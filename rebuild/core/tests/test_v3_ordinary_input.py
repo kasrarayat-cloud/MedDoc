@@ -229,9 +229,17 @@ class InlineOwnershipRefutation(SimpleTestCase):
         for separator in ('\n', '\r\n', '\r', '\u2028'):
             notes = 'Father: MI at 50.' + separator + 'Smoker: yes.'
             answer = run(notes, {'Smoker': ['Smoker: yes.']})['Smoker']
-            self.assertEqual((answer['status'], answer['text']), ('supported', 'Yes'))
+            # ⚠️ DELIBERATE CHANGE 2026-09-29 (X1, notes usefulness step 1): the separate line is still its own unit and
+            # never an inline option, but in the SAME paragraph as another person's line a subject-less labelled person
+            # attribute is held (it was filled 'Yes'); in its own paragraph it still names its option.
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''), repr(separator))
             reading = g.governance_for(notes, FIELDS)[11]['preceding']
             self.assertEqual(reading['inline_options'], set())
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (round 3, RR5/X1): a blank line proves nothing about whose attribute a
+        # subject-less labelled line is, so the other person's run is not reset there and the line is held too.
+        for gap in ('\n\n', '\r\n\r\n', '\n \n', '\n\t\n'):
+            answer = run('Father: MI at 50.' + gap + 'Smoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''), repr(gap))
 
 
 class CompleteValueEvidenceContext(SimpleTestCase):

@@ -1,0 +1,31 @@
+{
+  "base": "966e372b383b392b8651e934011f260ecedd935f",
+  "source": {
+    "rebuild/documents/word_v3.py": "d4c2f1eb94fdb80ee3055c7af78be2deeaf2aa00e06f7d588858188fd28b12d8",
+    "rebuild/documents/test_paragraph_list_boxes.py": "4662f140508e55d22b0ef00c3063f69337682135638a1f6574d43ac9dc67ca37",
+    "rebuild/documents/test_document_relations.py": "56975beed78ef46bcd1946e9fbbdeea1060b277d4e2b45e70045b4e0b349f28a"
+  },
+  "evidence": {
+    "01-before.json": "6b407fcc7592003f24472b4a021d805008baec3addbd1983005e9f205398ba85",
+    "02-after-initial.json": "3ef674e4ed74b53ec6fa6ae83574dd06bae0c965fa504d9b1b5a4734da564090",
+    "03-before-tests.log": "aaeed43e463d5df251d02fe8ee06def02ad564a2b3964a30ed5d3d65c5eac8fb",
+    "04-focused-tests.log": "ad63b203d6dfd4967901317b20e3d189281379903f7133c7efa9d4ef05f09b31",
+    "05-focused-tests.log": "6c4151e51dcf86bbca311992eeb5125259e592a262481bb3610a416bb5ac5ee1",
+    "06-original-export.json": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "07-original-export.json": "2cccec0b6305dc7a877dafd3a65ceccfd84a1fdc1b6dc3b5a7f9556050491586",
+    "08-before-behavior-tests.log": "94bd41077a5221155209a5f97692008e209ca587735496a6e4d2995526cee710",
+    "09-admission.json": "815470f542089337213a2ebddfa5289139eac31f34bfe042aa65271ab177b426",
+    "10-final-focused-tests.log": "c3b90466f1a0a8648a0fcd011fa146302e4fdc0bb196702e581c5404f038d0e1",
+    "admission_probe.py": "2ecebb14701669213b8a225a6014a37493fed5c9a1c296ab8f3af0b648eee5af",
+    "export_probe.py": "9501c4df653f5dcb528b037949e4aca97ebf87026add474f786995aa3275b4f3",
+    "original-only-audit/REPORT.md": "ea1ea9b75c0a7505565f3ad46dd2e1d3172191aeb34bf451aeae005ac4770dbf",
+    "original-only-audit/extract.py": "454af0dd121347f34d7a3d27fb9f037e92d38d6dcf6da201356df79b15649ce5",
+    "original-only-audit/original-all-paragraphs.json": "1a60342f5adc730e75e8e877672da3e550a4eb820a22d40d1041be5e42084f52",
+    "original-only-audit/original-source.json": "f459764110ac100ebf150ff5797e70b144f422598247c4be55236cb388a5d2d2",
+    "probe.py": "1d04303348a4907053842c4f6af3222411fca7188ae66995ff5165220799437f",
+    "retained-D30-fdeafbee872f.annotator.json": "888a639e5ae4d834e4cbc19738ecb5eb843ebbd29995e6a838f63185cdb0dcd9",
+    "retained-D30-fdeafbee872f.json": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+    "run_tests.py": "064e143fa9a4465d3b6c69b957ccd484bd5ae6c36d63d843b863b6cce9cf53a0"
+  },
+  "validation": "63 methods pass; two negative-control methods fail4cases againstbase;4actual sandbox original-export scenarios pass; old stored map unchanged. Component scope only."
+}

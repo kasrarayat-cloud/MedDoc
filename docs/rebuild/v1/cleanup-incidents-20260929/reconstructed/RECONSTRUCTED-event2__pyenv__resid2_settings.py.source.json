@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__pyenv__resid2_settings.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl:129",
+   "timestamp": "2026-09-29T01:11:19.250Z",
+   "sha256_after": "a90e2408fa862cfae04e4b54210869d3526e1246f7460d2f273bd89ae6f770a5",
+   "bytes_after": 129
+  }
+ ],
+ "lines": 3,
+ "sha256": "a90e2408fa862cfae04e4b54210869d3526e1246f7460d2f273bd89ae6f770a5"
+}

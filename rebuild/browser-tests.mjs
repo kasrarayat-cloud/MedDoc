@@ -1,11 +1,13 @@
 /**
  * Private synthetic browser regression gate.
  *
- * Start a fixture-mode doctor server and worker after migrate, collectstatic, and
- * seed_private. Run: node rebuild/browser-tests.mjs
+ * Start a fixture-mode doctor server, an administration server (QUILLMD_ADMIN_SITE=1) and the worker
+ * after migrate, collectstatic, and seed_private. Run: node rebuild/browser-tests.mjs
  *
  * Optional environment:
  * QUILLMD_BROWSER_BASE_URL: loopback doctor server (default http://127.0.0.1:9130)
+ * QUILLMD_BROWSER_ADMIN_URL: loopback administration server (default http://127.0.0.1:9131). The console
+ *   exists there only: the doctor server answers 404 for /console/ to every account (inventory 7A, F1).
  * QUILLMD_BROWSER_CREDENTIALS: private seed credentials JSON, never printed
  * PLAYWRIGHT_MODULE_DIR: explicit node_modules directory if dependencies are elsewhere
  *
@@ -32,6 +34,10 @@ const artifacts = path.join(appDirectory, '.runtime', 'browser-artifacts');
 const base = new URL(process.env.QUILLMD_BROWSER_BASE_URL || 'http://127.0.0.1:9130');
 assert(['localhost', '127.0.0.1', '[::1]'].includes(base.hostname), 'Browser gate requires a loopback server.');
 assert(!base.username && !base.password, 'Do not put credentials in the preview URL.');
+const adminBase = new URL(process.env.QUILLMD_BROWSER_ADMIN_URL || 'http://127.0.0.1:9131');
+assert(['localhost', '127.0.0.1', '[::1]'].includes(adminBase.hostname), 'Browser gate requires a loopback server.');
+assert(!adminBase.username && !adminBase.password, 'Do not put credentials in the preview URL.');
+assert.notEqual(adminBase.origin, base.origin, 'The administration surface is a separate server.');
 const checks = [];
 let activeCheck = 'Initialize browser dependencies and private credentials';
 let browser;
@@ -120,8 +126,9 @@ try {
       await page.waitForTimeout(1000);
       await page.reload();
       if (await page.locator('textarea[name^=answer_]').count()) break;
-      const terminalErrors = await page.locator('.source-panel .badge').allTextContents();
-      assert(!terminalErrors.some(state => ['failed', 'reconciliation'].includes(state)), 'Fixture job did not complete.');
+      // The request list reads core.doctor_status: its key, not the internal state word, says a request is stuck.
+      const terminalErrors = await page.locator('.source-panel [data-request-status]').evaluateAll(nodes => nodes.map(node => node.dataset.requestStatus));
+      assert(!terminalErrors.some(state => ['held','not_completed','completed_not_applied','unknown'].includes(state)), 'Fixture job did not complete.');
     }
     assert.equal(await page.locator('textarea[name^=answer_]').count(), 3);
     assert.equal(await page.locator('.evidence blockquote').count(), 3);
@@ -163,10 +170,10 @@ try {
   });
   await check('Doctor cannot access administrator console', async () => {
     const response = await page.goto(new URL('/console/', base).href);
-    assert([403, 404].includes(response.status()));
+    assert.equal(response.status(), 404);
   });
   await check('Administrator authenticates with MFA and has financial-only access', async () => {
-    await page.goto(new URL('/login/', base).href);
+    await page.goto(new URL('/login/', adminBase).href);
     await page.locator('[name=email]').fill(credentials.admin.email);
     await page.locator('[name=password]').fill(credentials.admin.password);
     const counter = Buffer.alloc(8);
@@ -174,10 +181,10 @@ try {
     const digest = crypto.createHmac('sha1', Buffer.from(credentials.admin.totp_key_hex, 'hex')).update(counter).digest();
     const code = String((digest.readUInt32BE(digest[digest.length - 1] & 15) & 0x7fffffff) % 1000000).padStart(6, '0');
     await page.locator('[name=otp]').fill(code);
-    await Promise.all([page.waitForNavigation(), page.getByRole('button', { name: 'Sign in', exact: true }).click()]);
-    const response = await page.goto(new URL('/console/', base).href);
+    await Promise.all([page.waitForNavigation(), page.getByRole('button', { name: 'Sign in to administration', exact: true }).click()]);
+    const response = await page.goto(new URL('/console/', adminBase).href);
     assert.equal(response.status(), 200);
-    const patients = await page.request.get(new URL('/api/patients/', base).href);
+    const patients = await page.request.get(new URL('/api/patients/', adminBase).href);
     assert.deepEqual((await patients.json()).patients, []);
     await accessibility('Administrator overview accessibility');
     await noPageOverflow();
@@ -195,9 +202,9 @@ try {
     await page.screenshot({ path: path.join(artifacts, 'admin-charge-evidence.png'), fullPage: true });
   });
   await check('Admin filters disclose empty matches and audit retains readable drill-downs', async () => {
-    await page.goto(new URL('/console/?q=no-such-isolated-fixture', base).href);
+    await page.goto(new URL('/console/?q=no-such-isolated-fixture', adminBase).href);
     assert((await page.locator('#accounts').innerText()).includes('No accounts match these filters.'));
-    await page.goto(new URL('/console/audit/?q=admin.job_financial_read', base).href);
+    await page.goto(new URL('/console/audit/?q=admin.job_financial_read', adminBase).href);
     assert.equal(await page.locator('tbody tr').count(), 1);
     await accessibility('Filtered audit accessibility');
   });

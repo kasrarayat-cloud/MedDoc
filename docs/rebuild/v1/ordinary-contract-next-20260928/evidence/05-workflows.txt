@@ -1,0 +1,46 @@
+Using existing test database for alias 'default' ('test_quillmd_ci')...
+test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+
+  test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) (case='r1-note2') ... FAIL
+  test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) (case='r1-note4') ... FAIL
+
+======================================================================
+FAIL: test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) (case='r1-note2')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_history_context.py", line 182, in test_three_original_notes_worker_review_no_history_edit_finalize_download
+    job.refresh_from_db(); self.assertEqual(job.state, 'succeeded', job.error)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'reconciliation' != 'succeeded'
+- reconciliation
++ succeeded
+ : Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.
+
+======================================================================
+FAIL: test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) (case='r1-note4')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_history_context.py", line 182, in test_three_original_notes_worker_review_no_history_edit_finalize_download
+    job.refresh_from_db(); self.assertEqual(job.state, 'succeeded', job.error)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'reconciliation' != 'succeeded'
+- reconciliation
++ succeeded
+ : Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.
+
+----------------------------------------------------------------------
+Ran 1 test in 6.485s
+
+FAILED (failures=2)
+Preserving test database for alias 'default' ('test_quillmd_ci')...
+Found 1 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

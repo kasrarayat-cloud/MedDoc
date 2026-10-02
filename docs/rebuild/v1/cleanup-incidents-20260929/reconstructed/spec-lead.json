@@ -1,0 +1,7 @@
+[
+ {"name": "event2__msg-mapstop.txt", "outdir": "recovered", "steps": [["heredoc", "P.jsonl", 18568, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/msg-mapstop.txt", ">"]]},
+ {"name": "event2__msg-merge-stop.txt", "outdir": "recovered", "steps": [["heredoc", "P.jsonl", 18657, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/msg-merge-stop.txt", ">"]]},
+ {"name": "event2__msg-blockers.txt", "outdir": "recovered", "steps": [["heredoc", "P.jsonl", 18701, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/msg-blockers.txt", ">"]]},
+ {"name": "event2__msg-report.txt", "outdir": "recovered", "steps": [["heredoc", "P.jsonl", 18784, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/msg-report.txt", ">"]]},
+ {"name": "event2__camp__msg-mc.txt", "outdir": "recovered", "steps": [["heredoc", "P.jsonl", 17095, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/camp/msg-mc.txt", ">"]]}
+]

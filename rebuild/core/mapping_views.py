@@ -61,27 +61,46 @@ def review(request,pk):
         if not error:error='; '.join(exc.messages) if isinstance(exc,ValidationError) else 'This form cannot be prepared for mapping assistance.'
     areas={row['slot']:shown_area(row) for row in version.assistance.get('areas',[])}
     unresolved=[{**areas.get(row['slot'],shown_area(row)),**row} for row in version.assistance.get('unresolved',[])]
+    from .jobs import deliverable
+    operations=list(Job.objects.filter(mapping_version__template=template).order_by('-created_at')[:20])
+    # A charged operation's stored provider output, under views.job_result's rule (RR2-L1).
+    for job in operations:job.deliverable=bool(job.result_path) and deliverable(job)
     return render(request,'mapping_assistance.html',{'template':template,'version':version,'error':error,'quote':quote,
-        'approval':approval,'operations':Job.objects.filter(mapping_version__template=template).order_by('-created_at')[:20],
+        'approval':approval,'operations':operations,
         'unresolved':unresolved,'areas':list(areas.values()),'record':version.assistance},status=status)
 
 @transaction.atomic
 def resolve(request,template,version):
+    """The clinician's decision on every unresolved assistance area, saved as a new assisted version.
+
+    ⚠️ REMOVALS FIRST, THEN EVERY DECISION IS JUDGED AGAINST THE MAPPING THAT WILL BE SAVED. A 'mapped' decision was
+    checked before the same submission removed the field that mapped it, and a key-less 'not an answer' on an area a
+    field still writes to removed nothing and was saved. The resulting mapping is then validated as a whole (overlaps,
+    keys, boxes and the original's destination roles, read now) before anything is saved."""
     template=Template.objects.select_for_update().get(pk=template.pk)
     latest=template.versions.order_by('-number').first()
     if latest.pk!=version.pk or request.POST.get('mapping_version')!=str(version.pk):
         raise ValidationError('The mapping changed. Review the latest version.')
     unresolved=version.assistance.get('unresolved',[])
     if not unresolved:raise ValidationError('No unresolved assistance areas remain.')
-    mapped=v3_mapping.mapped_slots(version.fields);decisions=[];removed=set()
+    posted=[]
     for number,row in enumerate(unresolved):
         decision=request.POST.get('resolution_'+str(number))
         if decision not in ('mapped','not_answer'):raise ValidationError('Review every unresolved area before saving.')
-        if decision=='mapped' and not v3_mapping.is_mapped(row['slot'],mapped):
-            raise ValidationError('Add this missed area on the mapping page before marking it mapped.')
-        if decision=='not_answer' and row.get('key'):removed.add(row['key'])
-        decisions.append({'slot':row['slot'],'key':row.get('key',''),'decision':decision})
+        posted.append((row,decision))
+    removed={row['key'] for row,decision in posted if decision=='not_answer' and row.get('key')}
     fields=[f for f in version.fields if f['key'] not in removed]
+    mapped=v3_mapping.mapped_slots(fields);decisions=[]
+    for row,decision in posted:
+        slot=row.get('slot') or ''
+        if decision=='mapped' and not v3_mapping.is_mapped(slot,mapped):
+            raise ValidationError('Add this missed area on the mapping page before marking it mapped.')
+        if decision=='not_answer' and not row.get('key') and slot and v3_mapping.is_mapped(slot,mapped):
+            raise ValidationError('A field of this mapping still writes to an area you marked not an answer. Remove that '
+                                  'field on the mapping page first, or mark the area mapped. Nothing was saved.')
+        decisions.append({'slot':slot,'key':row.get('key',''),'decision':decision})
+    from .views import v3_outline
+    mapping.validate_mapping(version,fields,v3_outline(template))
     new=TemplateVersion.objects.create(template=template,number=version.number+1,fields=fields,contract='v3',
         created_by=request.user,review_requirements=version.review_requirements,
         assistance={**version.assistance,'unresolved':[],'assisted':True,'resolutions':decisions},

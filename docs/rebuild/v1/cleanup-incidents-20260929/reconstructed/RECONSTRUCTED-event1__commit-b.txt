@@ -1,0 +1,24 @@
+Record the Sonnet 5 diagnostics against the re-frozen expectations
+
+Every record below was made after 0beaf2b2 froze the maps, graders, generators and
+notes cases (EXPECTED-SHA256SUMS); FREEZE.json lists the sha256 of every file, the
+runtime forms and the order of work. No provider call, no .env read, sockets denied
+with positive controls; the QA database was used only for quillmd_qa_diag_* test
+databases that Django created and dropped.
+
+- baseline-deterministic.json: inspect 36/48 areas right (3 wrong: f1.A2's leaked
+  label, f2b's one-choice leave list, f3.A4; 9 missed), 24/25 controls (f5.C2).
+- app-path-selftest.json: 18/18 stated checks; correct, do-nothing and harmful
+  responses grade differently through the real validate_proposal; 11 items the
+  model path cannot express at 8e3dcfd0; a signing-kind replacement at the
+  declaration paragraph does reach 'right' for f5.C2.
+- long-answer-readback.json: 5,835 characters filled and read back whole.
+- wording-check.json: CLEAN; the checked sets still show 28 gated hits.
+- notes/offline-observations.json: no drift on two reruns; one entry depends on
+  the other fields (N02 worse, field_relations), recorded both ways.
+- notes/app-path-walk.json: 21 of 21 sends walk upload to export; the stored
+  mapping equals cases.json and all 91 compared fields agree with the replay.
+- notes/note-forms-inspection.json: v3 inspect matches every case; the legacy
+  engine refuses every notes form.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

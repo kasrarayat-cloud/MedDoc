@@ -1,0 +1,146 @@
+{
+  "before_fields": 43,
+  "after_fields": 47,
+  "added": [
+    {
+      "kind": "text",
+      "label": "Other:",
+      "context": "Detailed Patient Headache Questionnaire (Current Headache) > 10. Please indicate what your headaches usually feel like: (tick all that apply):",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]",
+        "target": {
+          "end": 43,
+          "type": "span",
+          "shape": "blank",
+          "start": 9
+        },
+        "contract": "v3",
+        "fingerprint": "8c410b973de9916e4b39105c63f4ba693c72690700929e93dffb06ce8eb1f329"
+      }
+    },
+    {
+      "kind": "text",
+      "label": "Other:",
+      "context": "Detailed Patient Headache Questionnaire (Current Headache) > 15. Do you experience any of these symptoms 1 to 2 days before the onset of headache? Please tick all that apply.",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]",
+        "target": {
+          "end": 81,
+          "type": "span",
+          "shape": "blank",
+          "start": 9
+        },
+        "contract": "v3",
+        "fingerprint": "e0a1e9e3642b2275082e4f34abf6a9cb0b414adf1b0bd58f52a392f3046fddd7"
+      }
+    },
+    {
+      "kind": "text",
+      "label": "Other:",
+      "context": "Detailed Patient Headache Questionnaire (Current Headache) > 17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply. > Visual:",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]",
+        "target": {
+          "end": 28,
+          "type": "span",
+          "shape": "blank",
+          "start": 9
+        },
+        "contract": "v3",
+        "fingerprint": "eb72f9dbc79d6f49bd1fa559a511615892a4cf675130b2f716b524ccfad3a6ae"
+      }
+    },
+    {
+      "kind": "text",
+      "label": "Other:",
+      "context": "Detailed Patient Headache Questionnaire (Current Headache) > 19. Do any of the following activities worsen your headache once it starts?",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+        "target": {
+          "end": 71,
+          "type": "span",
+          "shape": "blank",
+          "start": 9
+        },
+        "contract": "v3",
+        "fingerprint": "ab64ca759a2ef5f4fe5d379a7ee30cd68ee839f607d017bd4a7875cbe16bcbbd"
+      }
+    }
+  ],
+  "removed": [],
+  "changed_existing": [],
+  "generated": {
+    "missing": {
+      "text": "",
+      "status": "missing",
+      "evidence": [],
+      "reviewed": false
+    },
+    "ordinary": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient reports pressure around the forehead.",
+          "start": 0,
+          "end": 49
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient reports pressure around the forehead.",
+          "start": 0,
+          "end": 49
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient reports pressure around the forehead.",
+        "evidence": [
+          {
+            "quote": "The patient reports pressure around the forehead.",
+            "start": 0,
+            "end": 49
+          }
+        ],
+        "context": [],
+        "reason": "This question appears 4 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+      }
+    },
+    "long": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient reports pressure around the forehead.",
+          "start": 0,
+          "end": 49
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient reports pressure around the forehead.",
+          "start": 0,
+          "end": 49
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient reports pressure around the forehead.",
+        "evidence": [
+          {
+            "quote": "The patient reports pressure around the forehead.",
+            "start": 0,
+            "end": 49
+          }
+        ],
+        "context": [],
+        "reason": "This question appears 4 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+      }
+    }
+  }
+}

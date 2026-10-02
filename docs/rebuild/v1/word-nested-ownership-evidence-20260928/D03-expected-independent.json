@@ -1,0 +1,4634 @@
+{
+  "schema": "custodian-original-first-dev-map-v1",
+  "case": "D03",
+  "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "evidence": [
+    "complete original XML reading",
+    "all original-only rendered pages visually inspected"
+  ],
+  "native_word_verified": false,
+  "prior_maps_read_before_seal": false,
+  "candidate_output_read_before_seal": false,
+  "unit": "semantic answer area with atomic physical options/spans; counts are not engine fields or acceptance denominator",
+  "global_expectations": {
+    "missing": "Leave every answer unselected/blank; no invented patient data, signatures, dates, defaults or scores.",
+    "ordinary": "Write only explicitly supplied answer into its own identified area; select only supplied options; retain every other question, option, instruction, XML control and unrelated answer.",
+    "long": "Preserve complete supplied text within its own editable answer area or refuse/require review; never truncate, spill into another question, overwrite fixed text, or claim native layout acceptance."
+  },
+  "protected": "Every original text/control/graphic outside an explicitly listed answer span/option; headings, question text, all section labels, page/header/footer identifiers and final thanks.",
+  "areas": [
+    {
+      "id": "q02",
+      "kind": "single_choice",
+      "label": "2. Did your headaches start with the development of acromegaly?    ⃝ No    ⃝ Yes → if yes, describe the timing of onset and symptoms: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 9,
+          "path": "/w:document/w:body/w:tbl/w:tr[2]/w:tc/w:p[1]",
+          "text": "2. Did your headaches start with the development of acromegaly?    ⃝ No    ⃝ Yes → if yes, describe the timing of onset and symptoms: ____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 9,
+            "path": "/w:document/w:body/w:tbl/w:tr[2]/w:tc/w:p[1]",
+            "text": "2. Did your headaches start with the development of acromegaly?    ⃝ No    ⃝ Yes → if yes, describe the timing of onset and symptoms: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 67,
+            "text_end": 68,
+            "exact_text": "⃝"
+          },
+          "source_context": "2. Did your headaches start with the development of acromegaly?    ⃝ No    ⃝ Yes → if yes, describe the timing of onset and symptoms: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 9,
+            "path": "/w:document/w:body/w:tbl/w:tr[2]/w:tc/w:p[1]",
+            "text": "2. Did your headaches start with the development of acromegaly?    ⃝ No    ⃝ Yes → if yes, describe the timing of onset and symptoms: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 75,
+            "text_end": 76,
+            "exact_text": "⃝"
+          },
+          "source_context": "2. Did your headaches start with the development of acromegaly?    ⃝ No    ⃝ Yes → if yes, describe the timing of onset and symptoms: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q03",
+      "kind": "single_choice",
+      "label": "3. Do your headache vary with the control of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please describe: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 11,
+          "path": "/w:document/w:body/w:tbl/w:tr[3]/w:tc/w:p[1]",
+          "text": "3. Do your headache vary with the control of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please describe: ____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 11,
+            "path": "/w:document/w:body/w:tbl/w:tr[3]/w:tc/w:p[1]",
+            "text": "3. Do your headache vary with the control of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please describe: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 65,
+            "text_end": 66,
+            "exact_text": "⃝"
+          },
+          "source_context": "3. Do your headache vary with the control of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please describe: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 11,
+            "path": "/w:document/w:body/w:tbl/w:tr[3]/w:tc/w:p[1]",
+            "text": "3. Do your headache vary with the control of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please describe: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 73,
+            "text_end": 74,
+            "exact_text": "⃝"
+          },
+          "source_context": "3. Do your headache vary with the control of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please describe: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q04",
+      "kind": "single_choice",
+      "label": "4. Is headache the worst aspect of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 13,
+          "path": "/w:document/w:body/w:tbl/w:tr[4]/w:tc/w:p[1]",
+          "text": "4. Is headache the worst aspect of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 13,
+            "path": "/w:document/w:body/w:tbl/w:tr[4]/w:tc/w:p[1]",
+            "text": "4. Is headache the worst aspect of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 55,
+            "text_end": 56,
+            "exact_text": "⃝"
+          },
+          "source_context": "4. Is headache the worst aspect of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 13,
+            "path": "/w:document/w:body/w:tbl/w:tr[4]/w:tc/w:p[1]",
+            "text": "4. Is headache the worst aspect of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 63,
+            "text_end": 64,
+            "exact_text": "⃝"
+          },
+          "source_context": "4. Is headache the worst aspect of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q05",
+      "kind": "single_choice",
+      "label": "5. Did your headache become less severe after the treatment of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 15,
+          "path": "/w:document/w:body/w:tbl/w:tr[5]/w:tc/w:p[1]",
+          "text": "5. Did your headache become less severe after the treatment of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 15,
+            "path": "/w:document/w:body/w:tbl/w:tr[5]/w:tc/w:p[1]",
+            "text": "5. Did your headache become less severe after the treatment of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 83,
+            "text_end": 84,
+            "exact_text": "⃝"
+          },
+          "source_context": "5. Did your headache become less severe after the treatment of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 15,
+            "path": "/w:document/w:body/w:tbl/w:tr[5]/w:tc/w:p[1]",
+            "text": "5. Did your headache become less severe after the treatment of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 91,
+            "text_end": 92,
+            "exact_text": "⃝"
+          },
+          "source_context": "5. Did your headache become less severe after the treatment of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q08",
+      "kind": "single_choice",
+      "label": "8. Do you have more than one type of headache?    ⃝ No    ⃝ Yes → If yes, focus on your worst headache type while answering the following questions.",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 70,
+          "path": "/w:document/w:body/w:tbl/w:tr[8]/w:tc/w:p[1]",
+          "text": "8. Do you have more than one type of headache?    ⃝ No    ⃝ Yes → If yes, focus on your worst headache type while answering the following questions."
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 70,
+            "path": "/w:document/w:body/w:tbl/w:tr[8]/w:tc/w:p[1]",
+            "text": "8. Do you have more than one type of headache?    ⃝ No    ⃝ Yes → If yes, focus on your worst headache type while answering the following questions.",
+            "text_start": 50,
+            "text_end": 51,
+            "exact_text": "⃝"
+          },
+          "source_context": "8. Do you have more than one type of headache?    ⃝ No    ⃝ Yes → If yes, focus on your worst headache type while answering the following questions.",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 70,
+            "path": "/w:document/w:body/w:tbl/w:tr[8]/w:tc/w:p[1]",
+            "text": "8. Do you have more than one type of headache?    ⃝ No    ⃝ Yes → If yes, focus on your worst headache type while answering the following questions.",
+            "text_start": 58,
+            "text_end": 59,
+            "exact_text": "⃝"
+          },
+          "source_context": "8. Do you have more than one type of headache?    ⃝ No    ⃝ Yes → If yes, focus on your worst headache type while answering the following questions.",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q09-temple-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Temple -",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 74,
+          "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+          "text": "⃝ Temple - ☐ Right  ☐ Left"
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 74,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Temple - ☐ Right  ☐ Left",
+            "text_start": 11,
+            "text_end": 12,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Temple - ☐ Right  ☐ Left",
+          "representation": "native checkbox",
+          "sdt_id": "1847358078",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 74,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Temple - ☐ Right  ☐ Left",
+            "text_start": 20,
+            "text_end": 21,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Temple - ☐ Right  ☐ Left",
+          "representation": "native checkbox",
+          "sdt_id": "296960293",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q09-ear-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Ear -",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 76,
+          "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+          "text": "⃝ Ear -  ☐Right ☐ Left "
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 76,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Ear -  ☐Right ☐ Left ",
+            "text_start": 9,
+            "text_end": 10,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Ear -  ☐Right ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "412822745",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 76,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Ear -  ☐Right ☐ Left ",
+            "text_start": 16,
+            "text_end": 17,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Ear -  ☐Right ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "1956451914",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q09-back-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Back of head -",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 77,
+          "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+          "text": "⃝ Back of head - ☐ Right  ☐ Left "
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 77,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Back of head - ☐ Right  ☐ Left ",
+            "text_start": 17,
+            "text_end": 18,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Back of head - ☐ Right  ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "2077540654",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 77,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Back of head - ☐ Right  ☐ Left ",
+            "text_start": 26,
+            "text_end": 27,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Back of head - ☐ Right  ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "1998993898",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q09-top-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Top of head -",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 80,
+          "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p",
+          "text": "⃝ Top of head - ☐ Right  ☐ Left "
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 80,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Top of head - ☐ Right  ☐ Left ",
+            "text_start": 16,
+            "text_end": 17,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Top of head - ☐ Right  ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "354630576",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 80,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Top of head - ☐ Right  ☐ Left ",
+            "text_start": 25,
+            "text_end": 26,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Top of head - ☐ Right  ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "290411187",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q09-eye-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Eye -",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 81,
+          "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[2]/w:p",
+          "text": "⃝ Eye - ☐ Right  ☐ Left "
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 81,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Eye - ☐ Right  ☐ Left ",
+            "text_start": 8,
+            "text_end": 9,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Eye - ☐ Right  ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "-428351300",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 81,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Eye - ☐ Right  ☐ Left ",
+            "text_start": 17,
+            "text_end": 18,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Eye - ☐ Right  ☐ Left ",
+          "representation": "native checkbox",
+          "sdt_id": "-12614579",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q09-location",
+      "kind": "multiple_choice",
+      "label": "9. Where are your headaches located in general? Please tick all that apply, and indicate right or left where appropriate.",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 72,
+          "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:p[1]",
+          "text": "9. Where are your headaches located in general? Please tick all that apply, and indicate right or left where appropriate."
+        }
+      ],
+      "options": [
+        {
+          "label": "Temple",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 74,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Temple - ☐ Right  ☐ Left",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Temple - ☐ Right  ☐ Left",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Front of head",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 75,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Front of head ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Front of head ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Ear",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 76,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Ear -  ☐Right ☐ Left ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Ear -  ☐Right ☐ Left ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Back of head",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 77,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Back of head - ☐ Right  ☐ Left ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Back of head - ☐ Right  ☐ Left ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Around head",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 78,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ Around head ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Around head ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Neck",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 79,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[2]/w:tc[3]/w:p",
+            "text": "⃝ Neck ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Neck ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Top of head",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 80,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Top of head - ☐ Right  ☐ Left ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Top of head - ☐ Right  ☐ Left ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Eye",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 81,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Eye - ☐ Right  ☐ Left ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Eye - ☐ Right  ☐ Left ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Jaw",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 82,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[3]/w:tc[3]/w:p",
+            "text": "⃝ Jaw ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Jaw ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 83,
+            "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[4]/w:tc/w:p[1]",
+            "text": "⃝ Other ____________________ ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other ____________________ ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q10-quality",
+      "kind": "multiple_choice",
+      "label": "10. Please indicate what your headaches usually feel like: (tick all that apply):",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 87,
+          "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:p[2]",
+          "text": "10. Please indicate what your headaches usually feel like: (tick all that apply):"
+        }
+      ],
+      "options": [
+        {
+          "label": "Throbbing/Pulsing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 89,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Throbbing/Pulsing ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Throbbing/Pulsing ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Dull",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 90,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Dull ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Dull ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Shooting",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 91,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Shooting ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Shooting ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Achy",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 92,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Achy ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Achy ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Stabbing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 93,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ Stabbing ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Stabbing ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Burning",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 94,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[2]/w:tc[3]/w:p",
+            "text": "⃝ Burning ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Burning ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Tight",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 95,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Tight ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Tight ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Pressure",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 96,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Pressure ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Pressure ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 97,
+            "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[3]/w:tc[3]/w:p[1]",
+            "text": "⃝ Other: __________________________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other: __________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q11-constant",
+      "kind": "single_choice",
+      "label": "11. How long do your headaches last in HOURS? ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 100,
+          "path": "/w:document/w:body/w:tbl/w:tr[11]/w:tc/w:p[1]",
+          "text": "11. How long do your headaches last in HOURS? "
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 102,
+            "path": "/w:document/w:body/w:tbl/w:tr[11]/w:tc/w:p[3]",
+            "text": "Shortest ___    Longest ___    Average ____    or are they constant?   ⃝ No    ⃝ Yes",
+            "text_start": 71,
+            "text_end": 72,
+            "exact_text": "⃝"
+          },
+          "source_context": "Shortest ___    Longest ___    Average ____    or are they constant?   ⃝ No    ⃝ Yes",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 102,
+            "path": "/w:document/w:body/w:tbl/w:tr[11]/w:tc/w:p[3]",
+            "text": "Shortest ___    Longest ___    Average ____    or are they constant?   ⃝ No    ⃝ Yes",
+            "text_start": 79,
+            "text_end": 80,
+            "exact_text": "⃝"
+          },
+          "source_context": "Shortest ___    Longest ___    Average ____    or are they constant?   ⃝ No    ⃝ Yes",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q12-time",
+      "kind": "single_choice",
+      "label": "12. Please indicate when your headaches are worst:",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 104,
+          "path": "/w:document/w:body/w:tbl/w:tr[12]/w:tc/w:p[1]",
+          "text": "12. Please indicate when your headaches are worst:"
+        }
+      ],
+      "options": [
+        {
+          "label": "Morning",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 106,
+            "path": "/w:document/w:body/w:tbl/w:tr[12]/w:tc/w:p[3]",
+            "text": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+            "text_start": 1,
+            "text_end": 2,
+            "exact_text": "⃝"
+          },
+          "source_context": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Afternoon",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 106,
+            "path": "/w:document/w:body/w:tbl/w:tr[12]/w:tc/w:p[3]",
+            "text": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+            "text_start": 15,
+            "text_end": 16,
+            "exact_text": "⃝"
+          },
+          "source_context": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Evening",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 106,
+            "path": "/w:document/w:body/w:tbl/w:tr[12]/w:tc/w:p[3]",
+            "text": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+            "text_start": 31,
+            "text_end": 32,
+            "exact_text": "⃝"
+          },
+          "source_context": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "During the night",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 106,
+            "path": "/w:document/w:body/w:tbl/w:tr[12]/w:tc/w:p[3]",
+            "text": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+            "text_start": 45,
+            "text_end": 46,
+            "exact_text": "⃝"
+          },
+          "source_context": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "No pattern",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 106,
+            "path": "/w:document/w:body/w:tbl/w:tr[12]/w:tc/w:p[3]",
+            "text": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+            "text_start": 68,
+            "text_end": 69,
+            "exact_text": "⃝"
+          },
+          "source_context": " ⃝ Morning     ⃝ Afternoon     ⃝ Evening     ⃝ During the night     ⃝ No pattern",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q13-position",
+      "kind": "single_choice",
+      "label": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 108,
+          "path": "/w:document/w:body/w:tbl/w:tr[13]/w:tc/w:p[1]",
+          "text": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   "
+        }
+      ],
+      "options": [
+        {
+          "label": "Lying down",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 108,
+            "path": "/w:document/w:body/w:tbl/w:tr[13]/w:tc/w:p[1]",
+            "text": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   ",
+            "text_start": 55,
+            "text_end": 56,
+            "exact_text": "⃝"
+          },
+          "source_context": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Standing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 108,
+            "path": "/w:document/w:body/w:tbl/w:tr[13]/w:tc/w:p[1]",
+            "text": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   ",
+            "text_start": 72,
+            "text_end": 73,
+            "exact_text": "⃝"
+          },
+          "source_context": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Both the same",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 108,
+            "path": "/w:document/w:body/w:tbl/w:tr[13]/w:tc/w:p[1]",
+            "text": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   ",
+            "text_start": 87,
+            "text_end": 88,
+            "exact_text": "⃝"
+          },
+          "source_context": "13. Are your headaches worse lying down or standing?   ⃝ Lying down     ⃝ Standing     ⃝ Both the same   ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q14-waking",
+      "kind": "single_choice",
+      "label": "14. Do your headaches wake you up in the middle of the night? ⃝ No   ⃝ Yes → if yes, how often? __________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 110,
+          "path": "/w:document/w:body/w:tbl/w:tr[14]/w:tc/w:p[1]",
+          "text": "14. Do your headaches wake you up in the middle of the night? ⃝ No   ⃝ Yes → if yes, how often? __________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 110,
+            "path": "/w:document/w:body/w:tbl/w:tr[14]/w:tc/w:p[1]",
+            "text": "14. Do your headaches wake you up in the middle of the night? ⃝ No   ⃝ Yes → if yes, how often? __________________",
+            "text_start": 62,
+            "text_end": 63,
+            "exact_text": "⃝"
+          },
+          "source_context": "14. Do your headaches wake you up in the middle of the night? ⃝ No   ⃝ Yes → if yes, how often? __________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 110,
+            "path": "/w:document/w:body/w:tbl/w:tr[14]/w:tc/w:p[1]",
+            "text": "14. Do your headaches wake you up in the middle of the night? ⃝ No   ⃝ Yes → if yes, how often? __________________",
+            "text_start": 69,
+            "text_end": 70,
+            "exact_text": "⃝"
+          },
+          "source_context": "14. Do your headaches wake you up in the middle of the night? ⃝ No   ⃝ Yes → if yes, how often? __________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q15-premonitory",
+      "kind": "multiple_choice",
+      "label": "15. Do you experience any of these symptoms 1 to 2 days before the onset of headache? Please tick all that apply. ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 112,
+          "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:p[1]",
+          "text": "15. Do you experience any of these symptoms 1 to 2 days before the onset of headache? Please tick all that apply. "
+        }
+      ],
+      "options": [
+        {
+          "label": "Hyperactivity",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 114,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Hyperactivity ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Hyperactivity ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Difficulty with speech",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 115,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Difficulty with speech ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Difficulty with speech ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Food cravings",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 116,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Food cravings ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Food cravings ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Depressed feeling",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 117,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Depressed feeling ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Depressed feeling ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sensitive to light",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 118,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ Sensitive to light ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Sensitive to light ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Increased appetite",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 119,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[2]/w:tc[3]/w:p",
+            "text": "⃝ Increased appetite ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Increased appetite ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Irritability",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 120,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Irritability ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Irritability ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sensitive to sound/noise",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 121,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Sensitive to sound/noise ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Sensitive to sound/noise ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Decreased appetite",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 122,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[3]/w:tc[3]/w:p",
+            "text": "⃝ Decreased appetite ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Decreased appetite ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Feeling sluggish",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 123,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[4]/w:tc[1]/w:p",
+            "text": "⃝ Feeling sluggish ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Feeling sluggish ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Dizziness",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 124,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[4]/w:tc[2]/w:p",
+            "text": "⃝ Dizziness ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Dizziness ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Increased urination",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 125,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[4]/w:tc[3]/w:p",
+            "text": "⃝ Increased urination ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Increased urination ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Difficulty concentrating",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 126,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[5]/w:tc[1]/w:p",
+            "text": "⃝ Difficulty concentrating ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Difficulty concentrating ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Excessive yawning",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 127,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[5]/w:tc[2]/w:p",
+            "text": "⃝ Excessive yawning ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Excessive yawning ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Stiff neck",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 128,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[5]/w:tc[3]/w:p",
+            "text": "⃝ Stiff neck ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Stiff neck ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 129,
+            "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[6]/w:tc/w:p",
+            "text": "⃝ Other: ________________________________________________________________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other: ________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q16-eye-redness-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Eye-redness [",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 150,
+          "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[9]/w:tc[1]/w:p",
+          "text": "⃝ Eye-redness [☐ Right  ☐ Left] "
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 150,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[9]/w:tc[1]/w:p",
+            "text": "⃝ Eye-redness [☐ Right  ☐ Left] ",
+            "text_start": 15,
+            "text_end": 16,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Eye-redness [☐ Right  ☐ Left] ",
+          "representation": "native checkbox",
+          "sdt_id": "-996346363",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 150,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[9]/w:tc[1]/w:p",
+            "text": "⃝ Eye-redness [☐ Right  ☐ Left] ",
+            "text_start": 24,
+            "text_end": 25,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Eye-redness [☐ Right  ☐ Left] ",
+          "representation": "native checkbox",
+          "sdt_id": "-2084822314",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q16-drooping-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Drooping eyelid [",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 152,
+          "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[10]/w:tc[1]/w:p",
+          "text": "⃝ Drooping eyelid [☐ Right  ☐ Left]"
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 152,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[10]/w:tc[1]/w:p",
+            "text": "⃝ Drooping eyelid [☐ Right  ☐ Left]",
+            "text_start": 19,
+            "text_end": 20,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Drooping eyelid [☐ Right  ☐ Left]",
+          "representation": "native checkbox",
+          "sdt_id": "874967515",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 152,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[10]/w:tc[1]/w:p",
+            "text": "⃝ Drooping eyelid [☐ Right  ☐ Left]",
+            "text_start": 28,
+            "text_end": 29,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Drooping eyelid [☐ Right  ☐ Left]",
+          "representation": "native checkbox",
+          "sdt_id": "-935672991",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q16-swelling-side",
+      "kind": "multiple_choice",
+      "label": "⃝ Swelling of eyelid [",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 154,
+          "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[11]/w:tc[1]/w:p",
+          "text": "⃝ Swelling of eyelid [☐ Right  ☐ Left]"
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 154,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[11]/w:tc[1]/w:p",
+            "text": "⃝ Swelling of eyelid [☐ Right  ☐ Left]",
+            "text_start": 22,
+            "text_end": 23,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Swelling of eyelid [☐ Right  ☐ Left]",
+          "representation": "native checkbox",
+          "sdt_id": "1282458377",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 154,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[11]/w:tc[1]/w:p",
+            "text": "⃝ Swelling of eyelid [☐ Right  ☐ Left]",
+            "text_start": 31,
+            "text_end": 32,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Swelling of eyelid [☐ Right  ☐ Left]",
+          "representation": "native checkbox",
+          "sdt_id": "-1539508140",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q16-pupil-change",
+      "kind": "single_choice",
+      "label": "⃝ Change in pupil [",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 156,
+          "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[12]/w:tc[1]/w:p",
+          "text": "⃝ Change in pupil [☐ Larger  ☐ Smaller]"
+        }
+      ],
+      "options": [
+        {
+          "label": "Larger",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 156,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[12]/w:tc[1]/w:p",
+            "text": "⃝ Change in pupil [☐ Larger  ☐ Smaller]",
+            "text_start": 19,
+            "text_end": 20,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Change in pupil [☐ Larger  ☐ Smaller]",
+          "representation": "native checkbox",
+          "sdt_id": "573084780",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Smaller",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 156,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[12]/w:tc[1]/w:p",
+            "text": "⃝ Change in pupil [☐ Larger  ☐ Smaller]",
+            "text_start": 29,
+            "text_end": 30,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ Change in pupil [☐ Larger  ☐ Smaller]",
+          "representation": "native checkbox",
+          "sdt_id": "1637599976",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q16-during",
+      "kind": "multiple_choice",
+      "label": "16. Do you experience any of these symptoms during your headache? Please tick all that apply. ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 132,
+          "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:p[1]",
+          "text": "16. Do you experience any of these symptoms during your headache? Please tick all that apply. "
+        }
+      ],
+      "options": [
+        {
+          "label": "Nausea or upset stomach/vomiting",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 134,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Nausea or upset stomach/vomiting ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Nausea or upset stomach/vomiting ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sensitivity to smells",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 135,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Sensitivity to smells ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Sensitivity to smells ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sensitivity to light (prefer a dark room)",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 136,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Sensitivity to light (prefer a dark room) ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Sensitivity to light (prefer a dark room) ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Difficulty thinking/concentrating/focusing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 137,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ Difficulty thinking/concentrating/focusing ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Difficulty thinking/concentrating/focusing ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sensitivity to sound (prefer a quiet room)",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 138,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Sensitivity to sound (prefer a quiet room) ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Sensitivity to sound (prefer a quiet room) ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Difficulty speaking/slurred speech",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 139,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Difficulty speaking/slurred speech ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Difficulty speaking/slurred speech ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sore/stiff neck",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 140,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[4]/w:tc[1]/w:p",
+            "text": "⃝ Sore/stiff neck ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Sore/stiff neck ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Increased Urination",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 141,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[4]/w:tc[2]/w:p",
+            "text": "⃝ Increased Urination ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Increased Urination ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Vision changes (blurred, spots, patterns)",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 142,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[5]/w:tc[1]/w:p",
+            "text": "⃝ Vision changes (blurred, spots, patterns) ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Vision changes (blurred, spots, patterns) ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Anxiety",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 143,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[5]/w:tc[2]/w:p",
+            "text": "⃝ Anxiety ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Anxiety ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Eye tearing in only ONE EYE",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 144,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[6]/w:tc[1]/w:p",
+            "text": "⃝ Eye tearing in only ONE EYE ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Eye tearing in only ONE EYE ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Irritability",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 145,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[6]/w:tc[2]/w:p",
+            "text": "⃝ Irritability ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Irritability ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Runny nose in only ONE NOSTRIL",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 146,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[7]/w:tc[1]/w:p",
+            "text": "⃝ Runny nose in only ONE NOSTRIL ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Runny nose in only ONE NOSTRIL ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Memory problems",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 147,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[7]/w:tc[2]/w:p",
+            "text": "⃝ Memory problems ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Memory problems ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Ringing in ears",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 148,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[8]/w:tc[1]/w:p",
+            "text": "⃝ Ringing in ears ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Ringing in ears ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Increased appetite",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 149,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[8]/w:tc[2]/w:p",
+            "text": "⃝ Increased appetite ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Increased appetite ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Eye-redness",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 150,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[9]/w:tc[1]/w:p",
+            "text": "⃝ Eye-redness [☐ Right  ☐ Left] ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Eye-redness [☐ Right  ☐ Left] ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Decreased appetite",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 151,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[9]/w:tc[2]/w:p",
+            "text": "⃝ Decreased appetite ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Decreased appetite ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Drooping eyelid",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 152,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[10]/w:tc[1]/w:p",
+            "text": "⃝ Drooping eyelid [☐ Right  ☐ Left]",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Drooping eyelid [☐ Right  ☐ Left]",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Diarrhoea",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 153,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[10]/w:tc[2]/w:p",
+            "text": "⃝ Diarrhoea ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Diarrhoea ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Swelling of eyelid",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 154,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[11]/w:tc[1]/w:p",
+            "text": "⃝ Swelling of eyelid [☐ Right  ☐ Left]",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Swelling of eyelid [☐ Right  ☐ Left]",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Constipation",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 155,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[11]/w:tc[2]/w:p",
+            "text": "⃝ Constipation ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Constipation ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Change in pupil",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 156,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[12]/w:tc[1]/w:p",
+            "text": "⃝ Change in pupil [☐ Larger  ☐ Smaller]",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Change in pupil [☐ Larger  ☐ Smaller]",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Insomnia",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 157,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[12]/w:tc[2]/w:p",
+            "text": "⃝ Insomnia ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Insomnia ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Dizziness/vertigo",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 158,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[13]/w:tc[1]/w:p",
+            "text": "⃝ Dizziness/vertigo ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Dizziness/vertigo ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sleepiness",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 159,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[13]/w:tc[2]/w:p",
+            "text": "⃝ Sleepiness ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Sleepiness ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Imbalance",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 160,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[14]/w:tc[1]/w:p[1]",
+            "text": "⃝ Imbalance ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Imbalance ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Confusion",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 161,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[14]/w:tc[1]/w:p[2]",
+            "text": "⃝ Confusion",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Confusion",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Numbness/Tingling [Where?",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 162,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[14]/w:tc[2]/w:p[1]",
+            "text": "⃝ Numbness/Tingling [Where? ___________________ ]",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Numbness/Tingling [Where? ___________________ ]",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 164,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[15]/w:tc/w:p[1]",
+            "text": "⃝ Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 165,
+            "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[15]/w:tc/w:p[2]",
+            "text": "⃝ Other: ____________________________________________________________________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other: ____________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q17-visual",
+      "kind": "multiple_choice",
+      "label": "17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply.",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 168,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[1]",
+          "text": "17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply."
+        }
+      ],
+      "options": [
+        {
+          "label": "Flashing lights",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 170,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Flashing lights ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Flashing lights ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Loss of vision in one eye",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 171,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Loss of vision in one eye ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Loss of vision in one eye ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Tunnel vision",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 172,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Tunnel vision ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Tunnel vision ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Spots: bright/dark",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 173,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[1]/w:tc[4]/w:p",
+            "text": "⃝ Spots: bright/dark ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Spots: bright/dark ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Zigzag lines",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 174,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Zigzag lines ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Zigzag lines ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Loss of vision on one side",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 175,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ Loss of vision on one side ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Loss of vision on one side ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Double vision",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 176,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[2]/w:tc[3]/w:p",
+            "text": "⃝ Double vision ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Double vision ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Geometric forms",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 177,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[2]/w:tc[4]/w:p",
+            "text": "⃝ Geometric forms ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Geometric forms ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Wavy lines",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 178,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Wavy lines ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Wavy lines ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Total blindness",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 179,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Total blindness ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Total blindness ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Distorted vision",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 180,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[3]/w:tc[3]/w:p",
+            "text": "⃝ Distorted vision ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Distorted vision ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 181,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[3]/w:tc[4]/w:p",
+            "text": "⃝ Other: ___________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other: ___________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q17-weakness-side",
+      "kind": "multiple_choice",
+      "label": "⃝ One-sided weakness [",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 186,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[2]/w:tc[2]/w:p",
+          "text": "⃝ One-sided weakness [☐ Right  ☐ Left]"
+        }
+      ],
+      "options": [
+        {
+          "label": "Right",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 186,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ One-sided weakness [☐ Right  ☐ Left]",
+            "text_start": 22,
+            "text_end": 23,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ One-sided weakness [☐ Right  ☐ Left]",
+          "representation": "native checkbox",
+          "sdt_id": "-908306756",
+          "initial_checked": "0"
+        },
+        {
+          "label": "Left",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 186,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ One-sided weakness [☐ Right  ☐ Left]",
+            "text_start": 31,
+            "text_end": 32,
+            "exact_text": "☐"
+          },
+          "source_context": "⃝ One-sided weakness [☐ Right  ☐ Left]",
+          "representation": "native checkbox",
+          "sdt_id": "-1123068991",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q17-sensory",
+      "kind": "multiple_choice",
+      "label": "17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply.",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 168,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[1]",
+          "text": "17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply."
+        }
+      ],
+      "options": [
+        {
+          "label": "Numbness/tingling [Where?",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 183,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Numbness/tingling [Where? ___________________ ]",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Numbness/tingling [Where? ___________________ ]",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Light headedness",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 184,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Light headedness ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Light headedness ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Speech difficulty",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 185,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Speech difficulty ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Speech difficulty ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "One-sided weakness",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 186,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ One-sided weakness [☐ Right  ☐ Left]",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ One-sided weakness [☐ Right  ☐ Left]",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Vertigo",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 187,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[3]/w:tc[1]/w:p",
+            "text": "⃝ Vertigo ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Vertigo ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Confusion/déjà vu/hallucinations",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 188,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[3]/w:tc[2]/w:p",
+            "text": "⃝ Confusion/déjà vu/hallucinations ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Confusion/déjà vu/hallucinations ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Dizziness/unsteadiness",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 189,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[4]/w:tc[1]/w:p",
+            "text": "⃝ Dizziness/unsteadiness ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Dizziness/unsteadiness ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 190,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[4]/w:tc[2]/w:p",
+            "text": "⃝ Other: ______________________ ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other: ______________________ ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q17-timing",
+      "kind": "multiple_choice",
+      "label": "17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply.",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 168,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[1]",
+          "text": "17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply."
+        }
+      ],
+      "options": [
+        {
+          "label": "during the headache",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 192,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[5]",
+            "text": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+            "text_start": 128,
+            "text_end": 129,
+            "exact_text": "⃝"
+          },
+          "source_context": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "after the headache, OR",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 192,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[5]",
+            "text": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+            "text_start": 152,
+            "text_end": 153,
+            "exact_text": "⃝"
+          },
+          "source_context": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "without the headache",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 192,
+            "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[5]",
+            "text": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+            "text_start": 178,
+            "text_end": 179,
+            "exact_text": "⃝"
+          },
+          "source_context": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q18-wine-type",
+      "kind": "multiple_choice",
+      "label": "⃝ Alcohol beverages:  ⃝ Wine [",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 198,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[5]",
+          "text": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "Red",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 198,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[5]",
+            "text": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+            "text_start": 61,
+            "text_end": 62,
+            "exact_text": "☐"
+          },
+          "source_context": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+          "representation": "native checkbox",
+          "sdt_id": "1467084068",
+          "initial_checked": "0"
+        },
+        {
+          "label": "White",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 198,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[5]",
+            "text": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+            "text_start": 68,
+            "text_end": 69,
+            "exact_text": "☐"
+          },
+          "source_context": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+          "representation": "native checkbox",
+          "sdt_id": "-429435106",
+          "initial_checked": "0"
+        }
+      ]
+    },
+    {
+      "id": "q18-food",
+      "kind": "multiple_choice",
+      "label": "18. Provoking factors ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 194,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[1]",
+          "text": "18. Provoking factors "
+        }
+      ],
+      "options": [
+        {
+          "label": "Fasting/skipping meals",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 197,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[4]",
+            "text": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+            "text_start": 16,
+            "text_end": 17,
+            "exact_text": "⃝"
+          },
+          "source_context": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Chocolate",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 197,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[4]",
+            "text": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+            "text_start": 44,
+            "text_end": 45,
+            "exact_text": "⃝"
+          },
+          "source_context": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Caffeine",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 197,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[4]",
+            "text": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+            "text_start": 59,
+            "text_end": 60,
+            "exact_text": "⃝"
+          },
+          "source_context": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Nitrates",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 197,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[4]",
+            "text": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+            "text_start": 73,
+            "text_end": 74,
+            "exact_text": "⃝"
+          },
+          "source_context": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "MSG",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 197,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[4]",
+            "text": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+            "text_start": 87,
+            "text_end": 88,
+            "exact_text": "⃝"
+          },
+          "source_context": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Aged cheese",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 197,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[4]",
+            "text": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+            "text_start": 96,
+            "text_end": 97,
+            "exact_text": "⃝"
+          },
+          "source_context": "Food/beverage:  ⃝ Fasting/skipping meals    ⃝ Chocolate    ⃝ Caffeine    ⃝ Nitrates    ⃝ MSG    ⃝ Aged cheese ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Alcohol beverages",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 198,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[5]",
+            "text": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+            "text_start": 31,
+            "text_end": 32,
+            "exact_text": "⃝"
+          },
+          "source_context": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Wine",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 198,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[5]",
+            "text": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+            "text_start": 53,
+            "text_end": 54,
+            "exact_text": "⃝"
+          },
+          "source_context": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 198,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[5]",
+            "text": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+            "text_start": 80,
+            "text_end": 81,
+            "exact_text": "⃝"
+          },
+          "source_context": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q18-physical",
+      "kind": "multiple_choice",
+      "label": "18. Provoking factors ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 194,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[1]",
+          "text": "18. Provoking factors "
+        }
+      ],
+      "options": [
+        {
+          "label": "Coughing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 200,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[7]",
+            "text": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+            "text_start": 21,
+            "text_end": 22,
+            "exact_text": "⃝"
+          },
+          "source_context": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Talking",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 200,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[7]",
+            "text": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+            "text_start": 35,
+            "text_end": 36,
+            "exact_text": "⃝"
+          },
+          "source_context": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Chewing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 200,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[7]",
+            "text": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+            "text_start": 48,
+            "text_end": 49,
+            "exact_text": "⃝"
+          },
+          "source_context": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Exercise",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 200,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[7]",
+            "text": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+            "text_start": 61,
+            "text_end": 62,
+            "exact_text": "⃝"
+          },
+          "source_context": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sexual intercourse",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 200,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[7]",
+            "text": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+            "text_start": 75,
+            "text_end": 76,
+            "exact_text": "⃝"
+          },
+          "source_context": "Physical exertion:   ⃝ Coughing    ⃝ Talking    ⃝ Chewing    ⃝ Exercise    ⃝ Sexual intercourse ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q18-hormonal",
+      "kind": "multiple_choice",
+      "label": "18. Provoking factors ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 194,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[1]",
+          "text": "18. Provoking factors "
+        }
+      ],
+      "options": [
+        {
+          "label": "Menstruation",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 202,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[9]",
+            "text": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+            "text_start": 11,
+            "text_end": 12,
+            "exact_text": "⃝"
+          },
+          "source_context": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Before",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 202,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[9]",
+            "text": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+            "text_start": 27,
+            "text_end": 28,
+            "exact_text": "⃝"
+          },
+          "source_context": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "During",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 202,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[9]",
+            "text": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+            "text_start": 36,
+            "text_end": 37,
+            "exact_text": "⃝"
+          },
+          "source_context": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "After",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 202,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[9]",
+            "text": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+            "text_start": 45,
+            "text_end": 46,
+            "exact_text": "⃝"
+          },
+          "source_context": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Pregnancy",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 202,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[9]",
+            "text": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+            "text_start": 57,
+            "text_end": 58,
+            "exact_text": "⃝"
+          },
+          "source_context": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Menopause",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 202,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[9]",
+            "text": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+            "text_start": 72,
+            "text_end": 73,
+            "exact_text": "⃝"
+          },
+          "source_context": "Hormonal:  ⃝ Menstruation: ⃝ Before ⃝ During ⃝ After;    ⃝ Pregnancy    ⃝ Menopause ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q18-stress",
+      "kind": "multiple_choice",
+      "label": "18. Provoking factors ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 194,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[1]",
+          "text": "18. Provoking factors "
+        }
+      ],
+      "options": [
+        {
+          "label": "Work",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 204,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[11]",
+            "text": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+            "text_start": 11,
+            "text_end": 12,
+            "exact_text": "⃝"
+          },
+          "source_context": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Home",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 204,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[11]",
+            "text": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+            "text_start": 21,
+            "text_end": 22,
+            "exact_text": "⃝"
+          },
+          "source_context": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Family",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 204,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[11]",
+            "text": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+            "text_start": 31,
+            "text_end": 32,
+            "exact_text": "⃝"
+          },
+          "source_context": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Spouse",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 204,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[11]",
+            "text": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+            "text_start": 43,
+            "text_end": 44,
+            "exact_text": "⃝"
+          },
+          "source_context": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 204,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[11]",
+            "text": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+            "text_start": 55,
+            "text_end": 56,
+            "exact_text": "⃝"
+          },
+          "source_context": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q18-environment",
+      "kind": "multiple_choice",
+      "label": "18. Provoking factors ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 194,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[1]",
+          "text": "18. Provoking factors "
+        }
+      ],
+      "options": [
+        {
+          "label": "Allergies",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 206,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[13]",
+            "text": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+            "text_start": 18,
+            "text_end": 19,
+            "exact_text": "⃝"
+          },
+          "source_context": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Weather changes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 206,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[13]",
+            "text": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+            "text_start": 33,
+            "text_end": 34,
+            "exact_text": "⃝"
+          },
+          "source_context": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Altitude",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 206,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[13]",
+            "text": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+            "text_start": 54,
+            "text_end": 55,
+            "exact_text": "⃝"
+          },
+          "source_context": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Sunlight",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 206,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[13]",
+            "text": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+            "text_start": 68,
+            "text_end": 69,
+            "exact_text": "⃝"
+          },
+          "source_context": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 206,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[13]",
+            "text": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+            "text_start": 82,
+            "text_end": 83,
+            "exact_text": "⃝"
+          },
+          "source_context": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q18-sleep",
+      "kind": "multiple_choice",
+      "label": "18. Provoking factors ",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 194,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[1]",
+          "text": "18. Provoking factors "
+        }
+      ],
+      "options": [
+        {
+          "label": "Lack of sleep",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 208,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[15]",
+            "text": "Sleep:    ⃝ Lack of sleep    ⃝ Too much sleep    ⃝ Change in wake/sleep ",
+            "text_start": 10,
+            "text_end": 11,
+            "exact_text": "⃝"
+          },
+          "source_context": "Sleep:    ⃝ Lack of sleep    ⃝ Too much sleep    ⃝ Change in wake/sleep ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Too much sleep",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 208,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[15]",
+            "text": "Sleep:    ⃝ Lack of sleep    ⃝ Too much sleep    ⃝ Change in wake/sleep ",
+            "text_start": 29,
+            "text_end": 30,
+            "exact_text": "⃝"
+          },
+          "source_context": "Sleep:    ⃝ Lack of sleep    ⃝ Too much sleep    ⃝ Change in wake/sleep ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Change in wake/sleep",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 208,
+            "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[15]",
+            "text": "Sleep:    ⃝ Lack of sleep    ⃝ Too much sleep    ⃝ Change in wake/sleep ",
+            "text_start": 49,
+            "text_end": 50,
+            "exact_text": "⃝"
+          },
+          "source_context": "Sleep:    ⃝ Lack of sleep    ⃝ Too much sleep    ⃝ Change in wake/sleep ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q19-worsen",
+      "kind": "multiple_choice",
+      "label": "19. Do any of the following activities worsen your headache once it starts?",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 212,
+          "path": "/w:document/w:body/w:tbl/w:tr[19]/w:tc/w:p[1]",
+          "text": "19. Do any of the following activities worsen your headache once it starts?"
+        }
+      ],
+      "options": [
+        {
+          "label": "Walking",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 214,
+            "path": "/w:document/w:body/w:tbl/w:tr[19]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Walking",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Walking",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Climbing steps",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 215,
+            "path": "/w:document/w:body/w:tbl/w:tr[19]/w:tc/w:tbl/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Climbing steps",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Climbing steps",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Exercise",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 216,
+            "path": "/w:document/w:body/w:tbl/w:tr[19]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Exercise",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Exercise",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "N/A",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 217,
+            "path": "/w:document/w:body/w:tbl/w:tr[19]/w:tc/w:tbl/w:tr[1]/w:tc[4]/w:p",
+            "text": "⃝ N/A",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ N/A",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 218,
+            "path": "/w:document/w:body/w:tbl/w:tr[19]/w:tc/w:tbl/w:tr[2]/w:tc/w:p",
+            "text": "⃝ Other: ______________________________________________________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other: ______________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q20-relieve",
+      "kind": "multiple_choice",
+      "label": "20. Do any of the following factors relieve your headaches:",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 221,
+          "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:p[1]",
+          "text": "20. Do any of the following factors relieve your headaches:"
+        }
+      ],
+      "options": [
+        {
+          "label": "Lying down",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 223,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[1]/w:tc[1]/w:p",
+            "text": "⃝ Lying down ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Lying down ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Dark quiet room",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 224,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[1]/w:tc[2]/w:p",
+            "text": "⃝ Dark quiet room ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Dark quiet room ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Hot compress",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 225,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[1]/w:tc[3]/w:p",
+            "text": "⃝ Hot compress ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Hot compress ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Massage",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 226,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[1]/w:tc[4]/w:p",
+            "text": "⃝ Massage ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Massage ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "N/A",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 227,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[1]/w:tc[5]/w:p",
+            "text": "⃝ N/A",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ N/A",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Standing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 228,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[2]/w:tc[1]/w:p",
+            "text": "⃝ Standing ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Standing ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Ice/Cold compress",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 229,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[2]/w:tc[2]/w:p",
+            "text": "⃝ Ice/Cold compress ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Ice/Cold compress ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Keeping active/pacing",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 230,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[2]/w:tc[3]/w:p",
+            "text": "⃝ Keeping active/pacing ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Keeping active/pacing ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Pregnancy",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 231,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[2]/w:tc[4]/w:p",
+            "text": "⃝ Pregnancy ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Pregnancy ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 233,
+            "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p[1]",
+            "text": "⃝ Other: ______________________________________________________________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Other: ______________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q21-related",
+      "kind": "single_choice",
+      "label": "21. Do you think your headaches are related to acromegaly?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 237,
+          "path": "/w:document/w:body/w:tbl/w:tr[21]/w:tc/w:p[1]",
+          "text": "21. Do you think your headaches are related to acromegaly?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 237,
+            "path": "/w:document/w:body/w:tbl/w:tr[21]/w:tc/w:p[1]",
+            "text": "21. Do you think your headaches are related to acromegaly?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 61,
+            "text_end": 62,
+            "exact_text": "⃝"
+          },
+          "source_context": "21. Do you think your headaches are related to acromegaly?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 237,
+            "path": "/w:document/w:body/w:tbl/w:tr[21]/w:tc/w:p[1]",
+            "text": "21. Do you think your headaches are related to acromegaly?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 69,
+            "text_end": 70,
+            "exact_text": "⃝"
+          },
+          "source_context": "21. Do you think your headaches are related to acromegaly?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q22-side",
+      "kind": "single_choice",
+      "label": "22. Is your headache always on the same side of the head?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 239,
+          "path": "/w:document/w:body/w:tbl/w:tr[22]/w:tc/w:p[1]",
+          "text": "22. Is your headache always on the same side of the head?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 239,
+            "path": "/w:document/w:body/w:tbl/w:tr[22]/w:tc/w:p[1]",
+            "text": "22. Is your headache always on the same side of the head?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 60,
+            "text_end": 61,
+            "exact_text": "⃝"
+          },
+          "source_context": "22. Is your headache always on the same side of the head?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 239,
+            "path": "/w:document/w:body/w:tbl/w:tr[22]/w:tc/w:p[1]",
+            "text": "22. Is your headache always on the same side of the head?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 68,
+            "text_end": 69,
+            "exact_text": "⃝"
+          },
+          "source_context": "22. Is your headache always on the same side of the head?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q23-tumour",
+      "kind": "single_choice",
+      "label": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 241,
+          "path": "/w:document/w:body/w:tbl/w:tr[23]/w:tc/w:p[1]",
+          "text": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 241,
+            "path": "/w:document/w:body/w:tbl/w:tr[23]/w:tc/w:p[1]",
+            "text": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know",
+            "text_start": 52,
+            "text_end": 53,
+            "exact_text": "⃝"
+          },
+          "source_context": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 241,
+            "path": "/w:document/w:body/w:tbl/w:tr[23]/w:tc/w:p[1]",
+            "text": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know",
+            "text_start": 59,
+            "text_end": 60,
+            "exact_text": "⃝"
+          },
+          "source_context": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Don’t know",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 241,
+            "path": "/w:document/w:body/w:tbl/w:tr[23]/w:tc/w:p[1]",
+            "text": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know",
+            "text_start": 68,
+            "text_end": 69,
+            "exact_text": "⃝"
+          },
+          "source_context": "23. Is your headache the same side as the tumour?   ⃝ No   ⃝ Yes    ⃝ Don’t know",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q24-treatment",
+      "kind": "multiple_choice",
+      "label": "24. Which treatments for acromegaly help with your headache?",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 243,
+          "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[1]",
+          "text": "24. Which treatments for acromegaly help with your headache?"
+        }
+      ],
+      "options": [
+        {
+          "label": "Surgery",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 244,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[2]",
+            "text": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Radiotherapy",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 244,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[2]",
+            "text": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+            "text_start": 30,
+            "text_end": 31,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Octreotide",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 244,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[2]",
+            "text": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+            "text_start": 54,
+            "text_end": 55,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Lanreotide",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 244,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[2]",
+            "text": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+            "text_start": 73,
+            "text_end": 74,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "None",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 244,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[2]",
+            "text": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+            "text_start": 94,
+            "text_end": 95,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Surgery                     ⃝ Radiotherapy          ⃝ Octreotide       ⃝ Lanreotide         ⃝ None",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Pasireotide",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 245,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[3]",
+            "text": "⃝ Pasireotide              ⃝ Pegvisomant           ⃝ Other:_______________________________________________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Pasireotide              ⃝ Pegvisomant           ⃝ Other:_______________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Pegvisomant",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 245,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[3]",
+            "text": "⃝ Pasireotide              ⃝ Pegvisomant           ⃝ Other:_______________________________________________________",
+            "text_start": 27,
+            "text_end": 28,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Pasireotide              ⃝ Pegvisomant           ⃝ Other:_______________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Other",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 245,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[3]",
+            "text": "⃝ Pasireotide              ⃝ Pegvisomant           ⃝ Other:_______________________________________________________",
+            "text_start": 51,
+            "text_end": 52,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Pasireotide              ⃝ Pegvisomant           ⃝ Other:_______________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q25-onset",
+      "kind": "single_choice",
+      "label": "25. If somatostatin analogues (octreotide/ lanreotide/ pasireotide) help, how quickly do they improve your headache?",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 246,
+          "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[4]",
+          "text": "25. If somatostatin analogues (octreotide/ lanreotide/ pasireotide) help, how quickly do they improve your headache?"
+        }
+      ],
+      "options": [
+        {
+          "label": "Immediately",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 248,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[6]",
+            "text": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Within days",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 248,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[6]",
+            "text": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+            "text_start": 18,
+            "text_end": 19,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Within weeks",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 248,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[6]",
+            "text": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+            "text_start": 36,
+            "text_end": 37,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "They do not improve headache",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 248,
+            "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[6]",
+            "text": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+            "text_start": 55,
+            "text_end": 56,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Immediately     ⃝ Within days     ⃝ Within weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q26-wearoff",
+      "kind": "single_choice",
+      "label": "26. If somatostatin analogues help, how quickly does the effect take to wear off?",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 250,
+          "path": "/w:document/w:body/w:tbl/w:tr[25]/w:tc/w:p[1]",
+          "text": "26. If somatostatin analogues help, how quickly does the effect take to wear off?"
+        }
+      ],
+      "options": [
+        {
+          "label": "Hours",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 252,
+            "path": "/w:document/w:body/w:tbl/w:tr[25]/w:tc/w:p[3]",
+            "text": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Days",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 252,
+            "path": "/w:document/w:body/w:tbl/w:tr[25]/w:tc/w:p[3]",
+            "text": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+            "text_start": 12,
+            "text_end": 13,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Weeks",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 252,
+            "path": "/w:document/w:body/w:tbl/w:tr[25]/w:tc/w:p[3]",
+            "text": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+            "text_start": 24,
+            "text_end": 25,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "They do not improve headache",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 252,
+            "path": "/w:document/w:body/w:tbl/w:tr[25]/w:tc/w:p[3]",
+            "text": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+            "text_start": 36,
+            "text_end": 37,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ Hours     ⃝ Days      ⃝ Weeks     ⃝ They do not improve headache  ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q27-reliant",
+      "kind": "single_choice",
+      "label": "27. Are you reliant on somatostatin analogues to help your headache?    ⃝ No   ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 254,
+          "path": "/w:document/w:body/w:tbl/w:tr[26]/w:tc/w:p[1]",
+          "text": "27. Are you reliant on somatostatin analogues to help your headache?    ⃝ No   ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 254,
+            "path": "/w:document/w:body/w:tbl/w:tr[26]/w:tc/w:p[1]",
+            "text": "27. Are you reliant on somatostatin analogues to help your headache?    ⃝ No   ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 72,
+            "text_end": 73,
+            "exact_text": "⃝"
+          },
+          "source_context": "27. Are you reliant on somatostatin analogues to help your headache?    ⃝ No   ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 254,
+            "path": "/w:document/w:body/w:tbl/w:tr[26]/w:tc/w:p[1]",
+            "text": "27. Are you reliant on somatostatin analogues to help your headache?    ⃝ No   ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 79,
+            "text_end": 80,
+            "exact_text": "⃝"
+          },
+          "source_context": "27. Are you reliant on somatostatin analogues to help your headache?    ⃝ No   ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q28-injection",
+      "kind": "single_choice",
+      "label": "28. Can you tell when your next somatostatin analogue injection is due by your headache coming back?",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 256,
+          "path": "/w:document/w:body/w:tbl/w:tr[27]/w:tc/w:p[1]",
+          "text": "28. Can you tell when your next somatostatin analogue injection is due by your headache coming back?"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 257,
+            "path": "/w:document/w:body/w:tbl/w:tr[27]/w:tc/w:p[2]",
+            "text": "⃝ No     ⃝ Yes → if yes, please describe further: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ No     ⃝ Yes → if yes, please describe further: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 257,
+            "path": "/w:document/w:body/w:tbl/w:tr[27]/w:tc/w:p[2]",
+            "text": "⃝ No     ⃝ Yes → if yes, please describe further: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+            "text_start": 9,
+            "text_end": 10,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ No     ⃝ Yes → if yes, please describe further: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q29-othermedication",
+      "kind": "single_choice",
+      "label": "29. Are there any other medications, or anything else, which improves your headache?",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 259,
+          "path": "/w:document/w:body/w:tbl/w:tr[28]/w:tc/w:p[1]",
+          "text": "29. Are there any other medications, or anything else, which improves your headache?"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 260,
+            "path": "/w:document/w:body/w:tbl/w:tr[28]/w:tc/w:p[2]",
+            "text": "⃝ No     ⃝ Yes → if yes, please expand: ",
+            "text_start": 0,
+            "text_end": 1,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ No     ⃝ Yes → if yes, please expand: ",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 260,
+            "path": "/w:document/w:body/w:tbl/w:tr[28]/w:tc/w:p[2]",
+            "text": "⃝ No     ⃝ Yes → if yes, please expand: ",
+            "text_start": 9,
+            "text_end": 10,
+            "exact_text": "⃝"
+          },
+          "source_context": "⃝ No     ⃝ Yes → if yes, please expand: ",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q30-emergency",
+      "kind": "single_choice",
+      "label": "30. Did you ever need to attend A&E for your headache? ⃝ No     ⃝ Yes → if yes, how many times: __________________",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 263,
+          "path": "/w:document/w:body/w:tbl/w:tr[29]/w:tc/w:p[1]",
+          "text": "30. Did you ever need to attend A&E for your headache? ⃝ No     ⃝ Yes → if yes, how many times: __________________"
+        }
+      ],
+      "options": [
+        {
+          "label": "No",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 263,
+            "path": "/w:document/w:body/w:tbl/w:tr[29]/w:tc/w:p[1]",
+            "text": "30. Did you ever need to attend A&E for your headache? ⃝ No     ⃝ Yes → if yes, how many times: __________________",
+            "text_start": 55,
+            "text_end": 56,
+            "exact_text": "⃝"
+          },
+          "source_context": "30. Did you ever need to attend A&E for your headache? ⃝ No     ⃝ Yes → if yes, how many times: __________________",
+          "representation": "literal U+20DD circle"
+        },
+        {
+          "label": "Yes",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 263,
+            "path": "/w:document/w:body/w:tbl/w:tr[29]/w:tc/w:p[1]",
+            "text": "30. Did you ever need to attend A&E for your headache? ⃝ No     ⃝ Yes → if yes, how many times: __________________",
+            "text_start": 64,
+            "text_end": 65,
+            "exact_text": "⃝"
+          },
+          "source_context": "30. Did you ever need to attend A&E for your headache? ⃝ No     ⃝ Yes → if yes, how many times: __________________",
+          "representation": "literal U+20DD circle"
+        }
+      ]
+    },
+    {
+      "id": "q07-average",
+      "kind": "single_choice",
+      "label": "7. How severe are your headaches on average? (please circle the number which most applies)",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 20,
+          "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:p[1]",
+          "text": "7. How severe are your headaches on average? (please circle the number which most applies)"
+        }
+      ],
+      "options": [
+        {
+          "label": "0",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 22,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[1]/w:p",
+            "text": "0"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "1",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 23,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[2]/w:p",
+            "text": "1"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "2",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 24,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[3]/w:p",
+            "text": "2"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "3",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 25,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[4]/w:p",
+            "text": "3"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "4",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 26,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[5]/w:p",
+            "text": "4"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "5",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 27,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[6]/w:p",
+            "text": "5"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "6",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 28,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[7]/w:p",
+            "text": "6"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "7",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 29,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[8]/w:p",
+            "text": "7"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "8",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 30,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[9]/w:p",
+            "text": "8"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "9",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 31,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[10]/w:p",
+            "text": "9"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "10",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 32,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[1]/w:tr[1]/w:tc[11]/w:p",
+            "text": "10"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        }
+      ]
+    },
+    {
+      "id": "q07-worst",
+      "kind": "single_choice",
+      "label": "    How severe are your most painful headaches? (please circle the number which most applies)",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 45,
+          "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:p[4]",
+          "text": "    How severe are your most painful headaches? (please circle the number which most applies)"
+        }
+      ],
+      "options": [
+        {
+          "label": "0",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 47,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[1]/w:p",
+            "text": "0"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "1",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 48,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[2]/w:p",
+            "text": "1"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "2",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 49,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[3]/w:p",
+            "text": "2"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "3",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 50,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[4]/w:p",
+            "text": "3"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "4",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 51,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[5]/w:p",
+            "text": "4"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "5",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 52,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[6]/w:p",
+            "text": "5"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "6",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 53,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[7]/w:p",
+            "text": "6"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "7",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 54,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[8]/w:p",
+            "text": "7"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "8",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 55,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[9]/w:p",
+            "text": "8"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "9",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 56,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[10]/w:p",
+            "text": "9"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        },
+        {
+          "label": "10",
+          "anchor": {
+            "part": "word/document.xml",
+            "paragraph": 57,
+            "path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc/w:tbl[2]/w:tr[1]/w:tc[11]/w:p",
+            "text": "10"
+          },
+          "representation": "circle printed scale number; preserve endpoints and table"
+        }
+      ]
+    },
+    {
+      "id": "name",
+      "kind": "free_text",
+      "label": "name",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 3,
+          "path": "/w:document/w:body/w:p[3]",
+          "text": "Name: ______________________________           Endocrinology Centre: ________________________   ",
+          "text_start": 6,
+          "text_end": 36,
+          "exact_text": "______________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "endocrinology-centre",
+      "kind": "free_text",
+      "label": "endocrinology-centre",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 3,
+          "path": "/w:document/w:body/w:p[3]",
+          "text": "Name: ______________________________           Endocrinology Centre: ________________________   ",
+          "text_start": 69,
+          "text_end": 93,
+          "exact_text": "________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q01-days",
+      "kind": "free_text",
+      "label": "q01-days",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 7,
+          "path": "/w:document/w:body/w:tbl/w:tr[1]/w:tc/w:p[1]",
+          "text": "1. When did your headaches start?            #____ days ago, # _____ weeks ago, # ____ months ago, # ____ years ago ",
+          "text_start": 46,
+          "text_end": 50,
+          "exact_text": "____"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q01-weeks",
+      "kind": "free_text",
+      "label": "q01-weeks",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 7,
+          "path": "/w:document/w:body/w:tbl/w:tr[1]/w:tc/w:p[1]",
+          "text": "1. When did your headaches start?            #____ days ago, # _____ weeks ago, # ____ months ago, # ____ years ago ",
+          "text_start": 63,
+          "text_end": 68,
+          "exact_text": "_____"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q01-months",
+      "kind": "free_text",
+      "label": "q01-months",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 7,
+          "path": "/w:document/w:body/w:tbl/w:tr[1]/w:tc/w:p[1]",
+          "text": "1. When did your headaches start?            #____ days ago, # _____ weeks ago, # ____ months ago, # ____ years ago ",
+          "text_start": 82,
+          "text_end": 86,
+          "exact_text": "____"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q01-years",
+      "kind": "free_text",
+      "label": "q01-years",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 7,
+          "path": "/w:document/w:body/w:tbl/w:tr[1]/w:tc/w:p[1]",
+          "text": "1. When did your headaches start?            #____ days ago, # _____ weeks ago, # ____ months ago, # ____ years ago ",
+          "text_start": 101,
+          "text_end": 105,
+          "exact_text": "____"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q02-description",
+      "kind": "free_text",
+      "label": "q02-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 9,
+          "path": "/w:document/w:body/w:tbl/w:tr[2]/w:tc/w:p[1]",
+          "text": "2. Did your headaches start with the development of acromegaly?    ⃝ No    ⃝ Yes → if yes, describe the timing of onset and symptoms: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 134,
+          "text_end": 330,
+          "exact_text": "____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q03-description",
+      "kind": "free_text",
+      "label": "q03-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 11,
+          "path": "/w:document/w:body/w:tbl/w:tr[3]/w:tc/w:p[1]",
+          "text": "3. Do your headache vary with the control of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please describe: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 106,
+          "text_end": 302,
+          "exact_text": "____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q04-description",
+      "kind": "free_text",
+      "label": "q04-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 13,
+          "path": "/w:document/w:body/w:tbl/w:tr[4]/w:tc/w:p[1]",
+          "text": "4. Is headache the worst aspect of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 94,
+          "text_end": 290,
+          "exact_text": "____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q05-description",
+      "kind": "free_text",
+      "label": "q05-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 15,
+          "path": "/w:document/w:body/w:tbl/w:tr[5]/w:tc/w:p[1]",
+          "text": "5. Did your headache become less severe after the treatment of your acromegaly?    ⃝ No    ⃝ Yes → if yes, please expand: ____________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 122,
+          "text_end": 318,
+          "exact_text": "____________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q06-headache-days",
+      "kind": "free_text",
+      "label": "q06-headache-days",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 17,
+          "path": "/w:document/w:body/w:tbl/w:tr[6]/w:tc/w:p[1]",
+          "text": "6. How many days per month do you have a headache? _________ ",
+          "text_start": 51,
+          "text_end": 60,
+          "exact_text": "_________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q06-headache-free-days",
+      "kind": "free_text",
+      "label": "q06-headache-free-days",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 18,
+          "path": "/w:document/w:body/w:tbl/w:tr[6]/w:tc/w:p[2]",
+          "text": "    How many headache-free days do you have in a month? _________ ",
+          "text_start": 56,
+          "text_end": 65,
+          "exact_text": "_________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q09-other",
+      "kind": "free_text",
+      "label": "q09-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 83,
+          "path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc/w:tbl/w:tr[4]/w:tc/w:p[1]",
+          "text": "⃝ Other ____________________ ",
+          "text_start": 8,
+          "text_end": 28,
+          "exact_text": "____________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q10-other",
+      "kind": "free_text",
+      "label": "q10-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 97,
+          "path": "/w:document/w:body/w:tbl/w:tr[10]/w:tc/w:tbl/w:tr[3]/w:tc[3]/w:p[1]",
+          "text": "⃝ Other: __________________________________",
+          "text_start": 9,
+          "text_end": 43,
+          "exact_text": "__________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q11-shortest-hours",
+      "kind": "free_text",
+      "label": "q11-shortest-hours",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 102,
+          "path": "/w:document/w:body/w:tbl/w:tr[11]/w:tc/w:p[3]",
+          "text": "Shortest ___    Longest ___    Average ____    or are they constant?   ⃝ No    ⃝ Yes",
+          "text_start": 9,
+          "text_end": 12,
+          "exact_text": "___"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q11-longest-hours",
+      "kind": "free_text",
+      "label": "q11-longest-hours",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 102,
+          "path": "/w:document/w:body/w:tbl/w:tr[11]/w:tc/w:p[3]",
+          "text": "Shortest ___    Longest ___    Average ____    or are they constant?   ⃝ No    ⃝ Yes",
+          "text_start": 24,
+          "text_end": 27,
+          "exact_text": "___"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q11-average-hours",
+      "kind": "free_text",
+      "label": "q11-average-hours",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 102,
+          "path": "/w:document/w:body/w:tbl/w:tr[11]/w:tc/w:p[3]",
+          "text": "Shortest ___    Longest ___    Average ____    or are they constant?   ⃝ No    ⃝ Yes",
+          "text_start": 39,
+          "text_end": 43,
+          "exact_text": "____"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q14-frequency",
+      "kind": "free_text",
+      "label": "q14-frequency",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 110,
+          "path": "/w:document/w:body/w:tbl/w:tr[14]/w:tc/w:p[1]",
+          "text": "14. Do your headaches wake you up in the middle of the night? ⃝ No   ⃝ Yes → if yes, how often? __________________",
+          "text_start": 96,
+          "text_end": 114,
+          "exact_text": "__________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q15-other",
+      "kind": "free_text",
+      "label": "q15-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 129,
+          "path": "/w:document/w:body/w:tbl/w:tr[15]/w:tc/w:tbl/w:tr[6]/w:tc/w:p",
+          "text": "⃝ Other: ________________________________________________________________________",
+          "text_start": 9,
+          "text_end": 81,
+          "exact_text": "________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q16-numbness-where",
+      "kind": "free_text",
+      "label": "q16-numbness-where",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 162,
+          "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[14]/w:tc[2]/w:p[1]",
+          "text": "⃝ Numbness/Tingling [Where? ___________________ ]",
+          "text_start": 28,
+          "text_end": 47,
+          "exact_text": "___________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q16-other",
+      "kind": "free_text",
+      "label": "q16-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 165,
+          "path": "/w:document/w:body/w:tbl/w:tr[16]/w:tc/w:tbl/w:tr[15]/w:tc/w:p[2]",
+          "text": "⃝ Other: ____________________________________________________________________________",
+          "text_start": 9,
+          "text_end": 85,
+          "exact_text": "____________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q17-visual-other",
+      "kind": "free_text",
+      "label": "q17-visual-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 181,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[1]/w:tr[3]/w:tc[4]/w:p",
+          "text": "⃝ Other: ___________________",
+          "text_start": 9,
+          "text_end": 28,
+          "exact_text": "___________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q17-numbness-where",
+      "kind": "free_text",
+      "label": "q17-numbness-where",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 183,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[1]/w:tc[1]/w:p",
+          "text": "⃝ Numbness/tingling [Where? ___________________ ]",
+          "text_start": 28,
+          "text_end": 47,
+          "exact_text": "___________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q17-sensory-other",
+      "kind": "free_text",
+      "label": "q17-sensory-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 190,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:tbl[2]/w:tr[4]/w:tc[2]/w:p",
+          "text": "⃝ Other: ______________________ ",
+          "text_start": 9,
+          "text_end": 31,
+          "exact_text": "______________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q17-duration-minutes",
+      "kind": "free_text",
+      "label": "q17-duration-minutes",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 192,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[5]",
+          "text": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+          "text_start": 54,
+          "text_end": 59,
+          "exact_text": "_____"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q17-termination-before-pain-minutes",
+      "kind": "free_text",
+      "label": "q17-termination-before-pain-minutes",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 192,
+          "path": "/w:document/w:body/w:tbl/w:tr[17]/w:tc/w:p[5]",
+          "text": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ⃝ during the headache,  ⃝ after the headache, OR  ⃝ without the headache",
+          "text_start": 82,
+          "text_end": 87,
+          "exact_text": "_____"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q18-other-alcohol",
+      "kind": "free_text",
+      "label": "q18-other-alcohol",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 198,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[5]",
+          "text": "                               ⃝ Alcohol beverages:  ⃝ Wine [☐ Red  ☐ White ],  ⃝ Other:__________________________",
+          "text_start": 88,
+          "text_end": 114,
+          "exact_text": "__________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q18-other-stress",
+      "kind": "free_text",
+      "label": "q18-other-stress",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 204,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[11]",
+          "text": "Stress:    ⃝ Work    ⃝ Home    ⃝ Family    ⃝ Spouse    ⃝ Other: _______________________________ ",
+          "text_start": 64,
+          "text_end": 95,
+          "exact_text": "_______________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q18-other-environment",
+      "kind": "free_text",
+      "label": "q18-other-environment",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 206,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[13]",
+          "text": "Environmental:    ⃝ Allergies    ⃝ Weather changes    ⃝ Altitude    ⃝ Sunlight    ⃝ Other: __________________________ ",
+          "text_start": 91,
+          "text_end": 117,
+          "exact_text": "__________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q18-other-triggers",
+      "kind": "free_text",
+      "label": "q18-other-triggers",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 210,
+          "path": "/w:document/w:body/w:tbl/w:tr[18]/w:tc/w:p[17]",
+          "text": "Other Triggers: ______________________________________________________________________________________",
+          "text_start": 16,
+          "text_end": 102,
+          "exact_text": "______________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q19-other",
+      "kind": "free_text",
+      "label": "q19-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 218,
+          "path": "/w:document/w:body/w:tbl/w:tr[19]/w:tc/w:tbl/w:tr[2]/w:tc/w:p",
+          "text": "⃝ Other: ______________________________________________________________",
+          "text_start": 9,
+          "text_end": 71,
+          "exact_text": "______________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q20-other",
+      "kind": "free_text",
+      "label": "q20-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 233,
+          "path": "/w:document/w:body/w:tbl/w:tr[20]/w:tc/w:tbl/w:tr[3]/w:tc[1]/w:p[1]",
+          "text": "⃝ Other: ______________________________________________________________________",
+          "text_start": 9,
+          "text_end": 79,
+          "exact_text": "______________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q21-description",
+      "kind": "free_text",
+      "label": "q21-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 237,
+          "path": "/w:document/w:body/w:tbl/w:tr[21]/w:tc/w:p[1]",
+          "text": "21. Do you think your headaches are related to acromegaly?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 100,
+          "text_end": 300,
+          "exact_text": "________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q22-description",
+      "kind": "free_text",
+      "label": "q22-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 239,
+          "path": "/w:document/w:body/w:tbl/w:tr[22]/w:tc/w:p[1]",
+          "text": "22. Is your headache always on the same side of the head?   ⃝ No    ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 99,
+          "text_end": 299,
+          "exact_text": "________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q24-other",
+      "kind": "free_text",
+      "label": "q24-other",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 245,
+          "path": "/w:document/w:body/w:tbl/w:tr[24]/w:tc/w:p[3]",
+          "text": "⃝ Pasireotide              ⃝ Pegvisomant           ⃝ Other:_______________________________________________________",
+          "text_start": 59,
+          "text_end": 114,
+          "exact_text": "_______________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q27-description",
+      "kind": "free_text",
+      "label": "q27-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 254,
+          "path": "/w:document/w:body/w:tbl/w:tr[26]/w:tc/w:p[1]",
+          "text": "27. Are you reliant on somatostatin analogues to help your headache?    ⃝ No   ⃝ Yes → if yes, please expand: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 110,
+          "text_end": 310,
+          "exact_text": "________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q28-description",
+      "kind": "free_text",
+      "label": "q28-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 257,
+          "path": "/w:document/w:body/w:tbl/w:tr[27]/w:tc/w:p[2]",
+          "text": "⃝ No     ⃝ Yes → if yes, please describe further: ________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 50,
+          "text_end": 250,
+          "exact_text": "________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q29-description",
+      "kind": "free_text",
+      "label": "q29-description",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 261,
+          "path": "/w:document/w:body/w:tbl/w:tr[28]/w:tc/w:p[3]",
+          "text": "________________________________________________________________________________________________________________________________________________________________________________________________________",
+          "text_start": 0,
+          "text_end": 200,
+          "exact_text": "________________________________________________________________________________________________________________________________________________________________________________________________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    },
+    {
+      "id": "q30-attendance-count",
+      "kind": "free_text",
+      "label": "q30-attendance-count",
+      "anchors": [
+        {
+          "part": "word/document.xml",
+          "paragraph": 263,
+          "path": "/w:document/w:body/w:tbl/w:tr[29]/w:tc/w:p[1]",
+          "text": "30. Did you ever need to attend A&E for your headache? ⃝ No     ⃝ Yes → if yes, how many times: __________________",
+          "text_start": 96,
+          "text_end": 114,
+          "exact_text": "__________________"
+        }
+      ],
+      "conditional": "Apply only when supplied response explicitly answers this question/subquestion; no cross-question inference."
+    }
+  ],
+  "ambiguities": [
+    "Literal U+20DD circles render with an additional dotted-circle-like font appearance under LibreOffice; count exact original code points, never doubled visual glyphs.",
+    "Native Right/Left and Red/White controls are separate subordinate choices; without source exclusivity do not forbid both. Larger/Smaller is exclusive.",
+    "Q17 timing permits OR wording but does not explicitly restrict number of ticks; retain source and require review if conflicting responses.",
+    "Q18 parent Alcohol/Wine and Menstruation/before/during/after have hierarchical meaning; selecting a subtype must never manufacture additional patient answers.",
+    "No signature, date, or clinician attestation answer exists in this form.",
+    "Pages and rendering are LibreOffice evidence only, not native Word compatibility."
+  ],
+  "atomic_summary": {
+    "choice_markers": 212,
+    "free_text_spans": 39,
+    "scale_options": 22
+  }
+}

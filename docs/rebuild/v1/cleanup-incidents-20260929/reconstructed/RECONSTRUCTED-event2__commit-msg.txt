@@ -1,0 +1,55 @@
+Refutation repairs RS-1..RS-5 and RA-LOW-1: an in-doubt settlement asserts nothing; one rule for account emails
+
+A refutation of the residuals assessment (docs/rebuild/v1/residuals-assessment-20260929.md) on 61c5cc8f found:
+
+RS-1 (MEDIUM). settle()'s COMMIT sent and its answer lost: the handler reconnected, read Usage.exists()
+before the in-flight commit was visible and recorded 'reconciliation' with "... nothing is charged until
+it is resolved" while the charge committed a moment later. Reproduced deterministically (the COMMIT's
+answer lost at the Django connection layer; the transaction stays open on its server connection holding
+its locks and is committed or rolled back only after the handler waits for one of them): the job said
+nothing was charged while a -0.15 debit, the usage row and the settled holds of that commit existed.
+core.jobs.commit_in_doubt(error, carrier) is structural, like never_transmitted: the exception passed
+through Django's own commit() and the connection that carried the COMMIT is gone (Django reconnects at
+once inside atomic's exit, so identity is the signal, not absence). An in-doubt settlement is held:
+'reconciliation', "The settlement outcome of this request is unknown; an administrator must reconcile
+it.", nothing released, absorbed or freed. A COMMIT the server refused (deferred FK) is still an
+established rollback. The handler now writes under the job's row lock and never overwrites an outcome a
+committed transaction recorded: the adoption's COMMIT answer lost after it committed used to turn a
+delivered, charged success into a platform failure with the charge reversed. admin_resolve_job already
+resolves from the committed rows under the job lock; tests prove both ways (landed: charge reversed once,
+no hold released; not landed: holds released, receipt cost absorbed).
+
+RS-2 (LOW). The handler first does Django's request-boundary connection repair (a connection broken
+outside a transaction stayed broken: OperationalError out of run_one, job left 'running'); a handler
+read or write that fails holds the job with "The outcome of this request could not be recorded; an
+administrator must reconcile it." on a fresh connection. An unreachable database still leaves it to the
+stale sweep.
+
+RS-3 (LOW, money). The failed state and the absorption are one transaction; a failed absorption leaves
+nothing of it and holds the job with its key and charge (usage.absorb_failed audited) for the
+administrator's resolution, never 'failed', charged and re-requestable. core.mapping_jobs had the same
+shape and is repaired the same way. test_billing_policy pinned the old behaviour and is updated.
+
+RS-5 (LOW). A fixture-mode failure that is not a validation refusal is named ("a platform database error
+(OperationalError) ..."); the key is freed only when no charge can exist (an in-doubt settlement holds).
+
+RS-4 (LOW, report). The assessment's 654 "ordinary" scenarios: 632 over 33 ordinary operations, 13 of
+them (the stale sweep) vacuous, so 619 over 32 exercised settlement; 22 are the non-ordinary second
+settlement. Corrected in the report. This supersedes the counts in 61c5cc8f's message.
+
+RA-LOW-1 (LOW, pre-existing). lower() (the unique index) and UPPER() (every iexact lookup) disagree off
+ASCII: 'ſam@' was created beside 'sam@'. core.forms.account_email: an account address is ASCII (checked as
+typed, before lowercasing folds the Kelvin sign), stripped and lowercased, and an address the lookup
+already answers is refused. Registration, both invitation acceptances, both invitation issuances and
+bootstrap_first_admin create. Nothing is folded into a different address; an IDN domain is entered in
+its xn-- form.
+
+Tests: core/tests/test_settlement_outcome_unknown.py, core/tests/test_account_email_rule.py, one test in
+test_mapping_assistance, one test and one fixture updated in test_billing_policy (both had been built on
+the RS-3 defect). RED on 61c5cc8f: 19 of the 25 new or changed tests fail (29 failures with subtests,
+2 errors); GREEN 49 of 49 (with test_money_closeout). 15 mutants, all killed, every anchor asserted once,
+every application read back, every restore verified by sha256. 29 targeted modules: 540 run, 4 failures
+from that fixture, then test_billing_policy 33 of 33. The whole core suite 2,405 run, 31 skipped, 0 failures (29 min 43 s). manage.py check: no issues. Evidence:
+docs/rebuild/v1/residuals-evidence-20260929/rs-*. docs/rebuild/cost-definition.md states the rules.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

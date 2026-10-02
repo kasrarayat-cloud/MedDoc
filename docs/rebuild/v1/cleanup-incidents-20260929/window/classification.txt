@@ -1,0 +1,37 @@
+M rebuild/core/admin_console.py                              eager: web first routed request + worker startup/checks
+M rebuild/core/admin_queries.py                              eager: web first routed request + worker startup/checks
+M rebuild/core/admin_views.py                                eager: web first routed request + worker startup/checks
+M rebuild/core/billing.py                                    eager: web first routed request + worker startup/checks
+M rebuild/core/coding.py                                     eager: web first routed request + worker startup/checks
+M rebuild/core/context.py                                    eager: web first routed request + worker startup/checks
+M rebuild/core/email_backend.py                              eager: web first routed request + worker startup/checks
+M rebuild/core/email_delivery.py                             eager: web first routed request + worker startup/checks
+M rebuild/core/field_location.py                             eager: web first routed request + worker startup/checks
+M rebuild/core/forms.py                                      eager: web first routed request + worker startup/checks
+M rebuild/core/generation.py                                 eager: web first routed request + worker startup/checks
+M rebuild/core/jobs.py                                       eager: web first routed request + worker startup/checks
+M rebuild/core/management/commands/audit_billing.py          not imported by any installed process
+M rebuild/core/management/commands/configuration_status.py   not imported by any installed process
+M rebuild/core/management/commands/publish_operations_status.py TIMER ONLY: fresh process, quillmd-fresh-operations-publisher (uid 1000)
+M rebuild/core/management/commands/worker.py                 eager: worker startup/checks
+M rebuild/core/media.py                                      eager: web first routed request + worker startup/checks
+M rebuild/core/middleware.py                                 eager: gunicorn boot (and worker startup)
+M rebuild/core/models.py                                     eager: gunicorn boot (and worker startup)
+M rebuild/core/recovery.py                                   eager: web first routed request + worker startup/checks
+M rebuild/core/security.py                                   eager: gunicorn boot (and worker startup)
+M rebuild/core/stripe_validation.py                          eager: web first routed request + worker startup/checks
+M rebuild/core/views.py                                      eager: web first routed request + worker startup/checks
+M rebuild/core/wm_conflicts.py                               LAZY ONLY: core/views.py:70 in wm_resolve when the Word result reports conflicts
+M rebuild/core/wm_review.py                                  eager: web first routed request + worker startup/checks
+M rebuild/documents/__init__.py                              LAZY ONLY: core/views.py:49 wm_resolve; :202 template_upload; :350 encounter_detail; :511 save_answers; :722 finalize
+M rebuild/documents/engine.py                                SUBPROCESS ONLY: subprocess documents/worker.py:8 (spawned by documents/service.py:81-89 for non-WM inspect/fill)
+M rebuild/documents/sdk_service.py                           LAZY ONLY: documents/service.py:58 in _run (every inspect/fill/resolve)
+M rebuild/documents/service.py                               LAZY ONLY: documents/__init__.py:3 (package body) once `documents` is first imported
+M rebuild/ops/backup_alerts.py                               TIMER ONLY: fresh process, quillmd-fresh-backup-alerts (uid 1000); also lazily by publish_operations_status.py:58
+M rebuild/ops/backup_restore.py                              not imported by any installed process
+M rebuild/ops/database_roles.py                              not imported by any installed process
+M rebuild/ops/service_launcher.py                            not imported by any installed process
+M rebuild/ops/with_db_role.py                                not imported by any installed process
+M rebuild/quillmd/settings.py                                eager: gunicorn boot (and worker startup)
+M rebuild/quillmd/urls.py                                    eager: web first routed request + worker startup/checks
+ADDED .py (non-test): 71

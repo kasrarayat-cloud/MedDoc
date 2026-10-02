@@ -1,0 +1,45 @@
+Refutation R1: an empty export fails the model_check stage; stage_passed requires its evidence retained
+
+R1 (MEDIUM, lens: evidence), reproduced here first: with the product's finalize writing a 0-byte export, the
+authenticated export answered 200 with an empty body whose sha256 (e3b0c442...) equals the finalized record's.
+Both `if exported and export_sha != ...` and `if exported:` were skipped on the empty body, so the hash
+comparison, the export.docx retention and the DOCX checks never ran, and run_model_check returned PASS with
+reasons [] and wrote stage-model_check-passed.json with no export retained. RED before the fix:
+test_an_empty_export_fails_the_stage_and_keeps_what_the_export_returned -> 'PASS' != 'FAIL'.
+
+Root cause: checks guarded by the truthiness of the value they check. Fixed in rebuild/ops/sonnet5_qa.py:
+- the export block: a non-200 is 'the authenticated export failed (<status>)'; on a 200, whatever came back is
+  retained as export.docx (zero bytes included) and EVERY check runs on it. Emptiness is its own problem
+  ('the authenticated export is empty: no export evidence was retained'), because an empty body's hash equals
+  a record finalized from an empty file. The finalized-record hash comparison and export_checks are
+  unconditional (empty -> 'not a valid DOCX'). export.json now records the status.
+- defence in depth, in _decide: a stage about to pass is held to RETAINED_EVIDENCE (case files, request
+  capture, provider result, records, both answer snapshots, export.docx, export.json, billing audit); a file
+  that is missing, empty, a link or not regular fails the stage, and the reasons reach the manifest. A stage
+  already failing is not held to it (it stopped early; naming files it never reached would bury why).
+  With the ORIGINAL R1 export block restored, this gate alone fails the stage:
+  ['the retained evidence export.docx is missing'].
+No existing guard was weakened; the passed record's checks list gains 'evidence retained'.
+
+Tests (rebuild/ops/tests/test_sonnet5_qa.py, +5):
+- the empty export (documents.fill_template patched to write b''): stage_failed with the emptiness and
+  not-a-valid-DOCX reasons, one send, no stage_passed, nothing admitted after; export.json bytes 0 and both
+  hashes e3b0c442...; the zero-byte export.docx retained and listed in the manifest.
+- an export that is not the finalized record's (the view's FileResponse serves the blank form): stage_failed.
+- a failed export request (503): stage_failed, export.json status 503, no export.docx.
+- evidence lost before the decision (export.docx unlinked inside audit_report): stage_failed with exactly
+  ['the retained evidence export.docx is missing'].
+- the gate names each missing, empty and linked file.
+Results: 69/69 under manage.py test on the QA server (test_quillmd_qa_repair_r1; was 64/64 before this round);
+46 plain unittest, 1 visible skip (the QA module off the QA database). The worktree has no rebuild/.env.
+
+Mutation proofs (baseline unmutated 24/24 green first; anchor count asserted == 1; application read back;
+run under a 600 s deadline; restored in finally and asserted by sha256 0319be84...): 8 of 8 KILLED —
+M1 the original `if exported:` block (R1's shape), M2 no emptiness problem, M3 no finalized-record hash
+comparison, M4 no non-200 problem, M5 the evidence gate not applied in _decide, M6 the gate ignoring an empty
+file, M7 the gate ignoring a link, M8 export.docx dropped from RETAINED_EVIDENCE. Every kill is an assertion
+on the stage decision or its reasons; the file was restored byte-identical after each.
+
+No provider request, no live run, the credential file was not read, the live ledger was not touched.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,20 @@
+[
+ {"name": "event1__mutation_proofs.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_345deca9-b32/agent-aebee20aa731fa229.jsonl", 369, "$SP/mutation_proofs.py", ">"]]},
+ {"name": "event1__qaenv.sh", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_345deca9-b32/agent-aebee20aa731fa229.jsonl", 187, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/qaenv.sh", ">"]]},
+ {"name": "event1__mutate_r1.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_345deca9-b32/agent-a23989dfeb6b73899.jsonl", 123, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mutate_r1.py", ">"]]},
+ {"name": "event1__qa-test.sh", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_345deca9-b32/agent-a23989dfeb6b73899.jsonl", 52, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/qa-test.sh", ">"]]},
+ {"name": "event1__commit-r1.txt", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_345deca9-b32/agent-a23989dfeb6b73899.jsonl", 146, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/commit-r1.txt", ">"]]},
+ {"name": "event1__commit-message.txt", "outdir": "recovered", "steps": [["write", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 635]]},
+ {"name": "event1__harness__mutate.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 306, "$H/mutate.py", ">"]]},
+ {"name": "event1__harness__ra-mutants.json", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 306, "$H/ra-mutants.json", ">"]]},
+ {"name": "event1__harness__rb-mutants.json", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 369, "$H/rb-mutants.json", ">"]]},
+ {"name": "event1__harness__resid_settings.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 144, "resid_settings.py", ">"]]},
+ {"name": "event1__harness__sitecustomize.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 144, "sitecustomize.py", ">"]]},
+ {"name": "event1__harness__run.sh", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 144, "run.sh", ">"], ["replace_line", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 410, "export PYTHONPATH=\"$here\"", "export PYTHONPATH=\"$here${EXTRA_PYTHONPATH:+:$EXTRA_PYTHONPATH}\""]]},
+ {"name": "event1__harness__probe_terminate.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl", 549, "$H/probe_terminate.py", ">"]]},
+ {"name": "event1__camp__msg-approval.txt", "outdir": "recovered", "steps": [["heredoc", "P.jsonl", 16559, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/camp/msg-approval.txt", ">"]]},
+ {"name": "event1__camp__msg-diag.txt", "outdir": "recovered", "steps": [["heredoc", "P.jsonl", 16911, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/camp/msg-diag.txt", ">"]]},
+ {"name": "event1__make_freeze.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_81ecaf0b-939/agent-a72f8adaf164f1511.jsonl", 594, "$S/make_freeze.py", ">"]]},
+ {"name": "event1__commit-a.txt", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_81ecaf0b-939/agent-a72f8adaf164f1511.jsonl", 550, "$S/commit-a.txt", ">"]]},
+ {"name": "event1__commit-b.txt", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_81ecaf0b-939/agent-a72f8adaf164f1511.jsonl", 608, "$S/commit-b.txt", ">"]]}
+]

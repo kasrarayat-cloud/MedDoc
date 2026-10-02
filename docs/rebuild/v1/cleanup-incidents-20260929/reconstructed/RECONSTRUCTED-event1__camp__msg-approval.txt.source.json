@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__camp__msg-approval.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P.jsonl:16559",
+   "timestamp": "2026-09-28T23:29:58.121Z",
+   "sha256_after": "0939c2a2f02f1e664f3984690c95cc3ff9752a243d4a47051f0fb7d89e530309",
+   "bytes_after": 1339
+  }
+ ],
+ "lines": 20,
+ "sha256": "0939c2a2f02f1e664f3984690c95cc3ff9752a243d4a47051f0fb7d89e530309"
+}

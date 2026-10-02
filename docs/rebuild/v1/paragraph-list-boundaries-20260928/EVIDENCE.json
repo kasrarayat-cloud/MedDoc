@@ -1,0 +1,36 @@
+{
+  "base_commit": "e47b41fcce8dcb239bf41fb0f06ad77b5f80a680",
+  "branch": "fix/v1-paragraph-list-boundaries",
+  "python": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+  "commands": [
+    "python -B rebuild/.runtime/paragraph-list-boundaries/replay-reviewer.py",
+    "python -B rebuild/.runtime/paragraph-list-boundaries/run_tests.py documents.test_paragraph_list_boxes documents.test_document_relations documents.test_question_boxes",
+    "python -B rebuild/.runtime/paragraph-list-boundaries/run_boundary_tests.py --before documents.test_paragraph_list_boxes.ParagraphListBoxes.test_destination_hidden_directly_or_by_style_is_not_an_answer_field documents.test_paragraph_list_boxes.ParagraphListBoxes.test_visible_destination_and_later_style_change_are_rechecked_at_export documents.test_paragraph_list_boxes.ParagraphListBoxes.test_preceding_selection_or_other_only_instruction_does_not_own_whole_answer documents.test_paragraph_list_boxes.ParagraphListBoxes.test_complete_local_instruction_is_preserved_and_bound_at_export documents.test_paragraph_list_boxes.ParagraphListBoxes.test_numbering_checkbox_markers_including_override_and_symbol_font_refuse documents.test_paragraph_list_boxes.ParagraphListBoxes.test_plain_courier_bullet_remains_a_descriptor documents.test_paragraph_list_boxes.ParagraphListBoxes.test_unresolved_references_cannot_claim_a_complete_list_question",
+    "python -B rebuild/.runtime/paragraph-list-boundaries/export_probe.py",
+    "python -B rebuild/.runtime/paragraph-list-boundaries/admission_probe.py"
+  ],
+  "source_sha256": {
+    "rebuild/documents/word_v3.py": "3f375c1c2127a0e778787b7ff87687ea2ddf6b960fe19875937b9a9e6eab5f67",
+    "rebuild/documents/test_paragraph_list_boxes.py": "5e20a5e965fc42b0b0b64eedb3adab5ab4f5d1baba7535f882543f05559f5509"
+  },
+  "runtime": {
+    "01-before.json": "6b407fcc7592003f24472b4a021d805008baec3addbd1983005e9f205398ba85",
+    "11-reviewer-before.json": "ee7d01851e08212cd66db522d5c10b8a6319eb0f98887926b636dfe4325929fe",
+    "12-reviewer-after-initial.json": "6650fd3374c1b147ccb5cf8f64b986e32679dc02577a5f516585a8bb4127122d",
+    "13-focused-tests-initial.log": "c44b1b64b8383ccc65039e14c91f71a07661559a157b160a79ff4a45db353c89",
+    "14-boundary-tests-before.log": "4d902e7444493fb65dc046692c688394a104fa5e71349bc0497112d0e8e92351",
+    "15-original-export.json": "9cd3cd275189fd67072bfb8cb04e4ae8d681eaf50dba341dd4f6adcf197ee3e1",
+    "16-admission.json": "815470f542089337213a2ebddfa5289139eac31f34bfe042aa65271ab177b426",
+    "17-reviewer-final.json": "6019d296f293ce7d20d531d9638d93227802d0ad3dd0c5935ee02413a5cda382",
+    "admission_probe.py": "2ecebb14701669213b8a225a6014a37493fed5c9a1c296ab8f3af0b648eee5af",
+    "export_probe.py": "9501c4df653f5dcb528b037949e4aca97ebf87026add474f786995aa3275b4f3",
+    "probe.py": "5898607491aeaa39da2fdfeab7ee49ab929261ecafeeb08d0507487880aa9743",
+    "replay-reviewer.py": "bb8ce40b2e02305498abf35c2738585377d4ec8bd726138861a39700454a3b3a",
+    "reviewer-REPORT.md": "5ce96a0d7510897e97e0ec45863b0e6881b5eb371ec0d0755f193d068fc48f40",
+    "reviewer-probe.py": "2a9c2bc371e4fef3a4d0a43c5fbba05336b9766e98efc9728dc69b6d01b53aac",
+    "reviewer-results-01.json": "ee7d01851e08212cd66db522d5c10b8a6319eb0f98887926b636dfe4325929fe",
+    "run_boundary_tests.py": "88154f8cbe2f085582186f6e65fe3ba910b8722f66469f4a093d9dc98d36ac99",
+    "run_tests.py": "064e143fa9a4465d3b6c69b957ccd484bd5ae6c36d63d843b863b6cce9cf53a0"
+  },
+  "scope": "No DB/provider/model/installed operation; isolated document worker plus pure in-memory tests. Await independent unchanged-probe closure."
+}

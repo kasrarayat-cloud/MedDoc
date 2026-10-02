@@ -1,0 +1,12 @@
+{
+  "base": "39c682bc64c06a2f67e426d33814617d7c517628",
+  "expected_guards": 51,
+  "expected_functions": 17,
+  "source_sha256": {
+    "rebuild/ops/integrity_contract.py": "89b3c0b4ccb1061a4260826db65ed04d0a30e0bcb4d567e8369a0b6ec2009ec7",
+    "rebuild/ops/backup_restore.py": "9e460aaddaf6cb332afe6839896801e279d45a6726becbe48406da77421dc8ec",
+    "rebuild/ops/production_restore_check.py": "26d6478a217c690727c9afaee63a1aad599613ca7de0ae73b2305198f146fa21",
+    "rebuild/ops/test_production_restore_check.py": "d6e818e11821f026816571da0daa532bb71d71cc6e1299901b46ac0a6d46583b",
+    "rebuild/core/tests/test_restore_integrity_contract.py": "5186b4df0fb7fa2676090b21fe17eeb85c695ffaee156a736c04a479054cd1de"
+  }
+}

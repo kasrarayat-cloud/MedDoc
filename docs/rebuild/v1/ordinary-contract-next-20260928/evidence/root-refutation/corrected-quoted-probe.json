@@ -1,0 +1,140 @@
+{
+  "source": "5d0d0f12580074804446f41144fdf406fe5eb2e2e34eea00d1f82e1602ad4812",
+  "results": [
+    {
+      "case": "baseline",
+      "notes": "Patient presents with right knee pain. The patient takes a vitamin.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "supported",
+      "text": "Patient presents with right knee pain.",
+      "stored_forced_holds": []
+    },
+    {
+      "case": "explicit_correction",
+      "notes": "Patient presents with right knee pain. Correction: left knee, not right knee.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "corrected_history",
+      "notes": "Patient presents with right knee pain. This history was copied from the donor; the recipient has no pain.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "supported",
+      "text": "Patient presents with right knee pain.",
+      "stored_forced_holds": []
+    },
+    {
+      "case": "denied_scope",
+      "notes": "The following symptoms are denied:\nPatient presents with right knee pain.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "conditional_scope",
+      "notes": "Only if the patient develops symptoms:\nPatient presents with right knee pain.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "quoted_subject",
+      "notes": "The father said, \"Patient presents with right knee pain.\"",
+      "selected": "The father said, \"Patient presents with right knee pain.\"",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "foreign_subject",
+      "notes": "The patient advocate presents with right knee pain. Plan: rest.",
+      "selected": "The patient advocate presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "patient_noun",
+      "notes": "Patient education includes cough management. Plan: rest.",
+      "selected": "Patient education includes cough management.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "coordinated_subject",
+      "notes": "The patient and the caregiver report right knee pain. Plan: rest.",
+      "selected": "The patient and the caregiver report right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "father_pronoun",
+      "notes": "Patient presents with his father. He reports low-grade fevers.",
+      "selected": "He reports low-grade fevers.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "label_mismatch",
+      "notes": "Family history:\nPatient presents with right knee pain.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "conflict",
+      "text": "",
+      "stored_forced_holds": [
+        "Chief complaint"
+      ]
+    },
+    {
+      "case": "foreign_scoped_tail",
+      "notes": "Patient presents with right knee pain. Assessment: father has right knee pain.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "supported",
+      "text": "Patient presents with right knee pain.",
+      "stored_forced_holds": []
+    },
+    {
+      "case": "resolved_tail",
+      "notes": "Patient presents with right knee pain. The knee pain resolved two months ago and has not returned.",
+      "selected": "Patient presents with right knee pain.",
+      "relation": "all unselected=context_only (adversarial mock)",
+      "status": "supported",
+      "text": "Patient presents with right knee pain.",
+      "stored_forced_holds": []
+    }
+  ]
+}

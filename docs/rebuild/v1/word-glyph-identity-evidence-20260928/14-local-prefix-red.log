@@ -1,0 +1,24 @@
+test_readback_accepts_local_namespace_aliases_for_original_runs (documents.test_word_v3.SourceBoundGlyphWrites.test_readback_accepts_local_namespace_aliases_for_original_runs) ... ERROR
+
+======================================================================
+ERROR: test_readback_accepts_local_namespace_aliases_for_original_runs (documents.test_word_v3.SourceBoundGlyphWrites.test_readback_accepts_local_namespace_aliases_for_original_runs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_word_v3.py", line 1844, in test_readback_accepts_local_namespace_aliases_for_original_runs
+    result = w.fill(raw, fields, {'c': ['Before', 'After'], 't': 'literal ☐ symbol retained'})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/word_v3.py", line 3583, in fill
+    verify_options(out, fields, answers, glyph_readback=glyph_readback)
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/word_v3.py", line 3825, in verify_options
+    fail("After filling, the options shown for \"%s\" differ from the reviewed answer, so no export was made. "
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/word_v3.py", line 61, in fail
+    raise V3Failure(message, code)
+documents.word_v3.V3Failure: After filling, the options shown for "Choices" differ from the reviewed answer, so no export was made. Report this form to QuillMD.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.182s
+
+FAILED (errors=1)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

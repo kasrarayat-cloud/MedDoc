@@ -1,0 +1,45 @@
+{
+  "source_sha256": "b364091d33851a51edd8b88c374effd0aab8aea103f4015cfa656702d6444849",
+  "source_unchanged": true,
+  "pure_synthetic": true,
+  "cases": {
+    "conditional_choice": {
+      "input": "If pain is present, select one severity: / a. Mild / b. Severe / For help, please refer to the guidance at: / fixed link",
+      "baseline_fields": [
+        {
+          "label": "If pain is present, select one severity",
+          "options": [
+            "Mild",
+            "Severe"
+          ]
+        },
+        {
+          "label": "For help, please refer to the guidance at",
+          "options": null
+        }
+      ],
+      "new_fields": [
+        {
+          "label": "If pain is present, select one severity",
+          "options": [
+            "Mild",
+            "Severe"
+          ]
+        }
+      ],
+      "demonstrated_wrong_output": false
+    },
+    "moved_reference_destination": {
+      "refused": "mapping_mismatch",
+      "demonstrated_wrong_output": false
+    },
+    "other_author_box": {
+      "refused": "protected_signing_area",
+      "demonstrated_wrong_output": false
+    },
+    "filled_author_box": {
+      "refused": "protected_signing_area",
+      "demonstrated_wrong_output": false
+    }
+  }
+}

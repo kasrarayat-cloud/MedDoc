@@ -1,0 +1,35 @@
+BASELINE (unmutated, every targeted test must pass):
+  admission: stage limit: exit 0 :: Ran 1 test in 0.008s | OK
+  admission: total limit: exit 0 :: Ran 1 test in 0.011s | OK
+  admission: request count: exit 0 :: Ran 1 test in 0.009s | OK
+  admission: open attempt: exit 0 :: Ran 1 test in 0.013s | OK
+  admission: prerequisite: exit 0 :: Ran 1 test in 0.004s | OK
+  served model check: exit 0 :: Ran 1 test in 1.505s | OK
+  .env refusal: credential path: exit 0 :: Ran 1 test in 0.002s | OK
+  .env refusal: checkout rebuild/.env: exit 0 :: Ran 1 test in 0.047s | OK
+MUTANTS (each must make its targeted test FAIL):
+  admission: stage limit: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 0.001s | FAILED (failures=1) -> KILLED
+    restored: True (sha256 1759327952cd42ee… -> 1759327952cd42ee…)
+  admission: total limit: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 0.008s | FAILED (failures=1) -> KILLED
+    restored: True (sha256 1759327952cd42ee… -> 1759327952cd42ee…)
+  admission: request count: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 0.015s | FAILED (failures=1) -> KILLED
+    restored: True (sha256 1759327952cd42ee… -> 1759327952cd42ee…)
+  admission: open attempt: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 0.005s | FAILED (failures=1) -> KILLED
+    restored: True (sha256 1759327952cd42ee… -> 1759327952cd42ee…)
+  admission: prerequisite: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 0.002s | FAILED (failures=1) -> KILLED
+    restored: True (sha256 1759327952cd42ee… -> 1759327952cd42ee…)
+  served model check: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 2.497s | FAILED (failures=1) -> KILLED
+    restored: True (sha256 e1c9085c9bba8912… -> e1c9085c9bba8912…)
+  .env refusal: credential path: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 0.004s | FAILED (failures=1, errors=1) -> KILLED
+    restored: True (sha256 1759327952cd42ee… -> 1759327952cd42ee…)
+  .env refusal: checkout rebuild/.env: mutation applied: True
+    targeted test exit 1 :: Ran 1 test in 2.233s | FAILED (failures=1) -> KILLED
+    restored: True (sha256 e1c9085c9bba8912… -> e1c9085c9bba8912…)
+ALL MUTANTS KILLED AND RESTORED

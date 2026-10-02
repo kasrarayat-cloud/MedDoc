@@ -1,0 +1,209 @@
+Creating test database for alias 'default' ('test_v1_disposition_02_counterexamples')...
+Found 7 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying core.0023_retention_preservation... OK
+  Applying core.0024_preserved_file... OK
+  Applying core.0025_preservation_guards... OK
+  Applying core.0026_preservation_scope_identity... OK
+  Applying core.0028_disposition_preparation... OK
+  Applying core.0027_generation_batches... OK
+  Applying core.0029_merge_batch_disposition... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) ...
+  test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='journal') ... FAIL
+  test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='target') ... FAIL
+  test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='backup') ... FAIL
+  test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='typed_bool') ... FAIL
+test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) ...
+  test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='target') ... FAIL
+  test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='department') ... FAIL
+  test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='scope') ... FAIL
+  test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='typed_bool') ... FAIL
+test_known_batch_schema_is_supported_without_weakening_unknown_schema_refusal (core.tests.test_disposition_integration.RecoveredBoundaries.test_known_batch_schema_is_supported_without_weakening_unknown_schema_refusal) ... ERROR
+test_late_batch_event_invalidates_review_snapshot (core.tests.test_disposition_integration.RecoveredBoundaries.test_late_batch_event_invalidates_review_snapshot) ... FAIL
+test_quarantine_preserves_preview_authentication_and_public_css (core.tests.test_disposition_integration.RecoveredBoundaries.test_quarantine_preserves_preview_authentication_and_public_css) ... /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FAIL
+test_restore_quarantine_rejects_direct_mapping_and_batch_workers (core.tests.test_disposition_integration.RecoveredBoundaries.test_restore_quarantine_rejects_direct_mapping_and_batch_workers) ...
+  test_restore_quarantine_rejects_direct_mapping_and_batch_workers (core.tests.test_disposition_integration.RecoveredBoundaries.test_restore_quarantine_rejects_direct_mapping_and_batch_workers) (worker='core.mapping_jobs') ... FAIL
+  test_restore_quarantine_rejects_direct_mapping_and_batch_workers (core.tests.test_disposition_integration.RecoveredBoundaries.test_restore_quarantine_rejects_direct_mapping_and_batch_workers) (worker='core.batch_jobs') ... FAIL
+test_terminal_batch_keeps_late_child_and_immutable_response_in_graph (core.tests.test_disposition_integration.RecoveredBoundaries.test_terminal_batch_keeps_late_child_and_immutable_response_in_graph) ... FAIL
+
+======================================================================
+ERROR: test_known_batch_schema_is_supported_without_weakening_unknown_schema_refusal (core.tests.test_disposition_integration.RecoveredBoundaries.test_known_batch_schema_is_supported_without_weakening_unknown_schema_refusal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 36, in test_known_batch_schema_is_supported_without_weakening_unknown_schema_refusal
+    d.check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+FAIL: test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='journal')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 89, in test_database_refuses_false_restore_journal_and_mismatched_target_claims
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='target')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 89, in test_database_refuses_false_restore_journal_and_mismatched_target_claims
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='backup')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 89, in test_database_refuses_false_restore_journal_and_mismatched_target_claims
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) (change='typed_bool')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 89, in test_database_refuses_false_restore_journal_and_mismatched_target_claims
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='target')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 101, in test_database_refuses_plan_for_another_scope_or_string_authority
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='department')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 101, in test_database_refuses_plan_for_another_scope_or_string_authority
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='scope')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 101, in test_database_refuses_plan_for_another_scope_or_string_authority
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) (change='typed_bool')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 101, in test_database_refuses_plan_for_another_scope_or_string_authority
+    with self.subTest(change=change), self.assertRaises(DatabaseError), transaction.atomic():
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_late_batch_event_invalidates_review_snapshot (core.tests.test_disposition_integration.RecoveredBoundaries.test_late_batch_event_invalidates_review_snapshot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 59, in test_late_batch_event_invalidates_review_snapshot
+    with self.assertRaisesMessage(ValidationError, 'graph changed'):
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+AssertionError: ValidationError not raised
+
+======================================================================
+FAIL: test_quarantine_preserves_preview_authentication_and_public_css (core.tests.test_disposition_integration.RecoveredBoundaries.test_quarantine_preserves_preview_authentication_and_public_css)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 73, in test_quarantine_preserves_preview_authentication_and_public_css
+    self.assertEqual(response.status_code, 200)
+AssertionError: 503 != 200
+
+======================================================================
+FAIL: test_restore_quarantine_rejects_direct_mapping_and_batch_workers (core.tests.test_disposition_integration.RecoveredBoundaries.test_restore_quarantine_rejects_direct_mapping_and_batch_workers) (worker='core.mapping_jobs')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 66, in test_restore_quarantine_rejects_direct_mapping_and_batch_workers
+    with self.subTest(worker=worker.__module__), self.assertRaisesMessage(ValidationError, 'quarantined'):
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+AssertionError: ValidationError not raised
+
+======================================================================
+FAIL: test_restore_quarantine_rejects_direct_mapping_and_batch_workers (core.tests.test_disposition_integration.RecoveredBoundaries.test_restore_quarantine_rejects_direct_mapping_and_batch_workers) (worker='core.batch_jobs')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 66, in test_restore_quarantine_rejects_direct_mapping_and_batch_workers
+    with self.subTest(worker=worker.__module__), self.assertRaisesMessage(ValidationError, 'quarantined'):
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+AssertionError: ValidationError not raised
+
+======================================================================
+FAIL: test_terminal_batch_keeps_late_child_and_immutable_response_in_graph (core.tests.test_disposition_integration.RecoveredBoundaries.test_terminal_batch_keeps_late_child_and_immutable_response_in_graph)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 47, in test_terminal_batch_keeps_late_child_and_immutable_response_in_graph
+    self.assertEqual([r['id'] for r in plan.graph['nodes'].get('GenerationBatch', [])], [str(batch.pk)])
+AssertionError: Lists differ: [] != ['cf9500df-dffb-473e-be97-8a59f2c7050b']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'cf9500df-dffb-473e-be97-8a59f2c7050b'
+
+- []
++ ['cf9500df-dffb-473e-be97-8a59f2c7050b']
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.561s
+
+FAILED (failures=13, errors=1)
+Destroying test database for alias 'default' ('test_v1_disposition_02_counterexamples')...
+ OK
+System check identified no issues (0 silenced).

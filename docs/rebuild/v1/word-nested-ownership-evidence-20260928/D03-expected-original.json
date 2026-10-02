@@ -1,0 +1,1617 @@
+{
+ "template": "dev/originals/D03-29dfcdd8a5da.docx",
+ "sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+ "role": "reviewer",
+ "pages": 4,
+ "form_title": "Detailed Patient Headache Questionnaire (Current Headache)",
+ "answer_areas": [
+  {
+   "id": "A1",
+   "label": "Name:",
+   "context": "Page 1 header block (left)",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/p[2]"
+   ],
+   "location": "body",
+   "duplicate_label": false,
+   "notes": "Underscore run after \"Name:\"; shares paragraph b/p[2] with \"Endocrinology Centre:\"."
+  },
+  {
+   "id": "A2",
+   "label": "Endocrinology Centre:",
+   "context": "Page 1 header block (right)",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/p[2]"
+   ],
+   "location": "body",
+   "duplicate_label": false,
+   "notes": "Second underscore run in paragraph b/p[2], after \"Endocrinology Centre:\"."
+  },
+  {
+   "id": "A3",
+   "label": "# ____ days ago",
+   "context": "Q1 When did your headaches start?",
+   "kind": "number",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run 1 of 4 in the same paragraph (after \"#\"); number of days; typically only one of the four is answered."
+  },
+  {
+   "id": "A4",
+   "label": "# ____ weeks ago",
+   "context": "Q1 When did your headaches start?",
+   "kind": "number",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run 2 of 4 in the same paragraph (after \"#\"); number of weeks; typically only one of the four is answered."
+  },
+  {
+   "id": "A5",
+   "label": "# ____ months ago",
+   "context": "Q1 When did your headaches start?",
+   "kind": "number",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run 3 of 4 in the same paragraph (after \"#\"); number of months; typically only one of the four is answered."
+  },
+  {
+   "id": "A6",
+   "label": "# ____ years ago",
+   "context": "Q1 When did your headaches start?",
+   "kind": "number",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run 4 of 4 in the same paragraph (after \"#\"); number of years; typically only one of the four is answered."
+  },
+  {
+   "id": "A7",
+   "label": "Did your headaches start with the development of acromegaly?",
+   "context": "Q2",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[1]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "No/Yes enclosing-circle glyph pair inline in the question paragraph. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A8",
+   "label": "if yes, describe the timing of onset and symptoms:",
+   "context": "Q2 Did your headaches start with the development of acromegaly? > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[1]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Long underscore run at the end of the same paragraph as the question; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A9",
+   "label": "Do your headache vary with the control of your acromegaly?",
+   "context": "Q3",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[2]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "No/Yes enclosing-circle glyph pair inline in the question paragraph. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A10",
+   "label": "if yes, please describe:",
+   "context": "Q3 Do your headache vary with the control of your acromegaly? > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[2]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Long underscore run at the end of the same paragraph as the question; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A11",
+   "label": "Is headache the worst aspect of your acromegaly?",
+   "context": "Q4",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[3]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "No/Yes enclosing-circle glyph pair inline in the question paragraph. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A12",
+   "label": "if yes, please expand:",
+   "context": "Q4 Is headache the worst aspect of your acromegaly? > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[3]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Long underscore run at the end of the same paragraph as the question; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A13",
+   "label": "Did your headache become less severe after the treatment of your acromegaly?",
+   "context": "Q5",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[4]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "No/Yes enclosing-circle glyph pair inline in the question paragraph. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A14",
+   "label": "if yes, please expand:",
+   "context": "Q5 Did your headache become less severe after the treatment of your acromegaly? > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[4]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Long underscore run at the end of the same paragraph as the question; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A15",
+   "label": "How many days per month do you have a headache?",
+   "context": "Q6",
+   "kind": "number",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[5]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run at end of paragraph; count of days per month."
+  },
+  {
+   "id": "A16",
+   "label": "How many headache-free days do you have in a month?",
+   "context": "Q6",
+   "kind": "number",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[5]/tc[0]/p[1]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run at end of paragraph; count of days per month."
+  },
+  {
+   "id": "A17",
+   "label": "How severe are your headaches on average?",
+   "context": "Q7 (please circle the number which most applies); 0 = Not at all painful, 10 = Most severe pain possible",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[0]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[1]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[2]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[3]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[4]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[5]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[6]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[7]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[8]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[9]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[0]/tc[10]"
+   ],
+   "options": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "0-10 numeric rating scale in a nested 11-column table; answer = circle one printed number (cells of row 0). Row 1 holds anchor text in cells 0 and 10; its empty cells 1-9 are spacers, not blanks."
+  },
+  {
+   "id": "A18",
+   "label": "How severe are your most painful headaches?",
+   "context": "Q7 (please circle the number which most applies); 0 = Not at all painful, 10 = Most severe pain possible",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[0]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[1]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[2]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[3]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[4]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[5]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[6]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[7]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[8]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[9]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[0]/tc[10]"
+   ],
+   "options": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "0-10 numeric rating scale in a nested 11-column table; answer = circle one printed number (cells of row 0). Row 1 holds anchor text in cells 0 and 10; its empty cells 1-9 are spacers, not blanks."
+  },
+  {
+   "id": "A19",
+   "label": "Do you have more than one type of headache?",
+   "context": "Q8",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "No/Yes glyph pair; \"If yes, focus on your worst headache type...\" is an instruction, not a blank. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A20",
+   "label": "Where are your headaches located in general?",
+   "context": "Q9 (Please tick all that apply, and indicate right or left where appropriate)",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[3]/tc[0]/p[0]"
+   ],
+   "options": [
+    "Temple",
+    "Front of head",
+    "Ear",
+    "Back of head",
+    "Around head",
+    "Neck",
+    "Top of head",
+    "Eye",
+    "Jaw",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 3-column option grid; one glyph per cell. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A21",
+   "label": "Right / Left",
+   "context": "Q9 Where are your headaches located > Temple",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two checkbox content controls (unchecked, MS Gothic 2610/2612) after the \"Temple\" location glyph; side qualifier for that location, both may apply."
+  },
+  {
+   "id": "A22",
+   "label": "Right / Left",
+   "context": "Q9 Where are your headaches located > Ear",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two checkbox content controls (unchecked, MS Gothic 2610/2612) after the \"Ear\" location glyph; side qualifier for that location, both may apply."
+  },
+  {
+   "id": "A23",
+   "label": "Right / Left",
+   "context": "Q9 Where are your headaches located > Back of head",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two checkbox content controls (unchecked, MS Gothic 2610/2612) after the \"Back of head\" location glyph; side qualifier for that location, both may apply."
+  },
+  {
+   "id": "A24",
+   "label": "Right / Left",
+   "context": "Q9 Where are your headaches located > Top of head",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two checkbox content controls (unchecked, MS Gothic 2610/2612) after the \"Top of head\" location glyph; side qualifier for that location, both may apply."
+  },
+  {
+   "id": "A25",
+   "label": "Right / Left",
+   "context": "Q9 Where are your headaches located > Eye",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two checkbox content controls (unchecked, MS Gothic 2610/2612) after the \"Eye\" location glyph; side qualifier for that location, both may apply."
+  },
+  {
+   "id": "A26",
+   "label": "Other",
+   "context": "Q9 Where are your headaches located > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[3]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after the \"Other\" option glyph (merged cell spanning 3 columns)."
+  },
+  {
+   "id": "A27",
+   "label": "Please indicate what your headaches usually feel like:",
+   "context": "Q10 (tick all that apply)",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]"
+   ],
+   "options": [
+    "Throbbing/Pulsing",
+    "Dull",
+    "Shooting",
+    "Achy",
+    "Stabbing",
+    "Burning",
+    "Tight",
+    "Pressure",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 3-column option grid. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A28",
+   "label": "Other:",
+   "context": "Q10 Headache feel > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\"; renders on the line below the label."
+  },
+  {
+   "id": "A29",
+   "label": "Shortest",
+   "context": "Q11 How long do your headaches last in HOURS?",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[10]/tc[0]/p[2]"
+   ],
+   "unit": "hours",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Short underscore run after the label; all three blanks and the constant No/Yes share paragraph p[2]."
+  },
+  {
+   "id": "A30",
+   "label": "Longest",
+   "context": "Q11 How long do your headaches last in HOURS?",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[10]/tc[0]/p[2]"
+   ],
+   "unit": "hours",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Short underscore run after the label; all three blanks and the constant No/Yes share paragraph p[2]."
+  },
+  {
+   "id": "A31",
+   "label": "Average",
+   "context": "Q11 How long do your headaches last in HOURS?",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[10]/tc[0]/p[2]"
+   ],
+   "unit": "hours",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Short underscore run after the label; all three blanks and the constant No/Yes share paragraph p[2]."
+  },
+  {
+   "id": "A32",
+   "label": "or are they constant?",
+   "context": "Q11 How long do your headaches last",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[10]/tc[0]/p[2]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A33",
+   "label": "Please indicate when your headaches are worst:",
+   "context": "Q12",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[11]/tc[0]/p[2]"
+   ],
+   "options": [
+    "Morning",
+    "Afternoon",
+    "Evening",
+    "During the night",
+    "No pattern"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Five glyph options on one line (p[2], below the question). Wording implies one answer; a patient may tick more than one. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A34",
+   "label": "Are your headaches worse lying down or standing?",
+   "context": "Q13",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[12]/tc[0]/p[0]"
+   ],
+   "options": [
+    "Lying down",
+    "Standing",
+    "Both the same"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A35",
+   "label": "Do your headaches wake you up in the middle of the night?",
+   "context": "Q14",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[13]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A36",
+   "label": "if yes, how often?",
+   "context": "Q14 Wake you up at night > Yes",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[13]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run at end of the question paragraph; wraps onto the next printed line. Conditional on Yes."
+  },
+  {
+   "id": "A37",
+   "label": "Do you experience any of these symptoms 1 to 2 days before the onset of headache?",
+   "context": "Q15 Prodrome (Please tick all that apply)",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]"
+   ],
+   "options": [
+    "Hyperactivity",
+    "Difficulty with speech",
+    "Food cravings",
+    "Depressed feeling",
+    "Sensitive to light",
+    "Increased appetite",
+    "Irritability",
+    "Sensitive to sound/noise",
+    "Decreased appetite",
+    "Feeling sluggish",
+    "Dizziness",
+    "Increased urination",
+    "Difficulty concentrating",
+    "Excessive yawning",
+    "Stiff neck",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 3-column option grid; empty row tr[6] is a spacer. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A38",
+   "label": "Other:",
+   "context": "Q15 Symptoms 1 to 2 days before onset > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\" (merged cell, 3 columns); renders on the line below the label."
+  },
+  {
+   "id": "A39",
+   "label": "Do you experience any of these symptoms during your headache?",
+   "context": "Q16 Symptoms during headache (Please tick all that apply)",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[3]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[3]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[4]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[4]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[5]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[6]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[6]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[7]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[7]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[8]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[8]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[9]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[9]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[10]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[10]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[11]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[11]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[12]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[12]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[13]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[13]/tc[0]/p[1]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[13]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[14]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[14]/tc[0]/p[1]"
+   ],
+   "options": [
+    "Nausea or upset stomach/vomiting",
+    "Sensitivity to smells",
+    "Sensitivity to light (prefer a dark room)",
+    "Difficulty thinking/concentrating/focusing",
+    "Sensitivity to sound (prefer a quiet room)",
+    "Difficulty speaking/slurred speech",
+    "Sore/stiff neck",
+    "Increased Urination",
+    "Vision changes (blurred, spots, patterns)",
+    "Anxiety",
+    "Eye tearing in only ONE EYE",
+    "Irritability",
+    "Runny nose in only ONE NOSTRIL",
+    "Memory problems",
+    "Ringing in ears",
+    "Increased appetite",
+    "Eye-redness",
+    "Decreased appetite",
+    "Drooping eyelid",
+    "Diarrhoea",
+    "Swelling of eyelid",
+    "Constipation",
+    "Change in pupil",
+    "Insomnia",
+    "Dizziness/vertigo",
+    "Sleepiness",
+    "Imbalance",
+    "Confusion",
+    "Numbness/Tingling",
+    "Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 2-column option grid; options listed in document (row-major) order. Imbalance and Confusion share cell tr[13]/tc[0] as two paragraphs; Stroke-like and Other share merged cell tr[14]/tc[0]. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A40",
+   "label": "Right / Left",
+   "context": "Q16 Symptoms during headache > Eye-redness",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[8]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[8]/tc[0]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two bracketed checkbox content controls (unchecked) after the \"Eye-redness\" glyph; qualifier for that symptom."
+  },
+  {
+   "id": "A41",
+   "label": "Right / Left",
+   "context": "Q16 Symptoms during headache > Drooping eyelid",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[9]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[9]/tc[0]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two bracketed checkbox content controls (unchecked) after the \"Drooping eyelid\" glyph; qualifier for that symptom."
+  },
+  {
+   "id": "A42",
+   "label": "Right / Left",
+   "context": "Q16 Symptoms during headache > Swelling of eyelid",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[10]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[10]/tc[0]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two bracketed checkbox content controls (unchecked) after the \"Swelling of eyelid\" glyph; qualifier for that symptom."
+  },
+  {
+   "id": "A43",
+   "label": "Larger / Smaller",
+   "context": "Q16 Symptoms during headache > Change in pupil",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[11]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[11]/tc[0]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Larger",
+    "Smaller"
+   ],
+   "location": "content_control",
+   "duplicate_label": false,
+   "notes": "Two bracketed checkbox content controls (unchecked) after the \"Change in pupil\" glyph; qualifier for that symptom."
+  },
+  {
+   "id": "A44",
+   "label": "Where?",
+   "context": "Q16 Symptoms during headache > Numbness/Tingling",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[13]/tc[1]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run inside \"[Where? ___ ]\" after the Numbness/Tingling glyph."
+  },
+  {
+   "id": "A45",
+   "label": "Other:",
+   "context": "Q16 Symptoms during headache > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[14]/tc[0]/p[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\" (paragraph p[1] of merged cell); renders on the line below the label."
+  },
+  {
+   "id": "A46",
+   "label": "Do you experience any of the following symptoms before your headache begins? - Visual:",
+   "context": "Q17 Aura before headache > Visual (Please tick all that apply)",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[3]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]"
+   ],
+   "options": [
+    "Flashing lights",
+    "Loss of vision in one eye",
+    "Tunnel vision",
+    "Spots: bright/dark",
+    "Zigzag lines",
+    "Loss of vision on one side",
+    "Double vision",
+    "Geometric forms",
+    "Wavy lines",
+    "Total blindness",
+    "Distorted vision",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 4-column option grid under the \"Visual:\" subheading (split from the Sensory group because each subheading has its own Other). Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A47",
+   "label": "Other:",
+   "context": "Q17 Aura before headache > Visual > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\"."
+  },
+  {
+   "id": "A48",
+   "label": "Do you experience any of the following symptoms before your headache begins? - Sensory and other:",
+   "context": "Q17 Aura before headache > Sensory and other (Please tick all that apply)",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[2]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[3]/tc[1]/p[0]"
+   ],
+   "options": [
+    "Numbness/tingling",
+    "Light headedness",
+    "Speech difficulty",
+    "One-sided weakness",
+    "Vertigo",
+    "Confusion/déjà vu/hallucinations",
+    "Dizziness/unsteadiness",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 2-column option grid under the \"Sensory and other:\" subheading. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A49",
+   "label": "Where?",
+   "context": "Q17 Aura before headache > Sensory and other > Numbness/tingling",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[0]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run inside \"[Where? ___ ]\"; wraps onto the next printed line."
+  },
+  {
+   "id": "A50",
+   "label": "Right / Left",
+   "context": "Q17 Aura before headache > Sensory and other > One-sided weakness",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]/sdt[1]"
+   ],
+   "options": [
+    "Right",
+    "Left"
+   ],
+   "location": "content_control",
+   "duplicate_label": true,
+   "notes": "Two bracketed checkbox content controls (unchecked) after the One-sided weakness glyph; one side expected."
+  },
+  {
+   "id": "A51",
+   "label": "Other:",
+   "context": "Q17 Aura before headache > Sensory and other > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[3]/tc[1]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\"."
+  },
+  {
+   "id": "A52",
+   "label": "they usually last: _____ minutes",
+   "context": "Q17 Aura before headache > If you have any of these symptoms",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/p[4]"
+   ],
+   "unit": "minutes",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "First underscore run in paragraph p[4]."
+  },
+  {
+   "id": "A53",
+   "label": "terminate _____ minutes before the pain starts",
+   "context": "Q17 Aura before headache > If you have any of these symptoms",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/p[4]"
+   ],
+   "unit": "minutes",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Second underscore run in paragraph p[4]."
+  },
+  {
+   "id": "A54",
+   "label": "OR occur",
+   "context": "Q17 Aura before headache > If you have any of these symptoms",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/p[4]"
+   ],
+   "options": [
+    "during the headache",
+    "after the headache",
+    "without the headache"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Three glyphs at the end of p[4]; alternative to the \"terminate before the pain\" timing. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A55",
+   "label": "Food/beverage:",
+   "context": "Q18 Provoking factors (triggers) > Food/beverage",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]"
+   ],
+   "options": [
+    "Fasting/skipping meals",
+    "Chocolate",
+    "Caffeine",
+    "Nitrates",
+    "MSG",
+    "Aged cheese",
+    "Alcohol beverages"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Six glyphs on p[3] and \"Alcohol beverages\" on the continuation line p[4]. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A56",
+   "label": "Alcohol beverages:",
+   "context": "Q18 Provoking factors > Food/beverage > Alcohol beverages",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]"
+   ],
+   "options": [
+    "Wine",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Sub-options printed at 9pt after \"Alcohol beverages:\" (subordinate to that option). The \"Other\" here reads as other alcoholic beverage (it could alternatively be read as a Food/beverage Other). Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A57",
+   "label": "Wine [Red / White]",
+   "context": "Q18 Provoking factors > Food/beverage > Alcohol beverages > Wine",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[1]"
+   ],
+   "options": [
+    "Red",
+    "White"
+   ],
+   "location": "content_control",
+   "duplicate_label": false,
+   "notes": "Two bracketed checkbox content controls (unchecked) after the Wine glyph."
+  },
+  {
+   "id": "A58",
+   "label": "Other:",
+   "context": "Q18 Provoking factors > Food/beverage > Alcohol beverages > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\" at the end of p[4]."
+  },
+  {
+   "id": "A59",
+   "label": "Physical exertion:",
+   "context": "Q18 Provoking factors > Physical exertion",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[6]"
+   ],
+   "options": [
+    "Coughing",
+    "Talking",
+    "Chewing",
+    "Exercise",
+    "Sexual intercourse"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A60",
+   "label": "Hormonal:",
+   "context": "Q18 Provoking factors > Hormonal",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[8]"
+   ],
+   "options": [
+    "Menstruation",
+    "Pregnancy",
+    "Menopause"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A61",
+   "label": "Menstruation: Before / During / After",
+   "context": "Q18 Provoking factors > Hormonal > Menstruation",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[8]"
+   ],
+   "options": [
+    "Before",
+    "During",
+    "After"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Timing sub-options printed at 9pt after \"Menstruation:\" (subordinate to that option). Not mutually exclusive: Q18 asks the patient to indicate any triggers, and a menstrual headache can occur both before and during menses, so more than one may be ticked. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A62",
+   "label": "Stress:",
+   "context": "Q18 Provoking factors > Stress",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[10]"
+   ],
+   "options": [
+    "Work",
+    "Home",
+    "Family",
+    "Spouse",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A63",
+   "label": "Other:",
+   "context": "Q18 Provoking factors > Stress > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[10]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run at end of p[10]."
+  },
+  {
+   "id": "A64",
+   "label": "Environmental:",
+   "context": "Q18 Provoking factors > Environmental",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[12]"
+   ],
+   "options": [
+    "Allergies",
+    "Weather changes",
+    "Altitude",
+    "Sunlight",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A65",
+   "label": "Other:",
+   "context": "Q18 Provoking factors > Environmental > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[12]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run at end of p[12]."
+  },
+  {
+   "id": "A66",
+   "label": "Sleep:",
+   "context": "Q18 Provoking factors > Sleep",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[14]"
+   ],
+   "options": [
+    "Lack of sleep",
+    "Too much sleep",
+    "Change in wake/sleep"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A67",
+   "label": "Other Triggers:",
+   "context": "Q18 Provoking factors",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[16]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Full-width underscore run after the underlined label \"Other Triggers:\"."
+  },
+  {
+   "id": "A68",
+   "label": "Do any of the following activities worsen your headache once it starts?",
+   "context": "Q19",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]"
+   ],
+   "options": [
+    "Walking",
+    "Climbing steps",
+    "Exercise",
+    "N/A",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 4-column grid; empty row tr[2] is a spacer. N/A is exclusive of the others. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A69",
+   "label": "Other:",
+   "context": "Q19 Activities that worsen headache > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\" (merged cell, 4 columns); renders on the line below the label."
+  },
+  {
+   "id": "A70",
+   "label": "Do any of the following factors relieve your headaches:",
+   "context": "Q20",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[4]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[3]/p[0]",
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]"
+   ],
+   "options": [
+    "Lying down",
+    "Dark quiet room",
+    "Hot compress",
+    "Massage",
+    "N/A",
+    "Standing",
+    "Ice/Cold compress",
+    "Keeping active/pacing",
+    "Pregnancy",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Nested 5-column grid; empty cells tr[1]/tc[4] and tr[2]/tc[1] are layout fillers. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A71",
+   "label": "Other:",
+   "context": "Q20 Factors that relieve headache > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\" (merged cell); renders on the line below the label."
+  },
+  {
+   "id": "A72",
+   "label": "Do you think your headaches are related to acromegaly?",
+   "context": "Q21",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[20]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A73",
+   "label": "if yes, please expand:",
+   "context": "Q21 Do you think your headaches are related to acromegaly? > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[20]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Long underscore run at the end of the question paragraph; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A74",
+   "label": "Is your headache always on the same side of the head?",
+   "context": "Q22",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[21]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A75",
+   "label": "if yes, please expand:",
+   "context": "Q22 Is your headache always on the same side of the head? > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[21]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Long underscore run at the end of the question paragraph; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A76",
+   "label": "Is your headache the same side as the tumour?",
+   "context": "Q23",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[22]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes",
+    "Don’t know"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A77",
+   "label": "Which treatments for acromegaly help with your headache?",
+   "context": "Q24",
+   "kind": "multi_choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[23]/tc[0]/p[1]",
+    "word/document.xml#b/tbl[0]/tr[23]/tc[0]/p[2]"
+   ],
+   "options": [
+    "Surgery",
+    "Radiotherapy",
+    "Octreotide",
+    "Lanreotide",
+    "None",
+    "Pasireotide",
+    "Pegvisomant",
+    "Other"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Two lines of glyph options (p[1], p[2]); no printed \"tick all\" instruction but several may apply; None is exclusive. Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A78",
+   "label": "Other:",
+   "context": "Q24 Treatments that help headache > Other",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[23]/tc[0]/p[2]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run after \"Other:\" at the end of p[2]."
+  },
+  {
+   "id": "A79",
+   "label": "If somatostatin analogues (octreotide/ lanreotide/ pasireotide) help, how quickly do they improve your headache?",
+   "context": "Q25",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[23]/tc[0]/p[5]"
+   ],
+   "options": [
+    "Immediately",
+    "Within days",
+    "Within weeks",
+    "They do not improve headache"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Q25 sits in the same table cell as Q24 (tr[23]). Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A80",
+   "label": "If somatostatin analogues help, how quickly does the effect take to wear off?",
+   "context": "Q26",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[24]/tc[0]/p[2]"
+   ],
+   "options": [
+    "Hours",
+    "Days",
+    "Weeks",
+    "They do not improve headache"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A81",
+   "label": "Are you reliant on somatostatin analogues to help your headache?",
+   "context": "Q27",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[25]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A82",
+   "label": "if yes, please expand:",
+   "context": "Q27 Reliant on somatostatin analogues > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[25]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Long underscore run at the end of the question paragraph; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A83",
+   "label": "Can you tell when your next somatostatin analogue injection is due by your headache coming back?",
+   "context": "Q28",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[26]/tc[0]/p[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "No/Yes glyphs on the line below the question (p[1]). Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A84",
+   "label": "if yes, please describe further:",
+   "context": "Q28 Next injection due > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[26]/tc[0]/p[1]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Long underscore run at the end of p[1] after the Yes glyph; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A85",
+   "label": "Are there any other medications, or anything else, which improves your headache?",
+   "context": "Q29",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[27]/tc[0]/p[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "No/Yes glyphs on the line below the question (p[1]). Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A86",
+   "label": "if yes, please expand:",
+   "context": "Q29 Other medications that improve headache > Yes",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[27]/tc[0]/p[2]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Underscore run in its own paragraph p[2] below \"if yes, please expand:\"; wraps onto two printed lines. Conditional on Yes."
+  },
+  {
+   "id": "A87",
+   "label": "Did you ever need to attend A&E for your headache?",
+   "context": "Q30",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[28]/tc[0]/p[0]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Options are U+20DD combining enclosing-circle glyphs (rendered as a circle; not checkboxes, not listed as glyph slots) - slot is the containing paragraph; mark the chosen glyph(s)."
+  },
+  {
+   "id": "A88",
+   "label": "if yes, how many times:",
+   "context": "Q30 Attended A&E > Yes",
+   "kind": "number",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[28]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run at the end of the question paragraph; wraps onto the next printed line. Conditional on Yes."
+  }
+ ],
+ "preserve": [
+  {
+   "what": "form id/version",
+   "slots": [
+    "word/header1.xml#hf/p[0]"
+   ],
+   "notes": "Page header on every page: \"Version 1 – 31.01.2018\" and ethics reference \"MREC06/Q0104/133\". No PAGE/NUMPAGES fields; header has no answer areas."
+  },
+  {
+   "what": "other",
+   "slots": [
+    "word/document.xml#b/p[0]"
+   ],
+   "notes": "Form title \"Detailed Patient Headache Questionnaire (Current Headache)\"."
+  },
+  {
+   "what": "instructions",
+   "slots": [
+    "word/document.xml#b/p[4]",
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[1]",
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[0]"
+   ],
+   "notes": "Intro paragraph; Q18 trigger definition; Q8 inline instruction \"If yes, focus on your worst headache type while answering the following questions.\" Also the per-question \"Please tick all that apply\"/\"please circle the number\" phrases."
+  },
+  {
+   "what": "other",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[0]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[10]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[0]",
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[10]"
+   ],
+   "notes": "Q7 scale anchor labels \"Not at all painful\" / \"Most severe pain possible\" under 0 and 10."
+  },
+  {
+   "what": "existing check state",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[8]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[8]/tc[0]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[9]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[9]/tc[0]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[10]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[10]/tc[0]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[11]/tc[0]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]/tr[11]/tc[0]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]/sdt[1]",
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[0]",
+    "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[1]"
+   ],
+   "notes": "All 22 checkbox content controls are unchecked (checked=0; MS Gothic ☐ 2610 / ☒ 2612). All 190 U+20DD option glyphs are unmarked. Only answered options may change."
+  },
+  {
+   "what": "other",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[28]/tc[0]/p[4]"
+   ],
+   "notes": "Closing line \"Thank you for taking the time to complete this questionnaire\" (bold, with rule lines)."
+  }
+ ],
+ "families_observed": [
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F8",
+  "F9"
+ ],
+ "difficulties": "All 190 option markers are bare U+20DD COMBINING ENCLOSING CIRCLE characters in ordinary text runs (no checkbox semantics, not reported as glyph slots); when a circle sits alone in its run LibreOffice draws it on a dotted-circle base (\"○◯\"), so marking an option means replacing/overlaying that glyph without disturbing its label. Many questions put a No/Yes glyph pair and an \"if yes\" underscore run in the SAME paragraph, and several paragraphs hold 3-6 options plus an Other underscore run, so one slot carries multiple answer areas. Two-level answers: 22 checkbox content controls (Right/Left, Larger/Smaller, Red/White) are nested inside glyph options (Q9, Q16, Q17, Q18). Sub-options printed at 9pt (Alcohol beverages > Wine/Other; Menstruation > Before/During/After) are subordinate to a parent option. Q7 is two circle-the-number 0-10 scales in nested 11-column tables. The whole body is one shaded 1-column table spanning 4 pages with nested option grids (gridSpan merges, empty spacer cells); Q24 and Q25 share a row. Long underscore runs wrap across two printed lines; \"Other\" and \"if yes, please expand\" labels repeat many times. It is a patient-reported questionnaire, so answers are the patient's history rather than examination findings.",
+ "unsupportable": "None strictly unsupportable. Q7 \"circle the number\" requires a drawn mark around a printed number; a filler can only emulate it (e.g. highlight/encircle the chosen cell), which is recorded in scope.",
+ "review_changes": [
+  {
+   "change": "modified",
+   "area": "A61 (Q18 Hormonal > Menstruation: Before / During / After)",
+   "why": "Kind changed from choice to multi_choice: the three timing sub-options are not mutually exclusive (perimenstrual headache can be both before and during menses) and Q18 as a whole is an 'indicate any triggers' list; a single-choice ground truth would wrongly penalise a filler that marks two timings."
+  }
+ ]
+}

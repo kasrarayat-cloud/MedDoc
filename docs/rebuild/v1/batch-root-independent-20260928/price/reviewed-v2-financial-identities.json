@@ -1,0 +1,12 @@
+{
+  "reviewed_source_commits": [
+    "5a36e75276397c19175c5de8dc43a976329a3e2e",
+    "b1c3b95cca1a807f31eb5e3244258e8373bf9751"
+  ],
+  "normalized_module_identities": {
+    "core/generation_batch.py": "357a26d580ec01db5a5ab6bd3485ef265ecb3eb7b07ae6317e5495f4f808e7d6",
+    "core/batch_jobs.py": "b9f184db2512ff7ffedb354a602f25399b2c7ce8ec6529d40ffd2cc6b306e91b"
+  },
+  "compiler_evidence": "payload-v2-bound-probe.json",
+  "clinical_status": "prechecked global constraint counterexample OPEN; price identity is not clinical acceptance"
+}

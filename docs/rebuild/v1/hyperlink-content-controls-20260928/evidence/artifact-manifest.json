@@ -1,0 +1,402 @@
+[
+  {
+    "path": "REPORT.md",
+    "bytes": 5883,
+    "sha256": "4d4a57cc30a392af3a68cc38d3e356ff10c5d846f6d9d7afe4201103ad6bee4d"
+  },
+  {
+    "path": "after/block-placeholder-fixed-link-current.docx",
+    "bytes": 36729,
+    "sha256": "9ecf7b284b908a1e9053432d0a28898dd5070c1e9b1d39919957b72d460310ec"
+  },
+  {
+    "path": "after/hyperlink-around-sdt-current.docx",
+    "bytes": 36727,
+    "sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098"
+  },
+  {
+    "path": "after/hyperlink-around-sdt-historical.docx",
+    "bytes": 36727,
+    "sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098"
+  },
+  {
+    "path": "after/inline-linked-marker-current.docx",
+    "bytes": 36716,
+    "sha256": "161b60de55719249e106446f2b9a00fc4f1bd878fbd90ba56878692996ce0c9b"
+  },
+  {
+    "path": "after/linked-checkbox-current.docx",
+    "bytes": 36662,
+    "sha256": "4a4382b0e12a62747dfe6af34d13e05a3f0cdf62394c150cc615ac82d6c5d1c8"
+  },
+  {
+    "path": "after/results.json",
+    "bytes": 3790,
+    "sha256": "c9388c9258ef1c4cc95c7f942e6796fa2ded83fe8105143dbe9aeea233856543"
+  },
+  {
+    "path": "after/separate-link-and-sdt-positive-current.docx",
+    "bytes": 36754,
+    "sha256": "b3a3034c8e8c269b7f7422b39c34e0c58df430a27ce8929be0a38d7b172d8d69"
+  },
+  {
+    "path": "after/separate-link-and-sdt-positive-historical.docx",
+    "bytes": 36754,
+    "sha256": "b3a3034c8e8c269b7f7422b39c34e0c58df430a27ce8929be0a38d7b172d8d69"
+  },
+  {
+    "path": "after/unlinked-sdt-positive-current.docx",
+    "bytes": 36674,
+    "sha256": "868ba2833c8f63965d02a32e47794369924779050dfb9d820058716a4c773b67"
+  },
+  {
+    "path": "after/unlinked-sdt-positive-historical.docx",
+    "bytes": 36674,
+    "sha256": "868ba2833c8f63965d02a32e47794369924779050dfb9d820058716a4c773b67"
+  },
+  {
+    "path": "after-edges/direct-sdt-with-link-ancestor.docx",
+    "bytes": 36704,
+    "sha256": "03147814d03eb326136db1a20c664ed1a11a7791bcfe7ffffd45d860a507be87"
+  },
+  {
+    "path": "after-edges/ordinary-glyph-adjacent-link-filled.docx",
+    "bytes": 36748,
+    "sha256": "b6b728c91a0cb63c024df92d403c5051609fec18e5e281a5e78d56a6aac31ec6"
+  },
+  {
+    "path": "after-edges/ordinary-glyph-adjacent-link.docx",
+    "bytes": 36689,
+    "sha256": "dfb1be4093accd7422c0ecfe7677e07ed221f11fa10d02bbd544bc9e1306e5ca"
+  },
+  {
+    "path": "after-edges/ordinary-glyph-linked-option-filled.docx",
+    "bytes": 36730,
+    "sha256": "2d04e4bddc65d37cb319a57a4b256c7f781f3a40cc5e266e63c443f2e8d061f7"
+  },
+  {
+    "path": "after-edges/ordinary-glyph-linked-option.docx",
+    "bytes": 36677,
+    "sha256": "21f32d594065247d9ce51b6c2109e4df4f3c6cdfed016bde95738a4b0d507902"
+  },
+  {
+    "path": "after-edges/results.json",
+    "bytes": 9436,
+    "sha256": "1823e261b89b55aa11b215c552494f74de5facb38363b6541eeb4c26c0babe7e"
+  },
+  {
+    "path": "after-edges-first.log",
+    "bytes": 9436,
+    "sha256": "1823e261b89b55aa11b215c552494f74de5facb38363b6541eeb4c26c0babe7e"
+  },
+  {
+    "path": "after-first.log",
+    "bytes": 3790,
+    "sha256": "c9388c9258ef1c4cc95c7f942e6796fa2ded83fe8105143dbe9aeea233856543"
+  },
+  {
+    "path": "before/block-placeholder-fixed-link-filled.docx",
+    "bytes": 36707,
+    "sha256": "a3d7a76545b78106ed122a31cced5d500814b0d4c25f85b7d24946830df6f2a3"
+  },
+  {
+    "path": "before/block-placeholder-fixed-link.docx",
+    "bytes": 36729,
+    "sha256": "9ecf7b284b908a1e9053432d0a28898dd5070c1e9b1d39919957b72d460310ec"
+  },
+  {
+    "path": "before/hyperlink-around-sdt-filled.docx",
+    "bytes": 36727,
+    "sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098"
+  },
+  {
+    "path": "before/hyperlink-around-sdt.docx",
+    "bytes": 36727,
+    "sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098"
+  },
+  {
+    "path": "before/inline-linked-marker-filled.docx",
+    "bytes": 36720,
+    "sha256": "853bcde935459567db42eaf720d8912f9cb1a061784505adc312972b20587fc7"
+  },
+  {
+    "path": "before/inline-linked-marker.docx",
+    "bytes": 36716,
+    "sha256": "161b60de55719249e106446f2b9a00fc4f1bd878fbd90ba56878692996ce0c9b"
+  },
+  {
+    "path": "before/linked-checkbox-filled.docx",
+    "bytes": 36726,
+    "sha256": "ff906e3ed30c76bfe859dcdf758000fd1bd400b0c2963b69e67646d69a95ec67"
+  },
+  {
+    "path": "before/linked-checkbox.docx",
+    "bytes": 36662,
+    "sha256": "4a4382b0e12a62747dfe6af34d13e05a3f0cdf62394c150cc615ac82d6c5d1c8"
+  },
+  {
+    "path": "before/results.json",
+    "bytes": 16762,
+    "sha256": "52b3877b6b9b9dcc84bd14eaa250005f0694a2f668d4cca53b336f8af0b45682"
+  },
+  {
+    "path": "before/separate-link-and-sdt-positive-filled.docx",
+    "bytes": 36754,
+    "sha256": "b3a3034c8e8c269b7f7422b39c34e0c58df430a27ce8929be0a38d7b172d8d69"
+  },
+  {
+    "path": "before/separate-link-and-sdt-positive.docx",
+    "bytes": 36739,
+    "sha256": "1a0360504fc88565dbdf18f8dbc0e0dcdbb3e84abe6f8d301f412ef6cdf24841"
+  },
+  {
+    "path": "before/unlinked-sdt-positive-filled.docx",
+    "bytes": 36674,
+    "sha256": "868ba2833c8f63965d02a32e47794369924779050dfb9d820058716a4c773b67"
+  },
+  {
+    "path": "before/unlinked-sdt-positive.docx",
+    "bytes": 36659,
+    "sha256": "5fd5701d1c6ef5caf87593d063efe849e504827b040ba95d80a69700ace21e37"
+  },
+  {
+    "path": "before-edges/direct-sdt-with-link-ancestor-filled.docx",
+    "bytes": 36728,
+    "sha256": "5ef26c8a42e1d92ceea19c40e6b147f3375f61b657bace1e28ecbe6226a1a992"
+  },
+  {
+    "path": "before-edges/direct-sdt-with-link-ancestor.docx",
+    "bytes": 36704,
+    "sha256": "04246f4f5028c9496176b6a77d832951bc4822fd4b15a8239d05746205011de6"
+  },
+  {
+    "path": "before-edges/ordinary-glyph-adjacent-link-filled.docx",
+    "bytes": 36748,
+    "sha256": "83b73752cec33e63b4a07e8831fb56c69694e7d4ab2ffffd5418b5f159cb45b7"
+  },
+  {
+    "path": "before-edges/ordinary-glyph-adjacent-link.docx",
+    "bytes": 36689,
+    "sha256": "6ffd4c522bb3ffa7914cd0a752472eabe6d53c852c126de69236dc46613414af"
+  },
+  {
+    "path": "before-edges/ordinary-glyph-linked-option-filled.docx",
+    "bytes": 36730,
+    "sha256": "a873889a183a2bc73c6867adde312dbbaa22f306bfbbae209390395130fed9ad"
+  },
+  {
+    "path": "before-edges/ordinary-glyph-linked-option.docx",
+    "bytes": 36677,
+    "sha256": "8fd4644cf2f0550da7c758196ff153dcf918aad80cbfb49844b7620ee5f76a46"
+  },
+  {
+    "path": "before-edges/results.json",
+    "bytes": 10847,
+    "sha256": "3a8ab63f2818c2e241b0de8d1bb4037d92840fa06ceb210bd34421e1a802534b"
+  },
+  {
+    "path": "before-edges-first.log",
+    "bytes": 10847,
+    "sha256": "3a8ab63f2818c2e241b0de8d1bb4037d92840fa06ceb210bd34421e1a802534b"
+  },
+  {
+    "path": "before-first.log",
+    "bytes": 16762,
+    "sha256": "52b3877b6b9b9dcc84bd14eaa250005f0694a2f668d4cca53b336f8af0b45682"
+  },
+  {
+    "path": "checkbox-first/glyph-then-fixed-link-filled.docx",
+    "bytes": 36770,
+    "sha256": "30a26eeff11880e98a9fe41bd0ac7c77866da58776751f1b1f624e71029b6344"
+  },
+  {
+    "path": "checkbox-first/glyph-then-fixed-link.docx",
+    "bytes": 36742,
+    "sha256": "190827420893884f2f95320d9695930d65d9350689fb85f450e1e81012b29120"
+  },
+  {
+    "path": "checkbox-first/linked-glyph-only-filled.docx",
+    "bytes": 36766,
+    "sha256": "d04cc3b3a755e9e9c0d19a1d60c667fb73b824e759aa2d5a2132a1596606aa66"
+  },
+  {
+    "path": "checkbox-first/linked-glyph-only.docx",
+    "bytes": 36724,
+    "sha256": "801213925f42982f8e69c5f01f70343d4d05b0479bf7f3cdb62afe7652f23cfc"
+  },
+  {
+    "path": "checkbox-first/results.json",
+    "bytes": 7775,
+    "sha256": "802ca49d8628025e6241b87b18110d95601dc6127178fc9d70b669d361c9badd"
+  },
+  {
+    "path": "checkbox-first.log",
+    "bytes": 7775,
+    "sha256": "802ca49d8628025e6241b87b18110d95601dc6127178fc9d70b669d361c9badd"
+  },
+  {
+    "path": "edges.py",
+    "bytes": 2062,
+    "sha256": "3fb9f1a8e4cce69048952fd30b6b7fb34b1b98e03eed5b050c9994cd0d7e45cd"
+  },
+  {
+    "path": "final/block-placeholder-fixed-link-current.docx",
+    "bytes": 36729,
+    "sha256": "9ecf7b284b908a1e9053432d0a28898dd5070c1e9b1d39919957b72d460310ec"
+  },
+  {
+    "path": "final/hyperlink-around-sdt-current.docx",
+    "bytes": 36727,
+    "sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098"
+  },
+  {
+    "path": "final/hyperlink-around-sdt-historical.docx",
+    "bytes": 36727,
+    "sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098"
+  },
+  {
+    "path": "final/inline-linked-marker-current.docx",
+    "bytes": 36716,
+    "sha256": "161b60de55719249e106446f2b9a00fc4f1bd878fbd90ba56878692996ce0c9b"
+  },
+  {
+    "path": "final/linked-checkbox-current.docx",
+    "bytes": 36662,
+    "sha256": "4a4382b0e12a62747dfe6af34d13e05a3f0cdf62394c150cc615ac82d6c5d1c8"
+  },
+  {
+    "path": "final/results.json",
+    "bytes": 3790,
+    "sha256": "1cd285f9887cbbfccb6da466d76f9351b70f2d2bc2dfe2ed5956f79f33afee88"
+  },
+  {
+    "path": "final/separate-link-and-sdt-positive-current.docx",
+    "bytes": 36754,
+    "sha256": "b3a3034c8e8c269b7f7422b39c34e0c58df430a27ce8929be0a38d7b172d8d69"
+  },
+  {
+    "path": "final/separate-link-and-sdt-positive-historical.docx",
+    "bytes": 36754,
+    "sha256": "b3a3034c8e8c269b7f7422b39c34e0c58df430a27ce8929be0a38d7b172d8d69"
+  },
+  {
+    "path": "final/unlinked-sdt-positive-current.docx",
+    "bytes": 36674,
+    "sha256": "868ba2833c8f63965d02a32e47794369924779050dfb9d820058716a4c773b67"
+  },
+  {
+    "path": "final/unlinked-sdt-positive-historical.docx",
+    "bytes": 36674,
+    "sha256": "868ba2833c8f63965d02a32e47794369924779050dfb9d820058716a4c773b67"
+  },
+  {
+    "path": "final-checkbox/glyph-then-fixed-link-filled.docx",
+    "bytes": 36742,
+    "sha256": "190827420893884f2f95320d9695930d65d9350689fb85f450e1e81012b29120"
+  },
+  {
+    "path": "final-checkbox/glyph-then-fixed-link.docx",
+    "bytes": 36742,
+    "sha256": "190827420893884f2f95320d9695930d65d9350689fb85f450e1e81012b29120"
+  },
+  {
+    "path": "final-checkbox/linked-glyph-only-filled.docx",
+    "bytes": 36724,
+    "sha256": "801213925f42982f8e69c5f01f70343d4d05b0479bf7f3cdb62afe7652f23cfc"
+  },
+  {
+    "path": "final-checkbox/linked-glyph-only.docx",
+    "bytes": 36724,
+    "sha256": "801213925f42982f8e69c5f01f70343d4d05b0479bf7f3cdb62afe7652f23cfc"
+  },
+  {
+    "path": "final-checkbox/results.json",
+    "bytes": 6462,
+    "sha256": "75690bd101b4c9b8e76d25efa2d12d3c2d9b09e15112f6ad241775f35ee7bf73"
+  },
+  {
+    "path": "final-checkbox-first.log",
+    "bytes": 6462,
+    "sha256": "75690bd101b4c9b8e76d25efa2d12d3c2d9b09e15112f6ad241775f35ee7bf73"
+  },
+  {
+    "path": "final-controls/results.json",
+    "bytes": 913,
+    "sha256": "99cbcdba0046600dd0efbb7164acac29743dee8f0576b7abc2621424bea58ab5"
+  },
+  {
+    "path": "final-controls-first.log",
+    "bytes": 913,
+    "sha256": "99cbcdba0046600dd0efbb7164acac29743dee8f0576b7abc2621424bea58ab5"
+  },
+  {
+    "path": "final-edges/direct-sdt-with-link-ancestor.docx",
+    "bytes": 36704,
+    "sha256": "ab811c4a09b97811313ca292a7b50708dc2ff2ff83dbeb007e419a016bad8218"
+  },
+  {
+    "path": "final-edges/ordinary-glyph-adjacent-link-filled.docx",
+    "bytes": 36748,
+    "sha256": "7bf5c11ad002270a89233e201f3257e37c101f0995a45ff4f4c9a8c015272ceb"
+  },
+  {
+    "path": "final-edges/ordinary-glyph-adjacent-link.docx",
+    "bytes": 36689,
+    "sha256": "588cb8a34e3c4f57d1e028ac9f800f02009bcf616c6cbeb62b19fc78a21d57ef"
+  },
+  {
+    "path": "final-edges/ordinary-glyph-linked-option-filled.docx",
+    "bytes": 36730,
+    "sha256": "27f4b5166d14a12acd484e10dcaea3b757ac99dc25d25f210b372e74f5c010c3"
+  },
+  {
+    "path": "final-edges/ordinary-glyph-linked-option.docx",
+    "bytes": 36677,
+    "sha256": "ecabcb732ef3ad03eb2dccc5fac87fe169aa3b8964662816d5bbaa3b228c1913"
+  },
+  {
+    "path": "final-edges/results.json",
+    "bytes": 9436,
+    "sha256": "fbfd3433e6a1acab44b45f0227048fa4a538c79d27832500fca7fceae9adccc0"
+  },
+  {
+    "path": "final-edges-first.log",
+    "bytes": 9436,
+    "sha256": "fbfd3433e6a1acab44b45f0227048fa4a538c79d27832500fca7fceae9adccc0"
+  },
+  {
+    "path": "final-first.log",
+    "bytes": 3790,
+    "sha256": "1cd285f9887cbbfccb6da466d76f9351b70f2d2bc2dfe2ed5956f79f33afee88"
+  },
+  {
+    "path": "final_controls.py",
+    "bytes": 2232,
+    "sha256": "81d1240c1d3029ef9dc0ad7a694f05714e5078277674af623c45d5254efcd737"
+  },
+  {
+    "path": "probe.py",
+    "bytes": 4139,
+    "sha256": "87222a6fd05555424bc3b5a9733063c1f7b90965b8e5a1d6d53d84bc4ad58d99"
+  },
+  {
+    "path": "replay.py",
+    "bytes": 2116,
+    "sha256": "8886cd378ce4074d0939455c0973ab6bdeb159287f63780af802ccfe473bd52a"
+  },
+  {
+    "path": "sdt_checkbox.py",
+    "bytes": 1737,
+    "sha256": "2e625a7459f1fec4f4224a6855bf318f01ad3efbb8144f6d0b5bfaada92ef2a1"
+  },
+  {
+    "path": "source-final.py",
+    "bytes": 218186,
+    "sha256": "bc7933b67b044197c3ff632530af09ca5c8f9f32090a1f671b70fc46b6ebc7ff"
+  },
+  {
+    "path": "source-first-repair.py",
+    "bytes": 217945,
+    "sha256": "8d9df73582a61b0aa1bdc80ca54c4c2f17cc0cd9c72ad0182eddab4bfb5a37c3"
+  }
+]

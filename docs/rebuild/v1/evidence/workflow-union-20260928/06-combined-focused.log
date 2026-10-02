@@ -1,0 +1,16 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+................Forbidden (CSRF token missing.): /console/retention/
+....................../opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.........................................................
+----------------------------------------------------------------------
+Ran 96 tests in 45.480s
+
+OK
+Preserving test database for alias 'default'...
+Found 96 test(s).
+System check identified no issues (0 silenced).

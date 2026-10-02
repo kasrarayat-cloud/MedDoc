@@ -1,0 +1,17 @@
+Creating test database for alias 'default'...
+F
+======================================================================
+FAIL: test_fresh_migrations_have_exact_release_bound_guards (core.tests.test_restore_integrity_contract.ReleaseIntegrityContract.test_fresh_migrations_have_exact_release_bound_guards)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_restore_integrity_contract.py", line 15, in test_fresh_migrations_have_exact_release_bound_guards
+    self.assertTrue(report['passed'],report)
+AssertionError: False is not true : {'found': 51, 'enabled': 51, 'expected': 39, 'missing': 0, 'unexpected': 12, 'definition_mismatches': 6, 'malformed': 0, 'context_valid': True, 'declaration_matches_release': True, 'passed': False}
+
+----------------------------------------------------------------------
+Ran 1 test in 0.017s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 1 test(s).
+System check identified no issues (0 silenced).

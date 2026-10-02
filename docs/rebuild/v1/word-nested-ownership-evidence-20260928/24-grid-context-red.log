@@ -1,0 +1,36 @@
+test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) ... 
+  test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) (case='headers') ... FAIL
+  test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) (case='consent') ... FAIL
+  test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) (case='signature') ... FAIL
+
+======================================================================
+FAIL: test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) (case='headers')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 624, in test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context
+    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+AssertionError: [{'key': 'v3_1', 'label': 'Which procedures are authorized? Tick all that apply.', 'kind': 'multi_choice', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs', 'target': {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs', 'glyph': 0}], 'printed': ['Abnormal', 'Abnormal']}, 'fingerprint': '455996a9567ec99b6a3a117c304eb3a955d7e8034e5359527065e3f6af78445a', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs', 'fingerprint': '455996a9567ec99b6a3a117c304eb3a955d7e8034e5359527065e3f6af78445a'}]}, 'options': ['Abnormal', 'Abnormal (2)']}] is not false
+
+======================================================================
+FAIL: test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) (case='consent')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 624, in test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context
+    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+AssertionError: [{'key': 'v3_1', 'label': 'Which procedures are authorized? Tick all that apply.', 'kind': 'multi_choice', 'context': 'Consent', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'target': {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}]}, 'fingerprint': '5fb274407e883052c3a2ceeb08e34818d3286bd4f35846cb0eb1ac0275eb35f0', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'fingerprint': 'd59eedd9928ac60f7b04bba93d66e3c535255ca3c5b0754c7b3917a1c82f3df5'}]}, 'options': ['Blood sampling', 'Tissue storage']}] is not false
+
+======================================================================
+FAIL: test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) (case='signature')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 624, in test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context
+    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+AssertionError: [{'key': 'v3_1', 'label': 'Which procedures are authorized? Tick all that apply.', 'kind': 'multi_choice', 'context': 'Signed declaration', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'target': {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}]}, 'fingerprint': '5fb274407e883052c3a2ceeb08e34818d3286bd4f35846cb0eb1ac0275eb35f0', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'fingerprint': 'd59eedd9928ac60f7b04bba93d66e3c535255ca3c5b0754c7b3917a1c82f3df5'}]}, 'options': ['Blood sampling', 'Tissue storage']}] is not false
+
+----------------------------------------------------------------------
+Ran 1 test in 0.244s
+
+FAILED (failures=3)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

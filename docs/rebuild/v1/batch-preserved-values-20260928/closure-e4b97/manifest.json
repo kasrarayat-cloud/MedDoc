@@ -1,0 +1,59 @@
+{
+  "source_commit": "e4b97f4355d9f34f62309db3b08165e1e8177303",
+  "source_sha256": {
+    "rebuild/core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "rebuild/documents/word_v3.py": "cae8ea4c0f922922d98a49fe13c983fd5ace2277e9b500f185e1421e12d75f04",
+    "rebuild/documents/service.py": "e8b17bce53fed735faed7452f33e8d8dc1838bce98b934c63d9705be5dfef8a6",
+    "rebuild/documents/engine.py": "c1e1313df1a37476c7d05e8a461f4feca1f00204f3ab5e8041b434fd89eab8ae"
+  },
+  "evidence_sha256": {
+    "root/root-final-replay.py": "f372d202cc276e7282fc0250132381d23ab0b83548e1ab69970c3407a3d7e90b",
+    "root/root-final-positive.py": "7c306ff793d3554608deab5b97ec2e873a2f4add0802ef1f17b3b1248019a7ad",
+    "root/root-final-replay-results.json": "7f0495284ab03ba4d1f4729e5d73014806f89aa6fb0ba7caf3dcc1fabb78c207",
+    "root/root-final-positive-results.json": "61b5e2e8713e2f74fdc22836c93708f7d51727a4fde38653b52388c182abef12",
+    "root/root-final-replay-manifest.json": "61380c7e224e098dbd78c66ca9f24fc0132f5715e242b79de3a8b33544b5f37f",
+    "root/root-closure-replay.py": "9b3b4d491a1f98e00d5330210dfc8c548cda1eb793600f72f6d9f69af12f7aec",
+    "root/root-closure-positive.py": "9fb84d8eb2e4aa61238501be2b38785caa838e8287a9be5a6e9724bb91a512f7",
+    "root/root-closure-replay-results.json": "f97a3c967fb311b1c6450d081fa924a6f7886360e98d4d3c6b7068af3a36617e",
+    "root/root-closure-positive-results.json": "c3ad3b413f90433cf2101ed2615036bbb2b64d3ba8398f281f58983013656a30",
+    "root/root-closure-manifest.json": "d80508066aa889bb5d8587989ac25778e0dcd63cf7811769fd885e93b897da4f",
+    "root/root-closure-document-tests.log": "90e640e6de669ed65dcdadb21f29c82251f263cf6ae70bf74a1836f2abd360f4",
+    "independent/probe.py": "fa0776607d323f6287e995526a31d32001819e42333205e778a597fff882766e",
+    "independent/01-results.json": "90e433b4693f04efc32a505befe6e5c189203f8aea17049c71b1d5dee3c36914",
+    "independent/REPORT.md": "9f5095892a73999072d9e9cb5f40543ff108ba807be8fcdc28c41bb766e7ebd1",
+    "independent/02-closure-90297.json": "03848c5f62e8f14c34ee5641d73cc77d1512b41c693681128dbe64d691efed49",
+    "independent/adjacent.py": "545d82ab80b49a7c7193269307dd00408efa0c08effa3c2f5b53f93b681b13fd",
+    "independent/03-adjacent-90297.json": "d8811438fc55af9027ff7f79b6cee5813c02e03d2a444cc11f99d849bc846e75",
+    "independent/duplicate-properties.py": "4aed498da1489c613125bdcdb974a6caa2347039599659e85e733ccf4d79598f",
+    "independent/04-duplicate-properties-90297.json": "40e597d5fcef713364832613db9ebf9543607da753c25687dc41228cd628288e",
+    "independent/CLOSURE-90297.md": "ba6b3b56bb3e28616b2d6dfdf330c1aef73b9ab26f13af94ebdc7a4760963430",
+    "independent/05-original-e4b97.json": "7afacbdce48ca245909659d69bdde0f0d2d482ea46390686d226a034de6c852b",
+    "independent/06-adjacent-e4b97.json": "b36f7f223f325a41e59df772b4477d2dfea1d06e38b744b22c47518920ebacfe",
+    "independent/07-properties-e4b97.json": "e0971e9b4b26f708bd8195fac41e94835e359cdd97dfc03900bc2102b7cbfc3d",
+    "independent/CLOSURE-e4b97.md": "d4036758fb73260b32baff9f57a2f80d72bddb5c27810348af264b4b846c6ae1",
+    "independent/final-manifest.json": "4ad8e4135245a5302ac558f902f20f703784ce0fd2d8a68a9392c01ccdb9150c",
+    "independent/04-root-adjacent-90297.json": "9ef36b22d25ec06327dd486dfea0178afbf4fe2b1d5c83655b8e1a21460bf455",
+    "independent/05-root-duplicate-properties-90297.json": "67621f4fb07c62f4998982a47a704a6738c0628d4707a7e254914d8c42e11a08",
+    "author/16-cardinality-before.log": "57b6c892dccaea37b7feaa02656b16c053de49cfee87844533a7b2ab86237d81",
+    "author/17-cardinality-focused-affected.log": "8a6576f896f80253a59558a02967c736cabd184edf8301010a109bd20c10ee8b",
+    "author/18-cardinality-adjacent.json": "b9f5d1490df260c0980cb65185ac7d66e2115f3db504757145c0c60bee9948b9",
+    "author/19-cardinality-properties.json": "f86f08a571f53ac1d898945dcaf20236c0c6003d42136903eab8b9206da16dc6",
+    "author/20-cardinality-original.json": "e2546b21628441e60e7ec0a868a354c7436cedce633d87195adef41fb16bec53",
+    "author/21-scratch-cleanup.json": "24f85f2427fb0cc1e295b2c498838f5bd0b180dcbe1ee3e5f0ae96c2d6c3b610"
+  },
+  "disposition": "Independent bounded closure:73 unchanged cases, zero mismatches; root original negatives refuse and positive controls export correctly",
+  "tests": "40 final focused/affected tests:39passed+1pre-existing opposite-side expected failure; no database setup",
+  "limits": [
+    "component closure only",
+    "no full clinical/native Word/provider/launch qualification",
+    "scanner pins unchanged; no push/integration"
+  ],
+  "preservation": "All runtime originals untouched; copies verified byte-for-byte; prior952 and90297 failures retained",
+  "cleanup": {
+    "path": "/tmp/claude-1000/batch-preserved-values-20260928",
+    "files_shredded": 0,
+    "directories_removed": 1,
+    "removed": true,
+    "runtime_originals_preserved": true
+  }
+}

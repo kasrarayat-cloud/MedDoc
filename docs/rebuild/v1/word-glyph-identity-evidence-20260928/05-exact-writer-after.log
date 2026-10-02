@@ -1,0 +1,59 @@
+[
+  {
+    "case": "glyph-False",
+    "text": "Choices? ☒ Before: literal ☐ symbol retained",
+    "readback": [
+      true
+    ],
+    "expected_printed_after_checked": false,
+    "result": "exported"
+  },
+  {
+    "case": "glyph-True",
+    "text": "Choices? ☒ Before: literal ☐ symbol retained ☒ After",
+    "readback": [
+      true,
+      false
+    ],
+    "expected_printed_after_checked": true,
+    "result": "exported"
+  },
+  {
+    "case": "sdt-False",
+    "text": "Choices? ☐ Before: literal ☐ symbol retained",
+    "readback": [
+      true
+    ],
+    "expected_printed_after_checked": false,
+    "result": "exported"
+  },
+  {
+    "case": "sdt-True",
+    "text": "Choices? ☐ Before: literal ☐ symbol retained ☐ After",
+    "readback": [
+      true,
+      true
+    ],
+    "expected_printed_after_checked": true,
+    "result": "exported"
+  },
+  {
+    "case": "ff-False",
+    "text": "Choices? ☐ Before: literal ☐ symbol retained",
+    "readback": [
+      true
+    ],
+    "expected_printed_after_checked": false,
+    "result": "exported"
+  },
+  {
+    "case": "ff-True",
+    "text": "Choices? ☐ Before: literal ☐ symbol retained ☐ After",
+    "readback": [
+      true,
+      true
+    ],
+    "expected_printed_after_checked": true,
+    "result": "exported"
+  }
+]

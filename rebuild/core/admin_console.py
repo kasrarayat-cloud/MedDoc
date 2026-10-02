@@ -25,7 +25,7 @@ from .models import (AuditEvent, CostReconciliation, Department, Job, LedgerEntr
 ZERO = Decimal('0')
 
 #: Jobs whose outcome nobody has established yet. Same set `audit_billing` calls `unresolved_jobs`.
-UNRESOLVED_STATES = ['queued', 'running', 'reconciliation']
+UNRESOLVED_STATES = ['queued', 'running', 'staged', 'reconciliation']
 
 #: `core.jobs.mark_stale` flips a job that has been `running` longer than this to `reconciliation`.
 #: It runs only inside the worker loop, so a job that has outlived it proves the reaper has not run.
@@ -200,7 +200,7 @@ def business_overview(window):
              'definition': "Reconciliations held at 'pending_funds': the evidence raised the charge and the payer's paid balance could not cover it."},
             {'label': 'Jobs with no established outcome', 'count': Job.objects.filter(state__in=UNRESOLVED_STATES).count(),
              'amount': None,
-             'definition': "Jobs queued, running or held for reconciliation. The same set the billing audit calls unresolved."},
+             'definition': "Jobs queued, running, staged for whole-form validation or held for reconciliation. The same set the billing audit calls unresolved."},
         ],
         'counts': {
             'accounts_total': User.objects.count(),
@@ -232,6 +232,7 @@ def processing_health(at=None):
     cutoff = at - STALENESS_BOUND
     queued = Job.objects.filter(state='queued')
     running = Job.objects.filter(state='running')
+    staged = Job.objects.filter(state='staged')
     overdue = running.filter(started_at__lt=cutoff)
     oldest_queued = queued.order_by('created_at').first()
     oldest_running = running.exclude(started_at=None).order_by('started_at').first()
@@ -255,6 +256,10 @@ def processing_health(at=None):
     elif queued.exists() or running.exists():
         verdict, severity = 'Work in progress', 'success'
         detail = f'{queued.count()} queued, {running.count()} running, all within the staleness bound.'
+        if staged.exists():detail += f' {staged.count()} responses are staged; complete-form validation is pending.'
+    elif staged.exists():
+        verdict, severity = 'Whole-form validation pending', 'warning'
+        detail = f'{staged.count()} recorded responses are staged. No complete answer draft has been adopted yet.'
     else:
         verdict, severity = 'Queue empty', 'success'
         detail = ('Nothing queued or running. An empty queue is not evidence that a worker exists — it is evidence '
@@ -266,6 +271,7 @@ def processing_health(at=None):
         'staleness_minutes': int(STALENESS_BOUND.total_seconds() / 60),
         'queued': queued.count(),
         'running': running.count(),
+        'staged': staged.count(),
         'overdue': overdue.count(),
         'awaiting_owner': Job.objects.filter(state='reconciliation').count(),
         'oldest_queued_at': oldest_queued.created_at if oldest_queued else None,
@@ -299,28 +305,29 @@ def live_generation_queue_row(live):
     the worker refuses each queued live job before sending it (not processed, hold released). Without the count the drain
     the migration note asks for could not be seen from either screen.
 
-    ⚠️ DRAINED MEANS ALL THREE ARE 0, the note's definition. The row used to count only queued and running, so a live job
+    ⚠️ DRAINED MEANS ALL FOUR ARE 0, including staged batch responses. The row used to count only queued and running, so a live job
     stranded in reconciliation — an uncertain provider outcome whose hold is kept until the owner reconciles it — read
     '0 queued, 0 running (drained when both are 0)'. Measured with three such jobs. Waiting does not clear one.
     """
     from django.db import DatabaseError
     from .models import Job
     try:
-        live_jobs = Job.objects.filter(kind__in=['generation','mapping'], config__mode='live')
+        live_jobs = Job.objects.filter(kind__in=['generation','mapping','generation_part'], config__mode='live')
         queued, running, reconciliation = (live_jobs.filter(state='queued').count(), live_jobs.filter(state='running').count(),
                                            live_jobs.filter(state='reconciliation').count())
+        staged=live_jobs.filter(state='staged').count()
     except DatabaseError:
         return {'name': 'live language-model jobs', 'value': 'UNAVAILABLE — the job table could not be read', 'severity': 'error'}
-    value = f'{queued} queued, {running} running, {reconciliation} in reconciliation'
+    value = f'{queued} queued, {running} running, {reconciliation} in reconciliation, {staged} staged'
     if live:
-        return {'name': 'live language-model jobs', 'value': value + ' (drained when all three are 0)', 'severity': ''}
-    return {'name': 'live language-model jobs', 'severity': 'warning' if queued or running or reconciliation else '',
+        return {'name': 'live language-model jobs', 'value': value + ' (drained when all four are 0)', 'severity': ''}
+    return {'name': 'live language-model jobs', 'severity': 'warning' if queued or running or reconciliation or staged else '',
             'value': value + ' — QUILLMD_AI_MODE is not live, so the worker refuses each queued one before sending it '
-                             '(not processed, nothing charged, hold released)'}
+                             '(unsent holds released; staged or uncertain outcomes still require resolution)'}
 
 
 def language_model_rows():
-    """The language-model section: model, three rates, the Sonnet 5 settings, the request profile and pricing_version.
+    """The language-model section: model, three rates, the Sonnet 5 / 5.5 settings, the request profile and pricing_version.
 
     ONE implementation, printed line for line by `manage.py configuration_status` and rendered by the services page, so
     the two screens cannot disagree about which request a generation queued now would send — including the INVALID state
@@ -352,8 +359,10 @@ def language_model_rows():
                         ('QUILLMD_AI_THINKING', settings.AI_THINKING),
                         ('QUILLMD_AI_EFFORT', settings.AI_EFFORT),
                         ('QUILLMD_AI_INFERENCE_GEO', settings.AI_INFERENCE_GEO)):
-        # Thinking and effort are read only for claude-sonnet-5; saying so stops a 4.6 operator reading them as live.
-        scope = ' (read only for claude-sonnet-5)' if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else ''
+        # Thinking and effort are read only for the native models; saying so stops a 4.6 operator reading them as live.
+        # On claude-sonnet-5-5 'disabled' is SENT as between_tools: the request profile row below shows what is sent.
+        scope = (' (read only for claude-sonnet-5 and claude-sonnet-5-5)'
+                 if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else '')
         rows.append({'name': name, 'value': unset(value) + scope + inactive, 'severity': ''})
     try:
         config = generation.configuration()
@@ -383,6 +392,11 @@ def language_model_rows():
     rows.append({'name': 'pricing_version', 'value': config['pricing_version'] + inactive, 'severity': ''})
     rows.append(live_generation_queue_row(live))
     return rows
+
+
+def worker_status_rows():
+    from .worker_lock import status_rows
+    return status_rows()
 
 
 def configuration_rows():
@@ -419,6 +433,8 @@ def configuration_rows():
                     for name, value, recogniser in secret_rows],
         # The same rows `configuration_status` prints under 'Language model', from the same function.
         'language_model': language_model_rows(),
+        # The same rows `configuration_status` prints under 'Worker', from the same function (core.worker_lock).
+        'worker': worker_status_rows(),
         'media_tools': [
             {'name': 'ffprobe', 'status': probe or missing, 'severity': 'success' if probe else 'error'},
             {'name': 'ffmpeg', 'status': remuxer or missing, 'severity': 'success' if remuxer else 'error'},

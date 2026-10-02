@@ -1,0 +1,11 @@
+test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) ... ok
+test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) ... ok
+test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) ... ok
+test_normal_blank_after_link_keeps_text_and_relationship (documents.test_hyperlink_destinations.HyperlinkDestinations.test_normal_blank_after_link_keeps_text_and_relationship) ... ok
+test_old_mapping_cannot_replace_fixed_hyperlink (documents.test_hyperlink_destinations.HyperlinkDestinations.test_old_mapping_cannot_replace_fixed_hyperlink) ... ok
+test_unlinked_colored_explicit_hint_remains_fillable (documents.test_hyperlink_destinations.HyperlinkDestinations.test_unlinked_colored_explicit_hint_remains_fillable) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.682s
+
+OK

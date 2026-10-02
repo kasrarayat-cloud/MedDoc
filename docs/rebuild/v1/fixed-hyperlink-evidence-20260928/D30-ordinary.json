@@ -1,0 +1,50 @@
+{
+  "identity": "D30",
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "export_sha256": "6795144363a34ff46c82ceb9bec2334e3a6690f5dae7ff1ebc43989b1b3fb61e",
+  "target": {
+    "key": "v3_7",
+    "kind": "date",
+    "label": "Date of Birth",
+    "context": "Patient’s Details > Date of Birth",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[5]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "a721de24621aaa0de34c26906591bc2742c5c4f24d133dab2753dce6999cd097"
+    }
+  },
+  "notes": "The patient was born on January 1, 1980.",
+  "answer": {
+    "text": "January 1, 1980, confirmed with the patient.",
+    "status": "edited",
+    "evidence": [
+      {
+        "end": 40,
+        "quote": "The patient was born on January 1, 1980.",
+        "start": 0
+      }
+    ],
+    "reviewed": true,
+    "edited_by": "927fc575-e97a-4fb5-abcf-77f05a05f578",
+    "accepted_by": null,
+    "reviewed_by": "927fc575-e97a-4fb5-abcf-77f05a05f578",
+    "own_evidence": [
+      {
+        "end": 40,
+        "quote": "The patient was born on January 1, 1980.",
+        "start": 0
+      }
+    ],
+    "accepted_suggestion": false
+  },
+  "state": "finalized",
+  "original_download_identical": true,
+  "export_download_identical": true,
+  "all_outside_target_slots_unchanged": true,
+  "automatic_document_success": false,
+  "provider": "mocked-selection; full source-unit validation; no API call"
+}

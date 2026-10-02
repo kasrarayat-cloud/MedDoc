@@ -1,0 +1,2043 @@
+{
+  "base_generation_sha256": "a7bbe3d9efd0db5247dccebeba0cb97137786312b03f22994c394cdfb744a81b",
+  "candidate_generation_sha256": "bdb7304bbb2a51b4c2e80d18613c02c560a09c8a517a4a0855f6efe8419dcee9",
+  "positive_pairs": [
+    {
+      "label": "What activities does the patient attend?",
+      "notes": "The patient attends an art class every Monday.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient attends an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class every Monday.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient attends an art class every Monday.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ]
+      }
+    },
+    {
+      "label": "History",
+      "notes": "The patient fell from a ladder yesterday and hurt his left wrist.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient fell from a ladder yesterday and hurt his left wrist.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient fell from a ladder yesterday and hurt his left wrist.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient fell from a ladder yesterday and hurt his left wrist.",
+          "evidence": [
+            {
+              "quote": "The patient fell from a ladder yesterday and hurt his left wrist.",
+              "start": 0,
+              "end": 65
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient fell from a ladder yesterday and hurt his left wrist.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient fell from a ladder yesterday and hurt his left wrist.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient fell from a ladder yesterday and hurt his left wrist.",
+            "start": 0,
+            "end": 65
+          }
+        ]
+      }
+    },
+    {
+      "label": "Allergies",
+      "notes": "The patient developed a rash after amoxicillin.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient developed a rash after amoxicillin.",
+            "start": 0,
+            "end": 47
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient developed a rash after amoxicillin.",
+            "start": 0,
+            "end": 47
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient developed a rash after amoxicillin.",
+          "evidence": [
+            {
+              "quote": "The patient developed a rash after amoxicillin.",
+              "start": 0,
+              "end": 47
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient developed a rash after amoxicillin.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient developed a rash after amoxicillin.",
+            "start": 0,
+            "end": 47
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient developed a rash after amoxicillin.",
+            "start": 0,
+            "end": 47
+          }
+        ]
+      }
+    },
+    {
+      "label": "Social history",
+      "notes": "The patient smokes ten cigarettes a day.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient smokes ten cigarettes a day.",
+            "start": 0,
+            "end": 40
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient smokes ten cigarettes a day.",
+            "start": 0,
+            "end": 40
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient smokes ten cigarettes a day.",
+          "evidence": [
+            {
+              "quote": "The patient smokes ten cigarettes a day.",
+              "start": 0,
+              "end": 40
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient smokes ten cigarettes a day.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient smokes ten cigarettes a day.",
+            "start": 0,
+            "end": 40
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient smokes ten cigarettes a day.",
+            "start": 0,
+            "end": 40
+          }
+        ]
+      }
+    },
+    {
+      "label": "Mobility",
+      "notes": "The patient walks two blocks daily.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient walks two blocks daily.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient walks two blocks daily.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient walks two blocks daily.",
+          "evidence": [
+            {
+              "quote": "The patient walks two blocks daily.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient walks two blocks daily.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient walks two blocks daily.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient walks two blocks daily.",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      }
+    },
+    {
+      "label": "How does the patient sleep?",
+      "notes": "The patient sleeps through the night.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient sleeps through the night.",
+            "start": 0,
+            "end": 37
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient sleeps through the night.",
+            "start": 0,
+            "end": 37
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient sleeps through the night.",
+          "evidence": [
+            {
+              "quote": "The patient sleeps through the night.",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient sleeps through the night.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient sleeps through the night.",
+            "start": 0,
+            "end": 37
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient sleeps through the night.",
+            "start": 0,
+            "end": 37
+          }
+        ]
+      }
+    }
+  ],
+  "source_controls": [
+    {
+      "notes": "Her father attends an art class every Monday.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Her father attends an art class every Monday.",
+            "start": 0,
+            "end": 45
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Her father attends an art class every Monday.",
+            "start": 0,
+            "end": 45
+          }
+        ],
+        "held_candidate": {
+          "text": "Her father attends an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "Her father attends an art class every Monday.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Her father attends an art class every Monday.",
+            "start": 0,
+            "end": 45
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Her father attends an art class every Monday.",
+            "start": 0,
+            "end": 45
+          }
+        ],
+        "held_candidate": {
+          "text": "Her father attends an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "Her father attends an art class every Monday.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "context": [
+            {
+              "quote": "Her father attends an art class every Monday.",
+              "start": 0,
+              "end": 45,
+              "after": false,
+              "same": true,
+              "syntax_incomplete": true
+            }
+          ],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "notes": "Patient reports her father attends an art class every Monday.",
+      "base": {
+        "text": "Patient reports her father attends an art class every Monday.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Patient reports her father attends an art class every Monday.",
+            "start": 0,
+            "end": 61
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Patient reports her father attends an art class every Monday.",
+            "start": 0,
+            "end": 61
+          }
+        ]
+      },
+      "candidate": {
+        "text": "Patient reports her father attends an art class every Monday.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Patient reports her father attends an art class every Monday.",
+            "start": 0,
+            "end": 61
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Patient reports her father attends an art class every Monday.",
+            "start": 0,
+            "end": 61
+          }
+        ]
+      }
+    },
+    {
+      "notes": "The patient asks whether her father attends an art class every Monday.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient asks whether her father attends an art class every Monday.",
+            "start": 0,
+            "end": 70
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient asks whether her father attends an art class every Monday.",
+            "start": 0,
+            "end": 70
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient asks whether her father attends an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "The patient asks whether her father attends an art class every Monday.",
+              "start": 0,
+              "end": 70
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient asks whether her father attends an art class every Monday.",
+            "start": 0,
+            "end": 70
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient asks whether her father attends an art class every Monday.",
+            "start": 0,
+            "end": 70
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient asks whether her father attends an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "The patient asks whether her father attends an art class every Monday.",
+              "start": 0,
+              "end": 70
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient asks whether her father attends an art class every Monday.",
+              "start": 0,
+              "end": 70,
+              "after": false,
+              "same": true,
+              "syntax_incomplete": true
+            }
+          ],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "notes": "Patient hopes to attend an art class every Monday.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Patient hopes to attend an art class every Monday.",
+            "start": 0,
+            "end": 50
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Patient hopes to attend an art class every Monday.",
+            "start": 0,
+            "end": 50
+          }
+        ],
+        "held_candidate": {
+          "text": "Patient hopes to attend an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "Patient hopes to attend an art class every Monday.",
+              "start": 0,
+              "end": 50
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Patient hopes to attend an art class every Monday.",
+            "start": 0,
+            "end": 50
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "Patient hopes to attend an art class every Monday.",
+            "start": 0,
+            "end": 50
+          }
+        ],
+        "held_candidate": {
+          "text": "Patient hopes to attend an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "Patient hopes to attend an art class every Monday.",
+              "start": 0,
+              "end": 50
+            }
+          ],
+          "context": [
+            {
+              "quote": "Patient hopes to attend an art class every Monday.",
+              "start": 0,
+              "end": 50,
+              "after": false,
+              "same": true,
+              "syntax_incomplete": true
+            }
+          ],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "notes": "The patient never attends an art class.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient never attends an art class.",
+            "start": 0,
+            "end": 39
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient never attends an art class.",
+            "start": 0,
+            "end": 39
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient never attends an art class.",
+          "evidence": [
+            {
+              "quote": "The patient never attends an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient never attends an art class.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient never attends an art class.",
+            "start": 0,
+            "end": 39
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient never attends an art class.",
+            "start": 0,
+            "end": 39
+          }
+        ]
+      }
+    },
+    {
+      "notes": "The patient is escorted to an art class by her father.",
+      "base": {
+        "text": "The patient is escorted to an art class by her father.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient is escorted to an art class by her father.",
+            "start": 0,
+            "end": 54
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient is escorted to an art class by her father.",
+            "start": 0,
+            "end": 54
+          }
+        ]
+      },
+      "candidate": {
+        "text": "The patient is escorted to an art class by her father.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient is escorted to an art class by her father.",
+            "start": 0,
+            "end": 54
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient is escorted to an art class by her father.",
+            "start": 0,
+            "end": 54
+          }
+        ]
+      }
+    },
+    {
+      "notes": "The patient, whose father attends art classes, attends the group.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient, whose father attends art classes, attends the group.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient, whose father attends art classes, attends the group.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient, whose father attends art classes, attends the group.",
+          "evidence": [
+            {
+              "quote": "The patient, whose father attends art classes, attends the group.",
+              "start": 0,
+              "end": 65
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient, whose father attends art classes, attends the group.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient, whose father attends art classes, attends the group.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient, whose father attends art classes, attends the group.",
+          "evidence": [
+            {
+              "quote": "The patient, whose father attends art classes, attends the group.",
+              "start": 0,
+              "end": 65
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient, whose father attends art classes, attends the group.",
+              "start": 0,
+              "end": 65,
+              "after": false,
+              "same": true,
+              "syntax_incomplete": true
+            }
+          ],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "notes": "The patient says \"her father attends an art class\".",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient says \"her father attends an art class\".",
+            "start": 0,
+            "end": 51
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient says \"her father attends an art class\".",
+            "start": 0,
+            "end": 51
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient says \"her father attends an art class\".",
+          "evidence": [
+            {
+              "quote": "The patient says \"her father attends an art class\".",
+              "start": 0,
+              "end": 51
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient says \"her father attends an art class\".",
+              "start": 0,
+              "end": 51,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient says \"her father attends an art class\".",
+            "start": 0,
+            "end": 51
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient says \"her father attends an art class\".",
+            "start": 0,
+            "end": 51
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient says \"her father attends an art class\".",
+          "evidence": [
+            {
+              "quote": "The patient says \"her father attends an art class\".",
+              "start": 0,
+              "end": 51
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient says \"her father attends an art class\".",
+              "start": 0,
+              "end": 51,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "notes": "If the patient improves, the patient attends an art class.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "If the patient improves, the patient attends an art class.",
+            "start": 0,
+            "end": 58
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "If the patient improves, the patient attends an art class.",
+            "start": 0,
+            "end": 58
+          }
+        ],
+        "held_candidate": {
+          "text": "If the patient improves, the patient attends an art class.",
+          "evidence": [
+            {
+              "quote": "If the patient improves, the patient attends an art class.",
+              "start": 0,
+              "end": 58
+            }
+          ],
+          "context": [
+            {
+              "quote": "If the patient improves, the patient attends an art class.",
+              "start": 0,
+              "end": 58,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "If the patient improves, the patient attends an art class.",
+            "start": 0,
+            "end": 58
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "If the patient improves, the patient attends an art class.",
+            "start": 0,
+            "end": 58
+          }
+        ],
+        "held_candidate": {
+          "text": "If the patient improves, the patient attends an art class.",
+          "evidence": [
+            {
+              "quote": "If the patient improves, the patient attends an art class.",
+              "start": 0,
+              "end": 58
+            }
+          ],
+          "context": [
+            {
+              "quote": "If the patient improves, the patient attends an art class.",
+              "start": 0,
+              "end": 58,
+              "after": false,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    {
+      "notes": "The patient attends an art class every Monday.",
+      "base": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ],
+        "held_candidate": {
+          "text": "The patient attends an art class every Monday.",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class every Monday.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "candidate": {
+        "text": "The patient attends an art class every Monday.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ],
+        "reviewed": false,
+        "own_evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ]
+      }
+    }
+  ],
+  "retained_note4": {
+    "original_case": {
+      "name": "r1-note4",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "This is a 30-year-old female seen for headaches."
+        ],
+        "History of present illness": [
+          "The headaches started two months ago and are worse in the morning.",
+          "She denies visual changes, nausea, or weakness."
+        ],
+        "Medications": [
+          "She takes ibuprofen as needed."
+        ],
+        "Allergies": [
+          "No known drug allergies."
+        ],
+        "Smoker": [
+          "She is a nonsmoker."
+        ],
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "This is a 30-year-old female seen for headaches.",
+            "evidence": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48
+              }
+            ],
+            "context": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+            "evidence": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163
+              }
+            ],
+            "context": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She takes ibuprofen as needed.",
+            "evidence": [
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194
+              }
+            ],
+            "context": [
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219
+              }
+            ],
+            "context": [
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She is a nonsmoker.",
+                "start": 220,
+                "end": 239,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Smoker": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She is a nonsmoker.",
+              "start": 220,
+              "end": 239
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She is a nonsmoker.",
+            "evidence": [
+              {
+                "quote": "She is a nonsmoker.",
+                "start": 220,
+                "end": 239
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 240,
+                "end": 275,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 240,
+              "end": 275
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "tension-type headache.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment is tension-type headache.",
+              "start": 276,
+              "end": 312
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan is to start amitriptyline 10 mg at night.",
+              "start": 313,
+              "end": 359
+            },
+            {
+              "quote": "She will follow up in six weeks.",
+              "start": 360,
+              "end": 392
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 3,
+      "selected_total": 8
+    },
+    "base": {
+      "Chief complaint": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "This is a 30-year-old female seen for headaches.",
+            "start": 0,
+            "end": 48
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "This is a 30-year-old female seen for headaches.",
+          "evidence": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "context": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "History of present illness": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49,
+            "end": 115
+          },
+          {
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116,
+            "end": 163
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+          "evidence": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163
+            }
+          ],
+          "context": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163,
+              "after": true,
+              "same": true
+            },
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Past medical history": {
+        "text": "",
+        "status": "missing",
+        "evidence": [],
+        "reviewed": false
+      },
+      "Medications": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "She takes ibuprofen as needed.",
+            "start": 164,
+            "end": 194
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "She takes ibuprofen as needed.",
+          "evidence": [
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194
+            }
+          ],
+          "context": [
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Allergies": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "No known drug allergies.",
+            "start": 195,
+            "end": 219
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "No known drug allergies.",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219
+            }
+          ],
+          "context": [
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "She is a nonsmoker.",
+              "start": 220,
+              "end": 239,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Smoker": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "She is a nonsmoker.",
+            "start": 220,
+            "end": 239
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "She is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "She is a nonsmoker.",
+              "start": 220,
+              "end": 239
+            }
+          ],
+          "context": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 240,
+              "end": 275,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Examination": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 240,
+            "end": 275
+          }
+        ],
+        "reviewed": false
+      },
+      "Assessment": {
+        "text": "tension-type headache.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Assessment is tension-type headache.",
+            "start": 276,
+            "end": 312
+          }
+        ],
+        "reviewed": false
+      },
+      "Plan": {
+        "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Plan is to start amitriptyline 10 mg at night.",
+            "start": 313,
+            "end": 359
+          },
+          {
+            "quote": "She will follow up in six weeks.",
+            "start": 360,
+            "end": 392
+          }
+        ],
+        "reviewed": false
+      },
+      "Consent obtained": {
+        "text": "",
+        "status": "missing",
+        "evidence": [],
+        "reviewed": false
+      },
+      "Clinician signature": {
+        "text": "",
+        "status": "missing",
+        "evidence": [],
+        "reviewed": false,
+        "reason": "Signed by hand on the printed form; never filled."
+      }
+    },
+    "candidate": {
+      "Chief complaint": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "This is a 30-year-old female seen for headaches.",
+            "start": 0,
+            "end": 48
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "This is a 30-year-old female seen for headaches.",
+          "evidence": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "context": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "History of present illness": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "The headaches started two months ago and are worse in the morning.",
+            "start": 49,
+            "end": 115
+          },
+          {
+            "quote": "She denies visual changes, nausea, or weakness.",
+            "start": 116,
+            "end": 163
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+          "evidence": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163
+            }
+          ],
+          "context": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163,
+              "after": true,
+              "same": true
+            },
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Past medical history": {
+        "text": "",
+        "status": "missing",
+        "evidence": [],
+        "reviewed": false
+      },
+      "Medications": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "She takes ibuprofen as needed.",
+            "start": 164,
+            "end": 194
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "She takes ibuprofen as needed.",
+          "evidence": [
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194
+            }
+          ],
+          "context": [
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Allergies": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "No known drug allergies.",
+            "start": 195,
+            "end": 219
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "No known drug allergies.",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219
+            }
+          ],
+          "context": [
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "She is a nonsmoker.",
+              "start": 220,
+              "end": 239,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Smoker": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "She is a nonsmoker.",
+            "start": 220,
+            "end": 239
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "She is a nonsmoker.",
+          "evidence": [
+            {
+              "quote": "She is a nonsmoker.",
+              "start": 220,
+              "end": 239
+            }
+          ],
+          "context": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219,
+              "after": false,
+              "same": true
+            },
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 240,
+              "end": 275,
+              "after": true,
+              "same": true
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Examination": {
+        "text": "Neurological examination is normal.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Neurological examination is normal.",
+            "start": 240,
+            "end": 275
+          }
+        ],
+        "reviewed": false
+      },
+      "Assessment": {
+        "text": "tension-type headache.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Assessment is tension-type headache.",
+            "start": 276,
+            "end": 312
+          }
+        ],
+        "reviewed": false
+      },
+      "Plan": {
+        "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Plan is to start amitriptyline 10 mg at night.",
+            "start": 313,
+            "end": 359
+          },
+          {
+            "quote": "She will follow up in six weeks.",
+            "start": 360,
+            "end": 392
+          }
+        ],
+        "reviewed": false
+      },
+      "Consent obtained": {
+        "text": "",
+        "status": "missing",
+        "evidence": [],
+        "reviewed": false
+      },
+      "Clinician signature": {
+        "text": "",
+        "status": "missing",
+        "evidence": [],
+        "reviewed": false,
+        "reason": "Signed by hand on the printed form; never filled."
+      }
+    }
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "base": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+  "source_files": {
+    "rebuild/core/v3_literal_facts.py": {
+      "base_sha256": "4929ef8ec705218f6a92d5d4a636ffa27dbb12bee57d1e14f21d954e3e8d56c7",
+      "current_sha256": "86566a4d83a94e14854d49c93ab6d995f2c5ff45fdc339ea2090413362abab68",
+      "unchanged": false
+    },
+    "rebuild/core/tests/test_v3_field_relations.py": {
+      "base_sha256": "4bff8852c5c40f33ccd067a57a4aaf46b32d87aea186f20fb0dddea28d1f49e5",
+      "current_sha256": "ffd9b225bbd8756cd370f0e111ac473a78dc634f32db16dc077bbff3d606bf59",
+      "unchanged": false
+    },
+    "rebuild/core/generation.py": {
+      "base_sha256": "abca2742fc330a40a4bb6362326b3e07164151c49472b69429ad0878857d9b27",
+      "current_sha256": "abca2742fc330a40a4bb6362326b3e07164151c49472b69429ad0878857d9b27",
+      "unchanged": true
+    },
+    "rebuild/core/v3_field_relations.py": {
+      "base_sha256": "b980c42f45caca105d994767e1ba8cd3e2b8a66e71d31d5514b2806e148e67f0",
+      "current_sha256": "b980c42f45caca105d994767e1ba8cd3e2b8a66e71d31d5514b2806e148e67f0",
+      "unchanged": true
+    },
+    "rebuild/core/generation_batch.py": {
+      "base_sha256": "f950ffaaaec318e6caec79c33f9600bb057c79a1b13439b2008a1f9e81dc8e93",
+      "current_sha256": "f950ffaaaec318e6caec79c33f9600bb057c79a1b13439b2008a1f9e81dc8e93",
+      "unchanged": true
+    },
+    "rebuild/core/batch_jobs.py": {
+      "base_sha256": "5c82d721099a8e3db3354026919bbcd8274042d8f6316c4853189a2ba6bcc71d",
+      "current_sha256": "5c82d721099a8e3db3354026919bbcd8274042d8f6316c4853189a2ba6bcc71d",
+      "unchanged": true
+    },
+    "rebuild/core/jobs.py": {
+      "base_sha256": "848f64bdd25d72a594940ff63b876c5dbf0575786350135c2c3ad89ce788c188",
+      "current_sha256": "848f64bdd25d72a594940ff63b876c5dbf0575786350135c2c3ad89ce788c188",
+      "unchanged": true
+    },
+    "rebuild/core/v3_destination.py": {
+      "base_sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "current_sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "unchanged": true
+    },
+    "rebuild/ops/test_production_deploy.py": {
+      "base_sha256": "15d68a59ef434e412da1eeed698345e324fb9502e91e5dfbc7c9e101e1474add",
+      "current_sha256": "15d68a59ef434e412da1eeed698345e324fb9502e91e5dfbc7c9e101e1474add",
+      "unchanged": true
+    }
+  },
+  "runtime_files": {
+    "baseline-01.log": "ea9590ed4141a9ede3619e9ebc3204b42dd0a4924625569e2ecfd2afa74c58c6",
+    "focused-02.log": "a488f2cba6df723cd567bb637b18cd23ab212670928052d7e70583d78d2bed4e",
+    "affected-01.log": "7f996af6fb68e1c04d26a4f02641e13821f987bd26f835b7fba3fec3c4b1b68d",
+    "diagnose-mappa.py": "3db2b537ec9689d80b5683d696f4d4eb7c17e8f11abaceb413915430cf2be5ec",
+    "diagnosis-first.json": "a327061680c54e81bb8c484dae17212009783379cec1247179f8db2ce2add35a",
+    "final-witness.py": "be5b169fe94ac7282d690458354fa5f498ab7a7554b1ddf28004d509c0531f16",
+    "final-witness.json": "c24835370984b79ecdde0f076693da8157f58f4f074744836df635ebbb974880",
+    "final-witness.log": "c24835370984b79ecdde0f076693da8157f58f4f074744836df635ebbb974880",
+    "replay.py": "8110065804561517603ad31e1905748470cb72f3b07eebd8e5e646364184afdc",
+    "historical-final.json": "cdd2e71f96cfbc28217b6eaecc01aebb0429f78aca9c958a38c5aacbf118c433",
+    "historical-final.log": "707ca29e5939f1cc230d0663da9d37ff419ad1a78f84aac1e8eb2913e3c03831",
+    "retained-original.json": "28bac03e50f3a8b7a6571f0be9f97da35fde744d60d67ba4d1c4e24f33aedb71"
+  },
+  "original_d31_inputs": {
+    "mapping.json": "abec48b233f918cc76171d35988722975f07a7aec364d37248f86861268baeb0",
+    "response-01.json": "5b4984c29bc5bd510519d35ea130248335cc95a69475330124d18e5c2e162f77",
+    "result.json": "b42fce1164885d6babd4b9223b1370ce247f80a5d696a0673735f619c6d94f5b"
+  },
+  "historical": {
+    "t-": {
+      "supported": 12,
+      "selected": 12
+    },
+    "r1-": {
+      "supported": 26,
+      "selected": 77
+    }
+  },
+  "history_supported_targets": 5,
+  "d31": {
+    "generation_status": "supported",
+    "stored_status": "supported",
+    "exact_source_retained": true,
+    "governed_decisions": []
+  },
+  "tests": {
+    "field_relations": {
+      "methods": 20,
+      "seconds": 3.328,
+      "result": "PASS"
+    },
+    "literal_syntax_history": {
+      "methods": 31,
+      "seconds": 3.273,
+      "result": "PASS"
+    }
+  },
+  "limits": [
+    "Offline supplied-response replay, no new model judgment",
+    "Parent actual D31 application workflow and independent refutation pending",
+    "Historical77 uses its original contract; no new relation oracle supplied"
+  ],
+  "committed_log_copies": {
+    "baseline-01.log": {
+      "sha256": "fa084f57bcfdb6bd66ccafbdd9df018b7736f7796e5fa8953b912992f2a99d2a",
+      "normalization": "Trailing whitespace stripped; original raw log retained under runtime_files hash."
+    },
+    "focused-02.log": {
+      "sha256": "a488f2cba6df723cd567bb637b18cd23ab212670928052d7e70583d78d2bed4e",
+      "normalization": "Trailing whitespace stripped; original raw log retained under runtime_files hash."
+    },
+    "affected-01.log": {
+      "sha256": "7f996af6fb68e1c04d26a4f02641e13821f987bd26f835b7fba3fec3c4b1b68d",
+      "normalization": "Trailing whitespace stripped; original raw log retained under runtime_files hash."
+    }
+  }
+}

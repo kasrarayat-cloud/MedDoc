@@ -1,0 +1,30 @@
+{
+  "frozen_commit": "e4b97f4355d9f34f62309db3b08165e1e8177303",
+  "result": "73 unchanged independent cases; zero mismatches; nothing further demonstrated in bounded pass",
+  "source_sha256": {
+    "core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "documents/word_v3.py": "cae8ea4c0f922922d98a49fe13c983fd5ace2277e9b500f185e1421e12d75f04",
+    "core/v3_mapping.py": "0c51c7908524e4c568017c6e80bd926cd8b13cfd77296102a41c835f479c4d19"
+  },
+  "evidence_sha256": {
+    "probe.py": "fa0776607d323f6287e995526a31d32001819e42333205e778a597fff882766e",
+    "01-results.json": "90e433b4693f04efc32a505befe6e5c189203f8aea17049c71b1d5dee3c36914",
+    "REPORT.md": "9f5095892a73999072d9e9cb5f40543ff108ba807be8fcdc28c41bb766e7ebd1",
+    "02-closure-90297.json": "03848c5f62e8f14c34ee5641d73cc77d1512b41c693681128dbe64d691efed49",
+    "adjacent.py": "545d82ab80b49a7c7193269307dd00408efa0c08effa3c2f5b53f93b681b13fd",
+    "03-adjacent-90297.json": "d8811438fc55af9027ff7f79b6cee5813c02e03d2a444cc11f99d849bc846e75",
+    "duplicate-properties.py": "4aed498da1489c613125bdcdb974a6caa2347039599659e85e733ccf4d79598f",
+    "04-duplicate-properties-90297.json": "40e597d5fcef713364832613db9ebf9543607da753c25687dc41228cd628288e",
+    "CLOSURE-90297.md": "ba6b3b56bb3e28616b2d6dfdf330c1aef73b9ab26f13af94ebdc7a4760963430",
+    "05-original-e4b97.json": "7afacbdce48ca245909659d69bdde0f0d2d482ea46390686d226a034de6c852b",
+    "06-adjacent-e4b97.json": "b36f7f223f325a41e59df772b4477d2dfea1d06e38b744b22c47518920ebacfe",
+    "07-properties-e4b97.json": "e0971e9b4b26f708bd8195fac41e94835e359cdd97dfc03900bc2102b7cbfc3d",
+    "CLOSURE-e4b97.md": "d4036758fb73260b32baff9f57a2f80d72bddb5c27810348af264b4b846c6ae1"
+  },
+  "limits": [
+    "pure in-memory component checks",
+    "no native Word or full clinical workflow",
+    "no DB/network/providers",
+    "no source/scanner/integration changes"
+  ]
+}

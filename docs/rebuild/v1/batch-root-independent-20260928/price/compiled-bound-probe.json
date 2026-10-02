@@ -1,0 +1,137 @@
+{
+  "cases": [
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "disabled",
+      "geo": "",
+      "maximum_charge": "0.883854000000",
+      "last_request_bytes": 94814
+    },
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "disabled",
+      "geo": "us",
+      "maximum_charge": "0.972391200000",
+      "last_request_bytes": 94837
+    },
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "adaptive",
+      "geo": "",
+      "maximum_charge": "1.123992000000",
+      "last_request_bytes": 94837
+    },
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "adaptive",
+      "geo": "us",
+      "maximum_charge": "1.236543000000",
+      "last_request_bytes": 94860
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "disabled",
+      "geo": "",
+      "maximum_charge": "2.164542000000",
+      "last_request_bytes": 187858
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "disabled",
+      "geo": "us",
+      "maximum_charge": "2.381223900000",
+      "last_request_bytes": 187881
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "adaptive",
+      "geo": "",
+      "maximum_charge": "2.524749000000",
+      "last_request_bytes": 187881
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "adaptive",
+      "geo": "us",
+      "maximum_charge": "2.777451600000",
+      "last_request_bytes": 187904
+    },
+    {
+      "count": 559,
+      "thinking": "disabled",
+      "geo": "",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    },
+    {
+      "count": 559,
+      "thinking": "disabled",
+      "geo": "us",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    },
+    {
+      "count": 559,
+      "thinking": "adaptive",
+      "geo": "",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    },
+    {
+      "count": 559,
+      "thinking": "adaptive",
+      "geo": "us",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    },
+    {
+      "count": 800,
+      "thinking": "disabled",
+      "geo": "",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    },
+    {
+      "count": 800,
+      "thinking": "disabled",
+      "geo": "us",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    },
+    {
+      "count": 800,
+      "thinking": "adaptive",
+      "geo": "",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    },
+    {
+      "count": 800,
+      "thinking": "adaptive",
+      "geo": "us",
+      "admitted": false,
+      "refusal": "complete-source request exceeds512000bytes"
+    }
+  ],
+  "case_count": 16,
+  "network_forbidden": true,
+  "provider_calls": 0,
+  "result": "PASS_WITH_EXPLICIT_REFUSALS",
+  "scope": "Actual compiler bound at fixed current native rates; not token-count/usage or clinical qualification."
+}

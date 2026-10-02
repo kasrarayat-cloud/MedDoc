@@ -18,6 +18,13 @@ _ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|d
 #: signature", because `Signature date` and `Date of signature` are DATE questions — refusing to
 #: finalize them unless they equal the clinician's name would be a false rejection, and this
 #: file has already shipped one of those.
+#: ⚠️ ANY PARENTHETICAL KEEPS A SIGNATURE LINE THE FINALIZER'S, UNLESS IT NAMES SOMEBODY ELSE (`NOT_THE_CLINICIAN`,
+#: below) OR A DATE (`QUALIFIER`). The identity check FAILS CLOSED: a parenthetical that names no one it knows is read
+#: as the finalizer's. A narrowing to parentheticals naming a clinician-role word (2026-09-30) was refuted the same day:
+#: `Signed (Consultant)`, `Signature (GP)`, `Signed (print name)`, `Electronically signed by (print name)` all stopped
+#: being identity rows - generation filled a consultant's signature line from the notes and finalization accepted
+#: another clinician's name. The persons that are NOT the finalizer are the exclusion list, and a miss there costs a
+#: signature line left for the hand (never a name written that the finalizer did not sign).
 SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
     r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
     rf"{_ROLE}'?s? sign(?:ature|ed)(?: by)?",
@@ -30,6 +37,13 @@ SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
 #: one is a FALSE REFUSAL: `validate_identity` would then demand the finalizing clinician's own
 #: name in a witness or patient signature line and refuse the document until it got it.
 #: `Signed by (witness)` matched the qualifier arm and did exactly that. Measured.
+#: ⚠️ KEPT AT 43fcf214's LIST (refutation of 258650f2, L1:R1-01 / L2:R2-01). Widening it by `participant`, `mother`,
+#: `father` and `donor` (a32243eb) is searched over the WHOLE label, so it also released CLINICIANS' own lines from
+#: identity - "Signature (participant's consultant)", 'Signed by (doctor recruiting the participant)', 'Signature (donor
+#: coordinator)', "Signature (father's GP)" finalized another clinician's typed name - and let 'Signature (participant,
+#: dd/mm/yyyy)' be renamed away from its signature label and generated. Telling the signer from a person merely named
+#: needs a new wording reader, so the widening is dropped: `Signature (participant)` demands the finalizer's own name
+#: again, exactly as on 43fcf214 (declared residual, design matrix L04 LEAVE); it is never generated.
 NOT_THE_CLINICIAN = re.compile(
     r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
 
@@ -44,14 +58,37 @@ QUALIFIER = re.compile(r'\(([^)]*)\)')
 DATE_QUESTION = re.compile(r'\b(?:date|dated|time|day)\b')
 
 
-def signature_label(label):
-    text = re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
-    if NOT_THE_CLINICIAN.search(text):
-        return False
+def _normal(label):
+    return re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
+
+
+def signature_line(label):
+    """Whether a label prints a SIGNATURE LINE, whoever signs it: SIGNATURE_PATTERNS with the date-qualifier exclusion,
+    BEFORE the not-the-clinician exclusion. `signature_label` is this reading less `NOT_THE_CLINICIAN`, unchanged."""
+    text = _normal(label)
     inner = QUALIFIER.search(text)
     if inner and DATE_QUESTION.search(inner.group(1)):
         return False
     return any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
+
+
+def signature_label(label):
+    if NOT_THE_CLINICIAN.search(_normal(label)):
+        return False
+    return signature_line(label)
+
+
+def another_signers_line(field):
+    """A signature line the label names as somebody else's (`NOT_THE_CLINICIAN`): not the finalizer's identity row, and
+    never generated from notes either - it is signed by hand by the person it names.
+
+    ⚠️ THE EXCLUSION LIST DECIDES WHOSE SIGNATURE IT IS, NEVER WHETHER IT IS ONE (refutation of a32243eb, RR1-10). It
+    reads the SAME patterns as identity - no new wording - so identity and this together hold exactly the lines
+    SIGNATURE_PATTERNS reads, whoever signs them: 'Signature (patient, dd/mm/yyyy)' or 'Signed by (witness, DOB)' (a
+    date word the role reader treats as a date question) is never generated; a clinician's typed value still exports.
+    'Signature (participant, dd/mm/yyyy)' and 'Signed (mother, DOB)' are identity rows again (43fcf214's hold)."""
+    label = (field or {}).get('label')
+    return bool(NOT_THE_CLINICIAN.search(_normal(label))) and signature_line(label)
 
 
 def clinician_identity(field):

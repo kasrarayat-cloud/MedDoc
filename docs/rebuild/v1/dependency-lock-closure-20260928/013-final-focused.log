@@ -1,0 +1,13 @@
+test_changes_to_a_pin_hash_missing_package_or_provenance_refuse (ops.test_dependency_lock.DependencyLockTests.test_changes_to_a_pin_hash_missing_package_or_provenance_refuse) ... ok
+test_checked_in_pins_match_the_full_wheel_lock (ops.test_dependency_lock.DependencyLockTests.test_checked_in_pins_match_the_full_wheel_lock) ... ok
+test_local_wheel_inventory_bytes_and_missing_extra_symlink_refuse (ops.test_dependency_lock.DependencyLockTests.test_local_wheel_inventory_bytes_and_missing_extra_symlink_refuse) ... ok
+test_model_lock_requires_matching_second_hash (ops.test_dependency_lock.DependencyLockTests.test_model_lock_requires_matching_second_hash) ... ok
+test_only_exact_reviewed_official_model_url_is_accepted (ops.test_dependency_lock.DependencyLockTests.test_only_exact_reviewed_official_model_url_is_accepted) ... ok
+test_production_installer_uses_verified_hash_lock (ops.test_dependency_lock.DependencyLockTests.test_production_installer_uses_verified_hash_lock) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.113s
+
+OK
+
+exit=0

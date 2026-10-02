@@ -1,0 +1,1 @@
+Initial raw-engine versus application-wrapper comparison used notes on wrapper; KeyError before comparison recorded. Wrapper uses warnings; corrected separately. Original invocation retained.

@@ -1,0 +1,185 @@
+{
+  "at": "2026-09-28T03:27:56.272524+00:00",
+  "head": "3ee445b84786d4457d0e236ddd751548edaef6d6",
+  "status": [
+    " M rebuild/core/jobs.py",
+    " M rebuild/core/management/commands/worker.py",
+    " M rebuild/core/models.py",
+    " M rebuild/core/retention.py",
+    " M rebuild/core/retention_readiness.py",
+    " M rebuild/core/tests/test_restore_integrity_contract.py",
+    " M rebuild/ops/integrity_contract.py",
+    " M rebuild/ops/production_restore_check.py",
+    " M rebuild/ops/retention/policy.schema.json",
+    " M rebuild/ops/retention/policy.unset.json",
+    " M rebuild/ops/test_production_restore_check.py",
+    " M rebuild/quillmd/settings.py",
+    " M rebuild/quillmd/urls.py",
+    " M rebuild/templates/admin_dashboard.html",
+    "?? docs/rebuild/v1/disposition-preparation-20260928/",
+    "?? rebuild/core/disposition.py",
+    "?? rebuild/core/disposition_catalog.py",
+    "?? rebuild/core/disposition_views.py",
+    "?? rebuild/core/migrations/0028_disposition_preparation.py",
+    "?? rebuild/core/tests/test_disposition_preparation.py",
+    "?? rebuild/templates/disposition_review.html",
+    "?? rebuild/templates/restore_preparation.html"
+  ],
+  "files": [
+    {
+      "path": "docs/rebuild/v1/disposition-preparation-20260928/DESIGN.md",
+      "sha256": "4b9da4c0dfdf4b4ecc2794beb991aa98df38a3b82571b71a9f210b3a1a4c8733",
+      "bytes": 1850,
+      "mtime_ns": 1790561589574049939,
+      "untracked": true
+    },
+    {
+      "path": "rebuild/core/disposition.py",
+      "sha256": "5f9917f43082ac73c0d8961bc7ae93e435eec6ac71005206fdd5f7ea74e90250",
+      "bytes": 13442,
+      "mtime_ns": 1790562455739371398,
+      "untracked": true
+    },
+    {
+      "path": "rebuild/core/disposition_catalog.py",
+      "sha256": "40c2d68c2f864db4885dc4e086fab208311e9cccf928a520af53354978823d6f",
+      "bytes": 16588,
+      "mtime_ns": 1790561983715992962,
+      "untracked": true
+    },
+    {
+      "path": "rebuild/core/disposition_views.py",
+      "sha256": "d3405c00f8dfe6ae01229785e741a0892d3aaa2c8e2b8e705861a3c4a45fbb1b",
+      "bytes": 5176,
+      "mtime_ns": 1790562455740371419,
+      "untracked": true
+    },
+    {
+      "path": "rebuild/core/jobs.py",
+      "sha256": "1126eb4ca21240f3ab1ccb9d27ec915ec1e9d3c86beae04cb3b442f2c96d82d8",
+      "bytes": 57273,
+      "mtime_ns": 1790561819719962220,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/core/management/commands/worker.py",
+      "sha256": "08aa9721d4e058b0c33cfd5df117a7b928d862b50f334acb911dd871d54e8297",
+      "bytes": 957,
+      "mtime_ns": 1790561819719962220,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/core/migrations/0028_disposition_preparation.py",
+      "sha256": "0ab9749471a3e4d3b6818c5231baf8cd0713ede6fec041a3242ad736fe4bb5c6",
+      "bytes": 8680,
+      "mtime_ns": 1790562197834154476,
+      "untracked": true
+    },
+    {
+      "path": "rebuild/core/models.py",
+      "sha256": "a2bf06ebb907bdbc1be57df463b0cb4cd7f88883d2e7e402c66f1bb1cc64829f",
+      "bytes": 33491,
+      "mtime_ns": 1790561609567369804,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/core/retention.py",
+      "sha256": "e58cbfcc6f7d07b71c7cf5b24cf0b582466d3eb50766d655ebdff0affb01fe70",
+      "bytes": 11069,
+      "mtime_ns": 1790561819719962220,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/core/retention_readiness.py",
+      "sha256": "8b9100637776154344edfa0860941fbcb47c06a3c272e0fa76ffc02a5c7ddc3e",
+      "bytes": 11668,
+      "mtime_ns": 1790561819718962202,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/core/tests/test_disposition_preparation.py",
+      "sha256": "225051c433445768eff80cb138d5317874731c982faea9b3952271b28e6372bd",
+      "bytes": 13097,
+      "mtime_ns": 1790562455741371439,
+      "untracked": true
+    },
+    {
+      "path": "rebuild/core/tests/test_restore_integrity_contract.py",
+      "sha256": "cadb1cc8e671ed56fcfd541d12d3fde5c523bb53d439dd2dec9ebd3882dc26e4",
+      "bytes": 722,
+      "mtime_ns": 1790561949594349334,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/ops/integrity_contract.py",
+      "sha256": "72148fb62ec39cd23d0da2bcdc0d39a36df83c869dbb48bf9364c400916a6319",
+      "bytes": 9273,
+      "mtime_ns": 1790561983711992887,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/ops/production_restore_check.py",
+      "sha256": "26d6478a217c690727c9afaee63a1aad599613ca7de0ae73b2305198f146fa21",
+      "bytes": 7707,
+      "mtime_ns": 1790561949593349315,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/ops/retention/policy.schema.json",
+      "sha256": "ee7da89afdbd3f5fb6054205300775ff3e541b53b6d0e39239b1f9bf48b71fe2",
+      "bytes": 70520,
+      "mtime_ns": 1790561949599349428,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/ops/retention/policy.unset.json",
+      "sha256": "12de00828fb698dbc67b943475e7437585370f47401ff2b6997df2449a84243b",
+      "bytes": 5238,
+      "mtime_ns": 1790561949594349334,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/ops/test_production_restore_check.py",
+      "sha256": "02d447ac3a1e1f1802197b6d79f4d43dd2d22699f6e2d9ed7198fe7f5a4d1d85",
+      "bytes": 10828,
+      "mtime_ns": 1790561949594349334,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/quillmd/settings.py",
+      "sha256": "a4f41fd98cffed8c2232d03f95e8763a28e09e107acc70f64bbb79f34837ea32",
+      "bytes": 12391,
+      "mtime_ns": 1790561918627770766,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/quillmd/urls.py",
+      "sha256": "a29e834963ccfca61a304d8791ee613ed80ebf2020a2ba0e96519631214b14cb",
+      "bytes": 5982,
+      "mtime_ns": 1790561918626770747,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/templates/admin_dashboard.html",
+      "sha256": "b2ac43e9bc1006d3475660b6da9cd137d4f084793a8df1a687156114cec43723",
+      "bytes": 35549,
+      "mtime_ns": 1790561918627770766,
+      "untracked": false
+    },
+    {
+      "path": "rebuild/templates/disposition_review.html",
+      "sha256": "5652273c7c434d6e3c5dc9fa95c1f5f8ad0da8d1879ef16557a09ff8c0a202d4",
+      "bytes": 3573,
+      "mtime_ns": 1790562376976760068,
+      "untracked": true
+    },
+    {
+      "path": "rebuild/templates/restore_preparation.html",
+      "sha256": "296a800bae6701646339b981f7d4612eab8afdd61610198988ae2d72ebce8981",
+      "bytes": 1589,
+      "mtime_ns": 1790562376976760068,
+      "untracked": true
+    }
+  ],
+  "stable_since_first": true
+}

@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__msg-mapstop.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P.jsonl:18568",
+   "timestamp": "2026-09-29T09:35:47.293Z",
+   "sha256_after": "22b4d01dd7620ccbbf54dc6c0186f51afbc057fb6b1623f5be8e6d9fa839a68a",
+   "bytes_after": 920
+  }
+ ],
+ "lines": 14,
+ "sha256": "22b4d01dd7620ccbbf54dc6c0186f51afbc057fb6b1623f5be8e6d9fa839a68a"
+}

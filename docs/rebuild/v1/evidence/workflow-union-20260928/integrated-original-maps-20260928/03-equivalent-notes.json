@@ -1,0 +1,18 @@
+{
+  "old_engine": "c82ef298b59780238c4f995c6da4056d87ca939282b62c15e74ef185f362cad8",
+  "new_engine": "123c293b6f74f9d15685269c802276689d382c10b15b06957fb8eb0e94517520",
+  "cases": [
+    {
+      "case": "D30",
+      "same_raw_engine_notes": true,
+      "raw_notes": 3,
+      "explanation": "Application wrapper adds two constant review/pagination notices; they are not engine output. Initial cross-surface mismatch retained."
+    },
+    {
+      "case": "D31",
+      "same_raw_engine_notes": true,
+      "raw_notes": 0,
+      "explanation": "Application wrapper adds two constant review/pagination notices; they are not engine output. Initial cross-surface mismatch retained."
+    }
+  ]
+}

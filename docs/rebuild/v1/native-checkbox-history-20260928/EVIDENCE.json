@@ -1,0 +1,38 @@
+{
+  "base_commit": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+  "branch": "fix/v1-checkbox-cardinality-union",
+  "python": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+  "source_sha256": {
+    "rebuild/documents/word_v3.py": "1404f99773e516b95799f394c299b40bb1fe3bc82a6039d21f008a477e4d4b1f",
+    "rebuild/documents/test_checkbox_history.py": "2c82930fdf2c52bf67fa24e6e064ea4b74d5cf933f856fde6854cf824acf7757"
+  },
+  "original_render": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-release-integration/rebuild/.runtime/release-integration/d30-d31-guidance-http-01/render-01/inspection/original-03.png",
+    "sha256": "ffc7948aa567d0b2405638a9d637741081a064c37527fcee05e7e92cfdcd7316",
+    "renderer": "cached LibreOffice, not native Word"
+  },
+  "commands": [
+    "python -B rebuild/.runtime/checkbox-cardinality/read_original.py",
+    "python -B rebuild/.runtime/checkbox-cardinality/before.py",
+    "python -B rebuild/.runtime/checkbox-cardinality/run_tests.py --before documents.test_checkbox_history",
+    "python -B rebuild/.runtime/checkbox-cardinality/run_tests.py documents.test_checkbox_history documents.test_document_relations documents.test_question_boxes documents.test_word_v3.OptionReader documents.test_word_v3.ControlReadBack documents.test_word_v3.ControlsInBoxCells documents.test_word_v3.LegacyDropdownDefault",
+    "python -B rebuild/.runtime/checkbox-cardinality/export_probe.py"
+  ],
+  "runtime": {
+    "01-original-paragraphs.json": "d7227ef4c8b69a6a5f5bd09d27b61977325aba145f7787b86df1d68f42dfb014",
+    "02-before.json": "d7ae9f4d99181317c1ef52d78f16966e34e20b115aeafc644624709782b50bdd",
+    "03-after-initial.json": "8f203828da736bae4978a8f6c9cb527edaf925d69966f1213d71d813eb47ef02",
+    "04-new-tests-initial.log": "094fadd6e88f376ff53a971fdfb0d02e0c9daaa4cad26ed9ce4681763f07daf9",
+    "05-focused-tests.log": "1644c0c71d22d1a08bf0068dfecfa43581b1b5fdc1d9484f0d1693ed27c1a75f",
+    "06-before-tests.log": "df1ef12ba6b9042f33a98550ccd5bd324831bb9fd090b91b9deb762e95fd4871",
+    "07-original-export.json": "4bb4e4baad279c7e3f4416ea7a4a8cece1b0772d26a1cf2cfdbf30105c9a0bcb",
+    "before.py": "c1d437bd25e2e1e75d5cbe34bddd934fb284d99ae6abda713db3449d5d5ac2c7",
+    "export_probe.py": "23886c0fe22d9bac3d2fbbda5457f871f53d767b0eac9bb8d007066096c52b81",
+    "read_original.py": "7a0c5e048af2b312a78a9d36948d5fbc4d2dc4af68e34ff75b81b3a84b9433b0",
+    "retained-D31-groundtruth.json": "e86962a18fea61c1718f0086ce75d4af318082766a60e2c47f9e073cdd18387a",
+    "root-d31-a15-first.json": "588a780957193a8bec7ad001622cf408c27f915546beada1a246afb917fc7fa1",
+    "run_tests.py": "488c488a08c9ab55b4df529afd9a0aa2d11afef41f938da9ae1fe43d847aca37",
+    "setup.py": "5a9578581f3d509f0241d9334e53bdaf29c3b1b68e0891308f65416e4ca642e2"
+  },
+  "scope": "No model, provider, DB, installed or HTTP call. Await independent bounded refutation."
+}

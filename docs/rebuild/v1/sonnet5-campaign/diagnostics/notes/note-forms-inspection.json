@@ -1,0 +1,1525 @@
+{
+ "schema": "quillmd-sonnet5-note-forms-inspection/1",
+ "script_sha256": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
+ "forms": {
+  "r1-11": {
+   "sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Chief complaint",
+     "kind": "text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_2",
+     "label": "History of present illness",
+     "kind": "long_text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_3",
+     "label": "Past medical history",
+     "kind": "long_text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_4",
+     "label": "Medications",
+     "kind": "long_text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_5",
+     "label": "Allergies",
+     "kind": "text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_6",
+     "label": "Smoker",
+     "kind": "choice",
+     "options": [
+      "Yes",
+      "No"
+     ],
+     "context": "Clinic visit record > Smoker"
+    },
+    {
+     "key": "v3_7",
+     "label": "Examination",
+     "kind": "long_text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_8",
+     "label": "Assessment",
+     "kind": "long_text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_9",
+     "label": "Plan",
+     "kind": "long_text",
+     "options": null,
+     "context": "Clinic visit record"
+    },
+    {
+     "key": "v3_10",
+     "label": "Consent obtained",
+     "kind": "checkbox",
+     "options": [
+      "Consent obtained"
+     ],
+     "context": "Sign-off"
+    },
+    {
+     "key": "v3_11",
+     "label": "Clinician signature",
+     "kind": "signature",
+     "options": null,
+     "context": "Sign-off"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n02-repeated-other": {
+   "sha256": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Other",
+     "kind": "text",
+     "options": null,
+     "context": "How would you describe the pain? (tick all that apply)"
+    },
+    {
+     "key": "v3_2",
+     "label": "Other",
+     "kind": "text",
+     "options": null,
+     "context": "Do you notice anything before the headache begins? (tick all that apply)"
+    },
+    {
+     "key": "v3_3",
+     "label": "Other",
+     "kind": "text",
+     "options": null,
+     "context": "What makes the pain worse? (tick all that apply)"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n03-order-question": {
+   "sha256": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Does a Community Treatment Order (CTO) currently apply to this person?",
+     "kind": "long_text",
+     "options": null,
+     "context": "Community care review"
+    },
+    {
+     "key": "v3_2",
+     "label": "Clinic attendance",
+     "kind": "long_text",
+     "options": null,
+     "context": "Community care review"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n08-knee-and-findings": {
+   "sha256": "60c486ab1aa18b18ace4e4b04be4bca002325365a89d460c2f6ef393f85c9b61",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Right knee",
+     "kind": "text",
+     "options": null,
+     "context": "Knee review > Right knee"
+    },
+    {
+     "key": "v3_2",
+     "label": "Clinical findings",
+     "kind": "long_text",
+     "options": null,
+     "context": "Knee review > Clinical findings"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "contract": "",
+    "fields": [
+     [
+      "Right knee",
+      "text"
+     ],
+     [
+      "Clinical findings",
+      "text"
+     ]
+    ],
+    "warnings": [
+     "DOCX answers expand and can change pagination. Review the exported document's layout."
+    ]
+   }
+  },
+  "n09-knee-pair": {
+   "sha256": "79310a2ba7ef95bda06621a9baf9b426ae3f21fd82296ffbb690dcbfcdc882f8",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Right knee",
+     "kind": "text",
+     "options": null,
+     "context": "Knee review > Right knee"
+    },
+    {
+     "key": "v3_2",
+     "label": "Left knee",
+     "kind": "text",
+     "options": null,
+     "context": "Knee review > Left knee"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "contract": "",
+    "fields": [
+     [
+      "Right knee",
+      "text"
+     ],
+     [
+      "Left knee",
+      "text"
+     ]
+    ],
+    "warnings": [
+     "DOCX answers expand and can change pagination. Review the exported document's layout."
+    ]
+   }
+  },
+  "n10-smoker-allergies": {
+   "sha256": "7b8edc65f832ceb8094b8ac6f89153b048976f542d5598f6840117e48edd43d6",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Smoker",
+     "kind": "choice",
+     "options": [
+      "Yes",
+      "No"
+     ],
+     "context": "Lifestyle and allergies > Smoker"
+    },
+    {
+     "key": "v3_2",
+     "label": "Allergies",
+     "kind": "text",
+     "options": null,
+     "context": "Lifestyle and allergies"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n11-n12-correction": {
+   "sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Chief complaint",
+     "kind": "text",
+     "options": null,
+     "context": "Skin clinic record"
+    },
+    {
+     "key": "v3_2",
+     "label": "Allergies",
+     "kind": "text",
+     "options": null,
+     "context": "Skin clinic record"
+    },
+    {
+     "key": "v3_3",
+     "label": "Smoker",
+     "kind": "choice",
+     "options": [
+      "Yes",
+      "No"
+     ],
+     "context": "Skin clinic record > Smoker"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n13-risk-and-medication": {
+   "sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Suicidal ideation",
+     "kind": "long_text",
+     "options": null,
+     "context": "Mental health review"
+    },
+    {
+     "key": "v3_2",
+     "label": "Medication",
+     "kind": "long_text",
+     "options": null,
+     "context": "Mental health review"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n14-smoking-and-mental-state": {
+   "sha256": "e0d8133fba02ee2dc12912df8b998f27e52e9bcc00ea1cb0b64586a8017706e4",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Smoking status",
+     "kind": "long_text",
+     "options": null,
+     "context": "Mental health review"
+    },
+    {
+     "key": "v3_2",
+     "label": "Mental state",
+     "kind": "long_text",
+     "options": null,
+     "context": "Mental health review"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n15-risk-and-arrangements": {
+   "sha256": "3804e0fa77aff59f2d6d6023b524c9e13936026aa4d2f03ad615577b12dc4f3c",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Risk to self",
+     "kind": "long_text",
+     "options": null,
+     "context": "Risk review"
+    },
+    {
+     "key": "v3_2",
+     "label": "MAPPA status",
+     "kind": "long_text",
+     "options": null,
+     "context": "Risk review"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  "n16-mood-and-allergies": {
+   "sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+   "v3_fields": [
+    {
+     "key": "v3_1",
+     "label": "Mental state",
+     "kind": "long_text",
+     "options": null,
+     "context": "Mental health review"
+    },
+    {
+     "key": "v3_2",
+     "label": "Allergies",
+     "kind": "long_text",
+     "options": null,
+     "context": "Mental health review"
+    }
+   ],
+   "v3_notes": [],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  }
+ },
+ "comparison": [
+  {
+   "case": "N01",
+   "form": "r1-11",
+   "matches": true,
+   "inspected": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N02",
+   "form": "n02-repeated-other",
+   "matches": true,
+   "inspected": [
+    [
+     "Other",
+     "text",
+     []
+    ],
+    [
+     "Other",
+     "text",
+     []
+    ],
+    [
+     "Other",
+     "text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Other",
+     "text",
+     []
+    ],
+    [
+     "Other",
+     "text",
+     []
+    ],
+    [
+     "Other",
+     "text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N03",
+   "form": "n03-order-question",
+   "matches": true,
+   "inspected": [
+    [
+     "Does a Community Treatment Order (CTO) currently apply to this person?",
+     "long_text",
+     []
+    ],
+    [
+     "Clinic attendance",
+     "long_text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Does a Community Treatment Order (CTO) currently apply to this person?",
+     "long_text",
+     []
+    ],
+    [
+     "Clinic attendance",
+     "long_text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N04",
+   "form": "r1-11",
+   "matches": true,
+   "inspected": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N05",
+   "form": "r1-11",
+   "matches": true,
+   "inspected": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N06",
+   "form": "r1-11",
+   "matches": true,
+   "inspected": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N07",
+   "form": "r1-11",
+   "matches": true,
+   "inspected": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "History of present illness",
+     "long_text",
+     []
+    ],
+    [
+     "Past medical history",
+     "long_text",
+     []
+    ],
+    [
+     "Medications",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Examination",
+     "long_text",
+     []
+    ],
+    [
+     "Assessment",
+     "long_text",
+     []
+    ],
+    [
+     "Plan",
+     "long_text",
+     []
+    ],
+    [
+     "Consent obtained",
+     "checkbox",
+     [
+      "Consent obtained"
+     ]
+    ],
+    [
+     "Clinician signature",
+     "signature",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N08",
+   "form": "n08-knee-and-findings",
+   "matches": true,
+   "inspected": [
+    [
+     "Right knee",
+     "text",
+     []
+    ],
+    [
+     "Clinical findings",
+     "long_text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Right knee",
+     "text",
+     []
+    ],
+    [
+     "Clinical findings",
+     "long_text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "contract": "",
+    "fields": [
+     [
+      "Right knee",
+      "text"
+     ],
+     [
+      "Clinical findings",
+      "text"
+     ]
+    ],
+    "warnings": [
+     "DOCX answers expand and can change pagination. Review the exported document's layout."
+    ]
+   }
+  },
+  {
+   "case": "N09",
+   "form": "n09-knee-pair",
+   "matches": true,
+   "inspected": [
+    [
+     "Right knee",
+     "text",
+     []
+    ],
+    [
+     "Left knee",
+     "text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Right knee",
+     "text",
+     []
+    ],
+    [
+     "Left knee",
+     "text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "contract": "",
+    "fields": [
+     [
+      "Right knee",
+      "text"
+     ],
+     [
+      "Left knee",
+      "text"
+     ]
+    ],
+    "warnings": [
+     "DOCX answers expand and can change pagination. Review the exported document's layout."
+    ]
+   }
+  },
+  {
+   "case": "N10",
+   "form": "n10-smoker-allergies",
+   "matches": true,
+   "inspected": [
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N11",
+   "form": "n11-n12-correction",
+   "matches": true,
+   "inspected": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ]
+   ],
+   "case_defines": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N12",
+   "form": "n11-n12-correction",
+   "matches": true,
+   "inspected": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ]
+   ],
+   "case_defines": [
+    [
+     "Chief complaint",
+     "text",
+     []
+    ],
+    [
+     "Allergies",
+     "text",
+     []
+    ],
+    [
+     "Smoker",
+     "choice",
+     [
+      "Yes",
+      "No"
+     ]
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N13",
+   "form": "n13-risk-and-medication",
+   "matches": true,
+   "inspected": [
+    [
+     "Suicidal ideation",
+     "long_text",
+     []
+    ],
+    [
+     "Medication",
+     "long_text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Suicidal ideation",
+     "long_text",
+     []
+    ],
+    [
+     "Medication",
+     "long_text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N14",
+   "form": "n14-smoking-and-mental-state",
+   "matches": true,
+   "inspected": [
+    [
+     "Smoking status",
+     "long_text",
+     []
+    ],
+    [
+     "Mental state",
+     "long_text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Smoking status",
+     "long_text",
+     []
+    ],
+    [
+     "Mental state",
+     "long_text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N15",
+   "form": "n15-risk-and-arrangements",
+   "matches": true,
+   "inspected": [
+    [
+     "Risk to self",
+     "long_text",
+     []
+    ],
+    [
+     "MAPPA status",
+     "long_text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Risk to self",
+     "long_text",
+     []
+    ],
+    [
+     "MAPPA status",
+     "long_text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  },
+  {
+   "case": "N16",
+   "form": "n16-mood-and-allergies",
+   "matches": true,
+   "inspected": [
+    [
+     "Mental state",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "long_text",
+     []
+    ]
+   ],
+   "case_defines": [
+    [
+     "Mental state",
+     "long_text",
+     []
+    ],
+    [
+     "Allergies",
+     "long_text",
+     []
+    ]
+   ],
+   "notes": [
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+   ],
+   "legacy": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   }
+  }
+ ]
+}

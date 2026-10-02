@@ -14,6 +14,7 @@ from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.template.defaultfilters import floatformat
 from django.test import Client, SimpleTestCase, TestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -72,6 +73,7 @@ class ExactMoneyRendering(TestCase):
 
 @override_settings(**ISOLATED)
 class ConsoleFixture(SyntheticFixture, TestCase):
+    client_class = SurfaceClient
     def setUp(self):
         self.scope = self.make_scope('console')
         self.user, self.org, self.department, self.patient, self.template, self.encounter, _ = self.scope
@@ -907,7 +909,7 @@ class ConsoleAccessControl(ConsoleFixture):
             gate(type('R', (), {'user': clinical})())
 
     def test_console_writes_require_csrf(self):
-        client = Client(enforce_csrf_checks=True)
+        client = SurfaceClient(enforce_csrf_checks=True)
         client.force_login(self.admin)
         session = client.session
         session['otp_device_id'] = self.device.persistent_id
@@ -1041,7 +1043,7 @@ class MembershipAndPayerInvariants(ConsoleFixture):
 class SessionRevocation(ConsoleFixture):
     def test_signing_out_everywhere_invalidates_sessions_without_changing_access(self):
         """Previously the ONLY way to invalidate a session was to disable the account."""
-        signed_in = Client()
+        signed_in = SurfaceClient()
         signed_in.force_login(self.user)
         self.assertEqual(signed_in.get('/patients/').status_code, 200)
         before = self.user.session_version

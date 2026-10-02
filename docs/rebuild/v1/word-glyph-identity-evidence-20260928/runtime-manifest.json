@@ -1,0 +1,251 @@
+{
+  "runtime": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-proof-20260928",
+  "source_commit": "2e0dc20e62832208f23c4b29ab07ae4da104898d",
+  "files": [
+    {
+      "path": "01-glyph-source-red.log",
+      "bytes": 2695,
+      "sha256": "8267f9d8d0f68179c3f789ee167fa4f0e771d917817b86137306bf92a9a5040c"
+    },
+    {
+      "path": "02-glyph-source-after.log",
+      "bytes": 392,
+      "sha256": "3aa57ca96064ad339d171928e802113edca62db9bd695a60b4d23a97364d2d03"
+    },
+    {
+      "path": "03-glyph-focused.log",
+      "bytes": 958,
+      "sha256": "e51179db91bb84464db7b8e986187788d75e219b39bd98bbb43b7c4f7e7a097a"
+    },
+    {
+      "path": "04-glyph-affected.log",
+      "bytes": 24433,
+      "sha256": "a4c243ac15e31ccb32db4ff7aa3ab806eda247e3d65be5e1f013e37f2278b28e"
+    },
+    {
+      "path": "05-exact-writer-after.log",
+      "bytes": 1290,
+      "sha256": "943b1edefb315e62fdf2c86140dd815ccbf7e86d90b7ccabe2c079d2c71a89d5"
+    },
+    {
+      "path": "06-verification-contract-change.txt",
+      "bytes": 727,
+      "sha256": "023d40c09d76994ae46409248bb5d60b8f62bf60c1660ab567debef3f3a226e8"
+    },
+    {
+      "path": "07-final-glyph-focused.log",
+      "bytes": 958,
+      "sha256": "c109c5fb6a1dd5f36fb21f0ce102ec94b8fbe34c48123da90166a46b76bb53f1"
+    },
+    {
+      "path": "08-final-glyph-and-original-workflow.log",
+      "bytes": 4582,
+      "sha256": "45ea6490e4f7e7e9a414388d2e0be3489c890fef358e7a18bcddec326f258c9a"
+    },
+    {
+      "path": "09-final-glyph-readback.log",
+      "bytes": 1129,
+      "sha256": "fc58558acb4e2a0822cb8df9ad3509e3d56cdf07719f360e1679a88dd685c94d"
+    },
+    {
+      "path": "10-render-command.json",
+      "bytes": 835,
+      "sha256": "23a7720267b74ef87c61c214100a25611934c547ad54704aa080dbad65957221"
+    },
+    {
+      "path": "10-render.log",
+      "bytes": 1585,
+      "sha256": "f9585059fa7cea2979aa9b802f04d0b22dc2ad2bbe83efb56e96296f652aeca6"
+    },
+    {
+      "path": "11-final-original-export-equivalence.json",
+      "bytes": 633,
+      "sha256": "b702fc2cea6c47afa3201f73b4a319cc7a791d3132cc1c208d4b1e929c45a082"
+    },
+    {
+      "path": "12-render-equivalence.json",
+      "bytes": 588,
+      "sha256": "c6813ddb82e487e61ec6c74d25051a61572804401768a6c0cca620f8f2c252a2"
+    },
+    {
+      "path": "D03-q10-glyph-page-2.png",
+      "bytes": 221143,
+      "sha256": "8ba6128c771e759573ef8a9d4c1f92edf3236eb1f1ebf42ab95e19d67d19c6a2"
+    },
+    {
+      "path": "after/ff-False-filled.docx",
+      "bytes": 36769,
+      "sha256": "5106d09ac82b864f213d9e202dfa71695343095817a3727df57418dc853fc50e"
+    },
+    {
+      "path": "after/ff-False.docx",
+      "bytes": 36726,
+      "sha256": "3dc08d1431186e5792781c996304b527d3a58b8b6806e30ca4fe7976a3a8c0b2"
+    },
+    {
+      "path": "after/ff-True-filled.docx",
+      "bytes": 36787,
+      "sha256": "0b832770593e54965f3b3622ac642f152c6d3e51fbb2a0dd6eaa8a4d1c0d2230"
+    },
+    {
+      "path": "after/ff-True.docx",
+      "bytes": 36743,
+      "sha256": "4436c334e0bfc1ebbdaa9a842bb1cea78c16db28f4b11b302af71817b53d30b0"
+    },
+    {
+      "path": "after/glyph-False-filled.docx",
+      "bytes": 36708,
+      "sha256": "ed3f369726b296a5a1f0530dca81100d053d2013cb19435b1e387ddbbc6154d1"
+    },
+    {
+      "path": "after/glyph-False.docx",
+      "bytes": 36620,
+      "sha256": "12b30fe43b93d20d92d4017ca44337d8657be40030810c22e3464bc7160c31b3"
+    },
+    {
+      "path": "after/glyph-True-filled.docx",
+      "bytes": 36722,
+      "sha256": "e83ec104225e51e1135b9e2efd1ed81bfccef17a5a3e93b07816c098a3b97e22"
+    },
+    {
+      "path": "after/glyph-True.docx",
+      "bytes": 36631,
+      "sha256": "63a18aa3b8a62f54dd4fed27a489cbbe9382fec2c11736a5918cc24af9d0ee09"
+    },
+    {
+      "path": "after/result.json",
+      "bytes": 1562,
+      "sha256": "ba36bd8017ce8d0dd4dc0b61c6d3b88f99f3b4cc30e88e8b7be5009bab984ab1"
+    },
+    {
+      "path": "after/sdt-False-filled.docx",
+      "bytes": 36749,
+      "sha256": "e570ae9af7f668e69e164921b30bb7511a2907ce128f9017bda84617f57149fd"
+    },
+    {
+      "path": "after/sdt-False.docx",
+      "bytes": 36669,
+      "sha256": "921ef6c395c1f55df5eeb90d0f427c297e9f7ed9c33c18c98a8e257cc6241641"
+    },
+    {
+      "path": "after/sdt-True-filled.docx",
+      "bytes": 36768,
+      "sha256": "98255246d7094b2c398bc747c18c5b0dd1e708b9385816acaa37db26adb4d338"
+    },
+    {
+      "path": "after/sdt-True.docx",
+      "bytes": 36684,
+      "sha256": "83e2361eae058481fe7950e2e58f59ae5a71737750d2722125be2ed889a0300c"
+    },
+    {
+      "path": "ff-False-filled.docx",
+      "bytes": 36769,
+      "sha256": "04640242df1dc5994138607b572aa78a6080b582fd0413b47472a762c28b200f"
+    },
+    {
+      "path": "ff-False.docx",
+      "bytes": 36726,
+      "sha256": "746c55eb2cd8db066ac82a50b4ddd529e5fe6a2a200f4b5f78e8a112e4e87dff"
+    },
+    {
+      "path": "ff-True-filled.docx",
+      "bytes": 36787,
+      "sha256": "5cb26e5fda3c88e612a821a9d2482bf73442b570cb9159c59261cf1eb21f4711"
+    },
+    {
+      "path": "ff-True.docx",
+      "bytes": 36743,
+      "sha256": "c78172143c0db07009fafa3194d8ade6f97c8f6e3f23509a7644f7a867f4a262"
+    },
+    {
+      "path": "final-glyph-candidate.py",
+      "bytes": 211959,
+      "sha256": "b6c11ffe6a0b57ec11336748fb90194468278598e1e23cb10b8e12f53c203111"
+    },
+    {
+      "path": "frozen-glyph-candidate.py",
+      "bytes": 211903,
+      "sha256": "49c519fc8c7e2ca3600b1a36842c9ae2abcaa5ce6d22793f302bb39a1d109a02"
+    },
+    {
+      "path": "glyph-False-filled.docx",
+      "bytes": 36708,
+      "sha256": "f27eb9194d9e96c7b9bd3cd1302bf8c4300f1bd1e1de2edb76b042aa403acd12"
+    },
+    {
+      "path": "glyph-False.docx",
+      "bytes": 36620,
+      "sha256": "7e62205baf286ebc73f669d8d3b5c50cbb08d044cca6a843dcb5b9a8dfcd2d64"
+    },
+    {
+      "path": "glyph-True-filled.docx",
+      "bytes": 36730,
+      "sha256": "46a389cf601186ea966340b36ed9551fb6496560fd5b8bfa0269ffe84a3b9c7c"
+    },
+    {
+      "path": "glyph-True.docx",
+      "bytes": 36631,
+      "sha256": "66d19ba95e92deb3699f3d360ae5ad728d2eace0331c2c87abbffb589955ee57"
+    },
+    {
+      "path": "probe-after.py",
+      "bytes": 2304,
+      "sha256": "993d13f3d5e7cacf727a18f3476c8f53a5c997fd3dc68986a235b947642dc814"
+    },
+    {
+      "path": "probe-corrected.log",
+      "bytes": 1289,
+      "sha256": "6d8292ae30085e2291a678f43cfdab7fee9f5b01b7ad0f1038be23a3e8bad8c9"
+    },
+    {
+      "path": "probe-corrected.py",
+      "bytes": 2272,
+      "sha256": "3ad27b4ca33c634699de3c9e6c3022ac140fc8a1bd22f2e76b2b731c1ed3a836"
+    },
+    {
+      "path": "probe.log",
+      "bytes": 388,
+      "sha256": "08e8b7ad250b1beb99d02370fad2c1b00035992d22bfc233effeda83d12f904a"
+    },
+    {
+      "path": "probe.py",
+      "bytes": 2264,
+      "sha256": "8f8d6878a815dc5c73fcd64223e13b582d797d49291595d8114bf6e503ceb5e6"
+    },
+    {
+      "path": "render_compare.py",
+      "bytes": 749,
+      "sha256": "d1c36b13949c0d4853823c2df0acc95226ef7cf2c5edabf6c6bb0ebce7a2eed7"
+    },
+    {
+      "path": "result.json",
+      "bytes": 1561,
+      "sha256": "28eb36b752859fb053839ca89d23b36a0deb91ae12853fd45795579c515efd5b"
+    },
+    {
+      "path": "sdt-False-filled.docx",
+      "bytes": 36749,
+      "sha256": "48925e3e2fe7e5afaa9c9087f57284b6a13f2765777bc16dd4859313888350a8"
+    },
+    {
+      "path": "sdt-False.docx",
+      "bytes": 36669,
+      "sha256": "a24baea3a660f3c1b9e8e1cf7c6beb746013845c1f93960a90db1b9496d2c0e2"
+    },
+    {
+      "path": "sdt-True-filled.docx",
+      "bytes": 36768,
+      "sha256": "27f25b1d0f55862fbbc7e46e04670818df0801e2fa5ff981899c1c0c5816d56f"
+    },
+    {
+      "path": "sdt-True.docx",
+      "bytes": 36684,
+      "sha256": "0de1508ea4f35283eb927c3c61588bb7a8e385afce64aa9473d24bcdf06d43e7"
+    },
+    {
+      "path": "source-commit-message.txt",
+      "bytes": 454,
+      "sha256": "67a75042c4b304ea9fc3f34c38e0d4ca389b8031293873843446ea0664d0c186"
+    }
+  ]
+}

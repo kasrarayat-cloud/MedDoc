@@ -1,15 +1,20 @@
+from .retention import begin_private_file,cleanup_file
 from datetime import timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import hashlib
 import json
+import logging
 import re
 import secrets
 import os
+import sys
 import time
 import httpx
+from inspect import unwrap
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import DatabaseError, connection, transaction
+from django.db.backends.base.base import BaseDatabaseWrapper
 from django.utils import timezone
 from .models import AuditEvent, Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
@@ -35,6 +40,130 @@ class CancellationRefused(ValidationError):
 
 class NoProviderRequest(ValidationError):
     """Raised before any provider request is made: nothing billable happened, so the held funds are released."""
+
+
+class JobNoLongerRunning(ValidationError):
+    """The job left 'running' while its worker was busy with it (the stale sweep, an administrator's resolution): the worker
+    adopts nothing and records nothing over what the other party recorded."""
+
+
+#: What the doctor reads when the provider SDK refused to build a request for want of a credential. Fixed, non-clinical.
+PROVIDER_NOT_CONNECTED='Generation provider is not connected.'
+
+
+#: What the doctor reads about a request the provider refused without processing it (after NOT_PROCESSED). Fixed and
+#: non-clinical: the status and the provider's request id, never the provider's own words, which can quote the request.
+PROVIDER_REFUSED=('The AI provider refused this request without processing it (HTTP {status}, request {request}). Nothing '
+                  'was charged and the held funds were released.')
+#: The audit action that records a definite provider refusal, with the provider's request id.
+PROVIDER_REFUSED_ACTION='provider.refused'
+#: A provider request id (or error type) as the provider writes it; anything else is recorded as ''. Bounded so every
+#: message carrying it fits its 250-character column (a live id is 28 characters).
+REQUEST_ID=re.compile(r'[A-Za-z0-9_-]{1,64}')
+
+
+class ProviderRefusedRequest(ValidationError):
+    """The provider DEFINITELY refused the request without processing it (`provider_refused`): an HTTP 400
+    invalid_request_error or an HTTP 413, for the request's only attempt. Nothing was processed, so nothing is billed
+    (the provider bills processed tokens; a refused request has none) and the held funds are released."""
+    def __init__(self,refusal):
+        self.refusal=refusal
+        super().__init__(PROVIDER_REFUSED.format(status=refusal['status'],
+                                                 request=refusal['request_id'] or 'without a request id'))
+
+
+def sdk_code(module,owner,name):
+    """The code object of a LOADED provider SDK's own method, or None. Nothing is imported: an SDK this process never
+    loaded cannot be in a traceback, and an exception handler must not pay for, or fail on, an import."""
+    try: return getattr(getattr(sys.modules[module],owner),name).__code__
+    except Exception: return None
+
+
+def never_transmitted(error):
+    """True only when a provider SDK refused before its request existed, so provably nothing left (MONEY-2).
+
+    The proof is structural, never a message match: the innermost frame is the SDK's own refusal code. Two shapes:
+    - A TypeError from the SDK's own header validation while BUILDING the request, inside `_build_request`, before
+      `_client.send`, on the only attempt (max_retries=0). anthropic 0.125.0 resolves its credential there, not when the
+      client is constructed (no api_key, auth_token or credentials provider); openai 2.54.0 does the same for a client
+      constructed with only OPENAI_ADMIN_KEY, which satisfies its constructor but gives the Responses request no bearer
+      credential (R1-MONEY2-OPENAI).
+    - The base OpenAIError itself (never a subclass: APIConnectionError and every other transport or status error is a
+      subclass) raised by openai's own client constructor, called directly from generation.generate: with no credential at
+      all no client exists, so nothing can have been sent. That construction sits in a before_the_provider block that is
+      inactive for a legacy form, so it read as an unknown outcome and the hold was kept (R1-MONEY2-OPENAI).
+    Every send sits outside its pre-provider guard, and the send sites stay exactly as the cost scanner binds them; the
+    failure is classified where it lands. Anything else, including a later SDK that moves either check, the same class
+    and message raised by a send, or a constructor reached from anywhere but generate(), stays an unknown outcome with its
+    hold kept: the conservative status quo, never a guess.
+    """
+    trace=error.__traceback__
+    if trace is None: return False
+    frames=[]
+    while trace is not None: frames.append(trace.tb_frame.f_code); trace=trace.tb_next
+    # Identity, never equality: code objects compare equal by content, and only the SDK's own object is proof. A missing
+    # SDK or method gives None, which is never a frame's code, so it proves nothing.
+    if type(error) is TypeError:
+        return any(frames[-1] is code for code in (sdk_code('anthropic._client','Anthropic','_validate_headers'),
+                                                   sdk_code('openai._client','OpenAI','_validate_headers')))
+    OpenAIError=getattr(sys.modules.get('openai._exceptions'),'OpenAIError',None)
+    if OpenAIError is None or type(error) is not OpenAIError: return False
+    return (len(frames)>1 and frames[-1] is sdk_code('openai._client','OpenAI','__init__')
+            and frames[-2] is getattr(generation.generate,'__code__',None))
+
+
+def provider_refused(error):
+    """{'status', 'request_id', 'error_type'} when `error` PROVES the provider refused the request without processing
+    it; otherwise None (2026-10-02: campaign 3's 400 'Schema is too complex for compilation' was held as an unknown
+    outcome with its hold kept).
+
+    The proof is structural, like `never_transmitted`, never a message match. All of:
+    - the class IS the loaded anthropic SDK's own BadRequestError (whose body's error type is invalid_request_error) or
+      RequestTooLargeError - identity, never a subclass or a name;
+    - it carries the httpx.Response the SDK built it from, whose status is that class's status, and whose request is the
+      error's own request;
+    - the innermost frame is the SDK's own request loop (SyncAPIClient.request), where it raises a status error for a
+      response it received - so the provider answered, and nothing else raised it;
+    - the request was the Messages call itself (POST /v1/messages), never another endpoint;
+    - that request was the FIRST and only attempt: the SDK's own x-stainless-retry-count header is '0'. Every QuillMD
+      client is built with max_retries=0; a 400 answering a retry would prove nothing about the attempt before it.
+    A 400 or 413 is the provider's refusal to process the request at all: no tokens are processed and nothing is billed.
+    Every other outcome - 401, 403, 404, 408, 409, 422, 429, 5xx, 529, a timeout, a dropped connection, any other
+    provider SDK, the same class raised anywhere else - stays an unknown outcome with its hold kept: the conservative
+    status quo, which an administrator's reconciliation resolves from provider evidence."""
+    module=sys.modules.get('anthropic._exceptions')
+    if module is None: return None
+    statuses={getattr(module,'BadRequestError',None):400,getattr(module,'RequestTooLargeError',None):413}
+    status=statuses.get(type(error))
+    if status is None: return None
+    response=getattr(error,'response',None)
+    try: request=response.request if isinstance(response,httpx.Response) else None
+    except RuntimeError: request=None
+    if (request is None or response.status_code!=status or getattr(error,'status_code',None)!=status
+            or getattr(error,'request',None) is not request
+            or request.headers.get('x-stainless-retry-count')!='0'): return None
+    # Only the one call a job makes: POST /v1/messages (refutation of 9c2ffa92, T4 - a refused count_tokens, models or
+    # batches call must never release the hold of a messages request the provider did process).
+    if request.method!='POST' or request.url.path!='/v1/messages': return None
+    error_type=getattr(error,'type',None)
+    if status==400 and error_type!='invalid_request_error': return None
+    trace=error.__traceback__
+    if trace is None: return None
+    while trace.tb_next is not None: trace=trace.tb_next
+    if trace.tb_frame.f_code is not sdk_code('anthropic._base_client','SyncAPIClient','request'): return None
+    request_id=getattr(error,'request_id',None)
+    return {'status':status,'request_id':request_id if isinstance(request_id,str) and REQUEST_ID.fullmatch(request_id) else '',
+            'error_type':error_type if isinstance(error_type,str) and REQUEST_ID.fullmatch(error_type) else ''}
+
+
+def record_refusal(job,exc,action):
+    """Inside the caller's transaction, under the job's row lock: the provider's request id on the job and the audit
+    record of the refusal (status, error type, request id; never the provider's message)."""
+    refusal=exc.refusal
+    job.provider=f"anthropic:{job.config.get('model','')}"[:60];job.provider_request_id=refusal['request_id']
+    audit(job.user,PROVIDER_REFUSED_ACTION,job.pk,department=job.department,kind=job.kind,status=refusal['status'],
+          error_type=refusal['error_type'],request_id=refusal['request_id'],job_action=action)
+    return ['provider','provider_request_id']
 
 
 class RecordingOverLimit(ValidationError):
@@ -144,7 +273,13 @@ CANCEL_REFUSALS={'running':'Processing already started; the outcome will be bill
 
 def ended_key(job,label):
     """Free the request key of a job that ended without success so a fresh request for the same revision is accepted; the ended
-    row keeps its history under a key only it can hold. Longest key today is transcription (115 chars) + 43 = 158 of 160."""
+    row keeps its history under a key only it can hold. Longest key today is transcription (115 chars) + 43 = 158 of 160.
+
+    ⚠️ Once only. A key that already ends with this job's own id was ended before (a job an administrator resolved, reopened
+    by a late provider receipt and resolved again, core.jobs.hold_late_receipt): suffixing it twice would pass 160
+    characters and fail the resolution. A key is built before its job exists (enqueue), so a live key never carries its own
+    job's id."""
+    if job.request_key.endswith(':'+job.pk.hex): return job.request_key
     return f'{job.request_key}:{label}:{job.pk.hex}'
 
 
@@ -165,12 +300,19 @@ def billable_outcome(job):
 def deliverable(job):
     """Provider output the requester may download: exactly the charged outcomes, including a transcript the notes could not take.
     An absorbed failure is never delivered. Department scoping still decides who can see the job at all."""
-    return billable_outcome(job)
+    # A child artifact is evidence for a complete form, never a standalone draft.
+    return job.kind!='generation_part' and billable_outcome(job)
 
 
 def may_cancel(job,user):
     """Same rule jobs.cancel enforces: the requester, or an owner or clinician of the department."""
     if job.state!='queued': return False
+    if job.kind=='generation_part':
+        try: membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
+        except PermissionDenied:return False
+        return (job.generation_part.batch.state=='queued'
+                and not job.generation_part.batch.events.filter(kind='send_intent').exists()
+                and job.generation_part.ordinal==1)
     try: membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     except PermissionDenied: return False
     return True
@@ -179,7 +321,7 @@ def may_cancel(job,user):
 def failure_reason(exc):
     """Display text for a post-settlement failure. Only QuillMD's own fixed messages are shown; any other exception is named by class,
     because provider or validation messages can quote the source text."""
-    if isinstance(exc,(NotAdoptedByUser,PlatformFailure,NoProviderRequest)): return '; '.join(exc.messages)
+    if isinstance(exc,(NotAdoptedByUser,PlatformFailure,NoProviderRequest,ProviderRefusedRequest)): return '; '.join(exc.messages)
     return f'Output could not be adopted ({type(exc).__name__}); review required.'
 
 
@@ -209,13 +351,34 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 
 @transaction.atomic
 def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
-    e=Encounter.objects.select_for_update().get(pk=encounter.pk)
+    from . import generation_batch, batch_jobs
+    from .disposition_execution import lock_available
+    # Both routes lock the document first, the batch route included (batch_jobs.enqueue re-locks the same row in
+    # this transaction): a document disposed of since the caller read it is a refusal, never DoesNotExist (RF-3).
+    e=lock_available(encounter.pk)
+    # ⚠️ D10's LAYOUT GATE IS ADMISSION'S, AND IT IS HERE, never in v3_mapping.generation_refusal: that check also runs
+    # before every batch part and at adoption, after money was spent, where a verifier outage discarded paid parts
+    # (refutation L1:F1). It is measured before anything is held, and raised only for a request that would take a NEW
+    # hold — after each route's own replay answer, so a re-posted admitted request is still answered as that request.
+    # It is fill's own answer (v3_mapping.export_needs_verifier: the export path, probed), never the inspection's count,
+    # which also counts tab-column rows fill withdraws and exports without any verifier (refutation FV:F1).
+    if kind=='generation' and generation_batch.needed(encounter.template_version.fields, encounter.notes,
+                                                      config or generation.configuration(encounter.template_version.fields)):
+        admission=v3_mapping.admission_refusals(e.template_version)
+        job=batch_jobs.enqueue(encounter,user,config or generation.configuration(encounter.template_version.fields),expected_revision)
+        # A NEW batch admission raising here is undone whole by this transaction — batch, parts, holds, events, audit —
+        # exactly as the batch's own refusals after reserve() are; nothing held or sent survives it.
+        if not getattr(job,'reused',False) and (refusal:=admission[0] or admission[1]):
+            raise ValidationError(refusal)
+        return job
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
     if expected_revision is not None and e.revision!=expected_revision:
         raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
-    if kind=='generation' and (refusal:=v3_mapping.generation_refusal(e.template_version)):
-        raise ValidationError(refusal)
+    layout_refusal=''
+    if kind=='generation':
+        refusal,layout_refusal=v3_mapping.admission_refusals(e.template_version)
+        if refusal: raise ValidationError(refusal)
     if kind=='generation' and not e.notes.strip():
         raise ValidationError('Type and save source notes, or review and add a transcript, before generating answers.')
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
@@ -230,7 +393,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if old:
         old.reused=True
         return old
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
+    if batch_jobs.pending(e): raise ValidationError('This encounter already has a pending job.')
     # ⚠️ A SIGNED QUOTE IS A PRICE THE DOCTOR SAW, NOT A LICENCE TO SEND A REQUEST THE OPERATOR HAS SINCE WITHDRAWN. The
     # quote carries the whole configuration() it was signed under, and for its 600 s it used to be enqueued as it stood:
     # measured, a page loaded under claude-sonnet-5 and clicked after a rollback, restart and drain queued and SENT a
@@ -241,12 +404,14 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     # switched to fixture queued a LIVE job — held, sent, charged — while the console said no request is sent; the reverse
     # queued a fixture job whose synthetic answers entered a live deployment. Both directions are refused here.
     if config is not None and kind=='generation':
-        current=generation.configuration()
+        current=generation.configuration(e.template_version.fields)
         if config.get('mode')!=current['mode']: raise ValidationError(QUOTE_MODE_CHANGED)
         if config.get('pricing_version')!=current['pricing_version']: raise ValidationError(QUOTE_PRICE_CHANGED)
-    config=dict(config or generation.configuration())
+    config=dict(config or generation.configuration(e.template_version.fields))
     if kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,config)):
         raise ValidationError(refusal)
+    # Role suggestions are decided HERE, from the setting now, never carried from a quote (refutation I-1).
+    if kind=='generation':config=generation.admitted_with_role_suggestions(config,e.template_version)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
@@ -284,6 +449,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         streams=config.get('submission_streams') or ''
         if streams.isdigit() and int(streams)>1: raise ValidationError(AMBIGUOUS_STREAMS.format(count=int(streams)))
         if streams.isdigit() and int(streams)==0: raise ValidationError(NO_AUDIO_TRACK)
+    # The last refusal before the job and its hold: every earlier answer (the replay above included) stands as before.
+    if layout_refusal: raise ValidationError(layout_refusal)
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     job.reused=False
     if kind=='transcription':
@@ -483,11 +650,13 @@ def prepare_submission(job):
             relative=f'submissions/{secrets.token_hex(24)}{suffix}'
             destination=private_path(relative)
             destination.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            begin_private_file(destination)
             # Created at 0600 BEFORE ffmpeg opens it: ffmpeg truncates an existing file rather than creating one, so
             # the artifact is never briefly readable at the process umask.
             destination.touch(mode=0o600,exist_ok=False)
             produced=normalise_submission(source,destination,upload,floor_seconds=floor,ceiling_seconds=ceiling,
-                                          deadline=SUBMISSION_BUDGET_SECONDS-(time.monotonic()-started))
+                                          deadline=SUBMISSION_BUDGET_SECONDS-(time.monotonic()-started),
+                                          cleanup=lambda path:cleanup_file(path,encounter_id=job.encounter_id))
             artifact=destination
         except NotNormalised as error: raise refuse(error.kind,error.detail,job)
         # Anything else out of the remux is still a stop, not a fallback. An unexpected exception class is exactly the
@@ -515,7 +684,7 @@ def prepare_submission(job):
               submitted_bytes=submitted['submission_bytes'],sha256=submitted['submission_sha256'])
         return raw,artifact,submitted
     except BaseException:
-        if destination is not None: destination.unlink(missing_ok=True)
+        if destination is not None: cleanup_file(destination,encounter_id=job.encounter_id)
         raise
 
 
@@ -584,7 +753,7 @@ def transcribe(job):
         return submit_transcription(job,raw,key,submitted,params)
     finally:
         # The artifact is transient by design; its sha256 and measured duration on the job are what survive.
-        if artifact is not None: artifact.unlink(missing_ok=True)
+        if artifact is not None: cleanup_file(artifact,encounter_id=job.encounter_id)
 
 
 def submit_transcription(job,raw,key,submitted,params=None):
@@ -607,17 +776,23 @@ def submit_transcription(job,raw,key,submitted,params=None):
     return transcript,cost,dict(submitted,duration_seconds=str(duration)),rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
+    from .disposition import require_processing
+    require_processing()
+    from .batch_jobs import run_one as run_batch
+    if run_batch():return True
     from .mapping_jobs import run_one as run_mapping
     next_kind=Job.objects.filter(state='queued').order_by('created_at').values_list('kind',flat=True).first()
     if next_kind=='mapping' and run_mapping(): return True
     with transaction.atomic():
-        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').exclude(kind='mapping').order_by('created_at').first()
+        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').exclude(kind__in=['mapping','generation_part']).order_by('created_at').first()
         if not job: return False
+        from .disposition_execution import require_access
+        require_access(job.encounter_id)
         try: membership(job.user,job.department)
         except Exception:
             job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
-    provider_returned=False
+    provider_returned=False; settling=False; carrier=None
     try:
         # A hold taken before the switch to real data mode may sit on sandbox money, or its payer's paid balance (which a
         # reconciled cost would debit) may hold it: real mode never spends it, and refuses the job as reserve() would.
@@ -630,15 +805,30 @@ def run_one():
         # A job quoted with the narrative contract after the flag went off stops here: nothing is sent or charged.
         if job.kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,job.config)):
             raise NoProviderRequest(refusal)
-        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements) if job.kind=='generation' else transcribe(job)
+        if job.kind=='generation':
+            # ⚠️ A FIELD ON A ROLE PLACE IS NEVER ASKED: the roles are read from the ORIGINAL now, never from the stored
+            # mapping (core.destination_roles). An original that cannot be read refuses before anything is sent.
+            from . import destination_roles
+            from documents import DocumentError
+            # (the held rows are asked only while the setting is still on: turning it off stops every queued job asking them)
+            try:asked_fields=destination_roles.generation_fields(e.template_version,suggest=generation.role_suggestions(job.config)
+                                                                and destination_roles.suggestions_enabled())
+            except (DocumentError,ValidationError,OSError):raise NoProviderRequest(v3_mapping.GENERATION_SOURCE_REFUSAL)
+            if refusal:=destination_roles.generation_refusal(e.template_version,asked_fields,job.config):
+                raise NoProviderRequest(refusal)
+        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,asked_fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements) if job.kind=='generation' else transcribe(job)
         provider_returned=True
         response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
         resource_id=getattr(response,'id','') or ''
         # Financial evidence commits before any clinical serialization or file IO.
         with transaction.atomic():
+            # Under the job's row lock: the state this receipt arrives into. A receipt is recorded whatever it is — provider
+            # cost is never dropped — and one that arrives after the job left 'running' is held for an administrator.
+            arrived_into=Job.objects.select_for_update().get(pk=job.pk).state
             ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':request_id,'provider_resource_id':resource_id,'actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
             job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id;job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
             audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,resource_id=resource_id,actual_cost=str(cost))
+            if arrived_into!='running': hold_late_receipt(job,arrived_into)
         # The delivered transcript, stored and downloaded, carries the same incomplete-portion marker the notes would.
         note=coverage_note(job,units) if job.kind=='transcription' and isinstance(result,str) else ''
         if job.kind=='transcription':
@@ -652,18 +842,47 @@ def run_one():
             # A synthetic narrative response (fixture mode): kept as the text the validator read, and named as such.
             saved={'provider_output_text':result['narrative_replay'],'synthetic_source':result['replay_source']}
         else:saved={'answers':result}
-        result_path=f'receipts/{secrets.token_hex(24)}.json'
-        path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-        payload=json.dumps(saved,ensure_ascii=False).encode()
-        with path.open('xb') as file:path.chmod(0o600);file.write(payload)
-        job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
+        # ⚠️ A REDACTED DOCUMENT'S PROVIDER OUTPUT IS NEVER STORED (refutation F2 of dc33e094): a result arriving after the
+        # redaction (a late receipt) wrote the quoted notes to a file no tombstone listed. Its accounting facts are the
+        # receipt above; the output itself is not kept. "Redacted" includes a redaction the independent journal holds whose
+        # database commit has not happened yet (refutation R2D-L1 of 4cfa4301). A redaction journaled while this file is
+        # written is covered by the check after it, which removes THIS file and its reference (never the document's other
+        # files: an uncommitted redaction's exact retry must still find the content it was requested from), or, once
+        # committed, by the redaction's own sweep of every file its rows reference.
+        from .redaction import withheld
+        if withheld(job.encounter_id):
+            audit(job.user,'provider.output_withheld',job.pk,department=e.department,reason='document_redacted')
+        else:
+            result_path=f'receipts/{secrets.token_hex(24)}.json'
+            path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            payload=json.dumps(saved,ensure_ascii=False).encode()
+            with path.open('xb') as file:path.chmod(0o600);file.write(payload)
+            job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
+            if withheld(job.encounter_id):
+                # Already gone is the outcome wanted: the redaction's own sweep may read the new reference and remove it first.
+                try:path.unlink(missing_ok=True)
+                except OSError:
+                    # Kept referenced, so the redaction's sweep (at its commit, retry or replay) still finds and removes it.
+                    logging.getLogger(__name__).error('A withheld provider result was not removed; the redaction sweep removes it.')
+                else:
+                    job.result_path='';job.result_sha256='';job.save(update_fields=['result_path','result_sha256'])
+                    audit(job.user,'provider.output_withheld',job.pk,department=e.department,reason='document_redacted')
         # Settling provider cost is independent of clinical acceptance: invalid answers are never adopted.
+        # The connection that will carry settlement's COMMIT, kept to tell afterwards whether Django had to drop it (RS-1).
+        connection.ensure_connection(); carrier=connection.connection; settling=True
         settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)
+        settling=False
         with transaction.atomic():
             e=Encounter.objects.select_for_update().get(pk=e.pk)
             # Output QuillMD cannot use is a platform failure whatever the user did meanwhile, so it is checked first and absorbed.
             if job.kind=='generation': answers,review=generation.adoption(result)
             elif not isinstance(result,str): raise PlatformFailure('Provider supplied no usable transcript.')
+            # ⚠️ The encounter, then the job (the global lock order, core.retention), and before any write: a job swept or
+            # resolved after its settlement committed is never adopted, and its state is never overwritten as succeeded
+            # (blockers.txt item 3, case A: this block's full save used to turn a job the sweep held back into 'succeeded').
+            # Taken after the validation above, which writes nothing, so a cancellation during it still answers at once.
+            if Job.objects.select_for_update().get(pk=job.pk).state!='running':
+                raise JobNoLongerRunning('The request left processing before its output could be adopted.')
             # Usable output that the user's own state (finalized, edited, access revoked) declines is not a platform failure:
             # NotAdoptedByUser keeps the settled charge.
             try: membership(job.user,e.department)
@@ -680,56 +899,191 @@ def run_one():
                 text=result+note
                 if len(e.notes)+len(text)+2>NOTE_LIMIT: raise NotAdoptedByUser(OVERFLOW_ERROR)
                 e.notes+='\n\n'+text; e.answers={}; e.status='draft'; e.revision+=1
-                CodeSuggestion.objects.filter(encounter=e).delete()
-                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision)
+                # Accepted codes are kept and marked for re-review, never deleted (0034); the rest are cleared as before.
+                CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=True).delete()
+                marked=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).update(review_required=True)
+                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision,
+                      kept_for_review=marked)
             if not (job.kind=='transcription' and job.config.get('transcript_review_required')):
                 # A generation's statement proposals only pre-select the page; the first save replaces them with decisions.
                 e.template_review=review if job.kind=='generation' else {}
                 e.save()
-            job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
+            job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now()
+            job.save(update_fields=['state','provider','provider_request_id','finished_at'])
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
     except Exception as exc:
-        # A timeout can be billable. Never retry it or release its reservation as if cost were known.
-        known=Usage.objects.filter(job=job).exists()
-        fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
-        declined=known and isinstance(exc,NotAdoptedByUser)
-        unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)
-        job.state='failed' if known or fixture or unsent else 'reconciliation'
-        # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
-        if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
-        elif unsent: job.error=(NOT_PROCESSED+failure_reason(exc)+' No provider request was made; nothing was charged and the held funds were released.')[:250]
-        elif fixture: job.error='Generation failed validation.'
-        elif ProviderReceipt.objects.filter(job=job).exists():
-            # The provider completed and its receipt is durable; only settlement failed (for example cost above the held maximum).
-            job.error='Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.'
-        else: job.error='Provider outcome is uncertain; reconcile before retrying.'
-        job.finished_at=timezone.now()
-        fields=['state','error','finished_at']
-        if job.state=='failed': job.request_key=ended_key(job,'failed'); fields.append('request_key')
-        if fixture or unsent:
-            # One transaction: a job never reads 'held funds were released' while its hold is still held. If the release
-            # fails, the job stays 'running', mark_stale moves it to reconciliation and the audit lists it as unresolved.
-            with transaction.atomic():
-                job.save(update_fields=fields); release(job)
-        else: job.save(update_fields=fields)
-        # Released above (fixture, not processed), or a successful generation the user did not adopt: it remains billable,
-        # with no reversal and no platform cost.
-        if fixture or unsent or declined: pass
-        # Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the user's charge.
-        elif known:
-            try: absorb_failed_job(job)
-            except Exception as absorb_error:
-                # The failed job state is already durable; a failed reversal must never stop the worker. audit_billing flags settled-but-unabsorbed failures.
-                audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
-        audit(job.user,'job.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
-              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'fixture' if fixture else 'uncertain')
+        # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
+        if not provider_returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
+        # A request the provider definitely refused without processing it is not an unknown outcome (2026-10-02).
+        elif not provider_returned and (refusal:=provider_refused(exc)): exc=ProviderRefusedRequest(refusal)
+        # Read before anything reconnects: whether settle()'s COMMIT went out and its answer was lost (RS-1).
+        in_doubt=settling and commit_in_doubt(exc,carrier)
+        usable_connection()
+        try: end_failed_job(job,exc,provider_returned,in_doubt)
+        except DatabaseError:
+            # ⚠️ THE HANDLER'S OWN READ OR WRITE FAILED (RS-2): it used to leave the job 'running' — with a settled charge, if
+            # settlement had committed — until the stale sweep. What is left is to hold the job for an administrator,
+            # asserting nothing, on a fresh connection; if even that fails, the exception leaves run_one as before (the
+            # worker restarts and mark_stale holds the job).
+            usable_connection()
+            hold_for_reconciliation(job,exc,OUTCOME_UNRECORDED)
     return True
+
+
+#: ⚠️ WHAT THE WORKER SAYS WHEN IT CANNOT KNOW WHETHER A CHARGE COMMITTED (RS-1, RS-2): nothing about what was or was not
+#: charged. The administrator's resolution (views.admin_resolve_job) reads the committed usage, ledger and holds under the
+#: job's row lock and resolves from them, whichever way the commit went.
+SETTLEMENT_UNKNOWN='The settlement outcome of this request is unknown; an administrator must reconcile it.'
+OUTCOME_UNRECORDED='The outcome of this request could not be recorded; an administrator must reconcile it.'
+#: The settled charge of an output that was not adopted could not be reversed (RS-3): the job is held with its key.
+ABSORPTION_FAILED=('The output could not be adopted, and its charge could not be reversed automatically; an administrator '
+                   'must reconcile it.')
+FIXTURE_VALIDATION='Generation failed validation.'
+#: RS-5: in fixture (synthetic) mode a failure that is not a validation refusal is named as what it was.
+FIXTURE_PLATFORM_ERROR=('Generation failed: a platform {kind}error ({name}) stopped it before its output was adopted. '
+                        'Synthetic generation carries no charge; the held funds were released.')
+
+
+def commit_in_doubt(error,carrier):
+    """True when a COMMIT went out and its answer was lost, so whether that transaction committed is unknown here (RS-1).
+
+    Structural, like never_transmitted: the exception passed through Django's own commit() (its code object, identity),
+    and `carrier`, the connection that sent it, is gone — Django drops a connection whose rollback after a failed commit
+    fails too (and reconnects at once, in atomic's exit, so an absent connection proves nothing; identity does). A COMMIT
+    the server answered with an error (a deferred constraint) rolled back on a connection that survived to say so:
+    established, not in doubt. An error raised by a statement before the COMMIT never reached one: it cannot commit.
+    """
+    if not isinstance(error,DatabaseError) or carrier is None or connection.connection is carrier: return False
+    commit=unwrap(BaseDatabaseWrapper.commit).__code__
+    trace=error.__traceback__
+    while trace is not None:
+        if trace.tb_frame.f_code is commit: return True
+        trace=trace.tb_next
+    return False
+
+
+def usable_connection():
+    """A connection that broke outside a transaction stays broken until it is closed, and Django closes one only at a
+    request boundary; the worker has none. Before the handler reads and records an outcome, do what that boundary does."""
+    if not connection.in_atomic_block: connection.close_if_unusable_or_obsolete()
+
+
+def outcome_already_recorded(job,exc,state):
+    """A committed transaction ended this job before the handler got its lock (the adoption, whose COMMIT answer was lost
+    after it committed): that record stands, and the error is recorded beside it."""
+    audit(job.user,'job.error_after_commit',job.pk,department=job.department,state=state,error_class=type(exc).__name__)
+
+
+def hold_for_reconciliation(job,exc,message,billing='uncertain',absorb_error=None,action='job.reconciliation'):
+    """Hold a running job for an administrator, asserting nothing: no release, no absorption, and its request key kept, so
+    the same request cannot be bought twice meanwhile. Also the mapping worker's (core.mapping_jobs)."""
+    with transaction.atomic():
+        state=Job.objects.select_for_update().get(pk=job.pk).state
+        if state!='running': return outcome_already_recorded(job,exc,state)
+        job.state='reconciliation';job.error=message;job.finished_at=timezone.now()
+        job.save(update_fields=['state','error','finished_at'])
+        if absorb_error is not None: audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
+        audit(job.user,action,job.pk,department=job.department,error_class=type(exc).__name__,billing=billing)
+
+
+#: A provider receipt that arrived after its job had left 'running' (blockers.txt item 3): recorded, never settled, never
+#: dropped, and held for an administrator, whose resolution absorbs the receipt's cost (views.admin_resolve_job).
+LATE_RECEIPT=('The provider completed after this request had been ended or held elsewhere. Its receipt is recorded and nothing '
+              'is charged for it; an administrator must reconcile it.')
+#: The audit action audit_billing reads to find late receipts (late_provider_receipts_resolved).
+LATE_RECEIPT_ACTION='provider.receipt_late'
+
+
+def hold_late_receipt(job,state):
+    """Inside the receipt's own transaction, under the job's row lock: a receipt arrived for a job in `state`, not 'running'.
+
+    Somebody ended or held the job while its provider request was in flight: a second worker's stale sweep, or an
+    administrator resolving what that sweep held ('Resolved by administrator: no provider cost evidenced.', its hold released
+    and its request key freed). The receipt proves provider cost that record denies. So:
+
+    - a job that ENDED with no usage row ('failed', 'cancelled') is reopened for reconciliation, so its record no longer says
+      that no provider cost exists; the administrator's resolution then absorbs the receipt's cost (views.admin_resolve_job,
+      receipt branch). Its request key stays as it is: a freed key may already carry a new request, charged once, as its own.
+    - a job already held for reconciliation keeps its state, and its error now says that a receipt arrived.
+    - the arrival is recorded (LATE_RECEIPT_ACTION, with the previous state and error): audit_billing fails until the
+      receipt is accounted for, by a usage row or an absorbed platform cost of exactly its amount.
+
+    Nothing is settled here or later: settle() refuses a job that is not running (core.billing.SETTLEABLE_STATES). The batch
+    runner reopens an ENDED child the same way (core.batch_jobs.store_response, 'late_response_recorded'); a batch child that
+    was only held when its response arrived is not marked late and stays held for the batch resolution."""
+    current=Job.objects.get(pk=job.pk)  # the caller holds its row lock
+    previous_error=current.error
+    if state in ('failed','cancelled') and not Usage.objects.filter(job=job).exists():
+        current.state='reconciliation';current.finished_at=None;current.error=LATE_RECEIPT
+        current.save(update_fields=['state','finished_at','error'])
+    elif state=='reconciliation':
+        current.error=LATE_RECEIPT;current.save(update_fields=['error'])
+    audit(job.user,LATE_RECEIPT_ACTION,job.pk,department=job.department,previous_state=state,
+          previous_error=previous_error[:250],state=current.state)
+
+
+def end_failed_job(job,exc,provider_returned,in_doubt):
+    """Record how a running job that raised ended, from what is committed, under its row lock."""
+    # ⚠️ AN IN-DOUBT SETTLEMENT ASSERTS NOTHING (RS-1). Its COMMIT may still be in flight: a read here can come before it is
+    # visible, and this used to record 'nothing is charged' for a charge that committed a moment later.
+    if in_doubt: return hold_for_reconciliation(job,exc,SETTLEMENT_UNKNOWN)
+    absorbing=False
+    try:
+        with transaction.atomic():
+            # Under the job's row lock the committed record is final: a transaction whose COMMIT answer was lost still holds
+            # this lock until it ends, and one that committed (the adoption) has already ended the job.
+            state=Job.objects.select_for_update().get(pk=job.pk).state
+            if state!='running': return outcome_already_recorded(job,exc,state)
+            # A timeout can be billable. Never retry it or release its reservation as if cost were known.
+            known=Usage.objects.filter(job=job).exists()
+            fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
+            declined=known and isinstance(exc,NotAdoptedByUser)
+            unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)
+            # The provider answered with a definite refusal (`provider_refused`): nothing was processed or billed.
+            refused=not known and not provider_returned and not fixture and isinstance(exc,ProviderRefusedRequest)
+            job.state='failed' if known or fixture or unsent or refused else 'reconciliation'
+            # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
+            if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
+            elif unsent: job.error=(NOT_PROCESSED+failure_reason(exc)+' No provider request was made; nothing was charged and the held funds were released.')[:250]
+            elif refused: job.error=(NOT_PROCESSED+failure_reason(exc))[:250]
+            elif fixture:
+                job.error=FIXTURE_VALIDATION if isinstance(exc,ValidationError) else FIXTURE_PLATFORM_ERROR.format(
+                    kind='database ' if isinstance(exc,DatabaseError) else '',name=type(exc).__name__)[:250]
+            elif ProviderReceipt.objects.filter(job=job).exists():
+                # The provider completed and its receipt is durable; only settlement failed (for example cost above the held
+                # maximum), and settlement's transaction is known to have rolled back.
+                job.error='Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.'
+            else: job.error='Provider outcome is uncertain; reconcile before retrying.'
+            job.finished_at=timezone.now()
+            fields=['state','error','finished_at']
+            if job.state=='failed': job.request_key=ended_key(job,'failed'); fields.append('request_key')
+            if refused: fields+=record_refusal(job,exc,'job.failed')
+            job.save(update_fields=fields)
+            # One transaction: a job never reads 'held funds were released' while its hold is still held.
+            if fixture or unsent or refused: release(job)
+            # ⚠️ Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the
+            # user's charge IN THE SAME TRANSACTION as the failed state (RS-3). A successful generation the user did not adopt
+            # (declined) remains billable, with no reversal and no platform cost.
+            elif known and not declined:
+                absorbing=True; absorb_failed_job(job); absorbing=False
+            audit(job.user,'job.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
+                  billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'provider_refused' if refused else 'fixture' if fixture else 'uncertain')
+    except Exception as absorb_error:
+        if not absorbing: raise
+        # ⚠️ A REVERSAL THAT FAILED NEVER LEAVES A 'failed' JOB CHARGED (RS-3). It used to: the failed state was durable, the
+        # charge stayed and the request key was freed, so the same request was bought again. Now nothing of that transaction
+        # stands; the job is held with its key and its charge until an administrator resolves it (the settled branch of
+        # admin_resolve_job absorbs it).
+        hold_for_reconciliation(job,exc,ABSORPTION_FAILED,billing='platform_failure',absorb_error=absorb_error)
 
 
 @transaction.atomic
 def cancel(job,user):
     """Cancel a queued request before any provider request. The row lock is the same one run_one takes with skip_locked, so a job
     being picked up is never cancelled and a job being cancelled is never picked up. Held reservations are released; nothing is charged."""
+    if job.kind=='generation_part':
+        from .batch_jobs import cancel_child
+        return cancel_child(job,user)
     # Lock the job row only: locking the encounter or department too would invert run_one's encounter-then-job order and deadlock.
     job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department').get(pk=job.pk)
     # The requester may cancel their own queued request; anyone else needs a clinician or owner role in the department.
@@ -752,8 +1106,8 @@ def reap_abandoned_voice_uploads():
         if not UPLOAD_NAME.fullmatch(relative) or Job.objects.filter(input_path=relative).exists(): continue
         path=private_path(relative)
         if path.is_file():
-            path.unlink(missing_ok=True); removed+=1
-            audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
+            removed+=int(cleanup_file(path,encounter_id=event.target,department_id=event.department_id))
+            if not path.exists():audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
     return removed+reap_stray_submissions()
 
 
@@ -773,15 +1127,18 @@ def reap_stray_submissions():
         if not SUBMISSION_NAME.fullmatch(relative) or not path.is_file(): continue
         try:
             if path.stat().st_mtime>=cutoff: continue
-            path.unlink(missing_ok=True)
+            deleted=cleanup_file(path)
         except OSError: continue
+        if not deleted:continue
         removed+=1
         audit(None,'voice.stray_submission_removed','',path=relative)
     return removed
 
 
 def mark_stale():
-    for job in Job.objects.filter(state='running',started_at__lt=timezone.now()-timedelta(minutes=5)):
+    from .batch_jobs import mark_stale as batch_stale
+    batch_stale()
+    for job in Job.objects.filter(state='running',started_at__lt=timezone.now()-timedelta(minutes=5)).exclude(kind='generation_part'):
         with transaction.atomic():
             locked=Job.objects.select_for_update().get(pk=job.pk)
             if locked.state!='running':continue

@@ -1,0 +1,8 @@
+admin_dashboard.html   installed -> rendered 16102 chars
+admin_dashboard.html   candidate -> NoReverseMatch: Reverse for 'retention_holds' not found. 'retention_holds' is not a valid view function or pattern name.
+encounter_input.html   installed -> rendered 2887 chars
+encounter_input.html   candidate -> NoReverseMatch: Reverse for 'clear_review' not found. 'clear_review' is not a valid view function or pattern name.
+[admin surface] admin_dashboard.html   installed -> rendered 16102 chars
+[admin surface] admin_dashboard.html   candidate -> NoReverseMatch: Reverse for 'retention_holds' not found. 'retention_holds' is not a valid view function or pattern name.
+[admin surface] encounter_input.html   installed -> rendered 2887 chars
+[admin surface] encounter_input.html   candidate -> NoReverseMatch: Reverse for 'clear_review' not found. 'clear_review' is not a valid view function or pattern name.

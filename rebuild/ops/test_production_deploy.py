@@ -924,7 +924,10 @@ def compiled_mapping_cap(path, tree, call, expression, where):
     compiler_tree = ast.parse((REBUILD / 'core' / 'mapping_assistance.py').read_text())
     compiler = one_function(compiler_tree, 'compile_request')
     assigned_once(compiler, 'profile', 'request_profile(config)')
-    assigned_once(compiler, 'request', "generation.anthropic_request(config['model'], profile, SYSTEM, payload, wire.Proposal)")
+    # The schema carries no price: the cap is profile['max_output_tokens'] and the input bound is the compiled request's
+    # own size below, which includes the per-request enum schema of a claude-sonnet-5-5 envelope (standing attempt 32).
+    assigned_once(compiler, 'schema', "wire.request_schema(payload) if config['model'] == generation.SONNET_5_5 else wire.Proposal")
+    assigned_once(compiler, 'request', "generation.anthropic_request(config['model'], profile, SYSTEM, payload, schema)")
     readonly_value(compiler, 'request', ('canonical', 'digest'))
     assigned_once(compiler, 'size', 'len(canonical(request).encode())')
     assigned_once(compiler, 'bound', 'size + 12000')
@@ -955,7 +958,9 @@ def compiled_mapping_cap(path, tree, call, expression, where):
         raise Unresolved(f'{where}: mapping cost is rebound outside its priced formula')
     profiled = one_function(compiler_tree, 'request_profile')
     assigned_once(profiled, 'base', 'generation.job_request_profile(config)')
-    assigned_once(profiled, 'profile', "{**base, 'profile': PROFILE, 'max_output_tokens': MAX_OUTPUT_TOKENS, 'timeout_seconds': TIMEOUT_SECONDS}")
+    # MAPPING_THINKING is spread before the priced key, so max_output_tokens is MAX_OUTPUT_TOKENS whatever it holds.
+    assigned_once(profiled, 'profile', "{**base, **MAPPING_THINKING.get(config['model'], {}), 'profile': PROFILE, "
+                                       "'max_output_tokens': MAX_OUTPUT_TOKENS, 'timeout_seconds': TIMEOUT_SECONDS}")
     readonly_value(profiled, 'profile', ('digest',))
     returns = [n for n in ast.walk(profiled) if isinstance(n, ast.Return)]
     if len(returns) != 1 or returns[0] is not profiled.body[-1] or ast.unparse(returns[0]) != 'return profile':
@@ -964,6 +969,191 @@ def compiled_mapping_cap(path, tree, call, expression, where):
     if profile_cap_values(compiler_tree, int_constants(compiler_tree), where) != frozenset({cap}):
         raise Unresolved(f'{where}: mapping profile has another output cap')
     return 'mapping-profile', frozenset({cap})
+
+
+# Whole normalized modules bind helpers, imports, constants and their execution
+# paths as well as the priced functions. A function-only fingerprint missed an
+# undercharging replacement of Decimal. These fixed identities accompany reviewed
+# offline compiler/price witnesses; they are never learned from inspected source.
+# Any semantic module change fails until its dependency/price proof is reviewed.
+# The MONEY-1/MONEY-2 addendum (ordinary-cost-scanner-20260928.md) reviews the
+# batch_jobs delta: billing classification in finish/stop/run_one's handler only.
+# The relations-contract-v2 addendum (fix/v1-relations-contract): parse_part reads an ordinary part through
+# v3_field_relations.parse (the keyed answer); the request, its price and every other path are unchanged.
+# The settlement-guard addendum (fix/v1-settlement-worker): resolve_view and recover_recorded pass allowed_states to
+# settle(); with that keyword removed both are AST-identical to 17623922, and run_one (the send boundary) is unchanged.
+# The destination-roles addendum (integration 98aebf7b, fix/v1-roles-salvage): enqueue refuses, before any hold or
+# send, a complete-form plan whose ORIGINAL has a field on a role place (destination_roles.v3_held); resolve_view and
+# recover_recorded keep the settlement keyword above; run_one (the send boundary) and every other definition unchanged.
+# The Sonnet 5.5 addendum (fix/v2-sonnet55-notes 9833e79a; was 1da9f91b... / a5b04bf5...): the model gates and model
+# names only. generation_batch: require_config admits the exact native claude-sonnet-5 OR claude-sonnet-5-5
+# (core.generation.NATIVE_MODELS); parse_part judges a response against the model the plan's own config named, not the
+# constant claude-sonnet-5; assemble signs relation records with that model. batch_jobs: the fixture response, the
+# receipt provider and a metering-failure provider carry the plan's model. plan_for, request (the priced wire),
+# constraints, partitions and every other definition are AST-identical, so the request and its price are unchanged.
+# The relations field-batch addendum (fix/v2-sonnet55-notes 0e9f1025; was 375235d1... / 18f0910f...): a form whose
+# single field-relations response would exceed its bound is asked in bounded parts under the relations contract's own
+# plan contract 'ordinary-field-relations-parts-v1' (generation_batch.RELATIONS_PARTS_CONTRACT): partitions keeps every
+# field sharing a printed context in one part (by_context), each part's wire is v3_field_relations.compile_request for
+# that part's fields over the whole note and catalogue, and plan_constraints is None for such a plan without a
+# manifest; batch_jobs.current_plan compares plan_constraints. Each part is priced and held as before (one reservation
+# per part, settled on success or failure); the union is adopted only whole.
+# The provider-refusal addendum (fix/v2-relations-scale; batch_jobs was c759a6a1...): billing classification in run_one's
+# handler and stop() only. A part whose only attempt the provider DEFINITELY refused without processing it (an HTTP 400
+# invalid_request_error or 413 the SDK raised for its first attempt: core.jobs.provider_refused) records a
+# 'provider_refused' event and an audit row with the provider's request id, and stop() ends that part 'failed' (not
+# processed) with its hold RELEASED, where it used to hold it in 'reconciliation' for an administrator. No usage, receipt
+# or ledger row is written for it; a part that was settled is absorbed exactly as before. PRICED EFFECT: none on any
+# request or price - generation_batch (plan_for, request: the priced wire) is unchanged, and in batch_jobs the send
+# (client.messages.create(**wire), max_retries=0, inside run_one's try) and every definition but stop() and run_one's
+# exception handler are AST-identical; a refused part's hold is released instead of kept.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02', 'core/batch_jobs.py': '0e5dc19bda55a29a3b07691dca2a256da1e5198d85d2ef130a7545d1e0bffeda'}
+
+# Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
+# quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
+# independent exact-wire/price/reservation witness and negative controls. The
+# 17f0aefe addendum reviews source-reader and disposition-denial-only deltas. The relations-contract-v2 addendum
+# (fix/v1-relations-contract; was 97d38fed…): CONTRACT/SALT v2, the per-request keyed schema (response_schema, sent
+# through the same anthropic_request and refused unless it reaches the wire unchanged), the keyed response_bound, the
+# strict parse, and one refusal of a unit-less source; the priced wire is still the one compile_request builds and
+# maximum_cost measures, byte for byte. The disagreement-holds addendum (fix/v1-relations-contract; was ad7b29dd…):
+# records() no longer refuses the WHOLE response when one field's selection disagrees with its relations (live attempt
+# 020); it records that field as returned, and read() refuses it through the new `disagrees` predicate (the same
+# refusal as before, proved equivalent over every selection and relation of up to four units). Only disagrees, records
+# and read changed; compile_request, maximum_cost, generate, parse, response_schema and response_bound are AST-identical.
+# The claimed-units addendum (fix/v1-relations-contract; was ccfe1a51…): a field's CLAIM (`claimed`: its selection plus
+# every unit its relations call answer or qualifier) is what records() stores in competing_output and read() compares
+# between competing repeated questions (refutation of dfde4fc8, F1/F2). Only claimed (added), records and read changed;
+# compile_request, maximum_cost, generate, parse, response_schema, response_bound, disagrees, validated, CONTRACT, SALT
+# and INSTRUCTIONS are AST-identical, so the priced wire is unchanged byte for byte.
+# The Sonnet 5.5 addendum (fix/v2-sonnet55-notes 9833e79a; was 51120e0a...): require_config, records and read admit
+# the exact native claude-sonnet-5 or claude-sonnet-5-5 (core.generation.NATIVE_MODELS); generate adds the requested
+# model to its in-memory result and validated refuses a response from any other model. compile_request, maximum_cost,
+# response_schema, response_bound, parse, disagrees, claimed, CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the
+# priced wire is unchanged byte for byte (on claude-sonnet-5-5 the ordinary profile is claude-sonnet-5-5-ordinary-v1:
+# the same 20000-token cap the scanner already resolves).
+# The single-patient addendum (fix/v2-sonnet55-notes 0e9f1025; was a554409a...): enabled(model) reads
+# core.generation.field_relations_enabled (claude-sonnet-5-5 takes the contract by default unless the switch says
+# '0'), and require_config and records pass the config's / record's model to it (the django settings import is gone);
+# read() adds sole_released / sole_independent / SOLE_FIELD_TOPICS / option_view (evidence of WHO, read after the
+# response - nothing reaches the wire). compile_request, maximum_cost, generate, validated, response_schema,
+# response_bound, parse, disagrees, claimed, CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the priced wire is
+# unchanged byte for byte.
+# The refutation round-4 addendum (fix/v2-sonnet55-notes, repair over 0e9f1025; was 90fc7d89...): enabled() is on
+# only while the deployment's own switch is on AND (for a request or record) the model it names takes the contract;
+# read() refuses a record whose model the switch does not take; sole_independent sets apart only an assessment's doubt
+# about something else. compile_request, maximum_cost, generate, validated, response_schema, response_bound, parse,
+# disagrees, claimed, CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the priced wire is unchanged byte for byte.
+# The refutation round-5 addendum (fix/v2-sonnet55-notes, repair over 737590c1; was 5f94cea6...): sole_independent
+# holds a denial, ending or contraindication against every other line naming a topic class it bears on, holds a
+# doubt of the answer's own class whatever its word, and nothing else in the module changed. compile_request,
+# maximum_cost, generate, validated, response_schema, response_bound, parse, disagrees, claimed, records, read,
+# CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the priced wire is unchanged byte for byte.
+# The refutation round 6 addendum (fix/v2-sonnet55-notes, was bd3902aa...): sole_independent only (a line denying a
+# class that bears on the answer's, in either direction; its docstring) - read after the response, nothing reaches
+# the wire; every other definition is AST-identical.
+# The relations-contract-v3 addendum (fix/v2-relations-scale; was 6fc2071f...): the answer schema no longer grows with
+# fields x units (v2's 14 units x 10 fields was refused live, "Schema is too complex for compilation"). CONTRACT/SALT v3
+# (so the pricing version moves: ordinary_pricing_version hashes the contract), READABLE (read() also verifies a stored
+# v2 record under v2's own salt and binding; binding() takes the record's contract), INSTRUCTIONS (the positional
+# self-naming shape), response_schema (fields a list of answers naming their key; context a list of {unit, relation};
+# FieldKey/UnitId/OptionId/Relation enums, each once; no length keyword - transform_schema leaves it unchanged and
+# compile_request still refuses otherwise), parse (proves the exact coverage the grammar cannot: every requested key
+# once, every offered unit once per field in the offered order) and response_bound (the positional worst-case body).
+# PRICED EFFECT: the request bytes change (instructions and schema), so maximum_cost - the same formula, (request bytes
+# + 12000) x input rate + the profile's max_output_tokens x output rate - prices the new bytes; the response bound is
+# larger per unit, so fewer fields fit one bounded response and the relations field batches split sooner (each part
+# still priced and held as before). compile_request, maximum_cost, generate, validated, records, claimed, disagrees and
+# the send (client.messages.create(**compiled['wire']), max_retries=0, the profile cap) are AST-identical.
+# The relations-contract-v4 addendum (fix/v2-relations-compact; was 50e02822...): each field's relations are a
+# PARTITION of the offered unit IDs - context an object of five closed lists (answer, qualifier, contrary, unresolved,
+# independent) of UnitId enum values - instead of v3's one {unit, relation} entry per unit. CONTRACT/SALT v4 (the pricing
+# version moves with the contract identity), READABLE (stored v3 records read too), INSTRUCTIONS (the partition shape),
+# PARTITION (the list names), response_schema (the same fixed vocabulary: FieldKey/UnitId/OptionId enums each once, a
+# closed Partition object, no length keyword), parse (proves the partition: every offered unit exactly once across the
+# five lists, none unknown) and response_bound (the true worst case: every unit in one list). PRICED EFFECT: the request
+# bytes change (instructions and schema), so maximum_cost - the same formula - prices the new bytes; the response bound
+# is about a fifth of v3's per unit, so far more fields fit one bounded 20,000-token response (25 units: 60 fields, was
+# 17) and the relations field batches split far later. compile_request, maximum_cost, generate, validated, records,
+# read, claimed, disagrees and the send are AST-identical.
+ORDINARY_PRICED_SHA256 = 'efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb'
+
+
+def ordinary_module_proof(where):
+    path = REBUILD / 'core/v3_field_relations.py'
+    tree = ast.parse(path.read_text())
+    actual = hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+    if actual != ORDINARY_PRICED_SHA256:
+        raise Unresolved(f'{where}: complete ordinary compiler/binding/price proof needs review')
+    return tree
+
+
+def ordinary_dispatch(tree, name):
+    """The checked imported price/send branch must be the actual early route."""
+    function = one_function(tree, name)
+    tail = ('return ordinary.maximum_cost(notes,fields,config,context_labels,requirements or ())'
+            if name == 'maximum_cost' else
+            'return ordinary.generate(notes,fields,config,context_labels=context_labels,requirements=requirements or ())')
+    expected = ast.parse("if config.get('ordinary_field_contract') and natural_v3(fields):\n"
+        "    from . import v3_field_relations as ordinary\n    " + tail).body[0]
+    index = 2 if name == 'maximum_cost' else 1
+    first = ast.parse('config=config or configuration(fields)').body[0]
+    if (function.decorator_list or len(function.body) <= index or
+            ast.dump(function.body[0]) != ast.dump(first) or
+            ast.dump(function.body[index]) != ast.dump(expected)):
+        raise Unresolved(f'{name}: ordinary execution route bypasses its checked compiler')
+    return function.body[index].body[-1]
+
+
+def compiled_ordinary_cap(path, tree, call, expression, where):
+    if path != REBUILD / 'core/v3_field_relations.py' or ast.unparse(expression) != "compiled['wire']":
+        raise Unresolved(f'{where}: unknown ordinary request contract')
+    if enclosing_function(call, parent_map(tree)) is not one_function(tree, 'generate'):
+        raise Unresolved(f'{where}: ordinary request moved outside its reviewed send boundary')
+    ordinary_module_proof(where)
+    profile_tree = ast.parse(GENERATION.read_text())
+    ordinary_dispatch(profile_tree, 'generate')
+    ordinary_dispatch(profile_tree, 'maximum_cost')
+    return 'profile', profile_cap_values(profile_tree, int_constants(profile_tree), where)
+
+def compiled_batch_cap(path, tree, call, expression, where):
+    if path != REBUILD / 'core/batch_jobs.py' or ast.unparse(expression) != 'wire':
+        raise Unresolved(f'{where}: unknown batch request contract')
+    if enclosing_function(call, parent_map(tree)) is not one_function(tree, 'run_one'):
+        raise Unresolved(f'{where}: batch request is outside the reviewed send boundary')
+    modules = {str(path.relative_to(REBUILD)): tree,
+               'core/generation_batch.py': ast.parse((REBUILD / 'core/generation_batch.py').read_text())}
+    for relative, module in modules.items():
+        counts, _ = bindings(module)
+        names = ('g', 'b') if relative.endswith('/batch_jobs.py') else ('g',)
+        parents = parent_map(module)
+        for name in names:
+            matches = [n for n in module.body if isinstance(n, ast.ImportFrom) and n.level == 1
+                       and n.module is None and any(a.asname == name and a.name ==
+                           ('generation' if name == 'g' else 'generation_batch') for a in n.names)]
+            if len(matches) != 1 or counts.get(name) != 1:
+                raise Unresolved(f'{where}: batch compiler module identity changed')
+            for use in ast.walk(module):
+                if not isinstance(use, ast.Name) or use.id != name or not isinstance(use.ctx, ast.Load):
+                    continue
+                top = use
+                while isinstance(parents.get(top), ast.Attribute):
+                    top = parents[top]
+                if top is use or not isinstance(top.ctx, ast.Load):
+                    raise Unresolved(f'{where}: batch compiler module is mutated or escapes')
+    for relative, expected in BATCH_PRICED_MODULES.items():
+        actual = hashlib.sha256(ast.dump(modules[relative], include_attributes=False).encode()).hexdigest()
+        if actual != expected:
+            raise Unresolved(f'{where}: {relative} changed; its complete binding/price proof needs review')
+    ordinary_module_proof(where)  # Batch compilation imports this complete request/price contract too.
+    profile_tree = ast.parse(GENERATION.read_text())
+    return 'profile', profile_cap_values(profile_tree, int_constants(profile_tree), where)
+
+
+#: Client calls that send no tokens and are never priced (reviewed 2026-10-01 for the standing runner's model-access
+#: preflight, ops/standing_qa.run_preflight: GET /v1/models/<id> through a guard that allows one request). Anything
+#: else on a provider client still has to be a traced, capped provider call.
+UNBILLED_CLIENT_CALLS = frozenset({('models', 'retrieve'), ('close',)})
 
 
 def provider_caps(path):
@@ -1025,6 +1215,8 @@ def provider_caps(path):
         where = f'{name}:{node.lineno} {ast.unparse(node.func)}'
         if shaped and not from_client:
             raise Unresolved(f'{where}: the receiver cannot be traced to a provider client constructed in this file')
+        if from_client and not shaped and tuple(parts) in UNBILLED_CLIENT_CALLS and not capped:
+            continue  # reviewed: model metadata lookup / client close carry no tokens and no price
         if from_client and not shaped:
             raise Unresolved(f'{where}: a provider client call this check does not know')
         if INDIRECTIONS & set(parts):
@@ -1035,7 +1227,13 @@ def provider_caps(path):
             if len(node.keywords) != 1:
                 raise Unresolved(f'{where}: ** beside other keywords hides the request')
             if isinstance(node.keywords[0].value, ast.Subscript):
+                if path == REBUILD / 'core/v3_field_relations.py':
+                    caps.append((where, compiled_ordinary_cap(path, tree, node, node.keywords[0].value, where)))
+                    continue
                 caps.append((where, compiled_mapping_cap(path, tree, node, node.keywords[0].value, where)))
+                continue
+            if path == REBUILD / 'core/batch_jobs.py':
+                caps.append((where, compiled_batch_cap(path, tree, node, node.keywords[0].value, where)))
                 continue
             keywords = built_request(tree, node.keywords[0].value, where)
         else:
@@ -1054,6 +1252,38 @@ def all_provider_caps():
     return tuple(cap for path in application_sources() for cap in provider_caps(path))
 
 
+def history_cost_adjustment(function):
+    """Admit only the measured, additive history charge; never skip unknown rate terms."""
+    expected = ast.parse("""
+if config.get('history_context_contract'):
+    from . import v3_history_context as history
+    target_keys = list(history.targets(asked, units)) if v3_fields is not None else []
+    if target_keys:
+        history.refuse_request(config)
+        extra = len((history.INSTRUCTIONS + json.dumps(history.HistorySelections.model_json_schema())
+                     + json.dumps({'history_context_targets': target_keys})).encode())
+        bound += Decimal(extra)*r['input_per_million']/1000000
+""").body[0]
+    matches = [node for node in ast.walk(function) if isinstance(node, ast.If)
+               and ast.dump(node.test) == ast.dump(expected.test)]
+    if len(matches) != 1 or ast.dump(matches[0]) != ast.dump(expected):
+        raise Unresolved('maximum_cost: history charge no longer measures its full guarded request addition')
+    # A correct formula in dead code is not a priced request. Require the actual
+    # straight-line tail: base bound, history addition, geography, final return.
+    tail = function.body[-4:]
+    geography = ast.parse("if profile.get('inference_geo') == 'us': "
+                          "bound=(bound * US_INFERENCE_MULTIPLIER).quantize(COST_QUANTUM, rounding=ROUND_CEILING)").body[0]
+    if (len(tail) != 4 or not isinstance(tail[0], ast.Assign)
+            or [ast.dump(target) for target in tail[0].targets] != [ast.dump(ast.Name(id='bound', ctx=ast.Store()))]
+            or tail[1] is not matches[0] or ast.dump(tail[2]) != ast.dump(geography)
+            or ast.dump(tail[3]) != ast.dump(ast.parse('return bound').body[0])):
+        raise Unresolved('maximum_cost: history charge is not on the final priced execution path')
+    # A matching subtree must not mask another assignment elsewhere in the function.
+    assigned_once(function, 'target_keys')
+    assigned_once(function, 'extra')
+    return matches[0].body[-1].body[-1]
+
+
 def maximum_cost_terms():
     """(input overhead tokens, (kind, output caps)) in core/generation.py's maximum_cost: the overhead traced to one
     number, the output term to one number or to the job's request-profile cap (`cap_value`)."""
@@ -1062,14 +1292,19 @@ def maximum_cost_terms():
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost']
     if len(functions) != 1:
         raise Unresolved(f'core/generation.py: {len(functions)} maximum_cost functions')
+    ordinary_module_proof('maximum_cost')
+    ordinary_return = ordinary_dispatch(tree, 'maximum_cost')
+    history_charge = history_cost_adjustment(functions[0])
     parents = parent_map(tree)
     branches = {}
     for node in ast.walk(functions[0]):
         if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult) and isinstance(node.right, ast.Subscript)
                 and isinstance(node.right.slice, ast.Constant)):
             assignment = node
-            while assignment in parents and not isinstance(assignment, ast.Assign):
+            while assignment in parents and not isinstance(assignment, (ast.Assign, ast.AugAssign)):
                 assignment = parents[assignment]
+            if assignment is history_charge:
+                continue
             if not isinstance(assignment, ast.Assign):
                 raise Unresolved('maximum_cost: rate term outside a bounded assignment')
             branches.setdefault(assignment, {}).setdefault(node.right.slice.value, []).append(node.left)
@@ -1080,13 +1315,21 @@ def maximum_cost_terms():
                     and ast.dump(node) == ast.dump(zero_return)]
     if len(allowed_zero) != 1:
         raise Unresolved('maximum_cost: unpriced mode return changed')
+    narrative_test = ast.parse('narrative_contract(fields,config)', mode='eval').body
+    narrative = [node for node in functions[0].body if isinstance(node, ast.If)
+                 and ast.dump(node.test) == ast.dump(narrative_test)]
+    if len(narrative) != 1 or not isinstance(narrative[0].body[-1], ast.Return):
+        raise Unresolved('maximum_cost: narrative priced return is not explicit')
+    allowed_returns = (allowed_zero[0].body[0], narrative[0].body[-1], functions[0].body[-1], ordinary_return)
     for node in ast.walk(functions[0]):
-        if isinstance(node, ast.Return) and node is not allowed_zero[0].body[0]:
+        if isinstance(node, ast.Return) and node not in allowed_returns:
+            raise Unresolved('maximum_cost: an early return bypasses the priced execution path')
+        if isinstance(node, ast.Return) and node not in (allowed_zero[0].body[0], ordinary_return):
             if not isinstance(node.value, ast.Name) or node.value.id != 'bound':
                 raise Unresolved('maximum_cost: priced branch returns something other than bound')
         if isinstance(node, ast.Name) and node.id == 'bound' and isinstance(node.ctx, (ast.Store, ast.Del)):
             holder = parents.get(node)
-            if holder in branches:
+            if holder in branches or holder is history_charge:
                 continue
             adjustment = '(bound * US_INFERENCE_MULTIPLIER).quantize(COST_QUANTUM, rounding=ROUND_CEILING)'
             if not (isinstance(holder, ast.Assign) and holder.targets == [node]

@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .email_delivery import deliver_account_email
+from .forms import account_limit_key, account_lookup_email, accounts_at, legacy_accounts_at
 from .models import User, Verification
 from .security import audit, client_address, digest, rate_limit, token
 
@@ -36,7 +37,14 @@ class RecoveryRequestForm(PasswordResetForm):
     email = forms.EmailField(widget=forms.EmailInput(attrs={'autocomplete': 'email'}))
 
     def get_users(self, email):
-        return (user for user in super().get_users(email) if user.verified_at)
+        """The verified accounts a typed address reaches: Django's own rule on its lookup key (email__iexact, an active
+        account with a usable password, and its NFKC case-insensitive comparison), and the rows stored before the account
+        email rule in their own letters that the lookup key alone does not find (forms.legacy_accounts_at), under the same
+        active and usable-password conditions."""
+        users = list(super().get_users(account_lookup_email(email)))
+        as_typed, same_name = legacy_accounts_at(email, User.objects.filter(is_active=True))
+        users += [user for user in as_typed + same_name if user.has_usable_password() and user not in users]
+        return [user for user in users if user.verified_at]
 
 
 class RecoveryPasswordForm(SetPasswordForm):
@@ -54,11 +62,13 @@ def recovery_request(request):
     form = RecoveryRequestForm(request.POST or None)
     sent = False
     if request.method == 'POST' and form.is_valid():
-        email = form.cleaned_data['email'].strip().lower()
+        users = form.get_users(form.cleaned_data['email'])
         allowed_ip = rate_limit('recovery-ip:' + client_address(request), limit=20)
-        allowed_email = rate_limit('recovery-email:' + email, limit=3)
-        if allowed_ip and allowed_email:
-            for user in form.get_users(email):
+        # One limit per account reached, whatever spelling reached it (forms.account_limit_key); the lookup key's when none.
+        keys = sorted({account_limit_key(user, None) for user in users}) or [account_lookup_email(form.cleaned_data['email'])]
+        allowed_email = {key: rate_limit('recovery-email:' + key, limit=3) for key in keys}
+        if allowed_ip:
+            for user in (user for user in users if allowed_email[account_limit_key(user, None)]):
                 raw = f'{urlsafe_base64_encode(force_bytes(user.pk))}/{recovery_token_generator.make_token(user)}'
                 deliver_account_email(user, user.pk, user.email, 'recovery', raw)
                 audit(user, 'auth.recovery_requested')
@@ -110,12 +120,14 @@ def verification_resend(request):
     form = RecoveryRequestForm(request.POST or None)
     sent = False
     if request.method == 'POST' and form.is_valid():
-        email = form.cleaned_data['email'].strip().lower()
+        email = account_lookup_email(form.cleaned_data['email'])
+        # The unverified account this address reaches (forms.accounts_at), and the limit keyed on it.
+        target = next(iter(accounts_at(form.cleaned_data['email'], User.objects.filter(is_active=True, verified_at__isnull=True))), None)
         allowed_ip = rate_limit('verification-resend-ip:' + client_address(request), limit=20)
-        allowed_email = rate_limit('verification-resend-email:' + email, limit=3)
+        allowed_email = rate_limit('verification-resend-email:' + account_limit_key(target, email), limit=3)
         if allowed_ip and allowed_email:
             with transaction.atomic():
-                user = User.objects.select_for_update().filter(email__iexact=email, is_active=True, verified_at__isnull=True).first()
+                user = target and User.objects.select_for_update().filter(pk=target.pk, is_active=True, verified_at__isnull=True).first()
                 if user:
                     raw = token()
                     Verification.objects.filter(user=user, used_at__isnull=True).update(used_at=timezone.now())

@@ -1,0 +1,728 @@
+{
+  "mode": "simulated exact original selections, baseline before context-contract edits",
+  "generation_sha256": "9fca62e396dba349c32821fd2a23c5bd01f07b80fe7369943cb5dbd6750d0ac7",
+  "cases": [
+    {
+      "name": "r1-note1",
+      "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0,
+              "end": 75
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+            "evidence": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0,
+              "end": 75
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+            "evidence": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+              "start": 76,
+              "end": 129
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He has hypertension and takes lisinopril 10 mg daily.",
+            "evidence": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129
+              }
+            ],
+            "context": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "On examination there is a small effusion and medial joint line tenderness.",
+                "start": 165,
+                "end": 239,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+              "start": 76,
+              "end": 129
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He has hypertension and takes lisinopril 10 mg daily.",
+            "evidence": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129
+              }
+            ],
+            "context": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "On examination there is a small effusion and medial joint line tenderness.",
+                "start": 165,
+                "end": 239,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 130,
+              "end": 152
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "No",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 153,
+              "end": 164
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "On examination there is a small effusion and medial joint line tenderness.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "On examination there is a small effusion and medial joint line tenderness.",
+              "start": 165,
+              "end": 239
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "a probable medial meniscus tear.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment is a probable medial meniscus tear.",
+              "start": 240,
+              "end": 286
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "an MRI of the right knee and physiotherapy referral.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan is an MRI of the right knee and physiotherapy referral.",
+              "start": 287,
+              "end": 347
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      }
+    },
+    {
+      "name": "r1-note2",
+      "notes": "Patient presents with a cough for five days.\nShe reports low-grade fevers and green sputum.\nShe has asthma.\nMedications: salbutamol inhaler as needed.\nAllergies: none known.\nSmoker: no.\nChest examination revealed crackles at the right base.\nAssessment: community-acquired pneumonia.\nPlan: amoxicillin 500 mg three times daily for five days.\nReturn if symptoms worsen.",
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Patient presents with a cough for five days.",
+              "start": 0,
+              "end": 44
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Patient presents with a cough for five days.",
+            "evidence": [
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Patient presents with a cough for five days.",
+              "start": 0,
+              "end": 44
+            },
+            {
+              "quote": "She reports low-grade fevers and green sputum.",
+              "start": 45,
+              "end": 91
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Patient presents with a cough for five days.\nShe reports low-grade fevers and green sputum.",
+            "evidence": [
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44
+              },
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She has asthma.",
+                "start": 92,
+                "end": 107,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She has asthma.",
+              "start": 92,
+              "end": 107
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She has asthma.",
+            "evidence": [
+              {
+                "quote": "She has asthma.",
+                "start": 92,
+                "end": 107
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Medications: salbutamol inhaler as needed.",
+                "start": 108,
+                "end": 150,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Medications": {
+          "text": "salbutamol inhaler as needed.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Medications: salbutamol inhaler as needed.",
+              "start": 108,
+              "end": 150
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "none known.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: none known.",
+              "start": 151,
+              "end": 173
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "No",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: no.",
+              "start": 174,
+              "end": 185
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Chest examination revealed crackles at the right base.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Chest examination revealed crackles at the right base.",
+              "start": 186,
+              "end": 240
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "community-acquired pneumonia.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: community-acquired pneumonia.",
+              "start": 241,
+              "end": 282
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "amoxicillin 500 mg three times daily for five days.\nReturn if symptoms worsen.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin 500 mg three times daily for five days.",
+              "start": 283,
+              "end": 340
+            },
+            {
+              "quote": "Return if symptoms worsen.",
+              "start": 341,
+              "end": 367
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      }
+    },
+    {
+      "name": "r1-note4",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "This is a 30-year-old female seen for headaches.",
+            "evidence": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48
+              }
+            ],
+            "context": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+            "evidence": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163
+              }
+            ],
+            "context": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She takes ibuprofen as needed.",
+            "evidence": [
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194
+              }
+            ],
+            "context": [
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219
+              }
+            ],
+            "context": [
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She is a nonsmoker.",
+                "start": 220,
+                "end": 239,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Smoker": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She is a nonsmoker.",
+              "start": 220,
+              "end": 239
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She is a nonsmoker.",
+            "evidence": [
+              {
+                "quote": "She is a nonsmoker.",
+                "start": 220,
+                "end": 239
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 240,
+                "end": 275,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "Neurological examination is normal.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 240,
+              "end": 275
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "tension-type headache.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment is tension-type headache.",
+              "start": 276,
+              "end": 312
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan is to start amitriptyline 10 mg at night.",
+              "start": 313,
+              "end": 359
+            },
+            {
+              "quote": "She will follow up in six weeks.",
+              "start": 360,
+              "end": 392
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+Re-freeze the Sonnet 5 diagnostic expectations after the independent check
+
+Repairs every item of CHECK.md before any observation is recorded; the records
+follow in a separate commit so the freeze order is provable by git, not mtimes.
+
+Mapping set:
+- M1: grade_app_path.py grades the OUTPUT OF THE APP PATH (validate_proposal's
+  fields AND review verdicts/unresolved records): right / held_safe / wrong /
+  missed / false_field, what the clinician sees, and per item whether the model
+  path can express the expected outcome at 8e3dcfd0 (probed with single wire
+  changes through the real validate_proposal). Its offline self-test (correct,
+  do-nothing, harmful and the app's own fixture) must grade them differently.
+- M2: f2b, the leave list with a fresh owner line outside the engine's
+  completed-event word class (expected multi_choice; the engine maps one choice).
+- M3/M6: must_not_name on f1.A2 (the other question's guidance words) and on
+  f4.A8/f4.A15 (the other title, label and context).
+- M4: f6b's administrative note concerns an unrelated appointment.
+- M5: long_answer_readback.py fills and reads back a 5,835-character answer.
+- W1/W2: fresh wording for the f1 question, the f5 declaration, the f2 leave
+  options, the N03 label and the f4 summary titles; wording_check.py (strict
+  25-character normalized rule, positive control on the checked sets).
+- EXPECTED-SHA256SUMS now freezes the maps, graders, generators and notes cases.
+
+Notes set:
+- N1-N5: N06 Plan reference is the plan sentence alone; a silent J blank is a
+  usefulness loss; supported texts accept the full unit; N11/N12 relabelled V;
+  every listed selection is recorded replayed alone; whole-response --replay.
+- N6: real synthetic .docx per field set (build_note_forms.py), fields exactly
+  as the candidate's v3 inspect gives them, case keys mapped, cost bound per
+  case with the inspected fields x1.1 ($3.489524 for 21 sends); app_path_walk.py
+  walks every send through upload, mapping, generation, review, finalize, export.
+- cases.json holds expectations only; observations go to a separate file.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

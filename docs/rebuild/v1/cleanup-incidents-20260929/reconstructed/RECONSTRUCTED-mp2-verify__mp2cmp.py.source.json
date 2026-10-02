@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-verify__mp2cmp.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl:136",
+   "timestamp": "2026-09-29T09:26:17.795Z",
+   "sha256_after": "3bc41140e65841d325af5bcf5f96af106980716773528012d2f721413bc8ece1",
+   "bytes_after": 9352
+  }
+ ],
+ "lines": 154,
+ "sha256": "3bc41140e65841d325af5bcf5f96af106980716773528012d2f721413bc8ece1"
+}

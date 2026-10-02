@@ -1,0 +1,85 @@
+{
+  "engine_sha256": "9a25be7e3fd947e2069fc0be6cc6bc3c3bb964fe26dbb3ec52daf011fab67bd1",
+  "results": [
+    {
+      "case": "character_underline",
+      "sha256": "913ba6f86ce9abbcdea0dfb66c08501dff3f9119ddcd70ab10e107c98fdb0b85",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "case": "default_table_underline",
+      "sha256": "37e0027400b8a4d352833c297200c294eee6c644d9e379dc88577c99be26ea1c",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "case": "inherited_character_underline",
+      "sha256": "74342df5dd2388b027fd4a781acbd5407c6b0fca33bd4686d87ddc8c99109c8c",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "case": "simple_spacing",
+      "sha256": "462505ff5efee23b4b67f86cbbd61d261bf6f6b98254eb6849062cb66032540e",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "case": "unknown_character",
+      "sha256": "9ee6f6e0f65b75f6c8cbee2c32cef095c43b64410e7f9987f3cf61eb95da44a3",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    }
+  ]
+}

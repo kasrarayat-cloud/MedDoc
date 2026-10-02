@@ -1,0 +1,20 @@
+{
+  "source_before": {
+    "source_policy.py": "2b5e15eb6272b1f185088d92ca7152817d3b0ba9bae8ae0ad2584f6cdfb208de",
+    "test_source_policy.py": "96f57389ed57ea912fcf2651501fdd0c1b6cffd5b3a3f081542f4703e6dde6a7",
+    "word_v3.py": "8e2189ff6d0cf67fd28d7e0e51d7e691b30c3ae3b4886efb191af377632e2f21"
+  },
+  "source_after_sandbox": {
+    "source_policy.py": "2b5e15eb6272b1f185088d92ca7152817d3b0ba9bae8ae0ad2584f6cdfb208de",
+    "test_source_policy.py": "96f57389ed57ea912fcf2651501fdd0c1b6cffd5b3a3f081542f4703e6dde6a7",
+    "word_v3.py": "8e2189ff6d0cf67fd28d7e0e51d7e691b30c3ae3b4886efb191af377632e2f21"
+  },
+  "unchanged": true,
+  "artifacts": {
+    "REPORT.md": "30dc784d5323e3a5434397d0aee2dc480e7eaf213409b11ea6ebfb5550021507",
+    "sandbox_probe.py": "f4e48092decab5de4fbf52e09a5310a7d480c9625dea665710c1a980cffcee00",
+    "02-sandbox-results.json": "615d174a4cced842e0dec1a52aa4f629d06843ea103746bc0b25bf73ddd87237",
+    "probe.py": "c1e247b479b35b765ad00c67df3c817937f03db7f1e0be293886f878ded4fead",
+    "01-results.json": "711fd3c0033e7684112b3207166307ac79a84aad85493dd0c8a929fd94e46c00"
+  }
+}

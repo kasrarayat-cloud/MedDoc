@@ -1,0 +1,1212 @@
+{
+  "original_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+  "engine_sha256": "c82ef298b59780238c4f995c6da4056d87ca939282b62c15e74ef185f362cad8",
+  "result": {
+    "format": "docx",
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "Mental Health Casework Section (MHCS)",
+        "kind": "text",
+        "context": "Discharge Application for Restricted Patients",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[3]",
+          "target": {
+            "type": "paragraph"
+          },
+          "fingerprint": "ee6a6d93467866d35dc890fded13eed587bf991a29839339650b45c514fcd19c"
+        }
+      },
+      {
+        "key": "v3_2",
+        "label": "Discharge Application for Restricted PatientsMental Health Casework Section (MHCS)",
+        "kind": "text",
+        "context": "Mental Health Casework Section (MHCS) > Discharge Application for Restricted PatientsMental Health Casework Section (MHCS)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "2e11195ad7b04ac5a8ea91df632141ff65fd6957a12c34a13558c3d1bdf2e06d"
+        }
+      },
+      {
+        "key": "v3_3",
+        "label": "Answer",
+        "kind": "text",
+        "context": "Mental Health Casework Section (MHCS) · occurrence 1 of 2 (line 8:   )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[2]/ff[0]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "4d35ec797c08688a91d8c2518e0a075f204d72548033d39708714700a0162901"
+        }
+      },
+      {
+        "key": "v3_4",
+        "label": "Answer",
+        "kind": "text",
+        "context": "Mental Health Casework Section (MHCS) · occurrence 2 of 2 (line 8:   )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[2]/ff[1]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "f90a1a74435cf2888e212b26981d008f919db897213e79c9146d28643360219f"
+        }
+      },
+      {
+        "key": "v3_5",
+        "label": "Type of discharge applied for (please tick one)",
+        "kind": "choice",
+        "context": "Mental Health Casework Section (MHCS)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[2]/tr[0]/tc[0]/p[2]/ff[0]",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/tbl[2]/tr[0]/tc[0]/p[2]/ff[0]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/tbl[2]/tr[0]/tc[0]/p[4]/ff[0]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/tbl[2]/tr[0]/tc[0]/p[6]/ff[0]"
+              }
+            ]
+          },
+          "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[2]/tr[0]/tc[0]/p[4]/ff[0]",
+              "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[2]/tr[0]/tc[0]/p[6]/ff[0]",
+              "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf"
+            }
+          ]
+        },
+        "options": [
+          "Conditional (detained patients only)",
+          "Lifting Restrictions (detained patients only – to discharge the s41 Restriction Order only)",
+          "Absolute (detained patients or those already conditionally discharged)"
+        ]
+      },
+      {
+        "key": "v3_6",
+        "label": "Full name of patient",
+        "kind": "text",
+        "context": "Patient’s Details > Full name of patient",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[4]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "9ee18083c6b6a63ebc84612b40a248850a101df9bae4ac3c99c6a603c9cd77e1"
+        }
+      },
+      {
+        "key": "v3_7",
+        "label": "Date of birth",
+        "kind": "date",
+        "context": "Patient’s Details > Date of birth",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[5]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "f58ba3f51be243d0d132a64e3b7758e536ae2de7a166ae40aa939d875c01920d"
+        }
+      },
+      {
+        "key": "v3_8",
+        "label": "MHCS reference",
+        "kind": "text",
+        "context": "Patient’s Details > MHCS reference",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[6]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "1b14f250935566bb8838136a0c220d84b8bfeadc5a520d74e242ef2dfebd97a2"
+        }
+      },
+      {
+        "key": "v3_9",
+        "label": "Detention Authority",
+        "kind": "text",
+        "context": "Patient’s Details > Detention Authority",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[7]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "5ae800f46bfb8c918cc1e5dc6144cd0f678c325f6767867e247d6cbe4e46c366"
+        }
+      },
+      {
+        "key": "v3_10",
+        "label": "Full name",
+        "kind": "text",
+        "context": "Applicant’s Details > Full name",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[8]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "df9823b2fc3fb122eda5a885628bd5b5e1c8a027a917ad96fc79f827376dbe6f"
+        }
+      },
+      {
+        "key": "v3_11",
+        "label": "Relationship to Patient",
+        "kind": "text",
+        "context": "Applicant’s Details > Relationship to Patient",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[9]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "7582714b86356e7ba54457d30c673de9a9884887284f7e65ac81595933f65dcd"
+        }
+      },
+      {
+        "key": "v3_12",
+        "label": "Address",
+        "kind": "text",
+        "context": "Applicant’s Details > Address",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[10]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "324ec17aacebfb5bc796dbde8d90823d3bab7ec8b1712bd9418f7c2767ea4654"
+        }
+      },
+      {
+        "key": "v3_13",
+        "label": "Telephone number",
+        "kind": "text",
+        "context": "Applicant’s Details > Telephone number",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[11]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "a81c7236ca3890a3bd646b6a8100a61b8f2b73e3074b42a420f5b49803c20c29"
+        }
+      },
+      {
+        "key": "v3_14",
+        "label": "Email address",
+        "kind": "text",
+        "context": "Applicant’s Details > Email address",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[12]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "2a7b07643a87658b273bfb4f27f8a996c81b6e1ff7b7db88ab717f644f6117ea"
+        }
+      },
+      {
+        "key": "v3_15",
+        "label": "Please give details of the discharge proposal including",
+        "kind": "long_text",
+        "context": "Conditional Discharge Proposal > Please give details of the discharge proposal including",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[14]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "70545a479bcb76c28d5f0b03bbbe8371d704328350677a0fe20f0e14e1542d77"
+        }
+      },
+      {
+        "key": "v3_16",
+        "label": "Discharge Address",
+        "kind": "text",
+        "context": "Conditional Discharge Proposal > Discharge Address",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[15]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "05239970b81ff94e093320a4953870b9f81e5154cc97560ab6e24079e9520f35"
+        }
+      },
+      {
+        "key": "v3_17",
+        "label": "Suggested Conditions",
+        "kind": "text",
+        "context": "Conditional Discharge Proposal > Suggested Conditions",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[16]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "36ded9c4e88bf1f63763b554a431b78565e4db4d2b07fee7305ebc3454e19873"
+        }
+      },
+      {
+        "key": "v3_18",
+        "label": "Details of the Community Care Team (including contact details)",
+        "kind": "long_text",
+        "context": "Conditional Discharge Proposal > Details of the Community Care Team (including contact details)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[17]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c284be8a3bfe2348ee95a4837c6f4cd4cd4e81b5d5f09ee032b8d23ef29e3d05"
+        }
+      },
+      {
+        "key": "v3_19",
+        "label": "Community leave taken",
+        "kind": "choice",
+        "context": "Conditional Discharge Proposal",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[27]/ff[0]",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[27]/ff[0]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[27]/ff[1]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[29]/ff[0]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[29]/ff[1]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[31]/ff[0]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[31]/ff[1]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[33]/ff[0]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[33]/ff[1]"
+              },
+              {
+                "kind": "ff",
+                "part": "word/document.xml",
+                "slot": "b/p[35]/ff[0]"
+              }
+            ]
+          },
+          "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[27]/ff[1]",
+              "fingerprint": "ef2bc7a301d129cd8ebf8297fe970c6704eb19c33c9493881f4239e426f944be"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[29]/ff[0]",
+              "fingerprint": "3b193c33eb0532bdb2f858c6d5d477fbecdf1ca662dcf6bad5d54149e1b7ef2f"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[29]/ff[1]",
+              "fingerprint": "8e40b69070431bbe392d3e2168f242f1ddc84fe3a91c66e434a2b190696d0d1e"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[31]/ff[0]",
+              "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[31]/ff[1]",
+              "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[33]/ff[0]",
+              "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[33]/ff[1]",
+              "fingerprint": "949681259ead282b414f2d301b5abf2909819bb61d9afac674cf2bad3543afdf"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[35]/ff[0]",
+              "fingerprint": "ef2bc7a301d129cd8ebf8297fe970c6704eb19c33c9493881f4239e426f944be"
+            }
+          ]
+        },
+        "options": [
+          "Compassionate (day)",
+          "Compassionate (overnight)",
+          "Medical (day)",
+          "Medical (overnight)",
+          "Escorted (day)",
+          "Escorted (overnight)",
+          "Unescorted community (day)",
+          "Unescorted community (overnight)",
+          "Long Term Escorted Leave of Absence"
+        ]
+      },
+      {
+        "key": "v3_20",
+        "label": "Other",
+        "kind": "text",
+        "context": "Conditional Discharge Proposal > Other",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[18]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "6a352b4547bd2e986bb7317939e20b7e1a7d5eeafef240fa5ea900aab3dbee29"
+        }
+      },
+      {
+        "key": "v3_21",
+        "label": "Report on leave",
+        "kind": "text",
+        "context": "Conditional Discharge Proposal > Report on leave",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[19]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "730ce10b45bd2b1890dd982fd36583c94dd675f1a4c0b7ed34e281e59a41d07f"
+        }
+      },
+      {
+        "key": "v3_22",
+        "label": "If leave has previously been suspended or rescinded (by either the RC or the Secretary of State) please state why",
+        "kind": "text",
+        "context": "Conditional Discharge Proposal > If leave has previously been suspended or rescinded (by either the RC or the Secretary of State) please state why",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[20]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "8cd1c88567f1345ac006552929012c3e0218df4bd1cbb13202697edfdac8e1ae"
+        }
+      },
+      {
+        "key": "v3_23",
+        "label": "Explain the control measures which will be put in place to address the risks to victims (see section 8 below)",
+        "kind": "long_text",
+        "context": "Conditional Discharge Proposal > Explain the control measures which will be put in place to address the risks to victims (see section 8 below)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[21]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "5d0d9a8b9064b4c96dc3686aa165f35e00d0dd55f94b9478d98ccf792348e342"
+        }
+      },
+      {
+        "key": "v3_24",
+        "label": "Supervision",
+        "kind": "text",
+        "context": "Conditional Discharge Proposal > Supervision",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[22]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "9dc6814c5986644c1a0ec62758f298cd12644edcccae2a3cee43cf77dc1f72fd"
+        }
+      },
+      {
+        "key": "v3_25",
+        "label": "Why do you think this patient should be absolutely discharged?",
+        "kind": "text",
+        "context": "Absolute Discharge Proposal > Why do you think this patient should be absolutely discharged?",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[24]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "00623c6a57457f6daa7afd55119d2f6c2a30e47a46effbb30c4c7ec8c517d4f9"
+        }
+      },
+      {
+        "key": "v3_26",
+        "label": "Is the patient currently conditionally discharged?",
+        "kind": "text",
+        "context": "Absolute Discharge Proposal > Is the patient currently conditionally discharged?",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[25]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "bc9078f5fd86007493bb87bea5635006f48a3b8160643a3af6c6c9d208914337"
+        }
+      },
+      {
+        "key": "v3_27",
+        "label": "Please give details of the discharge proposal, including",
+        "kind": "long_text",
+        "context": "Absolute Discharge Proposal > Please give details of the discharge proposal, including",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[26]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c93aa8a9d5418effaac3f482f88d4a2380e1be97423dfbf6a6d1cb2ad0f7c0af"
+        }
+      },
+      {
+        "key": "v3_28",
+        "label": "Aftercare Arrangements",
+        "kind": "text",
+        "context": "Absolute Discharge Proposal > Aftercare Arrangements",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[27]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "7c38d71683b3ceffbb1092be1b5863e337edb1a178a46d926dac7b541f050a17"
+        }
+      },
+      {
+        "key": "v3_29",
+        "label": "Please give details of the proposal, including",
+        "kind": "long_text",
+        "context": "Lifting s41 Restrictions > Please give details of the proposal, including",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[29]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "fe81524689348bea76bb334107a9d3fc19ed518c5ec364972a2e3a8e89dbbde5"
+        }
+      },
+      {
+        "key": "v3_30",
+        "label": "Aftercare Arrangements",
+        "kind": "text",
+        "context": "Lifting s41 Restrictions > Aftercare Arrangements",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[30]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "0f5aa18939853fe1fa638f6ca9c41f3909accc2e88a081e686ac111766181bdc"
+        }
+      },
+      {
+        "key": "v3_31",
+        "label": "Please describe the patient’s mental disorder, including",
+        "kind": "long_text",
+        "context": "Patient’s Mental Disorder > Please describe the patient’s mental disorder, including",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[32]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "962f4bf03432a55b91b411c5e5931d8f82b3b92328602b1995b2462d4fdd8c43"
+        }
+      },
+      {
+        "key": "v3_32",
+        "label": "Answer",
+        "kind": "text",
+        "context": "Patient’s Mental Disorder · occurrence 1 of 4 (line 166:   )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[60]/ff[0]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "b7006ba573e890c4d7e374009538daac2f48936ef8140dacc49588c4b414563d"
+        }
+      },
+      {
+        "key": "v3_33",
+        "label": "Answer",
+        "kind": "text",
+        "context": "Patient’s Mental Disorder · occurrence 2 of 4 (line 166:   )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[60]/ff[1]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "cabe0908f221ca2ad3cf52586957f029eef1b3402d285ddc4aa4f4727ef2652c"
+        }
+      },
+      {
+        "key": "v3_34",
+        "label": "Please describe the patient’s attitude and behaviour in hospital and/or the community, including any incidents of",
+        "kind": "long_text",
+        "context": "Patient’s Mental Disorder > Please describe the patient’s attitude and behaviour in hospital and/or the community, including any incidents of",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[33]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "b78d890af89338c68571d3187a4b9c0f7d725ef87b6759fe4915102e4e58cdc5"
+        }
+      },
+      {
+        "key": "v3_35",
+        "label": "State what effect these have had on the patient and how they have been addressed",
+        "kind": "text",
+        "context": "Patient’s Mental Disorder > State what effect these have had on the patient and how they have been addressed",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[34]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c2d42939df36967fc9e011a72d7d46928dad86a051b80592bec9eaeb59495566"
+        }
+      },
+      {
+        "key": "v3_36",
+        "label": "Answer",
+        "kind": "text",
+        "context": "Patient’s Mental Disorder · occurrence 3 of 4 (line 182:   )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[62]/ff[0]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "501fb9c664188d3fae284bcdcc5d02b9801fd8b10eb9efcee7b50ca4e757eb3f"
+        }
+      },
+      {
+        "key": "v3_37",
+        "label": "Answer",
+        "kind": "text",
+        "context": "Patient’s Mental Disorder · occurrence 4 of 4 (line 182:   )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[62]/ff[1]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "319f3d5ece74ad7278e071b9d06cb5e85d3fca2e91ba16d9ec4977fa6b870319"
+        }
+      },
+      {
+        "key": "v3_38",
+        "label": "Describe the patient’s attitude to treatment (and see annex A)",
+        "kind": "long_text",
+        "context": "Patient’s Mental Disorder > Describe the patient’s attitude to treatment (and see annex A)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[35]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "0f91a19cdfae85c7128ffe718b3646f119faa73903a6c9f1b6e365665f547154"
+        }
+      },
+      {
+        "key": "v3_39",
+        "label": "Detail any history of discharge and recall to hospital",
+        "kind": "long_text",
+        "context": "Patient’s Mental Disorder > Detail any history of discharge and recall to hospital",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[36]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "e7b14b5f599e437ff28529eea5f51bf81853f8ed0942969f0efbd46cf3972425"
+        }
+      },
+      {
+        "key": "v3_40",
+        "label": "Please describe any physical medical conditions or disabilities which may impact upon their mental health",
+        "kind": "long_text",
+        "context": "Patient’s Mental Disorder > Please describe any physical medical conditions or disabilities which may impact upon their mental health",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[37]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "6d0539df2460e187b7cb692d700a89eb2dd36d9c201f5ca36789bcb1becc8472"
+        }
+      },
+      {
+        "key": "v3_41",
+        "label": "Capacity Issues",
+        "kind": "text",
+        "context": "Patient’s Mental Disorder",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[38]/tr[0]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 16,
+            "end": 16,
+            "shape": "after_label"
+          },
+          "fingerprint": "143126237d74d6a1f84cc0fec29ec7bf1d288ef46a25a69fd234890ffe114d10"
+        }
+      },
+      {
+        "key": "v3_42",
+        "label": "Capacity Issues",
+        "kind": "text",
+        "context": "Patient’s Mental Disorder > Capacity Issues",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[38]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "8c22a4d134089302b3cfe896bc0139a2e9741a7ff248b80b9ebf3ca9ddfc0676"
+        }
+      },
+      {
+        "key": "v3_43",
+        "label": "Managing Risk",
+        "kind": "text",
+        "context": "Managing Risk · occurrence 1 of 3 (line 206:     )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[69]/ff[0]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "3f4d03be19c2a5fb60c798399755dc22a2c4bbe21981da64ea99d4bee52979f9"
+        }
+      },
+      {
+        "key": "v3_44",
+        "label": "Managing Risk",
+        "kind": "text",
+        "context": "Managing Risk · occurrence 2 of 3 (line 206:     )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[69]/ff[1]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "984a5755d86d200e4dee77dcaa3f15d2227162277bc448ef248adff9acd160ba"
+        }
+      },
+      {
+        "key": "v3_45",
+        "label": "Managing Risk",
+        "kind": "text",
+        "context": "Managing Risk · occurrence 3 of 3 (line 206:     )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[69]/ff[2]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "115b6120033f08cc797cd8b11976f9fd3ae70a1fde7ae780720eea92a1342673"
+        }
+      },
+      {
+        "key": "v3_46",
+        "label": "Index offence(s)",
+        "kind": "text",
+        "context": "Managing Risk > Index offence(s)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[40]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "2a812b41926a3efaaf5c16d279016c33a76e6edfa7d0b1ea223139e8cddf3659"
+        }
+      },
+      {
+        "key": "v3_47",
+        "label": "Details of index offence(s)",
+        "kind": "long_text",
+        "context": "Managing Risk",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[41]/tr[0]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 28,
+            "end": 28,
+            "shape": "after_label"
+          },
+          "fingerprint": "2907df97f0db8933ea0aafc631a257ff21029120b973da938ecb6eb0117f4cf0"
+        }
+      },
+      {
+        "key": "v3_48",
+        "label": "Details of index offence(s)",
+        "kind": "long_text",
+        "context": "Managing Risk > Details of index offence(s)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[41]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "2e2bb9ac2f35b8d171a2b0c61b9dc958dd7f97cb7f5bbd85b291578cfdf415b0"
+        }
+      },
+      {
+        "key": "v3_49",
+        "label": "Describe the patient’s key risks factors/indicators",
+        "kind": "long_text",
+        "context": "Managing Risk > Describe the patient’s key risks factors/indicators",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[42]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "4bd730fbacb5c0f7741468d0ec60f02326bc0cf6b2ab9c5364af0e0701dcf044"
+        }
+      },
+      {
+        "key": "v3_50",
+        "label": "Describe how these risks are these being addressed",
+        "kind": "long_text",
+        "context": "Managing Risk > Describe how these risks are these being addressed",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[43]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "05f78694b07ce9c6e831d46138d5f0c42c3dec3d84c77e00fb733ba7b792e336"
+        }
+      },
+      {
+        "key": "v3_51",
+        "label": "Describe the patient’s community leave history",
+        "kind": "long_text",
+        "context": "Managing Risk > Describe the patient’s community leave history",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[44]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "28dbf7c32dfffa297176943afdc35085befdd8d32951b71d185cbe915af9c326"
+        }
+      },
+      {
+        "key": "v3_52",
+        "label": "Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA)",
+        "kind": "text",
+        "context": "Managing Risk > Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[45]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "b0f58d3975ba3418d56dbf8480f7054970a9510253ebd6591f5af5e5bff77d62"
+        }
+      },
+      {
+        "key": "v3_53",
+        "label": "Please give the name and contact details of the MAPPA coordinator",
+        "kind": "long_text",
+        "context": "Managing Risk > Please give the name and contact details of the MAPPA coordinator",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[46]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c24b4d52955ea161670562c56eef387329a889c11ba9c6dbe15e0f973b6fd44b"
+        }
+      },
+      {
+        "key": "v3_54",
+        "label": "Victim Liaison Officer (VLO) name and contact details",
+        "kind": "long_text",
+        "context": "Victims > Victim Liaison Officer (VLO) name and contact details",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[48]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "06292fd2a1b0e75c1e2e4123eb723ea38c42478e987a40d8699570bc13652d1e"
+        }
+      },
+      {
+        "key": "v3_55",
+        "label": "Details of conditions requested by victim(s)",
+        "kind": "long_text",
+        "context": "Victims > Details of conditions requested by victim(s)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[49]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "2b93fbafef8b72c8304e79422a8ae66a6d1e8ff12745665ccc2c583cbf143a12"
+        }
+      },
+      {
+        "key": "v3_56",
+        "label": "If there is no VLO or victim contact, are there any victim concerns which you think should be taken into account",
+        "kind": "text",
+        "context": "Victims > If there is no VLO or victim contact, are there any victim concerns which you think should be taken into account",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[50]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "8ee89fd1ee9f6f6e784341f83b578269b408f083f4a38c3d2052894144abbd9d"
+        }
+      },
+      {
+        "key": "v3_57",
+        "label": "Please consider the following",
+        "kind": "text",
+        "context": "Additional Comments > Please consider the following",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[52]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "2281658471a8cd9df791e9bcfe5cd5670184b0a40b2f4976597e3248d42ea263"
+        }
+      },
+      {
+        "key": "v3_58",
+        "label": "For patients whose s37/41 order was made after a finding of unfit to plead (under s24 of the Domestic Violence, Crime and Victims Act 2004) only",
+        "kind": "text",
+        "context": "Additional Comments > For patients whose s37/41 order was made after a finding of unfit to plead (under s24 of the Domestic Violence, Crime an",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[53]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "d45530a2d4576b5af560ee3952fd4901e8a57dc5832f388dcaf3872a93a74093"
+        }
+      },
+      {
+        "key": "v3_59",
+        "label": "Applicant’s signature",
+        "kind": "signature",
+        "context": "Additional Comments > Applicant’s signature",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[54]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c3fc159db406e96fe97910a4aece437c1cbfe47846ff23654ee564ebcc66fb81"
+        }
+      },
+      {
+        "key": "v3_60",
+        "label": "Date",
+        "kind": "date",
+        "context": "Additional Comments > Applicant’s signature > Date",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[54]/tr[0]/tc[3]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "8959640dc8a5b81fa8cc3ceeba28247a95f22b00e39b76a8aea593261211942f"
+        }
+      },
+      {
+        "key": "v3_61",
+        "label": "Date — The date the application was submitted to MHCS",
+        "kind": "date",
+        "context": "Additional Comments > Date > The date the application was submitted to MHCS",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[54]/tr[1]/tc[3]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "5737cc2354e307d2c669d9673a0e497cabe765890aeee8e87d2c7955a2266e3a"
+        }
+      },
+      {
+        "key": "v3_62",
+        "label": "Answer",
+        "kind": "text",
+        "context": "Additional Comments",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[89]/ff[0]",
+          "target": {
+            "type": "ff_text"
+          },
+          "fingerprint": "ee2eeb6486826bbfe79adfddc94599a4bdb25b899ff7ebba3cbc7e07b6e1c47c"
+        }
+      },
+      {
+        "key": "v3_63",
+        "label": "Explain what progress you think that you have you made towards your discharge",
+        "kind": "long_text",
+        "context": "Additional Comments > Explain what progress you think that you have you made towards your discharge",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[56]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "05b19ab9804063820f4ace47c286b0da9ea3583a8f916b9eac6e1e3651a8bf8d"
+        }
+      },
+      {
+        "key": "v3_64",
+        "label": "How do you think your risks have reduced since your admission?",
+        "kind": "text",
+        "context": "Additional Comments > How do you think your risks have reduced since your admission?",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[57]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c0c52d6b92a40da6901d081c8fb31e136f22a82d31e33bd66c6ce835519c7126"
+        }
+      },
+      {
+        "key": "v3_65",
+        "label": "What would you like the Ministry of Justice (MoJ) to take into consideration when deciding whether to grant this leave request?",
+        "kind": "text",
+        "context": "Additional Comments > What would you like the Ministry of Justice (MoJ) to take into consideration when deciding whether to grant this leave r",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[58]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "190f0fe398ff9ca86601929c3c2d601ce0a31b1bb706630903b400afd74c664f"
+        }
+      },
+      {
+        "key": "v3_66",
+        "label": "Please confirm that the patient has had sight of this application and had an opportunity to add their comments",
+        "kind": "long_text",
+        "context": "Additional Comments > Please confirm that the patient has had sight of this application and had an opportunity to add their comments",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[59]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c263e94066dbb191dddd5ee02787da71755bd8de1e1eaa709abfc2a87a3608bc"
+        }
+      },
+      {
+        "key": "v3_67",
+        "label": "The following are examples of conditions which Responsible Clinicians may wish t",
+        "kind": "text",
+        "context": "Additional Comments > The following are examples of conditions which Responsible Clinicians may wish t",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[60]/tr[1]/tc[0]",
+          "target": {
+            "type": "cell_replace",
+            "all": true
+          },
+          "fingerprint": "c8fdc812e3286cb0ba507279755b33983b91ef967819392154ea396c1da8b705"
+        }
+      }
+    ],
+    "warnings": [
+      "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+      "Answers expand and can change pagination. Review the exported document's layout."
+    ],
+    "contract": "v3",
+    "adapter": "word-v3",
+    "sandbox": "landlock+seccomp",
+    "sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d"
+  }
+}

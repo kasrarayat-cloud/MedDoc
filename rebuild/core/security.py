@@ -17,7 +17,11 @@ def departments(user):
     return Department.objects.filter(membership__user=user,membership__active=True)
 
 def scoped(model,user):
-    return model.objects.filter(department__in=departments(user))
+    query=model.objects.filter(department__in=departments(user))
+    if model._meta.label_lower == 'core.encounter':
+        from .disposition_execution import available
+        query=available(query)
+    return query
 
 def membership(user,department,roles=None):
     m=Membership.objects.filter(user=user,department=department,active=True,user__is_active=True,user__verified_at__isnull=False).first()
@@ -40,6 +44,8 @@ def store_upload(upload,category='originals',max_bytes=15*1024*1024):
     relative=f'{category}/{secrets.token_hex(24)}{suffix}'
     path=private_path(relative)
     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    from .retention import begin_private_file
+    begin_private_file(path)
     count=0
     try:
         with path.open('xb') as f:
@@ -49,7 +55,8 @@ def store_upload(upload,category='originals',max_bytes=15*1024*1024):
                 if count>max_bytes: raise ValidationError('File exceeds upload limit.')
                 f.write(chunk)
     except Exception:
-        path.unlink(missing_ok=True)
+        from .retention import cleanup_file
+        cleanup_file(path)
         raise
     return relative
 

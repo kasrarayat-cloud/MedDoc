@@ -82,7 +82,9 @@ def refuse_to_erase_live_evidence(apps, schema_editor):
         raise IrreversibleError(
             f'0020_payment_livemode cannot be reversed: {payments} payment row(s) and {events} Stripe event row(s) are '
             'recorded as live. Reversing drops their recorded mode, and re-applying records every row NULL, which real '
-            'data mode treats as sandbox money it never spends. Nothing was changed.')
+            'data mode treats as sandbox money it never spends. 0020 was not reversed and those rows are unchanged, but '
+            'any migration after 0020 that was applied has already been reversed and stays reversed: run migrate forward '
+            'to the latest migration before starting any release.')
 
 
 class Migration(migrations.Migration):

@@ -1,0 +1,619 @@
+RED run: d5367521 with the RR2 tests only (no application change)
+Using existing test database for alias 'default' ('quillmd_qa_resid3_t1')...
+test_an_address_of_exactly_the_column_length_still_creates_its_account (core.tests.test_account_email_rule.AccountEmailBounds.test_an_address_of_exactly_the_column_length_still_creates_its_account)
+Control: the bound is the column, not tighter. 150 characters is issued, accepted and registered. ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) ... 
+  test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=151, kind='department') ... FAIL
+  test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=151, kind='clinic') ... FAIL
+  test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=254, kind='department') ... FAIL
+  test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=254, kind='clinic') ... FAIL
+test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) ... 
+  test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=151) ... FAIL
+  test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=254) ... FAIL
+  test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=300) ... FAIL
+  test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=320) ... FAIL
+test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns) ... 
+  test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns) (length=151) ... FAIL
+  test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns) (length=300) ... ERROR
+test_register_refuses_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_register_refuses_an_address_longer_than_the_account_columns) ... 
+  test_register_refuses_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_register_refuses_an_address_longer_than_the_account_columns) (length=151) ... FAIL
+  test_register_refuses_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_register_refuses_an_address_longer_than_the_account_columns) (length=254) ... FAIL
+test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) ... 
+  test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) (email='"sam"@synthetic.invalid') ... FAIL
+  test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) (email='"s\\am"@synthetic.invalid') ... FAIL
+  test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) (email='"SAM"@synthetic.invalid') ... FAIL
+test_neither_invitation_creates_the_quoted_twin (core.tests.test_account_email_rule.QuotedLocalPart.test_neither_invitation_creates_the_quoted_twin) ... 
+  test_neither_invitation_creates_the_quoted_twin (core.tests.test_account_email_rule.QuotedLocalPart.test_neither_invitation_creates_the_quoted_twin) (kind='department') ... FAIL
+  test_neither_invitation_creates_the_quoted_twin (core.tests.test_account_email_rule.QuotedLocalPart.test_neither_invitation_creates_the_quoted_twin) (kind='clinic') ... FAIL
+test_no_invitation_is_issued_to_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_no_invitation_is_issued_to_a_quoted_local_part) ... FAIL
+test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) ... 
+  test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) (email='"sam"@synthetic.invalid') ... FAIL
+  test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) (email='"s\\am"@synthetic.invalid') ... FAIL
+  test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) (email='"SAM"@synthetic.invalid') ... FAIL
+test_an_address_of_exactly_the_column_length_creates_the_first_account (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_of_exactly_the_column_length_creates_the_first_account) ... ok
+test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) ... ok
+test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists)
+RR2-ACC-1 and RR2-ACC-2 at this door. RED on d5367521: the long address raised DataError from the insert, not ... 
+  test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists) (email='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.org')
+RR2-ACC-1 and RR2-ACC-2 at this door. RED on d5367521: the long address raised DataError from the insert, not ... ERROR
+  test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists) (email='"owner"@example.org')
+RR2-ACC-1 and RR2-ACC-2 at this door. RED on d5367521: the long address raised DataError from the insert, not ... FAIL
+test_an_ordinary_address_creates_the_first_account (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_ordinary_address_creates_the_first_account) ... ok
+test_a_charged_mapping_result_is_downloadable_under_the_generation_rule (core.tests.test_mapping_assistance.MappingAssistance.test_a_charged_mapping_result_is_downloadable_under_the_generation_rule) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FAIL
+test_an_uncharged_mapping_result_is_never_delivered (core.tests.test_mapping_assistance.MappingAssistance.test_an_uncharged_mapping_result_is_never_delivered) ... ok
+test_one_clinic_invitation_accepted_twice_at_the_same_moment (core.tests.test_invitation_account_race.OneInvitationAcceptedTwiceAtOnce.test_one_clinic_invitation_accepted_twice_at_the_same_moment) ... FAIL
+test_one_department_invitation_accepted_twice_at_the_same_moment (core.tests.test_invitation_account_race.OneInvitationAcceptedTwiceAtOnce.test_one_department_invitation_accepted_twice_at_the_same_moment) ... FAIL
+test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged (core.tests.test_mapping_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged)
+RED on d5367521: 'failed' with 'platform_failure: Mapping output could not be adopted.', the charge reversed ... FAIL
+test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed (core.tests.test_mapping_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed) ... ok
+test_a_handler_whose_first_statement_loses_the_connection_holds_the_job (core.tests.test_mapping_outcome_unknown.HandlerStatementFails.test_a_handler_whose_first_statement_loses_the_connection_holds_the_job)
+The RS-2 shape on the mapping path: settlement committed, the output could not be used, and the server ended ... ERROR
+test_an_unusable_output_is_still_a_platform_failure_absorbed (core.tests.test_mapping_outcome_unknown.HandlerStatementFails.test_an_unusable_output_is_still_a_platform_failure_absorbed)
+Control: with nothing lost, the locked handler records what it always recorded. ... ok
+test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown (core.tests.test_mapping_outcome_unknown.SettlementCommitAnswerLost.test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown) ... FAIL
+test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown (core.tests.test_mapping_outcome_unknown.SettlementCommitAnswerLost.test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown) ... FAIL
+
+======================================================================
+ERROR: test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns) (length=300)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.StringDataRightTruncation: value too long for type character varying(254)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/views/decorators/http.py", line 64, in inner
+    return func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/views.py", line 1645, in team
+    invitation=Invitation.objects.create(email=form.cleaned_data['email'].lower(),department=d,role=form.cleaned_data['role'],token_hash=digest(raw),expires_at=timezone.now()+timedelta(days=7),invited_by=request.user)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.DataError: value too long for type character varying(254)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 288, in test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns
+    department, clinic = self.issue(email)
+                         ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 132, in issue
+    device.delete()
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1281, in delete
+    return collector.delete()
+           ^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/deletion.py", line 448, in delete
+    count = sql.DeleteQuery(model).delete_batch(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/subqueries.py", line 42, in delete_batch
+    num_deleted += self.do_query(
+                   ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/subqueries.py", line 24, in do_query
+    return self.get_compiler(using).execute_sql(ROW_COUNT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 99, in _execute
+    self.db.validate_no_broken_transaction()
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/base/base.py", line 521, in validate_no_broken_transaction
+    raise TransactionManagementError(
+django.db.transaction.TransactionManagementError: An error occurred in the current transaction. You can't execute queries until the end of the 'atomic' block.
+
+======================================================================
+ERROR: test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists) (email='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.org')
+RR2-ACC-1 and RR2-ACC-2 at this door. RED on d5367521: the long address raised DataError from the insert, not
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.StringDataRightTruncation: value too long for type character varying(150)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 398, in test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists
+    self.create(email)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 379, in create
+    return bootstrap_first_admin.bootstrap('create', self.profile, self.declaration, uuid.uuid4(), email)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/management/commands/bootstrap_first_admin.py", line 90, in bootstrap
+    user.save(force_insert=True)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/contrib/auth/base_user.py", line 65, in save
+    super().save(*args, **kwargs)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.DataError: value too long for type character varying(150)
+
+======================================================================
+ERROR: test_a_handler_whose_first_statement_loses_the_connection_holds_the_job (core.tests.test_mapping_outcome_unknown.HandlerStatementFails.test_a_handler_whose_first_statement_loses_the_connection_holds_the_job)
+The RS-2 shape on the mapping path: settlement committed, the output could not be used, and the server ended
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/mapping_jobs.py", line 131, in run_one
+    proposal=mapping.validate_proposal(version,compiled,parse_response(raw,simulated))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/unittest/mock.py", line 1134, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/unittest/mock.py", line 1138, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/unittest/mock.py", line 1199, in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 164, in unusable
+    raise ValidationError('synthetic: the proposal cannot be used')
+django.core.exceptions.ValidationError: ['synthetic: the proposal cannot be used']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AdminShutdown: terminating connection due to administrator command
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 172, in test_a_handler_whose_first_statement_loses_the_connection_holds_the_job
+    self.run_mapping()
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 57, in run_mapping
+    self.assertTrue(jobs.run_one())
+                    ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/jobs.py", line 680, in run_one
+    if next_kind=='mapping' and run_mapping(): return True
+                                ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/mapping_jobs.py", line 148, in run_one
+    known=Usage.objects.filter(job=job).exists()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1298, in exists
+    return self.query.has_results(using=self.db)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/query.py", line 676, in has_results
+    return compiler.has_results()
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1591, in has_results
+    return bool(self.execute_sql(SINGLE))
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 169, in wrapper
+    return execute('SELECT pg_terminate_backend(pg_backend_pid())', None, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.OperationalError: terminating connection due to administrator command
+
+======================================================================
+FAIL: test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=151, kind='department')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 277, in test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused
+    self.assertEqual(response.status_code, 200)
+AssertionError: 500 != 200
+
+======================================================================
+FAIL: test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=151, kind='clinic')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 277, in test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused
+    self.assertEqual(response.status_code, 200)
+AssertionError: 500 != 200
+
+======================================================================
+FAIL: test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=254, kind='department')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 277, in test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused
+    self.assertEqual(response.status_code, 200)
+AssertionError: 500 != 200
+
+======================================================================
+FAIL: test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) (length=254, kind='clinic')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 277, in test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused
+    self.assertEqual(response.status_code, 200)
+AssertionError: 500 != 200
+
+======================================================================
+FAIL: test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=151)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 248, in test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns
+    self.assertFalse(register.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=254)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 248, in test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns
+    self.assertFalse(register.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=300)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 252, in test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns
+    self.assertFalse(department.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) (length=320)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 252, in test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns
+    self.assertFalse(department.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns) (length=151)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 290, in test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns
+    self.assertEqual(response.status_code, 200)
+AssertionError: 302 != 200
+
+======================================================================
+FAIL: test_register_refuses_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_register_refuses_an_address_longer_than_the_account_columns) (length=151)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 264, in test_register_refuses_an_address_longer_than_the_account_columns
+    self.assertEqual(response.status_code, 200)
+AssertionError: 500 != 200
+
+======================================================================
+FAIL: test_register_refuses_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_register_refuses_an_address_longer_than_the_account_columns) (length=254)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 264, in test_register_refuses_an_address_longer_than_the_account_columns
+    self.assertEqual(response.status_code, 200)
+AssertionError: 500 != 200
+
+======================================================================
+FAIL: test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) (email='"sam"@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 347, in test_every_form_that_chooses_an_address_refuses_a_quoted_local_part
+    self.assertFalse(register.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) (email='"s\\am"@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 347, in test_every_form_that_chooses_an_address_refuses_a_quoted_local_part
+    self.assertFalse(register.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) (email='"SAM"@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 347, in test_every_form_that_chooses_an_address_refuses_a_quoted_local_part
+    self.assertFalse(register.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_neither_invitation_creates_the_quoted_twin (core.tests.test_account_email_rule.QuotedLocalPart.test_neither_invitation_creates_the_quoted_twin) (kind='department')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 338, in test_neither_invitation_creates_the_quoted_twin
+    self.assertEqual(response.status_code, 200)
+AssertionError: 302 != 200
+
+======================================================================
+FAIL: test_neither_invitation_creates_the_quoted_twin (core.tests.test_account_email_rule.QuotedLocalPart.test_neither_invitation_creates_the_quoted_twin) (kind='clinic')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 339, in test_neither_invitation_creates_the_quoted_twin
+    self.assertIn(QUOTED_REFUSAL, ' '.join(response.context['form'].errors['email']))
+AssertionError: 'without quotation marks' not found in 'An account with this email address already exists.'
+
+======================================================================
+FAIL: test_no_invitation_is_issued_to_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_no_invitation_is_issued_to_a_quoted_local_part)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 359, in test_no_invitation_is_issued_to_a_quoted_local_part
+    self.assertEqual(response.status_code, 200)
+AssertionError: 302 != 200
+
+======================================================================
+FAIL: test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) (email='"sam"@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 325, in test_register_refuses_the_quoted_twin_of_an_existing_account
+    self.assertEqual(response.status_code, 200)
+AssertionError: 302 != 200
+
+======================================================================
+FAIL: test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) (email='"s\\am"@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 325, in test_register_refuses_the_quoted_twin_of_an_existing_account
+    self.assertEqual(response.status_code, 200)
+AssertionError: 302 != 200
+
+======================================================================
+FAIL: test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) (email='"SAM"@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 326, in test_register_refuses_the_quoted_twin_of_an_existing_account
+    self.assertIn(QUOTED_REFUSAL, ' '.join(response.context['form'].errors['email']))
+AssertionError: 'without quotation marks' not found in 'An account with this email address already exists.'
+
+======================================================================
+FAIL: test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists) (email='"owner"@example.org')
+RR2-ACC-1 and RR2-ACC-2 at this door. RED on d5367521: the long address raised DataError from the insert, not
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 397, in test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists
+    with self.assertRaisesRegex(OperatorError, 'first_admin_email'):
+AssertionError: OperatorError not raised
+
+======================================================================
+FAIL: test_a_charged_mapping_result_is_downloadable_under_the_generation_rule (core.tests.test_mapping_assistance.MappingAssistance.test_a_charged_mapping_result_is_downloadable_under_the_generation_rule)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_assistance.py", line 194, in test_a_charged_mapping_result_is_downloadable_under_the_generation_rule
+    self.assertContains(page,f'/jobs/{job.pk}/result/')
+AssertionError: False is not true : Couldn't find '/jobs/e58196e4-bda4-42e9-958f-4f49920667f8/result/' in the following response
+b'\n<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="robots" content="noindex, nofollow">\n  <title>Mapping assistance \xc2\xb7 Synthetic mapping \xc2\xb7 QuillMD</title>\n  <link rel="stylesheet" href="/static/app.css">\n  <script src="/static/app.js" defer></script>\n</head>\n<body>\n<a class="skip-link" href="#main">Skip to main content</a>\n\n<div class="app-shell">\n  <aside class="sidebar" aria-label="Workspace navigation">\n    <a class="brand" href="/" aria-label="QuillMD home"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>\n    <div class="workspace-label"><strong>Clinical workspace</strong><span>Synthetic mapping</span></div>\n    <nav class="navigation" aria-label="Primary">\n    \n      <a href="/" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Workspace</a>\n      <a href="/patients/" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-15a3 3 0 0 1 0 6m2 3a6 6 0 0 1 2 5"/></svg>Patients</a>\n      <a href="/#templates" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/></svg>Form library</a>\n      <a href="/team/" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V7l8-4 8 4v14M2 21h20M9 21v-5h6v5M8 8v2m8-2v2m-4-4v4M8 12v1m8-1v1"/></svg>Organization</a>\n      <a href="/billing/" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Billing & usage</a>\n    \n    </nav>\n    <div class="sidebar-footer">\n      <div class="account-name">mapping@synthetic.invalid</div>\n      <div class="small muted">Individual account</div>\n      <form action="/logout/" method="post"><input type="hidden" name="csrfmiddlewaretoken" value="CrKCLzEuUjzJ2GWZDw8jzQFzF44wKvrrsodUfnlL8fp9aIHcZ8tQZmy31VN2BWMq"><button class="quiet" type="submit">Sign out</button></form>\n    </div>\n  </aside>\n  <div class="main-column">\n    <header class="topbar"><div class="breadcrumb">Clinical workspace<span>/</span>Overview</div><div class="environment"><span class="status-dot" aria-hidden="true"></span>Private preview</div></header>\n    <div class="environment-banner">Synthetic data only. Patient-data processing is not yet approved for this environment.</div>\n    <main class="page" id="main">\n      \n      \n<div class="page-heading"><h1>Mapping assistance</h1><p>Synthetic mapping \xc2\xb7 mapping version 2</p></div>\n<p><a href="/templates/a5477087-06e4-41e5-a65c-193e18813374/">Review and correct answer fields</a> \xc2\xb7 <a href="/templates/a5477087-06e4-41e5-a65c-193e18813374/original/">Download the preserved original</a></p>\n\n<div class="notice warning">This is an offline fixture result. It does not show how Sonnet 5 recognizes this form and does not establish compatibility.</div>\n<section><h2>Areas requiring review</h2><p>Each area stays visible until you map it on the answer-fields page or explicitly identify it as not an answer. These corrections are recorded as assisted mapping.</p>\n<form method="post" data-submit-once><input type="hidden" name="csrfmiddlewaretoken" value="CrKCLzEuUjzJ2GWZDw8jzQFzF44wKvrrsodUfnlL8fp9aIHcZ8tQZmy31VN2BWMq"><input type="hidden" name="action" value="resolve"><input type="hidden" name="mapping_version" value="fbea2a91-11c8-41c0-8764-629f9467cf27">\n<div class="form-section section"><h3>Area 1 \xc2\xb7 Body \xc2\xb7 Table cell \xc2\xb7 row 1, column 1</h3><p>Plan</p><p class="helptext">Unresolved source area; map it or explicitly review it as not an answer.</p><label for="resolution-0">Decision for area 1</label><select id="resolution-0" name="resolution_0" required><option value="">Choose after reviewing</option><option value="mapped">I checked its mapped answer field</option><option value="not_answer">I checked: this is not an answer area</option></select></div><div class="form-section section"><h3>Area 2 \xc2\xb7 Body \xc2\xb7 Paragraph \xc2\xb7 row 1, column 1</h3><p>Plan</p><p class="helptext">Unresolved source area; map it or explicitly review it as not an answer.</p><label for="resolution-1">Decision for area 2</label><select id="resolution-1" name="resolution_1" required><option value="">Choose after reviewing</option><option value="mapped">I checked its mapped answer field</option><option value="not_answer">I checked: this is not an answer area</option></select></div><div class="form-section section"><h3>Area 3 \xc2\xb7 Body \xc2\xb7 Paragraph \xc2\xb7 row 1, column 2</h3><p>Blank answer space</p><p class="helptext">Unresolved source area; map it or explicitly review it as not an answer.</p><label for="resolution-2">Decision for area 3</label><select id="resolution-2" name="resolution_2" required><option value="">Choose after reviewing</option><option value="mapped">I checked its mapped answer field</option><option value="not_answer">I checked: this is not an answer area</option></select></div><div class="form-section section"><h3>Area 4 \xc2\xb7 Body \xc2\xb7 Table cell \xc2\xb7 row 2, column 1</h3><p>History</p><p class="helptext">Unresolved source area; map it or explicitly review it as not an answer.</p><label for="resolution-3">Decision for area 4</label><select id="resolution-3" name="resolution_3" required><option value="">Choose after reviewing</option><option value="mapped">I checked its mapped answer field</option><option value="not_answer">I checked: this is not an answer area</option></select></div><div class="form-section section"><h3>Area 5 \xc2\xb7 Body \xc2\xb7 Paragraph \xc2\xb7 row 2, column 1</h3><p>History</p><p class="helptext">Unresolved source area; map it or explicitly review it as not an answer.</p><label for="resolution-4">Decision for area 5</label><select id="resolution-4" name="resolution_4" required><option value="">Choose after reviewing</option><option value="mapped">I checked its mapped answer field</option><option value="not_answer">I checked: this is not an answer area</option></select></div><div class="form-section section"><h3>Area 6 \xc2\xb7 Body \xc2\xb7 Paragraph \xc2\xb7 row 2, column 2</h3><p>Blank answer space</p><p class="helptext">Unresolved source area; map it or explicitly review it as not an answer.</p><label for="resolution-5">Decision for area 6</label><select id="resolution-5" name="resolution_5" required><option value="">Choose after reviewing</option><option value="mapped">I checked its mapped answer field</option><option value="not_answer">I checked: this is not an answer area</option></select></div><div class="form-section section"><h3>Area 7 \xc2\xb7 Body \xc2\xb7 Paragraph</h3><p>Instructions: Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. </p><p class="helptext">Unresolved source area; map it or explicitly review it as not an answer.</p><label for="resolution-6">Decision for area 7</label><select id="resolution-6" name="resolution_6" required><option value="">Choose after reviewing</option><option value="mapped">I checked its mapped answer field</option><option value="not_answer">I checked: this is not an answer area</option></select></div>\n<div class="form-footer"><button type="submit">Save area decisions</button></div></form></section>\n<details><summary>All source-area verdicts</summary><div class="details-body"><div class="table-wrap"><table><thead><tr><th scope="col">Source area</th><th scope="col">Proposal verdict</th></tr></thead><tbody><tr><td>Body \xc2\xb7 Table cell \xc2\xb7 row 1, column 1<p>Plan</p></td><td>uncertain</td></tr><tr><td>Body \xc2\xb7 Paragraph \xc2\xb7 row 1, column 1<p>Plan</p></td><td>uncertain</td></tr><tr><td>Body \xc2\xb7 Table cell \xc2\xb7 row 1, column 2<p></p></td><td>covered</td></tr><tr><td>Body \xc2\xb7 Paragraph \xc2\xb7 row 1, column 2<p></p></td><td>uncertain</td></tr><tr><td>Body \xc2\xb7 Table cell \xc2\xb7 row 2, column 1<p>History</p></td><td>uncertain</td></tr><tr><td>Body \xc2\xb7 Paragraph \xc2\xb7 row 2, column 1<p>History</p></td><td>uncertain</td></tr><tr><td>Body \xc2\xb7 Table cell \xc2\xb7 row 2, column 2<p></p></td><td>covered</td></tr><tr><td>Body \xc2\xb7 Paragraph \xc2\xb7 row 2, column 2<p></p></td><td>uncertain</td></tr><tr><td>Body \xc2\xb7 Paragraph<p>Instructions: Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. Safe blank source wording. </p></td><td>uncertain</td></tr><tr><td>Body \xc2\xb7 Paragraph<p>Signature: ____________</p></td><td>covered</td></tr></tbody></table></div></div></details>\n<section class="section"><h2>Request a proposal</h2><p>Only the blank form is used. Review every proposed answer field against the original before confirming it. Existing documents keep their original mapping.</p>\n<p class="notice warning">Offline fixture mode: no model request or charge. Unmapped areas remain unresolved.</p>\n<form method="post" data-submit-once><input type="hidden" name="csrfmiddlewaretoken" value="CrKCLzEuUjzJ2GWZDw8jzQFzF44wKvrrsodUfnlL8fp9aIHcZ8tQZmy31VN2BWMq"><input type="hidden" name="action" value="queue"><input type="hidden" name="approval" value="eyJ1c2VyIjoiMmY1YTA3MWQtNGFmNC00OGQxLWE4OTEtOTdlODY1ODc0NDM5IiwidmVyc2lvbiI6ImZiZWEyYTkxLTExYzgtNDFjMC04NzY0LTYyOWY5NDY3Y2YyNyIsImNvbmZpZyI6eyJtb2RlIjoiZml4dHVyZSIsInByb3ZpZGVyIjoiYW50aHJvcGljIiwibW9kZWwiOiJjbGF1ZGUtc29ubmV0LTUiLCJpbnB1dF9yYXRlIjoiMiIsIm91dHB1dF9yYXRlIjoiMTAiLCJjYWNoZWRfcmF0ZSI6IjAuMiIsInZvaWNlX3JhdGVfbWludXRlIjoiIiwidm9pY2VfcmF0ZV9zZWNvbmQiOiIiLCJ2b2ljZV9tYXhfY29zdCI6IjAuMjAiLCJwcm9tcHRfdmVyc2lvbiI6ImV4dHJhY3RpdmUtdjYtc291cmNlLXNjb3BlLWF0dGVzdGF0aW9uIiwidjNfZXZpZGVuY2VfY29udHJhY3QiOiJuYXR1cmFsLXYxIiwiZGlzY291bnRfcmF0ZSI6IjAiLCJyZXF1ZXN0X3Byb2ZpbGUiOnsicHJvZmlsZSI6ImNsYXVkZS1zb25uZXQtNS12MSIsIm1heF9vdXRwdXRfdG9rZW5zIjo4MDAwLCJ0aW1lb3V0X3NlY29uZHMiOjEyMCwidGhpbmtpbmciOnsidHlwZSI6ImRpc2FibGVkIn0sImVmZm9ydCI6Im1lZGl1bSJ9LCJwcmljaW5nX3ZlcnNpb24iOiJjb25maWd1cmVkLXYxOjU4NWY3YzFjMjhjYmQyMzQ1ZDUwMzIwNmFjNmRjYjNjZmI2ODY4NDRmNzU2NzY5YmI4NTA5YWRlOTQ5MzJlZGQifSwicmVxdWVzdF9zaGEyNTYiOiIzNmEwMzUxMjVlZjUxNTAyNGU1Njk2NDIzODNiYTBhNTNlZTdjODQ0NDYzYzA5MjgxYzY5ZmVkMDMzNTM4ZWIzIn0:1xBO0w:f93Dg4C1v4AcwJhTNS9Uhg27SR1d_0tDQmlwox8AIHo"><label class="check-label" for="blank-only"><input id="blank-only" name="blank_only" type="checkbox" required><span>This is a blank form with no patient information.</span></label><div class="form-footer"><button type="submit">Prepare an offline proposal</button></div></form></section>\n<section><h2>Operation history</h2><div class="table-wrap"><table><thead><tr><th scope="col">Created</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead><tbody><tr><td>2026-09-29 02:56 UTC</td><td>succeeded</td><td>Review the resulting mapping when complete. <a href="/billing/jobs/e58196e4-bda4-42e9-958f-4f49920667f8/">Charge evidence</a></td></tr></tbody></table></div></section>\n\n    </main>\n  </div>\n</div>\n\n</body>\n</html>\n'
+
+======================================================================
+FAIL: test_one_clinic_invitation_accepted_twice_at_the_same_moment (core.tests.test_invitation_account_race.OneInvitationAcceptedTwiceAtOnce.test_one_clinic_invitation_accepted_twice_at_the_same_moment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_invitation_account_race.py", line 243, in test_one_clinic_invitation_accepted_twice_at_the_same_moment
+    self.race_one(link)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_invitation_account_race.py", line 223, in race_one
+    self.assertEqual([response.status_code for response in responses], [200, 200],
+AssertionError: Lists differ: [200, 404] != [200, 200]
+
+First differing element 1:
+404
+200
+
+- [200, 404]
+?       ^ ^
+
++ [200, 200]
+?       ^ ^
+ : [None, None]
+
+======================================================================
+FAIL: test_one_department_invitation_accepted_twice_at_the_same_moment (core.tests.test_invitation_account_race.OneInvitationAcceptedTwiceAtOnce.test_one_department_invitation_accepted_twice_at_the_same_moment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_invitation_account_race.py", line 234, in test_one_department_invitation_accepted_twice_at_the_same_moment
+    self.race_one(link)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_invitation_account_race.py", line 223, in race_one
+    self.assertEqual([response.status_code for response in responses], [200, 200],
+AssertionError: Lists differ: [404, 200] != [200, 200]
+
+First differing element 0:
+404
+200
+
+- [404, 200]
+?  ^ ^
+
++ [200, 200]
+?  ^ ^
+ : [None, None]
+
+======================================================================
+FAIL: test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged (core.tests.test_mapping_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged)
+RED on d5367521: 'failed' with 'platform_failure: Mapping output could not be adopted.', the charge reversed
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 82, in test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged
+    self.assertEqual((job.state, job.error), ('succeeded', ''))
+AssertionError: Tuples differ: ('failed', 'platform_failure: Mapping output could not be adopted.') != ('succeeded', '')
+
+First differing element 0:
+'failed'
+'succeeded'
+
+- ('failed', 'platform_failure: Mapping output could not be adopted.')
++ ('succeeded', '')
+
+======================================================================
+FAIL: test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown (core.tests.test_mapping_outcome_unknown.SettlementCommitAnswerLost.test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 148, in test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown
+    job = self.settle_with_lost_answer(landed=False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 131, in settle_with_lost_answer
+    self.assertEqual((job.state, job.error, job.request_key), ('reconciliation', UNKNOWN, key))
+AssertionError: Tuples differ: ('reconciliation', 'Provider outcome or settlement is uncerta[140 chars]da2') != ('reconciliation', 'The settlement outcome of this request is[155 chars]da2')
+
+First differing element 1:
+'Provider outcome or settlement is uncerta[26 chars]ing.'
+'The settlement outcome of this request is[41 chars] it.'
+
+  ('reconciliation',
+-  'Provider outcome or settlement is uncertain; reconcile before retrying.',
++  'The settlement outcome of this request is unknown; an administrator must '
++  'reconcile it.',
+   'mapping:e782c154-546d-49eb-b6fc-f0aee02a4c88:6e43227fe8587e0a5f3ce7010b95943d00fe0fa02b2317bd236a8ac4effd4da2')
+
+======================================================================
+FAIL: test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown (core.tests.test_mapping_outcome_unknown.SettlementCommitAnswerLost.test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 143, in test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown
+    job = self.settle_with_lost_answer(landed=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_outcome_unknown.py", line 131, in settle_with_lost_answer
+    self.assertEqual((job.state, job.error, job.request_key), ('reconciliation', UNKNOWN, key))
+AssertionError: Tuples differ: ('reconciliation', 'Provider outcome or settlement is uncerta[140 chars]899') != ('reconciliation', 'The settlement outcome of this request is[155 chars]899')
+
+First differing element 1:
+'Provider outcome or settlement is uncerta[26 chars]ing.'
+'The settlement outcome of this request is[41 chars] it.'
+
+  ('reconciliation',
+-  'Provider outcome or settlement is uncertain; reconcile before retrying.',
++  'The settlement outcome of this request is unknown; an administrator must '
++  'reconcile it.',
+   'mapping:87b130fc-61f4-4e0f-b482-7eea24a74601:fa60837933c19c7cb3d9d4e5b405d13351f0d164dea99c168aa3113cfedfb899')
+
+----------------------------------------------------------------------
+Ran 23 tests in 32.672s
+
+FAILED (failures=27, errors=3)
+Preserving test database for alias 'default' ('quillmd_qa_resid3_t1')...
+Found 23 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).
+
+RED re-run of the RR2-L1 test after moving its download assertion before its link assertion (still no application change)
+Using existing test database for alias 'default' ('quillmd_qa_resid3_t1')...
+test_a_charged_mapping_result_is_downloadable_under_the_generation_rule (core.tests.test_mapping_assistance.MappingAssistance.test_a_charged_mapping_result_is_downloadable_under_the_generation_rule) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FAIL
+
+======================================================================
+FAIL: test_a_charged_mapping_result_is_downloadable_under_the_generation_rule (core.tests.test_mapping_assistance.MappingAssistance.test_a_charged_mapping_result_is_downloadable_under_the_generation_rule)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_assistance.py", line 194, in test_a_charged_mapping_result_is_downloadable_under_the_generation_rule
+    self.assertEqual(response.status_code,200)
+AssertionError: 404 != 200
+
+----------------------------------------------------------------------
+Ran 1 test in 3.380s
+
+FAILED (failures=1)
+Preserving test database for alias 'default' ('quillmd_qa_resid3_t1')...
+Found 1 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

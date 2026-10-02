@@ -377,7 +377,7 @@ def plan_normalisation(submission):
     raise NotNormalised(UNREADABLE, 'no lossless remux is defined for %s audio' % (codec or 'unrecognised'))
 
 
-def normalise_submission(source, destination, submission, floor_seconds=None, ceiling_seconds=None, deadline=None):
+def normalise_submission(source, destination, submission, floor_seconds=None, ceiling_seconds=None, deadline=None, cleanup=None):
     """Remux the one audio stream of `source` into `destination`, losslessly, and describe the result.
 
     `floor_seconds` and `ceiling_seconds` are core/audio.py's two hand measurements of the SOURCE — what it certainly
@@ -394,7 +394,8 @@ def normalise_submission(source, destination, submission, floor_seconds=None, ce
     try:
         return _remux(source, destination, submission, floor_seconds, ceiling_seconds, deadline)
     except BaseException:
-        destination.unlink(missing_ok=True)
+        if cleanup is None:destination.unlink(missing_ok=True)
+        else:cleanup(destination)
         raise
 
 

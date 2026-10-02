@@ -1,0 +1,29 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__commit-msg.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl:491",
+   "timestamp": "2026-09-29T01:39:11.804Z",
+   "sha256_after": "463040cb08c3eb6326017df9c193168ee07b482c67cf9b8085776fd4d5006666",
+   "bytes_after": 3969
+  },
+  {
+   "step": "pyreplace",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl:626",
+   "timestamp": "2026-09-29T02:21:05.720Z",
+   "sha256_after": "096e28ac39190b402a25ae9f1fcbde7636eb8bc20cf604402d0c82f4f749f9f2",
+   "bytes_after": 4468
+  },
+  {
+   "step": "pyreplace",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl:631",
+   "timestamp": "2026-09-29T02:21:11.468Z",
+   "sha256_after": "006bdd4c13a2d51717d24c566957cea6984a59be1f4e205c4516d35aa781c12e",
+   "bytes_after": 4534
+  }
+ ],
+ "lines": 55,
+ "sha256": "006bdd4c13a2d51717d24c566957cea6984a59be1f4e205c4516d35aa781c12e"
+}

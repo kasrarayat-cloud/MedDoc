@@ -246,15 +246,19 @@ class ANotesSaveNeverClearsSilently(OrdinaryDraft, TestCase):
         self.assertEqual(sorted((a['status'], bool(a.get('accepted_suggestion'))) for a in encounter.answers.values()),
                          [('edited', True), ('left_blank', False)])                     # (the control)
         self.accepted_code(encounter)
+        help_text = ' '.join(notes_help(self.client.get(f'/encounters/{encounter.pk}/')).split())
         self.assertIn('Saving changed notes clears the answer draft (2 answers: 1 accepted suggestion and 1 decision to leave '
-                      'blank; 2 reviewed by a clinician) and 1 accepted code, whoever saves them;',     # (R4-7: from the counts)
-                      ' '.join(notes_help(self.client.get(f'/encounters/{encounter.pk}/')).split()))
+                      'blank; 2 reviewed by a clinician), whoever saves them;', help_text)     # (R4-7: from the counts)
+        # 0034 (coding ledger): a changed notes save keeps an accepted code, marked for re-review, instead of clearing it.
+        self.assertIn('Saving changed notes keeps 1 accepted code and marks it for re-review.', help_text)
         self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic follow-up.'})
-        self.assertEqual((encounter.answers, encounter.template_review, CodeSuggestion.objects.filter(encounter=encounter).count()),
-                         ({}, {}, 0))
+        self.assertEqual((encounter.answers, encounter.template_review,
+                          list(CodeSuggestion.objects.filter(encounter=encounter).values_list('review_required', flat=True))),
+                         ({}, {}, [True]))
         event = last_event('encounter.notes_saved', encounter)
         # R2-4: each answer is counted once — the accepted suggestion (also `edited` and reviewed) only as accepted.
-        self.assertEqual(event.get('cleared'), cleared(accepted_suggestion=1, left_blank=1, with_clinician_review=2, codes=1))
+        self.assertEqual(event.get('cleared'), cleared(accepted_suggestion=1, left_blank=1, with_clinician_review=2, codes=0))
+        self.assertEqual(event.get('codes_marked_for_review'), 1)
 
     def test_a_reviewed_transcript_is_applied_even_when_it_leaves_the_notes_as_they_were(self):
         """The unchanged-notes no-op is for a notes save only: a reviewed transcript is always applied (and recorded), or
@@ -442,8 +446,9 @@ class TheNotesPageSaysWhatAChangedSaveClears(OrdinaryDraft, TestCase):
         self.assertEqual(encounter.answers, {})                                     # (the control: only the code is left)
         job = self.transcript_awaiting_review(encounter)
         page = self.client.get(f'/encounters/{encounter.pk}/')
-        self.assertIn('Saving changed notes clears 1 accepted code,', notes_help(page))        # (R4-7: named from the counts)
-        self.assertIn('Saving clears 1 accepted code;', transcript_help(page, job))
+        # 0034 (coding ledger): a changed notes save keeps an accepted code, marked for re-review, instead of clearing it.
+        self.assertIn('Saving changed notes keeps 1 accepted code and marks it for re-review.', notes_help(page))
+        self.assertIn('Saving keeps 1 accepted code and marks it for re-review.', transcript_help(page, job))
 
     def test_statement_decisions_alone_are_warned_about(self):
         encounter, _keys = self.reviewed_draft()
@@ -497,8 +502,10 @@ class TheSaveSaysExactlyWhatItCleared(OrdinaryDraft, TestCase):
         self.post(f'/encounters/{encounter.pk}/clear-review/', encounter, {'confirm_clear': 'on'})
         self.assertEqual((encounter.answers, encounter.template_review), ({}, {}))           # (the control: only the code)
         said = self.saved(encounter)
-        self.assertEqual(last_event('encounter.notes_saved', encounter)['cleared']['codes_accepted'], 1)
-        self.assertIn(SAVED + 'Cleared, and recorded under your name: 1 accepted code. ' + NEXT, said)
+        # 0034 (coding ledger): a changed notes save keeps an accepted code, marked for re-review, instead of clearing it.
+        self.assertEqual(last_event('encounter.notes_saved', encounter)['cleared']['codes_accepted'], 0)
+        self.assertEqual(last_event('encounter.notes_saved', encounter)['codes_marked_for_review'], 1)
+        self.assertIn(SAVED + 'Kept and marked for re-review: 1 accepted code. ' + NEXT, said)
         for claim in ('answer draft', 'review decision', 'statement'):
             self.assertNotIn(claim, said.split(NEXT)[0])                           # (what it says it cleared)
 
@@ -750,9 +757,12 @@ class CodeWritersSerializeWithANotesSave(OrdinaryDraft, TransactionTestCase):
         encounter.refresh_from_db()
         self.assertEqual((accepted.status_code, save.get('save_ran'), save.get('status')), (302, 'waiting', 302))
         self.assertTrue(AuditEvent.objects.filter(action='coding.accept', target=str(offer.pk)).exists())
-        self.assertEqual((encounter.notes, CodeSuggestion.objects.filter(encounter=encounter).count()), (self.CHANGED, 0))
-        self.assertEqual(last_event('encounter.notes_saved', encounter).get('cleared', {}).get('codes_accepted'), 1)
-        self.assertIn('accepted code', save.get('messages', ''))
+        # 0034 (coding ledger): a changed notes save keeps an accepted code, marked for re-review, instead of clearing it.
+        self.assertEqual((encounter.notes, list(CodeSuggestion.objects.filter(encounter=encounter).values_list(
+            'review_required', flat=True))), (self.CHANGED, [True]))
+        self.assertEqual(last_event('encounter.notes_saved', encounter).get('cleared', {}).get('codes_accepted'), 0)
+        self.assertEqual(last_event('encounter.notes_saved', encounter).get('codes_marked_for_review'), 1)
+        self.assertIn('Kept and marked for re-review: 1 accepted code.', save.get('messages', ''))
 
     def test_suggestions_are_never_drawn_from_notes_a_concurrent_save_replaced(self):
         """`coding` wrote suggestions from the notes it had read, unlocked, before a save replaced them. Since R4-2 it reads
@@ -1090,16 +1100,19 @@ class WordNotesSaveAndClear(OfflineWordForm):
                                                                      'notes': self.encounter.notes + '\nSynthetic addendum.'})
         self.assertEqual(last_event('encounter.notes_saved', self.encounter).get('cleared'),
                          cleared(reviewed_unedited=3, unreviewed_unedited=1, with_clinician_review=3, statements_reviewed=2,
-                                 statements_recorded_unreviewed=1, codes=1))
+                                 statements_recorded_unreviewed=1, codes=0))
+        # 0034 (coding ledger): a changed notes save keeps an accepted code, marked for re-review, instead of clearing it.
+        self.assertEqual(last_event('encounter.notes_saved', self.encounter).get('codes_marked_for_review'), 1)
 
     def test_a_changed_save_names_each_thing_it_cleared(self):
         self.clinician_reviews()
         OrdinaryDraft.accepted_code(self, self.encounter)
         response = self.client.post(f'/encounters/{self.encounter.pk}/notes/', {'revision': self.encounter.revision,
                                     'notes': self.encounter.notes + '\nSynthetic addendum.'}, follow=True)
+        # 0034 (coding ledger): a changed notes save keeps an accepted code, marked for re-review, instead of clearing it.
         self.assertIn('Notes saved. Cleared, and recorded under your name: the answer draft (4 answers, 4 reviewed by a '
-                      'clinician), 3 saved prewritten statement wordings (3 reviewed by a clinician) and 1 accepted code. '
-                      'Generate and review a new answer draft.', shown_messages(response))
+                      'clinician) and 3 saved prewritten statement wordings (3 reviewed by a clinician). Kept and marked '
+                      'for re-review: 1 accepted code. Generate and review a new answer draft.', shown_messages(response))
 
     def test_clearing_counts_the_statement_decisions_it_clears(self):
         self.clinician_reviews()
@@ -1225,15 +1238,13 @@ class SuggestingCodesDoesNotHoldTheDocument(OrdinaryDraft, TransactionTestCase):
     LOCK_BOUND = 5.0          # seconds the encounter row may stay locked by one Suggest codes request
     REQUEST_BOUND = 30.0      # seconds the whole request may take on this input
 
-    def suggested(self, separator):
+    def suggested(self, notes):
         today = timezone.localdate()
         release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-review-guards-cost', sha256='0' * 64,
                                          effective_from=today - timedelta(days=1), effective_until=today + timedelta(days=1),
                                          source_url='https://synthetic.invalid/codes')
         Code.objects.bulk_create([Code(release=release, code=code, description='Synthetic fixture; no clinical use')
                                   for code in MANY_CODES])
-        notes = separator.join(MANY_CODES)
-        self.assertEqual(len(notes), 47999)                                          # (the control: the refuter's size)
         _template, version = self.upload(self.make_docx(), 'docx')
         encounter = self.create_encounter(version, notes)
         self.client.force_login(self.member('guards-cost-employee', 'employee'))
@@ -1266,22 +1277,45 @@ class SuggestingCodesDoesNotHoldTheDocument(OrdinaryDraft, TransactionTestCase):
         return (response.status_code, CodeSuggestion.objects.filter(encounter=encounter).count(),
                 held, round(measured.get('other_waited', -1), 1), round(answered - started, 1))
 
-    def within_bounds(self, separator):
-        status, count, held, waited, took = self.suggested(separator)
-        # A document holds at most 100 suggestions: the first 100 the notes document, and the other 11,900 said and audited.
+    # ⚠️ Refutation C10 of 4cfa4301: a three-character code is suggested only where a code label names it, so the refuter's
+    # 12,000 bare tokens are now the read path alone (looked up, quoted, label-checked, counted and said, nothing written),
+    # and the write path is measured on labelled forms of the same size: one label over a list of all 12,000 on one line,
+    # and 4,000 labelled lines (a label per line fits 4,000 codes in the same 48,000 characters). The bounds are unchanged
+    # and now include the label scan.
+    def within_bounds(self, notes, documented):
+        status, count, held, waited, took = self.suggested(notes)
+        # A document holds at most 100 suggestions: the first 100 the notes document, and the rest said and audited.
         details = last_event('coding.suggest', self.encounter)
-        self.assertEqual((status, count, details.get('count'), details.get('not_suggested_over_limit')), (302, 100, 100, 11900))
+        self.assertEqual((status, count, details.get('count'), details.get('not_suggested_over_limit')),
+                         (302, 100, 100, documented - 100))
         self.assertEqual(set(CodeSuggestion.objects.filter(encounter=self.encounter).values_list('terminology__code', flat=True)),
                          set(MANY_CODES[:100]))
-        self.assertIn('11900 further documented codes were not suggested: a document holds at most 100 code suggestions.', self.said)
+        self.assertIn(f'{documented - 100} further documented codes were not suggested: a document holds at most 100 code '
+                      'suggestions.', self.said)
+        self.bounded(held, waited, took)
+
+    def bounded(self, held, waited, took):
         self.assertTrue(held < self.LOCK_BOUND and waited < self.LOCK_BOUND and took < self.REQUEST_BOUND,
                         f'lock held {held} s, another request waited {waited} s, the request took {took} s')
 
     def test_codes_one_per_line(self):
-        self.within_bounds('\n')
+        notes = '\n'.join(MANY_CODES)
+        self.assertEqual(len(notes), 47999)                                          # (the control: the refuter's size)
+        status, count, held, waited, took = self.suggested(notes)
+        details = last_event('coding.suggest', self.encounter)
+        self.assertEqual((status, count, details.get('count'), details.get('three_character_unlabelled')), (302, 0, 0, 12000))
+        self.assertIn('12000 three-character entries in the notes match a diagnosis code but are not labelled', self.said)
+        self.bounded(held, waited, took)
 
     def test_codes_on_one_line(self):
-        self.within_bounds(' ')
+        notes = 'Dx codes: ' + ','.join(MANY_CODES)       # (not 'ICD-10: ': ICD is one of the 12,000 synthetic codes)
+        self.assertEqual(len(notes), 48009)                                          # (the control: the refuter's size)
+        self.within_bounds(notes, 12000)
+
+    def test_labelled_codes_one_per_line(self):
+        notes = '\n'.join('Dx code ' + code for code in MANY_CODES[:4000])
+        self.assertEqual(len(notes), 47999)
+        self.within_bounds(notes, 4000)
 
 
 def searched_line_by_line(notes, wanted):
@@ -1535,9 +1569,10 @@ class CodeRefusalsSayWhatHappened(OrdinaryDraft, TestCase):
         self.post(f'/encounters/{encounter.pk}/clear-review/', encounter, {'confirm_clear': 'on'})
         job = self.transcript_awaiting_review(encounter)
         page = self.client.get(f'/encounters/{encounter.pk}/')
-        self.assertIn('Saving changed notes clears 1 accepted code, whoever saves them;', ' '.join(notes_help(page).split()))
-        self.assertIn('Saving clears 1 accepted code; the clearing is recorded under your name.',
-                      ' '.join(transcript_help(page, job).split()))
+        # 0034 (coding ledger): a changed notes save keeps an accepted code, marked for re-review, instead of clearing it.
+        self.assertIn('Saving changed notes keeps 1 accepted code and marks it for re-review.', ' '.join(notes_help(page).split()))
+        self.assertIn('Saving keeps 1 accepted code and marks it for re-review.', ' '.join(transcript_help(page, job).split()))
+        self.assertNotIn('clears', notes_help(page) + transcript_help(page, job))  # nothing else is left to clear
         for claim in ('answer draft', 'review decision'):
             self.assertNotIn(claim, notes_help(page) + transcript_help(page, job))
 

@@ -1,0 +1,2171 @@
+{
+  "result": {
+    "format": "docx",
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "Name",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[2]",
+          "target": {
+            "type": "span",
+            "start": 6,
+            "end": 36,
+            "shape": "blank"
+          },
+          "fingerprint": "4f8cfc1efb9285450291ef90c6a5a2f074a36904478e6e8213a18b2a47cfa335"
+        }
+      },
+      {
+        "key": "v3_2",
+        "label": "Endocrinology Centre",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[2]",
+          "target": {
+            "type": "span",
+            "start": 69,
+            "end": 93,
+            "shape": "blank"
+          },
+          "fingerprint": "4f8cfc1efb9285450291ef90c6a5a2f074a36904478e6e8213a18b2a47cfa335"
+        }
+      },
+      {
+        "key": "v3_3",
+        "label": "When did your headaches start? #",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 46,
+            "end": 50,
+            "shape": "blank"
+          },
+          "fingerprint": "60cc5664d1681ac701451dcf3e2553f5f447b908ba2da5e95945b9554936840e"
+        }
+      },
+      {
+        "key": "v3_4",
+        "label": "days ago, #",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 63,
+            "end": 68,
+            "shape": "blank"
+          },
+          "fingerprint": "60cc5664d1681ac701451dcf3e2553f5f447b908ba2da5e95945b9554936840e"
+        }
+      },
+      {
+        "key": "v3_5",
+        "label": "weeks ago, #",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 82,
+            "end": 86,
+            "shape": "blank"
+          },
+          "fingerprint": "60cc5664d1681ac701451dcf3e2553f5f447b908ba2da5e95945b9554936840e"
+        }
+      },
+      {
+        "key": "v3_6",
+        "label": "months ago, #",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 101,
+            "end": 105,
+            "shape": "blank"
+          },
+          "fingerprint": "60cc5664d1681ac701451dcf3e2553f5f447b908ba2da5e95945b9554936840e"
+        }
+      },
+      {
+        "key": "v3_7",
+        "label": "Did your headaches start with the development of acromegaly?",
+        "kind": "choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "d339422f1742fe165bfa39ffda840812cc80f48b20ce0b2528d3a1bc7e5b8f4c"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, describe the timing of onset and symptoms"
+        ]
+      },
+      {
+        "key": "v3_8",
+        "label": "Do your headache vary with the control of your acromegaly?",
+        "kind": "choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "752da90239f54221e9cf74c64dbf528872af7052c639d2800afa726a7bb72589"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please describe"
+        ]
+      },
+      {
+        "key": "v3_9",
+        "label": "Is headache the worst aspect of your acromegaly?",
+        "kind": "choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[3]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[3]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[3]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "2994ff74310bcda0cb557aa181364872897fac39be4f049472199767eb85c324"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please expand"
+        ]
+      },
+      {
+        "key": "v3_10",
+        "label": "Did your headache become less severe after the treatment of your acromegaly?",
+        "kind": "choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[4]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[4]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[4]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "783f2a83533e67500b3a263a8a61e9fad8d187b1f4c64231b732979e225ab92a"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please expand"
+        ]
+      },
+      {
+        "key": "v3_11",
+        "label": "How many days per month do you have a headache?",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[5]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 51,
+            "end": 60,
+            "shape": "blank"
+          },
+          "fingerprint": "5c2d488e2418fbd8802efce709dac62438115a0d6bf513d3a6835e753f5fd9cb"
+        }
+      },
+      {
+        "key": "v3_12",
+        "label": "How many headache-free days do you have in a month?",
+        "kind": "text",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[5]/tc[0]/p[1]",
+          "target": {
+            "type": "span",
+            "start": 56,
+            "end": 65,
+            "shape": "blank"
+          },
+          "fingerprint": "3f55e3cd0c4955a4d20b50f608e7aea4e1596e207ac60b99e845775537de4fd9"
+        }
+      },
+      {
+        "key": "v3_13",
+        "label": "Not at all painful",
+        "kind": "choice",
+        "context": "10 > Not at all painful > 1 · occurrence 1 of 2 (table row 2: )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[1]",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[1]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[2]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[3]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[4]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[5]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[6]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[7]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[8]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[9]"
+              }
+            ]
+          },
+          "fingerprint": "289fa581fd6086fcd6d1261c885fdd27c36634253bcaf95d9ba30617336dbbe2",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[2]",
+              "fingerprint": "69b6e0fd34cf7050fc5003d05df25424bee00eb7e0eb61c5c9abdedb31006215"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[3]",
+              "fingerprint": "1e51ecddb5942f8e88f44c2c1e73e81f8691a29ce40beea0554d8d2d77226142"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[4]",
+              "fingerprint": "123e2a539e71a9a32d1cb7387e1126d5dbac40763ce74cc497f4102d1c334854"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[5]",
+              "fingerprint": "8e2a1d4193af4cc2e7f6499c96bd62ae7b8d39fbaa008c4fd8d6275b63aba9b7"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[6]",
+              "fingerprint": "dc9a7f7beaeb03702ed8b8901ea94f7d97325449f2b571788d5842fe5bd42936"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[7]",
+              "fingerprint": "9e8689b8c348303f7e37550cc0be8f6ea8459071a7346f20f67590e6dec16e9f"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[8]",
+              "fingerprint": "c4da57138bff3ce7827be6bd4f98ab11c8ec7ca4125fbd003c45956ffb4b2c6f"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[0]/tr[1]/tc[9]",
+              "fingerprint": "a6e43bb254866fad22af0ac3ba3654d809490abfe479ce35007654f77bf45ead"
+            }
+          ]
+        },
+        "options": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9"
+        ]
+      },
+      {
+        "key": "v3_14",
+        "label": "Not at all painful",
+        "kind": "choice",
+        "context": "10 > Not at all painful > 1 · occurrence 2 of 2 (table row 2: )",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[1]",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[1]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[2]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[3]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[4]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[5]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[6]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[7]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[8]"
+              },
+              {
+                "kind": "cell",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[9]"
+              }
+            ]
+          },
+          "fingerprint": "2ca5401739e77397a11e01f6d61f288b3a72b1a69ad73f59de55d2cc41df123a",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[2]",
+              "fingerprint": "d7e28a2c502dafb9b8ea0f083ba927e0dd7b1b16da75cddf3f2129a13acfecf5"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[3]",
+              "fingerprint": "24d6b2793ffcde77e0d176660db9ac0838767d06d3c7176f6ba70fe59cc043ff"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[4]",
+              "fingerprint": "1eb14ceee9577595f7d82f134ee330cd1676f1aa252eee9f495fd513b29c0e0a"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[5]",
+              "fingerprint": "5a096ef5435c6026933efcaf5b347c95485a780c6ffc66117042bd07f8ddd3c1"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[6]",
+              "fingerprint": "3f1d789e589143977bf0e5b5d1853edd64dd49bcdd96ab23a1e40b972affd837"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[7]",
+              "fingerprint": "9c47ea978409328a52b9d1c0b42517faac5f5eb0edc62bb4bf8426b52db56efc"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[8]",
+              "fingerprint": "5818e5e2ce8922ac1227e20f88d54a240e54433d46801283eef3ac3844d86bb7"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[6]/tc[0]/tbl[1]/tr[1]/tc[9]",
+              "fingerprint": "8f347a7c6cac146ebe78c9d5b8b46cc32558dd257b01f92541d5c661b65fd643"
+            }
+          ]
+        },
+        "options": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9"
+        ]
+      },
+      {
+        "key": "v3_15",
+        "label": "Do you have more than one type of headache?",
+        "kind": "choice",
+        "context": "10 > How severe are your headaches on average? (please circle the number which mos",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "caa27be710cc56285747cc43276f533c6402ae082c02fcdae4eb26efbb761af5"
+        },
+        "options": [
+          "No",
+          "Yes → If yes, focus on your worst headache type while answering the following questions."
+        ]
+      },
+      {
+        "key": "v3_16",
+        "label": "10. Please indicate what your headaches usually feel like: (tick all that apply):",
+        "kind": "multi_choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              }
+            ]
+          },
+          "fingerprint": "c789f192168e81883335e4f513e513aa78c253c3d9a670b0f6556a207679ea12",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+              "fingerprint": "1957ca94415ff9ccdf2344ac90df70d5d1546f4c965936df794052a5835900dc"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+              "fingerprint": "0a5531b0dd3ad4dcb68e3889ac0de59d48aa8525a9ac9611760b7ae1d4641856"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+              "fingerprint": "ba2c897ca1299ba1fdee166c5848ff1ae384881cbb95e83126b1245a802da2b2"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+              "fingerprint": "a97ce79011d27a7d88d67ee0ef1494c35fa703a32b2fd4a325ea05bcdf145c48"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+              "fingerprint": "b2f0ffcfa8e93456dbf7e37c818db440091a057ec7810b26d55a43c9bdc63d0e"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+              "fingerprint": "f8292a050fbe24e3ed25f07a5e2df3977087c58e1351cd6ca5de47aa05230756"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+              "fingerprint": "91232567e66d5fcf7be38acd7ee9f16a2581ebc8201844c88b900806115b50a1"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+              "fingerprint": "8c410b973de9916e4b39105c63f4ba693c72690700929e93dffb06ce8eb1f329"
+            }
+          ]
+        },
+        "options": [
+          "Throbbing/Pulsing",
+          "Dull",
+          "Shooting",
+          "Achy",
+          "Stabbing",
+          "Burning",
+          "Tight",
+          "Pressure",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_17",
+        "label": "Shortest ___ Longest ___ Average ____ or are they constant?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[10]/tc[0]/p[2]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[10]/tc[0]/p[2]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[10]/tc[0]/p[2]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "1d47ff19d71c7d3153c60308b2fb7e4e4a3de08a696669213efb80ab6919bff5"
+        },
+        "options": [
+          "No",
+          "Yes"
+        ]
+      },
+      {
+        "key": "v3_18",
+        "label": "Please indicate when your headaches are worst",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[11]/tc[0]/p[2]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[11]/tc[0]/p[2]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[11]/tc[0]/p[2]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[11]/tc[0]/p[2]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[11]/tc[0]/p[2]/glyphs",
+                "glyph": 3
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[11]/tc[0]/p[2]/glyphs",
+                "glyph": 4
+              }
+            ]
+          },
+          "fingerprint": "689b1d97dd19d8873fcda4f343f7f27fc03b534bf7fd9dab84fc041120d10f27"
+        },
+        "options": [
+          "Morning",
+          "Afternoon",
+          "Evening",
+          "During the night",
+          "No pattern"
+        ]
+      },
+      {
+        "key": "v3_19",
+        "label": "Are your headaches worse lying down or standing?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[12]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[12]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[12]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[12]/tc[0]/p[0]/glyphs",
+                "glyph": 2
+              }
+            ]
+          },
+          "fingerprint": "0e51cb846c406bcd5acce177c77746c3c8c42c409f5afa7fe68d805894868462"
+        },
+        "options": [
+          "Lying down",
+          "Standing",
+          "Both the same"
+        ]
+      },
+      {
+        "key": "v3_20",
+        "label": "Do your headaches wake you up in the middle of the night?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[13]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[13]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[13]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "bf0ba6678c9b30c391342c1c95afcfd058b40615b88b73fd4674a09fc890c9bd"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, how often?"
+        ]
+      },
+      {
+        "key": "v3_21",
+        "label": "15. Do you experience any of these symptoms 1 to 2 days before the onset of headache? Please tick all that apply.",
+        "kind": "multi_choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              }
+            ]
+          },
+          "fingerprint": "8c88f48780c4204be5a568e67a073a0b4f27caf0a4791ba7b0f21a98aa90bf4f",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+              "fingerprint": "9cad1d8ed3c411aadcf5b2ac82be70b6eb37dc7ef4db6e0c4571b1bcde1d99c1"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+              "fingerprint": "c030a66e15b6415b9304410533223dd0f89c1b5315207c354ced020c2d764095"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+              "fingerprint": "3986106242fba06e3c26d0d108704493824997e5175614d09f121a588b9e0a0c"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+              "fingerprint": "8216e3941b4cfbc6af330f02b8967fea0245263c1440e49a4ef6b92d0f6251bd"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+              "fingerprint": "d22d359e47f6c188b6bf12158a1fdd72703e32948efe2baaf03253d19701604b"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+              "fingerprint": "2dbab18568e5b158581f95ffaa8c85ffce5b006f33291a4e0c9de6116a0e1a71"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+              "fingerprint": "01ae202c9f10253e1d4264274cff0f3c2f5e62ae54d3a73e89cdf507136ecd38"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+              "fingerprint": "217f393ee221c63a76b9bf4b2539f4cd108cbb4f3154d255bf2db5cd910a4ac7"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[0]/p[0]/glyphs",
+              "fingerprint": "8653bf7fa397b265903c19247fa7a914043fe0b6cf8e6419f3f670754609d19d"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[1]/p[0]/glyphs",
+              "fingerprint": "00a4390e66e53dce810cc4ef95d65e88238af5b29b71b8f954381346b7650a95"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[3]/tc[2]/p[0]/glyphs",
+              "fingerprint": "9f0b16e6567ec39a2b91845d492301a8e28ac052500791f4b9bb638d6a8ef387"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[0]/p[0]/glyphs",
+              "fingerprint": "73db6d7a25ca4bebd37ce438ec48fb944cb726c5f98003355ad0b4143835e967"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[1]/p[0]/glyphs",
+              "fingerprint": "c68f88745d18612babf52f6ed80d74b21aac08d15ba5a0a2ef93613a9551311f"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[4]/tc[2]/p[0]/glyphs",
+              "fingerprint": "fa1cd1cc70b089afdf9e5b154a99a9f84ce0b65c1f824ae0b289badac55c0dc6"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]/glyphs",
+              "fingerprint": "e0a1e9e3642b2275082e4f34abf6a9cb0b414adf1b0bd58f52a392f3046fddd7"
+            }
+          ]
+        },
+        "options": [
+          "Hyperactivity",
+          "Difficulty with speech",
+          "Food cravings",
+          "Depressed feeling",
+          "Sensitive to light",
+          "Increased appetite",
+          "Irritability",
+          "Sensitive to sound/noise",
+          "Decreased appetite",
+          "Feeling sluggish",
+          "Dizziness",
+          "Increased urination",
+          "Difficulty concentrating",
+          "Excessive yawning",
+          "Stiff neck",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_22",
+        "label": "Visual:",
+        "kind": "multi_choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > 17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply.",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[3]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]/glyphs",
+                "glyph": 0
+              }
+            ]
+          },
+          "fingerprint": "d3691d2d70c75dcf44fb0ea14f6f8dd66cfdb7cfaf360d6ca097b7d01d2771e7",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+              "fingerprint": "27d8f83447a05e7b3aa0fb830068344c97b145c507741fe33af30265cd3a9799"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+              "fingerprint": "a0d1d032ea1fc7907a0236be04f71f49c0969d0daa328f568fb86ef52a48bf48"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]/glyphs",
+              "fingerprint": "fc55e02f9a5bd1c803b1983362800f50ec9147491870c7b7a6889e67c1aab7bc"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+              "fingerprint": "0ef8df988357733153997adba028cc7cdba7dfac53dd6b314d6ed77879e88c33"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+              "fingerprint": "e76a9b3619b306d7ff58d4c7886ab6fd12a53fb3d35c5e77d5b9c3d10b6df777"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+              "fingerprint": "241bdd90c6eb9a0bfd25765f78bddf221ab8cf63a452fed76c9e2a15233896fe"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[3]/p[0]/glyphs",
+              "fingerprint": "12e70ba02831c7bd7f8ac1893fc037e47e3e11164831b246bd6b067f7187fa49"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+              "fingerprint": "a9541ab50bc30a45fc35ec4eaa4a29a1479ea490be27086627b94790c51aff1b"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+              "fingerprint": "777d2c38ab1ff218d7732940041205612e25e6bca72e808c7d9a57e29ce6ce0a"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+              "fingerprint": "f409edaf1fc36cc4d90ed3c2ab0137e27bcbe5b08747e0019c9a5398fece4630"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]/glyphs",
+              "fingerprint": "eb72f9dbc79d6f49bd1fa559a511615892a4cf675130b2f716b524ccfad3a6ae"
+            }
+          ]
+        },
+        "options": [
+          "Flashing lights",
+          "Loss of vision in one eye",
+          "Tunnel vision",
+          "Spots: bright/dark",
+          "Zigzag lines",
+          "Loss of vision on one side",
+          "Double vision",
+          "Geometric forms",
+          "Wavy lines",
+          "Total blindness",
+          "Distorted vision",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_23",
+        "label": "If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs",
+                "glyph": 2
+              }
+            ]
+          },
+          "fingerprint": "a9eaed256f2068c5f9b3f740b8583b261598d4d21174034b5a364b34578e58f4"
+        },
+        "options": [
+          "during the headache,",
+          "after the headache, OR",
+          "without the headache"
+        ]
+      },
+      {
+        "key": "v3_24",
+        "label": "Food/beverage",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[0]/p[3]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[3]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[3]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[3]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[3]/glyphs",
+                "glyph": 3
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[3]/glyphs",
+                "glyph": 4
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[3]/glyphs",
+                "glyph": 5
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "sdt",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[0]"
+              },
+              {
+                "kind": "sdt",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[1]"
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/glyphs",
+                "glyph": 2
+              }
+            ]
+          },
+          "fingerprint": "dbd98d4b4aa3abfd8e8c717da37cfcdeaffbd92d5c5c83e4584b734d688f95a9",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/glyphs",
+              "fingerprint": "d2981b15dced5c82b90b31d8db9626395b6d7886e47c86387107067c44dc55b7"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[0]",
+              "fingerprint": "2303ea7d0985214a41d6cbfa129c3c431452573471e8f07941dc7f0318d981d5"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[1]",
+              "fingerprint": "49652b0eae866eff7a8501519247ec902d57d6369fe95de4c708e55c002cbdb7"
+            }
+          ]
+        },
+        "options": [
+          "Fasting/skipping meals",
+          "Chocolate",
+          "Caffeine",
+          "Nitrates",
+          "MSG",
+          "Aged cheese",
+          "Alcohol beverages",
+          "Wine [",
+          "Red",
+          "White ],",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_25",
+        "label": "Physical exertion",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[0]/p[6]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[6]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[6]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[6]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[6]/glyphs",
+                "glyph": 3
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[6]/glyphs",
+                "glyph": 4
+              }
+            ]
+          },
+          "fingerprint": "074b65b1239a8c25fac4f38df449f95e01f30476c0b804c8544123b11eef0bef"
+        },
+        "options": [
+          "Coughing",
+          "Talking",
+          "Chewing",
+          "Exercise",
+          "Sexual intercourse"
+        ]
+      },
+      {
+        "key": "v3_26",
+        "label": "Hormonal",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[0]/p[8]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[8]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[8]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[8]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[8]/glyphs",
+                "glyph": 3
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[8]/glyphs",
+                "glyph": 4
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[8]/glyphs",
+                "glyph": 5
+              }
+            ]
+          },
+          "fingerprint": "20d3c2941aa83e0171ca571b2845430583c353863cc316d29913ee4a2f5e1b54"
+        },
+        "options": [
+          "Menstruation",
+          "Before",
+          "During",
+          "After;",
+          "Pregnancy",
+          "Menopause"
+        ]
+      },
+      {
+        "key": "v3_27",
+        "label": "Stress",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[0]/p[10]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[10]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[10]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[10]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[10]/glyphs",
+                "glyph": 3
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[10]/glyphs",
+                "glyph": 4
+              }
+            ]
+          },
+          "fingerprint": "23b3e36c141ce6132a61f8b21264c3edb71c49ce4d37d9526a53770d83642692"
+        },
+        "options": [
+          "Work",
+          "Home",
+          "Family",
+          "Spouse",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_28",
+        "label": "Environmental",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[0]/p[12]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[12]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[12]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[12]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[12]/glyphs",
+                "glyph": 3
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[12]/glyphs",
+                "glyph": 4
+              }
+            ]
+          },
+          "fingerprint": "87a389f2d7e0c981d741f18facd17bde6a4d7d137440011af162e21428fef66e"
+        },
+        "options": [
+          "Allergies",
+          "Weather changes",
+          "Altitude",
+          "Sunlight",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_29",
+        "label": "Sleep",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[0]/p[14]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[14]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[14]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[17]/tc[0]/p[14]/glyphs",
+                "glyph": 2
+              }
+            ]
+          },
+          "fingerprint": "e1f4a0246acbe1b494f4eb04f5e010b0e3577be51f801e8891d1e1d3c92232ee"
+        },
+        "options": [
+          "Lack of sleep",
+          "Too much sleep",
+          "Change in wake/sleep"
+        ]
+      },
+      {
+        "key": "v3_30",
+        "label": "Other Triggers",
+        "kind": "text",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[0]/p[16]",
+          "target": {
+            "type": "span",
+            "start": 16,
+            "end": 102,
+            "shape": "blank"
+          },
+          "fingerprint": "8a5fe89d5af439d1a86ac58aacca823821c4327e33bf09f7918a6f34bb59550f"
+        }
+      },
+      {
+        "key": "v3_31",
+        "label": "19. Do any of the following activities worsen your headache once it starts?",
+        "kind": "choice",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              }
+            ]
+          },
+          "fingerprint": "d25fb5acecc4039f0a571ea44b4e5b14592dede40b227a8f5609ff8ba6a96526",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+              "fingerprint": "3c3e49fdb33f4e6e5e746749cf59e8264a2ae2fd06198f314ced48a774d3560f"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+              "fingerprint": "6b5a6c07834faa11234444a8aeadc8d82f625e2c30460474b7f41129986193d5"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]/glyphs",
+              "fingerprint": "7d3073248ee4cd34a8d7135c48a78b09fb6263124b3df000f9410592f1893031"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+              "fingerprint": "ab64ca759a2ef5f4fe5d379a7ee30cd68ee839f607d017bd4a7875cbe16bcbbd"
+            }
+          ]
+        },
+        "options": [
+          "Walking",
+          "Climbing steps",
+          "Exercise",
+          "N/A",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_32",
+        "label": "Do any of the following factors relieve your headaches",
+        "kind": "text",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[19]/tc[0]/p[1]",
+          "target": {
+            "type": "paragraph"
+          },
+          "fingerprint": "38dfbfbd996b22f7d3f7d41d81983862b20a5e3c884c764383281effcb91e69e"
+        }
+      },
+      {
+        "key": "v3_33",
+        "label": "Do you think your headaches are related to acromegaly?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[20]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[20]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[20]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "332929433f37c7fea268f4114acf29e9c8263e8e25a0aafb6b2573998b6be310"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please expand"
+        ]
+      },
+      {
+        "key": "v3_34",
+        "label": "Is your headache always on the same side of the head?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[21]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[21]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[21]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "808b1d4a35ea7d892fa795ee680a2912cd4bb2e78d44d99d50e93adff5ef9463"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please expand"
+        ]
+      },
+      {
+        "key": "v3_35",
+        "label": "Is your headache the same side as the tumour?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[22]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[22]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[22]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[22]/tc[0]/p[0]/glyphs",
+                "glyph": 2
+              }
+            ]
+          },
+          "fingerprint": "dd95e0f88290b5bfb05631b7397e37f12efedd2153a6a5a35b176698a063a85f"
+        },
+        "options": [
+          "No",
+          "Yes",
+          "Don’t know"
+        ]
+      },
+      {
+        "key": "v3_36",
+        "label": "Which treatments for acromegaly help with your headache?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[23]/tc[0]/p[1]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[1]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[1]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[1]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[1]/glyphs",
+                "glyph": 3
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[1]/glyphs",
+                "glyph": 4
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[2]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[2]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[2]/glyphs",
+                "glyph": 2
+              }
+            ]
+          },
+          "fingerprint": "7163d09102dc0a23eb13c1629f1b062daeee9395d6df78a0f3796aea35ee960d",
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[23]/tc[0]/p[2]/glyphs",
+              "fingerprint": "36a52f781a606249dc9626062343e75aae77045b6397b097142f0c3f394745ae"
+            }
+          ]
+        },
+        "options": [
+          "Surgery",
+          "Radiotherapy",
+          "Octreotide",
+          "Lanreotide",
+          "None",
+          "Pasireotide",
+          "Pegvisomant",
+          "Other"
+        ]
+      },
+      {
+        "key": "v3_37",
+        "label": "If somatostatin analogues (octreotide/ lanreotide/ pasireotide) help, how quickly do they improve your headache?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[23]/tc[0]/p[5]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[5]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[5]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[5]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[23]/tc[0]/p[5]/glyphs",
+                "glyph": 3
+              }
+            ]
+          },
+          "fingerprint": "fa39f78c8b3e165b05732a3165151326f8a77e2f5227ceee37b44eb70b3926cf"
+        },
+        "options": [
+          "Immediately",
+          "Within days",
+          "Within weeks",
+          "They do not improve headache"
+        ]
+      },
+      {
+        "key": "v3_38",
+        "label": "If somatostatin analogues help, how quickly does the effect take to wear off?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[24]/tc[0]/p[2]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[24]/tc[0]/p[2]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[24]/tc[0]/p[2]/glyphs",
+                "glyph": 1
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[24]/tc[0]/p[2]/glyphs",
+                "glyph": 2
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[24]/tc[0]/p[2]/glyphs",
+                "glyph": 3
+              }
+            ]
+          },
+          "fingerprint": "10d052d589d861976c51dad0c9ac30020856f5d5ffb2d104981bc4c5b14db06a"
+        },
+        "options": [
+          "Hours",
+          "Days",
+          "Weeks",
+          "They do not improve headache"
+        ]
+      },
+      {
+        "key": "v3_39",
+        "label": "Are you reliant on somatostatin analogues to help your headache?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[25]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[25]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[25]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "b353ebc933556ef43cddc004f3dc4a9720b209ef32ac84eac66341dd06c775db"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please expand"
+        ]
+      },
+      {
+        "key": "v3_40",
+        "label": "Can you tell when your next somatostatin analogue injection is due by your headache coming back?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[26]/tc[0]/p[1]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[26]/tc[0]/p[1]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[26]/tc[0]/p[1]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "7e980fc46270b990af78fa37f604ecf29383c5fcc415a7062504136047f167d1"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please describe further"
+        ]
+      },
+      {
+        "key": "v3_41",
+        "label": "Are there any other medications, or anything else, which improves your headache?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "9510a80e70d554e6157ea611459da6e741dc40505102d880284dab9426330a60"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, please expand"
+        ]
+      },
+      {
+        "key": "v3_42",
+        "label": "Answer",
+        "kind": "text",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[27]/tc[0]/p[2]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 200,
+            "shape": "blank"
+          },
+          "fingerprint": "a78150276a33d95609b12f1f1c3ed1fd9395f50eecfe653f9d076262f9e560c1"
+        }
+      },
+      {
+        "key": "v3_43",
+        "label": "Did you ever need to attend A&E for your headache?",
+        "kind": "choice",
+        "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[28]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[28]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[28]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "fingerprint": "d3a2061523aa70adacd54f578da0c8d1c5d7af004c83913e6d9754c84c0a1432"
+        },
+        "options": [
+          "No",
+          "Yes → if yes, how many times"
+        ]
+      }
+    ],
+    "warnings": [
+      "Nested option grid at word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 9. Where are your headaches located in general? Please tick all that apply, and indicate right or left where appropriate. Options: ☐ Temple - ☐ Right  ☐ Left☐ Front of head ☐ Ear -  ☐Right ☐ Left ☐ Back of head - ☐ Right  ☐ Left ☐ Around head ☐ Neck ☐ Top of head - ☐ Right  ☐ Left ☐ Eye - ☐ Right  ☐ Left ☐ Jaw ☐ Other ____________________ ",
+      "Unassigned write-in beside a nested option at word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]. Review this separate answer area. Printed text: ☐ Other: __________________________________",
+      "Unassigned write-in beside a nested option at word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]. Review this separate answer area. Printed text: ☐ Other: ________________________________________________________________________",
+      "Nested option grid at word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 16. Do you experience any of these symptoms during your headache? Please tick all that apply. Options: ☐ Nausea or upset stomach/vomiting ☐ Sensitivity to smells ☐ Sensitivity to light (prefer a dark room) ☐ Difficulty thinking/concentrating/focusing ☐ Sensitivity to sound (prefer a quiet room) ☐ Difficulty speaking/slurred speech ☐ Sore/stiff neck ☐ Increased Urination ☐ Vision changes (blurred, spots, patterns) ☐ Anxiety ☐ Eye tearing in only ONE EYE ☐ Irritability ☐ Runny nose in only ONE NOSTRIL ☐ Memory problems ☐ Ringing in ears ☐ Increased appetite ☐ Eye-redness [☐ Right  ☐ Left] ☐ Decreased appetite ☐ Drooping eyelid [☐ Right  ☐ Left]☐ Diarrhoea ☐ Swelling of eyelid [☐ Right  ☐ Left]☐ Constipation ☐ Change in pupil [☐ Larger  ☐ Smaller]☐ Insomnia ☐ Dizziness/vertigo ☐ Sleepiness ☐ Imbalance ☐ Confusion☐ Numbness/Tingling [Where? ___________________ ] ☐ Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)☐ Other: ____________________________________________________________________________",
+      "Nested option grid at word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 16. Do you experience any of these symptoms during your headache? Please tick all that apply. Options: ☐ Nausea or upset stomach/vomiting ☐ Sensitivity to smells ☐ Sensitivity to light (prefer a dark room) ☐ Difficulty thinking/concentrating/focusing ☐ Sensitivity to sound (prefer a quiet room) ☐ Difficulty speaking/slurred speech ☐ Sore/stiff neck ☐ Increased Urination ☐ Vision changes (blurred, spots, patterns) ☐ Anxiety ☐ Eye tearing in only ONE EYE ☐ Irritability ☐ Runny nose in only ONE NOSTRIL ☐ Memory problems ☐ Ringing in ears ☐ Increased appetite ☐ Eye-redness [☐ Right  ☐ Left] ☐ Decreased appetite ☐ Drooping eyelid [☐ Right  ☐ Left]☐ Diarrhoea ☐ Swelling of eyelid [☐ Right  ☐ Left]☐ Constipation ☐ Change in pupil [☐ Larger  ☐ Smaller]☐ Insomnia ☐ Dizziness/vertigo ☐ Sleepiness ☐ Imbalance ☐ Confusion☐ Numbness/Tingling [Where? ___________________ ] ☐ Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)☐ Other: ____________________________________________________________________________",
+      "Unassigned write-in beside a nested option at word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]. Review this separate answer area. Printed text: ☐ Other: ___________________",
+      "Nested option grid at word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply. Visual: Sensory and other: Options: ☐ Numbness/tingling [Where? ___________________ ]☐ Light headedness ☐ Speech difficulty ☐ One-sided weakness [☐ Right  ☐ Left]☐ Vertigo ☐ Confusion/déjà vu/hallucinations ☐ Dizziness/unsteadiness ☐ Other: ______________________ ",
+      "Unassigned write-in beside a nested option at word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]. Review this separate answer area. Printed text: ☐ Other: ______________________________________________________________",
+      "Nested option grid at word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]: There is not one complete printed parent question. Printed source: 20. Do any of the following factors relieve your headaches: Options: ☐ Lying down ☐ Dark quiet room ☐ Hot compress ☐ Massage ☐ N/A☐ Standing ☐ Ice/Cold compress ☐ Keeping active/pacing ☐ Pregnancy ☐ Other: ______________________________________________________________________",
+      "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+      "Answers expand and can change pagination. Review the exported document's layout."
+    ],
+    "contract": "v3",
+    "adapter": "word-v3",
+    "sandbox": "landlock+seccomp",
+    "sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff"
+  },
+  "engine_sha256": "1abbdc24b0d3b3a25165827a6a6c9e6be2500c7be70883482724ab929da690f7"
+}

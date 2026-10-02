@@ -1,0 +1,23 @@
+Freeze the Sonnet 5 campaign diagnostics as checked, defects included
+
+Before any provider request, the synthetic diagnostic sets and their independent check:
+
+- mapping/: seven synthetic blank forms (fresh wording, deterministic generator; the .docx
+  live in the gitignored runtime directory with their sha256), independent expected maps
+  written before any engine run (EXPECTED-SHA256SUMS), an engine-free map checker, and the
+  pre-model deterministic baseline (inspect 35/45 areas, layout proposal 42/45; a consent
+  declaration offered as an answerable field).
+- notes/: sixteen synthetic note cases drawn from our own probe material, with raw-model and
+  app-adoption expectations separated, and the offline recording at 8e3dcfd0.
+- layout-path/REPORT.md: every component of the rendered layout path runs as the claude
+  account except the renderer, a docker run of a pinned image; no deployed configuration has
+  the witness, so the deployed-equivalent condition is without it.
+- offline-replays/: D30/D31 whole-app replays on the candidate, mocked model: MAPPA and the
+  two-option community-leave selection fixed; long answers held with field relations on.
+- CHECK.md: the independent checker's verdict. It finds the mapping grader cannot tell a
+  correct model hold from doing nothing (M1), the notes cases run at the generation layer
+  only (N6), four short provider-bound phrases overlapping development labels, and several
+  weak or tuned items. These sets are therefore NOT sendable as they stand; the repair pass
+  is committed separately and re-frozen before any request.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,14 @@
+test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) ... ok
+test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) ... ok
+test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) ... ok
+test_link_only_value_cell_is_not_replacement_guidance (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_only_value_cell_is_not_replacement_guidance) ... ok
+test_normal_blank_after_link_keeps_text_and_relationship (documents.test_hyperlink_destinations.HyperlinkDestinations.test_normal_blank_after_link_keeps_text_and_relationship) ... ok
+test_old_mapping_cannot_replace_fixed_hyperlink (documents.test_hyperlink_destinations.HyperlinkDestinations.test_old_mapping_cannot_replace_fixed_hyperlink) ... ok
+test_old_whole_cell_mapping_cannot_remove_later_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_old_whole_cell_mapping_cannot_remove_later_link) ... ok
+test_unlinked_blue_guidance_cell_remains_fillable (documents.test_hyperlink_destinations.HyperlinkDestinations.test_unlinked_blue_guidance_cell_remains_fillable) ... ok
+test_unlinked_colored_explicit_hint_remains_fillable (documents.test_hyperlink_destinations.HyperlinkDestinations.test_unlinked_colored_explicit_hint_remains_fillable) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.901s
+
+OK

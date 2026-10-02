@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__rr__probes__export.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-a7932d7ba0724de14.jsonl:106",
+   "timestamp": "2026-09-29T02:02:05.176Z",
+   "sha256_after": "aa057f04001b715083a33dc3dee767413fb32da580e5b5b1403e4db3be01216c",
+   "bytes_after": 3187
+  }
+ ],
+ "lines": 55,
+ "sha256": "aa057f04001b715083a33dc3dee767413fb32da580e5b5b1403e4db3be01216c"
+}

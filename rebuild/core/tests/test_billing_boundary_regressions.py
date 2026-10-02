@@ -19,6 +19,7 @@ from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections, connection, connections
 from django.test import Client, TestCase, TransactionTestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 
 from core import generation
@@ -334,7 +335,7 @@ class CancellationNeverDeadlocks(SyntheticFixture,TransactionTestCase):
         def paused_validated(result):
             adopting.set();time.sleep(0.5+extra_pause);return original_validated(result)
         result=adopted_live_result(self.encounter.notes,self.encounter.template_version.fields,'req_regression_cancel_lock')
-        browser=Client();browser.force_login(self.user)
+        browser=SurfaceClient();browser.force_login(self.user)
         with patch('core.jobs.generation.generate',return_value=result),patch('core.jobs.generation.validated',side_effect=paused_validated):
             worker,worker_outcome=self.in_thread(run_one)
             self.assertTrue(adopting.wait(timeout=30))
@@ -382,7 +383,7 @@ class RoundTwoRegressions(RegressionFixture,TestCase):
         admin=User.objects.create_user(username='regression-admin',email='regression-admin@synthetic.invalid',password=self.password,verified_at=timezone.now(),is_staff=True)
         device=TOTPDevice.objects.create(user=admin,confirmed=True,name='Synthetic authenticator')
         code=str(totp(device.bin_key,step=device.step,t0=device.t0,digits=device.digits)).zfill(6)
-        client=Client()
+        client=SurfaceClient()
         self.assertEqual(client.post('/login/',{'email':admin.email,'password':self.password,'otp':code}).status_code,302)
         return client
 

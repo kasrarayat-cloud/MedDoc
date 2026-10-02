@@ -1,0 +1,31 @@
+{
+  "base": "b1c3b95cca1a807f31eb5e3244258e8373bf9751",
+  "source_sha256": {
+    "rebuild/core/generation_batch.py": "7690d5992679897e423b8ecbcc72134a527dc0a0651bb8786d50072927fe94c8",
+    "rebuild/core/batch_jobs.py": "89d7fd5456931d0c60156dab5efae4a785697e344e4435409817c8f11794f123",
+    "rebuild/documents/service.py": "c4793b3567c64b1ba4564096ad1d2603eda9dee03edb62a0322f77cd6378265a",
+    "rebuild/documents/engine.py": "17b6413d14ad39b40626f93b3513293e00707360b4a9dc07b4e4a39e4c53b2ac",
+    "rebuild/documents/word_v3.py": "7a3f9731e0bba132c33058804b9e9dcd0782aed9a45cf368577e31d8f9b150f7",
+    "rebuild/core/tests/test_batch_effective_constraints.py": "90fd6a5e2616278c888b253e93a3b8df7de4570f7b287e6e67e38b8851070fc9",
+    "rebuild/core/tests/test_generation_batch.py": "09a511b813ba65153268378e664801ec86589b5cfd8486cb4eb728ce8d79f6a9"
+  },
+  "evidence_sha256": {
+    "probe_preserved_checks.py": "fa53884559d10ac9d84fa2196f9c132c2faeef5c1986f3da6991558625b66b2c",
+    "prechecked-result.json": "a7ed7ec1bfb5d493fac3b6e9042240f0a0349a27f71b64678744ed9fe310c427",
+    "01-original-red.log": "bfb8c5e5f8815382776a21f7501a7e8b9f007f4be072446230dfbe48cae7cba0",
+    "02-focused.log": "cf2ded9c2ff5317777e30adaa6a58aad8e7065a15fe833c00ae888004225b876",
+    "03-affected.log": "003b095706a5da8633dc172596f876d937d69ace2ac1553c0434a1980fc7d444",
+    "04-final-focused.log": "92c571fa1a3d2246f335efebf091c931b1d219aaef21bd8bb7f3918530265ec3",
+    "replay_original.py": "4fc9a890be999ce38fa2f7044b40f76f32780553fa587385a0943de205ceb214",
+    "original-repaired.json": "f3077b806eb3c115710fdb5ccc39a52f839e8914086a708d53421d1c17bd4229",
+    "05-original-repaired.log": "27c9f6e33e8dcd076db41b1bd0add2270da1dd9b6fcf8dec0df374ce7f6c0cf4"
+  },
+  "runtime_docx_sha256": {
+    "prechecked-export.docx": "6e8d7dbca092dfa288f0e655a70654cd67dd1d1296e88acb147e5c01e8a434cd",
+    "prechecked-original.docx": "f3807dc2eb330aaa67ed2c694e25451b06bd94c40e3bf9c287577c0d7f4d3b03",
+    "prechecked-repaired-export.docx": "567fb335dcb06c431b6407037bb67b1dfe68c5b380333c96ef7583d184d4c61d"
+  },
+  "unchanged_run_one_ast": "35ea7ea849479e7d2db33623ccc02401f1fd47d46f4e634022ffa1445938a160",
+  "result": "final9PASS29.245s; prior affected29PASS1expectedclinicalfailure84.332s; original exact103field badanswer nowrefused; corrected actualexportoneActive",
+  "provider_calls": 0
+}

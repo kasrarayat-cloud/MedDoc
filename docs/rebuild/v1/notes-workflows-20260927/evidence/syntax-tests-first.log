@@ -1,0 +1,123 @@
+Using existing test database for alias 'default' ('test_quillmd_ci')...
+test_compound_activity_supported_but_missing_disclosure_is_assisted (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_compound_activity_supported_but_missing_disclosure_is_assisted) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+
+  test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) (question='How does the patient sleep?') ... ERROR
+  test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) (question='What distance does the patient walk?') ... ERROR
+  test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) (question='How did the injury happen?') ... ERROR
+test_compound_review_preserves_printed_text_without_inventing_coverage (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_compound_review_preserves_printed_text_without_inventing_coverage) ... ok
+test_dependency_failure_and_bounds_preserve_old_finite_path (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_dependency_failure_and_bounds_preserve_old_finite_path) ... ok
+test_fragments_are_not_released_on_generation_or_stored_reader (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_fragments_are_not_released_on_generation_or_stored_reader) ... ok
+test_materially_varied_complete_sentences_keep_exact_text_and_offsets (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_materially_varied_complete_sentences_keep_exact_text_and_offsets) ... 
+  test_materially_varied_complete_sentences_keep_exact_text_and_offsets (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_materially_varied_complete_sentences_keep_exact_text_and_offsets) (quote='The patient sleeps through the night.') ... FAIL
+test_no_actor_context_correction_side_or_shape_guard_is_replaced (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_no_actor_context_correction_side_or_shape_guard_is_replaced) ... 
+  test_no_actor_context_correction_side_or_shape_guard_is_replaced (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_no_actor_context_correction_side_or_shape_guard_is_replaced) (notes='Her father attends an art class every Monday.', label='Activities') ... FAIL
+
+======================================================================
+ERROR: test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) (question='How does the patient sleep?')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 162, in test_varied_complete_answers_need_review_but_no_answer_edit
+    with self.subTest(question=question): self.exercise(question, notes)
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 105, in exercise
+    template, version = self.uploaded(data=source, name='SYNTHETIC ordinary sentence syntax')
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_word_v3_workflow.py", line 147, in uploaded
+    template = Template.objects.get(name=kwargs.get("name", "Synthetic v3 intake"))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 638, in get
+    raise self.model.MultipleObjectsReturned(
+core.models.Template.MultipleObjectsReturned: get() returned more than one Template -- it returned 2!
+
+======================================================================
+ERROR: test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) (question='What distance does the patient walk?')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 162, in test_varied_complete_answers_need_review_but_no_answer_edit
+    with self.subTest(question=question): self.exercise(question, notes)
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 105, in exercise
+    template, version = self.uploaded(data=source, name='SYNTHETIC ordinary sentence syntax')
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_word_v3_workflow.py", line 147, in uploaded
+    template = Template.objects.get(name=kwargs.get("name", "Synthetic v3 intake"))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 638, in get
+    raise self.model.MultipleObjectsReturned(
+core.models.Template.MultipleObjectsReturned: get() returned more than one Template -- it returned 3!
+
+======================================================================
+ERROR: test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) (question='How did the injury happen?')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 162, in test_varied_complete_answers_need_review_but_no_answer_edit
+    with self.subTest(question=question): self.exercise(question, notes)
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 105, in exercise
+    template, version = self.uploaded(data=source, name='SYNTHETIC ordinary sentence syntax')
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_word_v3_workflow.py", line 147, in uploaded
+    template = Template.objects.get(name=kwargs.get("name", "Synthetic v3 intake"))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 638, in get
+    raise self.model.MultipleObjectsReturned(
+core.models.Template.MultipleObjectsReturned: get() returned more than one Template -- it returned 4!
+
+======================================================================
+FAIL: test_materially_varied_complete_sentences_keep_exact_text_and_offsets (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_materially_varied_complete_sentences_keep_exact_text_and_offsets) (quote='The patient sleeps through the night.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 46, in test_materially_varied_complete_sentences_keep_exact_text_and_offsets
+    self.assertEqual((answer['status'], answer['text']), ('supported', quote))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient sleeps through the night.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'The patient sleeps through the night.')
+
+======================================================================
+FAIL: test_no_actor_context_correction_side_or_shape_guard_is_replaced (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_no_actor_context_correction_side_or_shape_guard_is_replaced) (notes='Her father attends an art class every Monday.', label='Activities')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_sentence_syntax.py", line 78, in test_no_actor_context_correction_side_or_shape_guard_is_replaced
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Her father attends an art class every Monday.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Her father attends an art class every Monday.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 7 tests in 8.429s
+
+FAILED (failures=2, errors=3)
+Preserving test database for alias 'default' ('test_quillmd_ci')...
+Found 7 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

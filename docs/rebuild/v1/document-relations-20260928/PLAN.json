@@ -1,0 +1,16 @@
+{
+  "scope": "Known authorized development D30 whole-document failure continuation; not unseen qualification or new compatibility denominator.",
+  "source": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D30-fdeafbee872f.docx",
+  "source_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "expected_map": "docs/rebuild/v1/word-table-ownership-evidence-20260927/D30-expected.json",
+  "expected_area_count": 62,
+  "procedure": [
+    "verify original-only expected areas and fixed/signature/consent/authorship context",
+    "compare current integrated mapping against those expectations",
+    "repair generic ownership/dependency causes with synthetic positive/negative controls",
+    "actual authenticated upload/mapping/generation/review/finalization/download with missing, ordinary, long inputs",
+    "structural comparison and every rendered page; native Word evidence separate"
+  ],
+  "provider": "No paid calls; any deterministic/mocked generation must be labelled.",
+  "preservation": "Every previous original/map/export/failure unchanged; new outputs in this run only."
+}

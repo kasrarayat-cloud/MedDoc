@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-usefulness-size__env.sh",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl:92",
+   "timestamp": "2026-09-29T09:08:00.454Z",
+   "sha256_after": "266da07076989ec2c867dc6ef44bec321a325057db4f8ff6c0139a9d0c110625",
+   "bytes_after": 506
+  }
+ ],
+ "lines": 9,
+ "sha256": "266da07076989ec2c867dc6ef44bec321a325057db4f8ff6c0139a9d0c110625"
+}

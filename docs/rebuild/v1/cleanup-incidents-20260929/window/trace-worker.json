@@ -1,0 +1,207 @@
+{
+ "admin_site": "0",
+ "errors": [],
+ "mode": "worker",
+ "modules": {
+  "core": {
+   "file": "core/__init__.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "core.admin_console": {
+   "file": "core/admin_console.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/admin_views.py:19 (<module>)"
+  },
+  "core.admin_queries": {
+   "file": "core/admin_queries.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/admin_views.py:20 (<module>)"
+  },
+  "core.admin_views": {
+   "file": "core/admin_views.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "quillmd/urls.py:19 (<module>)"
+  },
+  "core.apps": {
+   "file": "core/apps.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "core.audio": {
+   "file": "core/audio.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": "core/jobs.py:21 (<module>)"
+  },
+  "core.billing": {
+   "file": "core/billing.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": "core/jobs.py:19 (<module>)"
+  },
+  "core.coding": {
+   "file": "core/coding.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/context.py:5 (<module>)"
+  },
+  "core.context": {
+   "file": "core/context.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/views.py:29 (<module>)"
+  },
+  "core.email_backend": {
+   "file": "core/email_backend.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/email_delivery.py:6 (<module>)"
+  },
+  "core.email_delivery": {
+   "file": "core/email_delivery.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/recovery.py:19 (<module>)"
+  },
+  "core.field_location": {
+   "file": "core/field_location.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/views.py:25 (<module>)"
+  },
+  "core.forms": {
+   "file": "core/forms.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/views.py:26 (<module>)"
+  },
+  "core.generation": {
+   "file": "core/generation.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": "core/jobs.py:20 (<module>)"
+  },
+  "core.jobs": {
+   "file": "core/jobs.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": "core/management/commands/worker.py:4 (<module>)"
+  },
+  "core.management": {
+   "file": "core/management/__init__.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "core.management.commands": {
+   "file": "core/management/commands/__init__.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "core.management.commands.worker": {
+   "file": "core/management/commands/worker.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "core.media": {
+   "file": "core/media.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": "core/jobs.py:16 (<module>)"
+  },
+  "core.middleware": {
+   "file": "core/middleware.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": null
+  },
+  "core.models": {
+   "file": "core/models.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "core.preview_access": {
+   "file": "core/preview_access.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "quillmd/urls.py:5 (<module>)"
+  },
+  "core.preview_logging": {
+   "file": "core/preview_logging.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "core.recovery": {
+   "file": "core/recovery.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "quillmd/urls.py:4 (<module>)"
+  },
+  "core.security": {
+   "file": "core/security.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": "core/jobs.py:15 (<module>)"
+  },
+  "core.stripe_validation": {
+   "file": "core/stripe_validation.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": "core/billing.py:11 (<module>)"
+  },
+  "core.templatetags": {
+   "file": "core/templatetags/__init__.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": null
+  },
+  "core.templatetags.console": {
+   "file": "core/templatetags/console.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": null
+  },
+  "core.views": {
+   "file": "core/views.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "quillmd/urls.py:3 (<module>)"
+  },
+  "core.wm_review": {
+   "file": "core/wm_review.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": "core/views.py:32 (<module>)"
+  },
+  "quillmd": {
+   "file": "quillmd/__init__.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "quillmd.settings": {
+   "file": "quillmd/settings.py",
+   "from_extract": true,
+   "phase": "worker.1_startup(django.setup + load command)",
+   "site": null
+  },
+  "quillmd.urls": {
+   "file": "quillmd/urls.py",
+   "from_extract": true,
+   "phase": "worker.2_system_checks(BaseCommand.execute -> check)",
+   "site": null
+  }
+ },
+ "requests": [],
+ "untracked_preloaded": []
+}

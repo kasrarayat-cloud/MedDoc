@@ -1,0 +1,352 @@
+[
+  {
+    "label": "activities",
+    "notes": "The patient attends an art class every Monday.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient attends an art class every Monday.",
+          "start": 0,
+          "end": 46
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient attends an art class every Monday.",
+          "start": 0,
+          "end": 46
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient attends an art class every Monday.",
+        "evidence": [
+          {
+            "quote": "The patient attends an art class every Monday.",
+            "start": 0,
+            "end": 46
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "He fell from a ladder yesterday and hurt his left wrist.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "He fell from a ladder yesterday and hurt his left wrist.",
+          "start": 0,
+          "end": 56
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "He fell from a ladder yesterday and hurt his left wrist.",
+          "start": 0,
+          "end": 56
+        }
+      ],
+      "held_candidate": {
+        "text": "He fell from a ladder yesterday and hurt his left wrist.",
+        "evidence": [
+          {
+            "quote": "He fell from a ladder yesterday and hurt his left wrist.",
+            "start": 0,
+            "end": 56
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "She developed a rash after amoxicillin.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "She developed a rash after amoxicillin.",
+          "start": 0,
+          "end": 39
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "She developed a rash after amoxicillin.",
+          "start": 0,
+          "end": 39
+        }
+      ],
+      "held_candidate": {
+        "text": "She developed a rash after amoxicillin.",
+        "evidence": [
+          {
+            "quote": "She developed a rash after amoxicillin.",
+            "start": 0,
+            "end": 39
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "social history",
+    "notes": "She smokes ten cigarettes a day.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "She smokes ten cigarettes a day.",
+          "start": 0,
+          "end": 32
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "She smokes ten cigarettes a day.",
+          "start": 0,
+          "end": 32
+        }
+      ],
+      "held_candidate": {
+        "text": "She smokes ten cigarettes a day.",
+        "evidence": [
+          {
+            "quote": "She smokes ten cigarettes a day.",
+            "start": 0,
+            "end": 32
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "The patient walks two blocks daily.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient walks two blocks daily.",
+          "start": 0,
+          "end": 35
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient walks two blocks daily.",
+          "start": 0,
+          "end": 35
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient walks two blocks daily.",
+        "evidence": [
+          {
+            "quote": "The patient walks two blocks daily.",
+            "start": 0,
+            "end": 35
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "The patient sleeps through the night.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient sleeps through the night.",
+          "start": 0,
+          "end": 37
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient sleeps through the night.",
+          "start": 0,
+          "end": 37
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient sleeps through the night.",
+        "evidence": [
+          {
+            "quote": "The patient sleeps through the night.",
+            "start": 0,
+            "end": 37
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "The patient attending an art class every Monday.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient attending an art class every Monday.",
+          "start": 0,
+          "end": 48
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient attending an art class every Monday.",
+          "start": 0,
+          "end": 48
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient attending an art class every Monday.",
+        "evidence": [
+          {
+            "quote": "The patient attending an art class every Monday.",
+            "start": 0,
+            "end": 48
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "Warfarin 5 mg daily.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Warfarin 5 mg daily.",
+          "start": 0,
+          "end": 20
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "Warfarin 5 mg daily.",
+          "start": 0,
+          "end": 20
+        }
+      ],
+      "held_candidate": {
+        "text": "Warfarin 5 mg daily.",
+        "evidence": [
+          {
+            "quote": "Warfarin 5 mg daily.",
+            "start": 0,
+            "end": 20
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "The patient who attends art classes.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient who attends art classes.",
+          "start": 0,
+          "end": 36
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient who attends art classes.",
+          "start": 0,
+          "end": 36
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient who attends art classes.",
+        "evidence": [
+          {
+            "quote": "The patient who attends art classes.",
+            "start": 0,
+            "end": 36
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "label": "history",
+    "notes": "Right knee.",
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Right knee.",
+          "start": 0,
+          "end": 11
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "Right knee.",
+          "start": 0,
+          "end": 11
+        }
+      ],
+      "held_candidate": {
+        "text": "Right knee.",
+        "evidence": [
+          {
+            "quote": "Right knee.",
+            "start": 0,
+            "end": 11
+          }
+        ],
+        "context": [],
+        "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  }
+]

@@ -1,0 +1,91 @@
+{
+  "evidence": [
+    {
+      "path": "financial/01-restore-before.log",
+      "sha256": "529f853194f318e33d09dc2edb9e08b85fa20c4cba3e6fafbe9d5c6da11b556f"
+    },
+    {
+      "path": "financial/02-financial-before.log",
+      "sha256": "2e93ac618567f2fe2f3af1b6d2958f02230da1362406aeb693baa3f4d4d512e9"
+    },
+    {
+      "path": "financial/02-results.json",
+      "sha256": "9770920809910a9025a38f4e4c4d5293d633e4c2add5d005be4b36c1fb4c4c59"
+    },
+    {
+      "path": "financial/03-restore-after.log",
+      "sha256": "639a97c53e9e8ea3a51c6dc1cb875f14fa6866fde25b769d41c6cfa6ce09e6ba"
+    },
+    {
+      "path": "financial/04-financial-after.log",
+      "sha256": "88542eff928b8d59559c738ff26df388010fe2815a99c237396b18c6c85e78db"
+    },
+    {
+      "path": "financial/04-results-after.json",
+      "sha256": "b34630bae3e6c8d64933047dbdecd59c70ff0ca139ec3aff19bfd3d6066b8b55"
+    },
+    {
+      "path": "financial/restore-after.json",
+      "sha256": "2eac859c5f1c2ee5a9ffb1be206f177df0013ea978c33b71c321870255d89bd2"
+    },
+    {
+      "path": "financial/restore-before.json",
+      "sha256": "1ddc073d2ced76367ae6219f287742349dc8dcfa40287dee6bf1a71dd8295c9c"
+    },
+    {
+      "path": "financial/test_root_batch.py",
+      "sha256": "d44f8f1315cbcac10081ac334081cc8f11764f9e0d951afc3ad5cd4daa1024bc"
+    },
+    {
+      "path": "financial/test_root_financial.py",
+      "sha256": "466a172742f7b338fcb8729c9c3cfdf60545ed406358c32f169c2324edacf41a"
+    },
+    {
+      "path": "financial/test_root_financial_after.py",
+      "sha256": "c69a1e003228b372f5742b479f1d421fec6f34d1da0a8b6dcadf1717bb5b0a8a"
+    },
+    {
+      "path": "price/03-bound-probe.log",
+      "sha256": "615582da25cd228979b5eda0111721fe54103b530993c9bb439fb378a6d7b4c3"
+    },
+    {
+      "path": "price/04-bound-probe-refusals.log",
+      "sha256": "1cace639edd9ab760bdf01431de2ca184f54c01b3b1561a84671aec68f51f724"
+    },
+    {
+      "path": "price/06-payload-v2-bound.log",
+      "sha256": "4ba8195270abc79a024ccc0ca9b353c6df1585e3b8f0f891ef53a8d8e6569f19"
+    },
+    {
+      "path": "price/07-v2-scanner-mutants.log",
+      "sha256": "ea7635ce68a4764d7917b1fa717c95773409cfa6f23d1faf0d710e0492f9bcdf"
+    },
+    {
+      "path": "price/compiled-bound-probe-first.py",
+      "sha256": "0c2b310afc294dce2b1a7478e740ce50c62eb49ac1602d4944993f31a300fba3"
+    },
+    {
+      "path": "price/compiled-bound-probe.json",
+      "sha256": "0e8e758cce83f2d8284769a2ac172c11e642dd3b922cdc71ffffb0e3e3935dd7"
+    },
+    {
+      "path": "price/compiled-bound-probe.py",
+      "sha256": "408f381e8e4aa87071fa8a0e886ba3642b9ec1f0f1d2bb6faadbefbd4f4cb9c2"
+    },
+    {
+      "path": "price/payload-v2-bound-probe.json",
+      "sha256": "755ccb9e78977155532e7415451652f367c3d6b06cc80165d4c9487ec620b9d8"
+    },
+    {
+      "path": "price/payload-v2-bound-probe.py",
+      "sha256": "408f381e8e4aa87071fa8a0e886ba3642b9ec1f0f1d2bb6faadbefbd4f4cb9c2"
+    },
+    {
+      "path": "price/reviewed-v2-financial-identities.json",
+      "sha256": "a49da32c35d5faab24d1985c255bf8e8c2e0e95ffb917c485c3d4fe42dafa263"
+    }
+  ],
+  "provider_calls": 0,
+  "native_word": "unperformed",
+  "qualification": "not whole-document acceptance"
+}

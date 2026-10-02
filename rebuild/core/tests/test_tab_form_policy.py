@@ -78,8 +78,10 @@ class TabIdentityPolicyTests(SimpleTestCase):
                 validate_identity(fields,{'old':{'text':'12/09/2026'}},self.actor)
 
     def test_the_signature_lines_it_must_still_recognise_are_untouched(self):
-        """The control on that narrowing: a date WORD alone must not disarm the guard."""
-        for label in ('Signature/Date', 'Signature (print name)', 'Electronically signed by'):
+        """The control on that narrowing: a date WORD alone must not disarm the guard, and a parenthetical that names
+        nobody else keeps it (the identity check fails closed)."""
+        for label in ('Signature/Date', 'Signature (print name)', 'Signature (MD)', 'Signature (consultant)',
+                      'Signed (GP)', 'Electronically signed by (print name)', 'Signed by (name)', 'Electronically signed by'):
             with self.subTest(label=label):
                 fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
                 with self.assertRaises(ValidationError):
@@ -92,6 +94,25 @@ class TabIdentityPolicyTests(SimpleTestCase):
             with self.subTest(label=label):
                 fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
                 validate_identity(fields,{'old':{'text':'Legacy reviewed text'}},self.actor)
+
+    def test_a_parenthetical_naming_another_person_is_not_the_finalizers(self):
+        """The persons who are NOT the finalizer are an exclusion list (`NOT_THE_CLINICIAN`); any other parenthetical
+        keeps the line the finalizer's (a narrowing to clinician-role words was refuted: `Signed (Consultant)` and
+        `Signature (GP)` stopped being identity rows).
+        ⚠️ Declared residual, design matrix L04 (LEAVE): the list is 43fcf214's. Widening it by participant, mother,
+        father and donor was searched over the whole label and released clinicians' own lines such as
+        "Signature (participant's consultant)" (refutation of 258650f2, L1:R1-01), so `Signature (participant)` demands
+        the finalizer's own name again, as on 43fcf214."""
+        for label in ('Signed by (witness)', 'Signature (patient)', 'Signature (guardian)'):
+            with self.subTest(label=label):
+                fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
+                validate_identity(fields,{'old':{'text':'Somebody Else'}},self.actor)
+        for label in ('Signature (participant)', 'Signature (mother)', 'Signature (father)', 'Signature (donor)',
+                      "Signature (participant's consultant)", 'Signed by (doctor recruiting the participant)'):
+            with self.subTest(label=label):
+                fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
+                with self.assertRaises(ValidationError):
+                    validate_identity(fields,{'old':{'text':'Somebody Else'}},self.actor)
 
     def test_another_reviewers_checkbox_cannot_authorize_finalizers_signature(self):
         for answer in ({'text':'Synthetic Clinician','reviewed':True,'reviewed_by':'other'},

@@ -1,0 +1,12 @@
+[
+ {"id": "RB-M1 resolution ignores the durable receipt (the 8e3dcfd0 behaviour)", "file": "core/views.py",
+  "old": "receipt=None if settled or simulated else ProviderReceipt.objects.filter(job=job,simulated=False).first()", "new": "receipt=None",
+  "tests": ["core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError"]},
+ {"id": "RB-M2 a provider-completed settlement failure treated as not processed (hold released)", "file": "core/jobs.py",
+  "old": "unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)", "new": "unsent=not known",
+  "tests": ["core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase"]},
+ {"id": "RB-M3 settlement failure swallowed and the output adopted", "file": "core/jobs.py",
+  "old": "        settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)\n",
+  "new": "        try: settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)\n        except Exception: pass\n",
+  "tests": ["core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase"]}
+]

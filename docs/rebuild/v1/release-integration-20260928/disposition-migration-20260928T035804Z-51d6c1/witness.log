@@ -1,0 +1,90 @@
+Created unique owned synthetic database
+Migrated fresh isolated database through 0026
+Seeded old rows; baseline historical audit passed
+0027 preserves all old rows/artifacts; 63 guards/18 functions and unchanged financial audit pass
+/opt/meddoc-pro/.worktrees/v1-release-integration/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+{
+  "passed": true,
+  "migration": "0026 -> union of 0027 and 0028 -> 0029",
+  "old_tables_compared": 35,
+  "old_rows_compared": 31,
+  "nonempty_old_tables": {
+    "core_auditevent": 1,
+    "core_department": 1,
+    "core_encounter": 3,
+    "core_job": 1,
+    "core_ledgerentry": 4,
+    "core_mappingconfirmation": 1,
+    "core_membership": 1,
+    "core_organization": 1,
+    "core_patient": 1,
+    "core_payment": 1,
+    "core_preservedfile": 1,
+    "core_preservedrecord": 1,
+    "core_providerreceipt": 1,
+    "core_reservation": 1,
+    "core_retentionhold": 1,
+    "core_template": 1,
+    "core_templateversion": 2,
+    "core_usage": 1,
+    "core_user": 3,
+    "core_wallet": 3,
+    "core_webhookevent": 1
+  },
+  "all_old_columns_identical": true,
+  "legacy_and_v3_constraints_remain_null": true,
+  "new_batch_tables_empty": true,
+  "schema_guards": {
+    "found": 63,
+    "enabled": 63,
+    "expected": 63,
+    "missing": 0,
+    "unexpected": 0,
+    "definition_mismatches": 0,
+    "malformed": 0,
+    "context_valid": true,
+    "declaration_matches_release": true,
+    "passed": true
+  },
+  "financial_audit_before_and_after_pass": true,
+  "financial_audit_projection_identical": true,
+  "immutable_sql_refusals": {
+    "core_ledgerentry": true,
+    "core_auditevent": true,
+    "core_usage": true,
+    "core_providerreceipt": true,
+    "core_templateversion": true,
+    "core_mappingconfirmation": true,
+    "core_encounter": true
+  },
+  "snapshot_positive_control": true,
+  "finalized_downloads": [
+    {
+      "encounter_id": "1cca8102-8cb3-4bd2-a16a-5b432c3ceeb9",
+      "contract": "",
+      "status": 200,
+      "sha256": "854c26396eb5ec82b003ff82a5b728f4e744f10085635817da207fe735155ad0",
+      "foreign_status": 404
+    },
+    {
+      "encounter_id": "be2fdaa4-06c8-4a12-804d-8b9554b4c5c1",
+      "contract": "v3",
+      "status": 200,
+      "sha256": "854c26396eb5ec82b003ff82a5b728f4e744f10085635817da207fe735155ad0",
+      "foreign_status": 404
+    }
+  ],
+  "only_download_side_effect": "Two appended encounter.export audit events",
+  "artifact_sha256": {
+    "originals/migration.docx": "4034a56defde7c758bf43d7f2dc16f57d15e0bcb3b72829e140db86a6e73389f",
+    "exports/legacy.docx": "854c26396eb5ec82b003ff82a5b728f4e744f10085635817da207fe735155ad0",
+    "exports/v3.docx": "854c26396eb5ec82b003ff82a5b728f4e744f10085635817da207fe735155ad0",
+    "results/migration.json": "4cfaff37f05ecf3363591604a058670051edba4c3829629ad11ccad3d06e72ab"
+  },
+  "baseline_audit_source_sha256": "836ae17d64dc4c2004cf3d0029ee5a12405da3b336720cc5c702a752d27c7a27",
+  "synthetic_financial_rows_are_fabricated": true,
+  "actual_provider_or_payment_calls": 0,
+  "installed_database_touched": false,
+  "database_retained": true
+}

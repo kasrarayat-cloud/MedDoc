@@ -1,0 +1,9 @@
+export TMPDIR=/tmp
+export QUILLMD_SECRET_KEY=scratch-refutation-only-not-a-secret-0123456789
+export QUILLMD_DB_PASSWORD=unused-in-simple-tests
+export QUILLMD_DB_NAME=quillmd_qa_mp2_usefulness-size
+export QUILLMD_DB_USER=quillmd_qa
+export QUILLMD_DB_HOST=127.0.0.1
+export QUILLMD_DB_PORT=55731
+export QUILLMD_STATE_DIR=/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mp2-usefulness-size/state
+export PY=/opt/meddoc-pro/.worktrees/v1-mapping-partial/rebuild/.venv/bin/python

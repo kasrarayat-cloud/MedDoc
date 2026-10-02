@@ -1,0 +1,224 @@
+## Refutation of this assessment: RS-1 to RS-5 and RA-LOW-1, repaired (2026-09-29)
+
+A refutation of this assessment on `61c5cc8f` found one MEDIUM and three LOW defects in how the worker records a failure
+whose end it cannot see (RS-1, RS-2, RS-3, RS-5), a LOW counting error in this report (RS-4), and a LOW pre-existing account
+defect (RA-LOW-1). Every one of them was reproduced first as a failing test on `61c5cc8f`, then repaired, and every new
+guard was mutation-proven with sha256-verified restores. Environment as above, except for a fresh throwaway database
+`quillmd_qa_resid2_t1` and a `sitecustomize` that refuses every non-loopback connection and name lookup. Providers,
+Stripe and email were fakes. The installed application, its database and the campaign root were not touched, and no
+environment file was read.
+
+### Summary
+
+| | Reproduced on `61c5cc8f` | Change | Proof |
+|---|---|---|---|
+| **RS-1** (MEDIUM) settle()'s COMMIT answer lost | **Yes.** The job said "… nothing is charged until it is resolved" while the −0.15 debit, the usage row and the settled hold of that very commit existed | An in-doubt settlement is held with a neutral message and nothing released, absorbed or freed. The handler writes under the job lock and never overwrites a committed outcome. The resolution decides from the committed rows | 5 tests (3 RED), 4 mutants killed |
+| **RS-2** (LOW) the handler's own failure | **Yes, two shapes.** OperationalError out of `run_one` with the job left `running` (and charged, when settlement had committed) | The connection is repaired before the handler reads. A handler read or write that fails holds the job | 2 tests (2 RED), 2 mutants killed |
+| **RS-3** (LOW, money) a reversal that fails | **Yes.** `failed`, still charged, key freed; the same request queued, held and sent again | Failed state and absorption in one transaction. If the absorption fails, the job is held with its key and charge. `mapping_jobs` repaired the same way | 3 tests (3 RED), 2 mutants killed |
+| **RS-4** (LOW) report numbers | Yes: 654 "ordinary" scenarios | Report corrected above: 632 ordinary, 13 vacuous, 619 exercised, 22 not ordinary | the evidence rows, recounted |
+| **RS-5** (LOW) fixture message | **Yes.** "Generation failed validation." for a settlement the database refused | Named as a platform database error. Key freed only when no charge can exist | 3 tests (2 RED; one is the in-doubt fixture settlement), 1 mutant killed (and RS1-M1) |
+| **RA-LOW-1** (LOW) two accounts for one address | **Yes, at every door.** `ſam@…` created beside `sam@…`, and `sam@…` beside a stored `ſam@…` | One rule, `core.forms.account_email`, at every door that chooses an account's address | 12 tests (9 RED), 6 mutants killed |
+
+### RS-1 — a settlement whose COMMIT answer is lost
+
+**Reproduction.** `core/tests/test_settlement_outcome_unknown.py`, `CommitAnswerLost`. The worker's COMMIT for
+`settle()` goes out and its answer is lost. The test replaces Django's `_commit`: an OperationalError comes out of
+Django's `commit()`, the rollback that follows fails, and Django drops the connection, as for a connection that died.
+Meanwhile the transaction stays open on its own server connection, holding its row locks, as a COMMIT in flight does. A
+finisher thread commits it (`landed`) or rolls it back, and only after another backend waits for one of its locks. So
+the handler acts while the commit is genuinely in flight. On `61c5cc8f` (`rs1-probe.txt`), the job read
+`reconciliation`, "Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is
+resolved.". At that moment the usage row existed, the ledger carried the −0.150 usage debit, and the job's
+reservation was `settled`. The handler had waited for the in-flight commit and then recorded a claim the commit had
+just made false.
+
+**Repair (`core/jobs.py`).**
+
+- `commit_in_doubt(error, carrier)` is structural, in the same idiom as `never_transmitted`. It returns true when the
+  exception passed through Django's own `BaseDatabaseWrapper.commit`, checked by code-object identity, **and** `carrier`
+  is gone. `carrier` is the connection that sent the COMMIT, recorded just before `settle()`. Django drops a connection
+  whose post-commit rollback fails, and reconnects at once inside `atomic`'s exit (`set_autocommit(True)`). So "no
+  connection" proves nothing, and the first version, which tested that, never fired: a probe showed a fresh `IDLE`
+  connection in the handler. The identity of the connection is what distinguishes the cases.
+  - A COMMIT the server answered with an error, such as a deferred foreign-key violation, rolled back on a connection
+    that survived to say so. That outcome is established, and the job still reads "nothing is charged".
+  - A statement that failed before the COMMIT never reached one, so it cannot commit. That outcome is established too.
+- **An in-doubt settlement asserts nothing.** The job goes to `reconciliation` with "The settlement outcome of this
+  request is unknown; an administrator must reconcile it.". Nothing is released or absorbed, and the request key is
+  held. The audit event is `job.reconciliation` with `billing=uncertain`.
+- **The handler now decides and writes under the job's row lock** (`end_failed_job`), and never overwrites an outcome
+  that a committed transaction recorded. Found in the same class: the **adoption's** COMMIT answer lost after the
+  adoption committed. On `61c5cc8f` the committed success was overwritten as `failed` / `platform_failure`, and the
+  charge of an output already adopted into the document was reversed. Now the job stays `succeeded` and charged, and a
+  `job.error_after_commit` audit event records the error beside the outcome.
+- **The resolution reads what committed.** `admin_resolve_job` already locks the job row, and so waits for any
+  in-flight transaction on it. It then reads `Usage` and resolves from it. The tests prove both directions, for both
+  form outcomes:
+  - **Landed:** the settled branch reverses the charge exactly once. Wallets end as they were before the request,
+    no hold is released (`usage.release` never written), and the platform cost equals the usage cost.
+  - **Not landed:** the holds are released, and the receipt's cost is absorbed with `receipt:<id>` evidence.
+  - `audit_billing` passes with nothing unresolved in both.
+- **Stated plainly:** under PostgreSQL the job-row lock alone would have established the outcome. `settle()` takes that
+  lock first and holds it until its transaction ends; mutant RS1-M1 shows the lock-first handler then records the
+  committed charge and absorbs it. The worker does not rely on that argument, as the refutation required. The cost is
+  availability: the document stays pending until an administrator resolves the job.
+- **R-B (1) above still holds for the shapes it tested.** Its "after COMMIT" row raises after `settle()` has
+  returned on a live connection. That is an established commit, still absorbed as a platform failure (the test is
+  unchanged and green). The lost-answer shape is the one this section adds.
+
+### RS-2 — the handler's own failure
+
+- **Connection repair before the handler reads.** `usable_connection()` does what a request boundary does
+  (`close_if_unusable_or_obsolete`) before the handler reads; the worker has no request boundary. RED on `61c5cc8f`:
+  the server ended the connection at the worker's autocommit write of the result path. Every later statement then
+  failed, with OperationalError "the connection is closed" out of `run_one` and the job left `running`. Now the
+  handler reconnects and records what is established: settlement never ran, so the job is held with its receipt and
+  "nothing is charged".
+- **A handler read or write that fails** (DatabaseError) holds the job on a fresh connection, asserting nothing: "The
+  outcome of this request could not be recorded; an administrator must reconcile it.". RED on `61c5cc8f`: settlement
+  committed, the output was unusable, and the server ended the connection at the handler's first statement. The result
+  was OperationalError out of `run_one`, with the job `running` and the charge standing until the stale sweep. Now:
+  `reconciliation`, key held, charge standing. The resolution absorbs it, and wallets end as before the request.
+- **Unchanged when nothing is possible.** An unreachable database also defeats the hold, so the exception leaves
+  `run_one` as before and the stale sweep holds the job. `test_an_unreachable_database_after_the_termination_waits_for_the_stale_sweep`
+  is still green.
+
+### RS-3 — a reversal that fails
+
+- **One transaction.** The failed state and the absorption are now one transaction. If the absorption fails, nothing
+  of that transaction stands. The job is held in `reconciliation` with its request key and its charge, with "The output
+  could not be adopted, and its charge could not be reversed automatically; an administrator must reconcile it.",
+  `usage.absorb_failed` audited and `billing=platform_failure`. The settled branch of the resolution absorbs it.
+- **Real database refusal.** The test raises 40P01 at the absorption's ledger insert. RED on `61c5cc8f`: `failed`,
+  charged, key freed, and a re-request queued a new job. Now a re-request of the same revision returns the held job
+  (`reused`): no new job, no new hold, no provider call.
+- **Tests that pinned the old behaviour, updated.**
+  - `test_billing_policy.test_failed_reversal_never_stops_the_worker_and_is_flagged_by_the_audit` asserted `failed`
+    and a direct `absorb_failed_job` as the repair. It is now `…_holds_the_job_with_its_key`, and repairs through the
+    console.
+  - `RefutationRegressions.failed_unabsorbed_job` manufactured its fixture through the old defect. It now asserts the
+    held job, then writes the pre-repair row explicitly; those four tests are about the absorption's netting, which is
+    unchanged.
+- **`core/mapping_jobs.py`** had the identical shape (behind a default-off flag). It is repaired the same way through
+  the shared `hold_for_reconciliation(action='mapping.reconciliation')`, with one test, RED then GREEN. The batch
+  worker's `stop()` already absorbs inside its own transaction and never frees a consumed key.
+
+### RS-5 — fixture (synthetic) mode
+
+- **Messages.** A validation refusal still reads "Generation failed validation.". Any other failure is named: "Generation
+  failed: a platform database error (OperationalError) stopped it before its output was adopted. Synthetic generation
+  carries no charge; the held funds were released.".
+- **Request key.** The key is freed only when no charge can exist: nothing settled, and synthetic cost is zero. An
+  in-doubt settlement in fixture mode is held like any other, with its key kept.
+
+### RS-4 — the report's counts
+
+The counts are corrected in the R-B (2) sections, table and limits above.
+
+- **Recount from `settle-interleavings-rows.json`:** 670 = 632 over the 33 ordinary operations + 22 second-settlement +
+  16 control.
+- **The stale sweep's 13 scenarios are vacuous.** `mark_stale` selects jobs running for more than five minutes, and J
+  had just started, so every one of the 13 has 0 lock-taking statements.
+- **What remains:** the ordinary evidence is 619 scenarios over 32 operations. The 654 figure is "all scenarios outside
+  the control".
+- **History:** `61c5cc8f`'s commit message still says "654 scenarios against 34 operations"; this report is the
+  correction.
+
+### RA-LOW-1 — one rule for an account's email address
+
+**The defect.** The rules that compare addresses disagree outside ASCII:
+
+- The unique index is `lower(email)`.
+- Every lookup is `email__iexact`, which is PostgreSQL `UPPER()`.
+- The views compare with `str.lower()`, and the email allowlist with `str.casefold()`.
+
+`lower('ſ')` is `ſ` but `upper('ſ')` is `S`. So `ſam@…` passed the index beside `sam@…`, and both answered the same
+sign-in lookup. Django's `EmailValidator` admits exactly four non-ASCII local-part letters: ſ, ı, İ and the Kelvin sign
+U+212A. It admits them only because `re.IGNORECASE` folds them onto its ASCII class; every other non-ASCII local part
+(ß, fullwidth letters) was already refused.
+
+**Decision, from the code.**
+
+- **What the rule is.** An account address is ASCII, stripped and lowercased: the only set on which all four
+  comparisons agree.
+- **The Kelvin sign.** ASCII is checked on the address as typed, because `str.lower()` itself folds the Kelvin sign
+  onto `k`.
+- **An address the lookup already answers is refused.** This covers a stored pre-rule `ſam@…`, which the lower() index
+  cannot see.
+- **Nothing is folded into a different address.** NFKC or casefold would rewrite `ſ` as `s`, and the stored address is
+  where the account's mail goes.
+- **Internationalized domains** are entered in their `xn--` form. IDNA conversion was rejected: Python's codec is
+  IDNA 2003 and maps `ß` to `ss`, which is another domain.
+
+**Doors.** The rule is applied at registration and both invitation acceptances (`RegisterForm`), at both invitation
+issuances (`InvitationForm`, `ClinicInvitationForm`), and when the first administrator is created
+(`bootstrap_first_admin create`). Ordinary addresses behave as before; the tests cover mixed case, invitation creation
+and clinic creation.
+
+### Test runs
+
+| Run | Result |
+|---|---|
+| RED: every new or changed test on the sources of `61c5cc8f` (`rs-red.txt`) | 49 run: the 25 new or changed tests, plus `test_money_closeout`'s 24, included only so that the mapping test imports in full-suite order. **19 of the 25 fail** (29 failures counting subtests, 2 errors). The 6 that pass are the narrowness and ordinary-case controls, green before and after. `test_money_closeout` 24 of 24 |
+| GREEN: the same 49 (`rs-green.txt`) | 49 of 49 OK |
+| Mutation (`rs-mutation.json`, `rs-mutation-run.txt`); unmutated baselines first (23, 1, 12 tests OK) | **15 of 15 killed**. 13 were killed by assertion failures. RS2-M4 and RS2-M5 were killed by the old behaviour itself, OperationalError out of `run_one`. Every anchor occurred once, every application was read back, and every restore was compared by sha256 |
+| Targeted modules: jobs, billing, invitations, admin resolution and the residual tests, 29 modules (`rs-modules.txt`) | 540 run, 4 failures: `RefutationRegressions`' fixture relied on the RS-3 defect (fixture rewritten above); `test_billing_policy` then 33 of 33 |
+| **`core.tests`, the whole core suite, on the final tree** (`rs-core-suite.txt`) (29 min 43 s, one run) | **2,405 run, 31 skipped, 0 failures**. That is 24 more tests than the earlier run's 2,381. The earlier run's one timing failure (`test_round_13_…`, 5.12 s against 5.0 s) did not recur |
+| `manage.py check` | no issues |
+
+Mutants:
+
+| Mutant | Killed by |
+|---|---|
+| RS1-M1 in-doubt settlement treated as established | landed and not-landed (both outcomes), fixture in-doubt: 5 |
+| RS1-M2 a COMMIT the server refused counted as in doubt (connection identity ignored) | server-refused commit (new), `test_generation_held_for_reconciliation_at_every_stage` (commit stage) |
+| RS1-M3 a statement error counted as in doubt (commit frame ignored) | `test_a_connection_terminated_during_settlement_is_held_for_reconciliation` |
+| RS2-M4 the handler's failure re-raised instead of held | the handler's first statement losing the connection |
+| RS2-M5 no connection repair before the handler reads | the connection lost at the autocommit result-path write |
+| RS1-M6 no committed-state guard under the job lock | the adoption that committed before its answer was lost |
+| RS3-M7 a failed reversal swallowed, failed state kept (the old handler) | both RS-3 tests |
+| RS5-M8 every fixture failure called a validation failure | the fixture database error |
+| RS3-M9 mapping worker: the old handler | the mapping RS-3 test |
+| RA-M10 non-ASCII addresses accepted | 16 tests or subtests |
+| RA-M11 lowercased before the ASCII check (the Kelvin sign) | the Kelvin subtests |
+| RA-M12 no refusal of an address the lookup already answers | register, department and clinic tests for a stored `ſam@` |
+| RA-M13 / RA-M14 department and clinic invitations issued without the rule | the issuance test (5 subtests each) |
+| RA-M15 first administrator created without the rule | 3 subtests |
+
+### Remaining limits
+
+- **Where the lost answer is simulated.** It is simulated at the Django connection layer (Django's `_commit`). The server
+  side is real: the transaction stays open holding its locks and is then committed or rolled back. A real network
+  partition, or a proxy between the worker and PostgreSQL, was not exercised.
+- **Held when it could be known.** An in-doubt settlement is held even though the job-lock read could establish it, so
+  the document waits for an administrator.
+- **The mapping worker (default-off)** received only the RS-3 repair. Its uncertain message was already neutral, but its
+  handler still writes without the job-lock guard, so an adoption whose COMMIT answer is lost could still be
+  overwritten there.
+- **RA-LOW-1 changes no existing row.**
+  - Production was not inspected, which this session may not do. A pre-rule non-ASCII account, if one exists, keeps
+    signing in by the same lookup. A pre-rule invitation to a non-ASCII address can no longer create an account; issue
+    a new one to the ASCII address.
+  - Whether production holds such an account, or a pair of accounts one lookup answers, needs an operator query
+    (count of `core_user` rows whose email is not ASCII, and of `upper(email)` duplicates).
+- **The ASCII rule is a product decision taken from the code:** an internationalized domain must be typed in its
+  `xn--` form. It is recorded for the owner.
+
+### Evidence
+
+`docs/rebuild/v1/residuals-evidence-20260929/`:
+
+- `rs-red.txt` and `rs-green.txt`
+- `rs1-probe.txt` (with the probe `rs1_probe.py`)
+- `rs-mutation.json`, `rs-mutation-run.txt` and the runner `rs_mutate.py`
+- `rs-modules.txt` and `rs-core-suite.txt`
+- `rs_sitecustomize.py` (the socket guard)
+
+Tests:
+
+- `rebuild/core/tests/test_settlement_outcome_unknown.py`
+- `rebuild/core/tests/test_account_email_rule.py`
+- one test in `test_mapping_assistance.py`
+- the updated test and fixture in `test_billing_policy.py`
+
+After the mutation batch, only comments in `core/forms.py`, a docstring and an unused import in the new test file, and the `RefutationRegressions` fixture changed. The core suite ran on that final tree, and its source hashes are recorded in `rs-core-suite.txt`. `docs/rebuild/cost-definition.md` states the new rules.

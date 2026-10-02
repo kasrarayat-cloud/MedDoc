@@ -1,0 +1,33 @@
+D01 92 91 96 {'missed': 1, 'wrong': 0, 'extras': 5} 
+D02 24 23 23 {'missed': 0, 'wrong': 0, 'extras': 0} 
+D03 88 88 50 {'missed': 43, 'wrong': 18, 'extras': 5} 
+D04 27 27 16 {'missed': 11, 'wrong': 0, 'extras': 0} 
+D05 6 6 9 {'missed': 0, 'wrong': 0, 'extras': 3} 
+D07 28 26 26 {'missed': 8, 'wrong': 5, 'extras': 6} 
+D08 41 41 42 {'missed': 2, 'wrong': 10, 'extras': 5} 
+D09 47 47 47 {'missed': 0, 'wrong': 0, 'extras': 0} 
+D10 198 198 226 {'missed': 14, 'wrong': 3, 'extras': 42} 
+D11 559 559 549 {'missed': 12, 'wrong': 0, 'extras': 2} 
+D12 19 19 15 {'missed': 4, 'wrong': 1, 'extras': 0} 
+D13 11 11 11 {'missed': 0, 'wrong': 0, 'extras': 0} 
+D14 55 55 34 {'missed': 22, 'wrong': 11, 'extras': 1} 
+D15 70 62 135 {'missed': 2, 'wrong': 3, 'extras': 75} 
+D16 55 54 57 {'missed': 0, 'wrong': 0, 'extras': 3} 
+D17 21 20 14 {'missed': 7, 'wrong': 5, 'extras': 0} 
+D18 21 20 14 {'missed': 7, 'wrong': 5, 'extras': 0} 
+D21 52 45 57 {'missed': 18, 'wrong': 0, 'extras': 25} 
+D22 35 28 39 {'missed': 12, 'wrong': 0, 'extras': 17} 
+D26 10 10 14 {'missed': 0, 'wrong': 0, 'extras': 4} long render: overprinting +24 chars
+D27 44 42 58 {'missed': 3, 'wrong': 6, 'extras': 19} long render: overprinting +96 chars; 1 answers not visible in render
+D28 227 227 399 {'missed': 12, 'wrong': 48, 'extras': 184} long render: overprinting +35 chars; 3 answers not visible in render
+D29 125 122 274 {'missed': 33, 'wrong': 19, 'extras': 184} ordinary render: overprinting +18 chars; long render: overprinting +162 chars; 3 answers not visible in render
+D30 62 59 36 {'missed': 33, 'wrong': 1, 'extras': 13} 
+D31 51 50 75 {'missed': 0, 'wrong': 1, 'extras': 25} ordinary render: 1 answers not visible in render
+D33 11 9 54 {'missed': 1, 'wrong': 0, 'extras': 47} 
+D34 14 12 58 {'missed': 0, 'wrong': 0, 'extras': 48} 
+D35 78 77 307 {'missed': 13, 'wrong': 10, 'extras': 243} long render: 1 answers not visible in render
+D36 13 8 9 {'missed': 8, 'wrong': 3, 'extras': 7} 
+D37 11 9 46 {'missed': 4, 'wrong': 0, 'extras': 43} 
+D38 60 60 46 {'missed': 20, 'wrong': 3, 'extras': 6} 
+D39 60 60 40 {'missed': 23, 'wrong': 1, 'extras': 3} 
+D40 38 38 29 {'missed': 9, 'wrong': 0, 'extras': 0} 

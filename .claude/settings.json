@@ -164,6 +164,8 @@
       "Read(//tmp/**)",
       "Edit(//opt/meddoc-pro/**)",
       "Bash(bash scripts/reap-session-scratch.sh:*)",
+      "Bash(bash scripts/scratch-ledger.sh:*)",
+      "Bash(bash scripts/reap-recorded-scratch.sh:*)",
       "Bash(bash scripts/git-commit-file.sh:*)"
     ],
     "deny": [

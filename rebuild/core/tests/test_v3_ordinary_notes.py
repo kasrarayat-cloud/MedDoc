@@ -105,8 +105,16 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
             answer = run(notes, {label: [quote]})[label]
             self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
             self.assertEqual(answer['held_candidate']['evidence'][0]['quote'], quote, notes)
-        # A line of its own still names its option.
-        self.assertEqual(run('Father: MI at 50.\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']['text'], 'Yes')
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (X1, step 1 of the notes-usefulness change): on the next line of the SAME
+        # paragraph as another person's line, a subject-less labelled person attribute cannot be shown to be the
+        # patient's, so it is held (it was filled 'Yes'). ⚠️ Round 3 (RR5): the same across a blank line - the other
+        # person's run is the NOTE's, not the paragraph's.
+        smoker = run('Father: MI at 50.\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
+        self.assertEqual((smoker['status'], smoker['text']), ('conflict', ''))
+        self.assertEqual(smoker['held_candidate']['context'][0]['quote'], 'Father: MI at 50.')
+        blank = run('Father: MI at 50.\n\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
+        self.assertEqual((blank['status'], blank['text']), ('conflict', ''))
+        self.assertIn('Father: MI at 50.', [entry['quote'] for entry in blank['held_candidate']['context']])
 
     def test_an_unlabelled_sentence_never_becomes_an_option(self):
         notes = 'The patient does not smoke. Allergies: none known.'
@@ -865,7 +873,11 @@ class RoundTwoMutantPins(SimpleTestCase):
         self.assertEqual(kept['context'], [{'quote': 'Her father has heart disease.', 'start': 0, 'end': 29, 'after': False,
                                             'same': True}])
         kept = run('Right knee.', {'Chief complaint': ['Right knee.']})['Chief complaint']['held_candidate']
-        self.assertEqual((kept['context'], kept['reason']), ([], g.V3_HELD_REASON))
+        # Generation and stored-draft review now use the same completeness reader;
+        # the incomplete source itself stays visible, with the fragment explanation.
+        self.assertEqual(kept['context'], [{'quote': 'Right knee.', 'start': 0, 'end': 11,
+            'after': False, 'same': True, 'syntax_incomplete': True}])
+        self.assertEqual(kept['reason'], g.V3_HELD_REASON)
 
 
 # Round-3 refutation of 1d66c798: the refuter's own inputs, the provider simulated by unit selection exactly as `run`
@@ -1161,7 +1173,9 @@ class RoundThreeCost(SimpleTestCase):
             adopted = g.v3_adopted(v3_fields, answers, notes, asked, context)
         self.assertLess(time.monotonic() - started, 2.0)
         self.assertLessEqual(len(calls), 1, 'one line, split once')
-        self.assertEqual((adopted['q']['status'], adopted['q']['text']), ('supported', 'No'))
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (round 3, RR4-1): a note of more units than the actor reader reads
+        # (`v3_actors.MAX_UNITS`) is unread, so every unit in it is held (fail closed); the cost pin is unchanged.
+        self.assertEqual((adopted['q']['status'], adopted['q']['text']), ('conflict', ''))
         # Split once for every option question of the adoption, not once per question.
         notes = ' '.join(['Q1: No. Q2: Yes.'] * 400)
         fields = [field('q', 'Q1', 'choice', ['Yes', 'No']), field('r', 'Q2', 'choice', ['Yes', 'No'])]
@@ -1175,7 +1189,7 @@ class RoundThreeCost(SimpleTestCase):
         with patch.object(g, 'sentence_boundaries', side_effect=counted):
             adopted = g.v3_adopted(v3_fields, answers, notes, asked, context)
         self.assertLessEqual(len(calls), 1, 'one line, split once for both questions')
-        self.assertEqual((adopted['q']['text'], adopted['r']['text']), ('No', 'Yes'))
+        self.assertEqual((adopted['q']['text'], adopted['r']['text']), ('', ''))   # 800 units: unread, held (RR4-1)
 
 
 @override_settings(**LIVE)
@@ -1272,6 +1286,8 @@ class RecoveredNoteContext(SimpleTestCase):
             # A provider's order cannot reverse the source's clinical sequence.
             reversed_out = run(notes, {'History of present illness': quotes[::-1]}, fields=fields)['History of present illness']
             self.assertEqual(reversed_out, out)
+            # A PART of the paragraph stays held by position (restored 2026-09-29 after the refutation round: a link
+            # reading released each part alone, and a later sentence can change an earlier one by meaning alone).
             for partial in ([quotes[0]], [quotes[1]]):
                 held = run(notes, {'History of present illness': partial}, fields=fields)['History of present illness']
                 self.assertEqual(held['status'], 'conflict')

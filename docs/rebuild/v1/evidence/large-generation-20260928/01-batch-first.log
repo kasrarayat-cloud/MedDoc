@@ -1,0 +1,533 @@
+Creating test database for alias 'default' ('test_quillmd_ci')...
+Got an error creating the test database: database "test_quillmd_ci" already exists
+Destroying old test database for alias 'default' ('test_quillmd_ci')...
+Found 8 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying core.0023_retention_preservation... OK
+  Applying core.0024_preserved_file... OK
+  Applying core.0025_preservation_guards... OK
+  Applying core.0026_preservation_scope_identity... OK
+  Applying core.0027_generation_batches... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_authenticated_whole_form_workflow_has_no_partial_adoption (core.tests.test_generation_batch.BatchWorkflow.test_authenticated_whole_form_workflow_has_no_partial_adoption) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ERROR
+test_insufficient_funds_rolls_back_all_children_and_duplicate_quote_is_one_admission (core.tests.test_generation_batch.BatchWorkflow.test_insufficient_funds_rolls_back_all_children_and_duplicate_quote_is_one_admission) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ERROR
+test_interrupted_second_call_keeps_unknown_hold_and_never_retries (core.tests.test_generation_batch.BatchWorkflow.test_interrupted_second_call_keeps_unknown_hold_and_never_retries) ... ERROR
+test_plan_and_attempt_records_are_immutable_in_database (core.tests.test_generation_batch.BatchWorkflow.test_plan_and_attempt_records_are_immutable_in_database) ... ERROR
+test_cross_part_repeated_questions_and_global_rules_keep_full_scope (core.tests.test_generation_batch.BatchContract.test_cross_part_repeated_questions_and_global_rules_keep_full_scope) ... ok
+test_exact_subset_union_and_actual_model_are_required (core.tests.test_generation_batch.BatchContract.test_exact_subset_union_and_actual_model_are_required) ... ok
+test_group_and_unknown_rule_admission_are_not_silent_splits (core.tests.test_generation_batch.BatchContract.test_group_and_unknown_rule_admission_are_not_silent_splits) ... ok
+test_old_single_request_limit_and_bounded_complete_plan (core.tests.test_generation_batch.BatchContract.test_old_single_request_limit_and_bounded_complete_plan) ... ok
+
+======================================================================
+ERROR: test_authenticated_whole_form_workflow_has_no_partial_adoption (core.tests.test_generation_batch.BatchWorkflow.test_authenticated_whole_form_workflow_has_no_partial_adoption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 948, in get_or_create
+    return self.get(**kwargs), False
+           ^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 635, in get
+    raise self.model.DoesNotExist(
+core.models.GenerationBatchEvent.DoesNotExist: GenerationBatchEvent matching query does not exist.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AmbiguousColumn: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 151, in test_authenticated_whole_form_workflow_has_no_partial_adoption
+    batch=self.admit();calls,call=self.fake(batch)
+          ^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 130, in admit
+    result=self.client.post(f'/encounters/{self.encounter.pk}/generate/',
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1156, in post
+    response = super().post(
+               ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 499, in post
+    return self.generic(
+           ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 671, in generic
+    return self.request(**r)
+           ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1090, in request
+    self.check_exception(response)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 805, in check_exception
+    raise exc_value
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/views/decorators/http.py", line 64, in inner
+    return func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/views.py", line 1033, in generate_view
+    job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/jobs.py", line 222, in enqueue
+    return batch_jobs.enqueue(encounter,user,config or generation.configuration(),expected_revision)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 86, in enqueue
+    event(batch,'admitted',details={'charge_limit':str(held),'parts':len(children),'plan_sha256':batch.plan_sha256})
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 34, in event
+    return GenerationBatchEvent.objects.get_or_create(event_key=key, defaults={
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 955, in get_or_create
+    return self.create(**params), True
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+======================================================================
+ERROR: test_insufficient_funds_rolls_back_all_children_and_duplicate_quote_is_one_admission (core.tests.test_generation_batch.BatchWorkflow.test_insufficient_funds_rolls_back_all_children_and_duplicate_quote_is_one_admission)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 948, in get_or_create
+    return self.get(**kwargs), False
+           ^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 635, in get
+    raise self.model.DoesNotExist(
+core.models.GenerationBatchEvent.DoesNotExist: GenerationBatchEvent matching query does not exist.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AmbiguousColumn: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 197, in test_insufficient_funds_rolls_back_all_children_and_duplicate_quote_is_one_admission
+    first=jobs.enqueue(self.encounter,self.user,config);second=jobs.enqueue(self.encounter,self.user,config)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 86, in enqueue
+    event(batch,'admitted',details={'charge_limit':str(held),'parts':len(children),'plan_sha256':batch.plan_sha256})
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 34, in event
+    return GenerationBatchEvent.objects.get_or_create(event_key=key, defaults={
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 955, in get_or_create
+    return self.create(**params), True
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+======================================================================
+ERROR: test_interrupted_second_call_keeps_unknown_hold_and_never_retries (core.tests.test_generation_batch.BatchWorkflow.test_interrupted_second_call_keeps_unknown_hold_and_never_retries)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 948, in get_or_create
+    return self.get(**kwargs), False
+           ^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 635, in get
+    raise self.model.DoesNotExist(
+core.models.GenerationBatchEvent.DoesNotExist: GenerationBatchEvent matching query does not exist.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AmbiguousColumn: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 180, in test_interrupted_second_call_keeps_unknown_hold_and_never_retries
+    batch=self.admit();calls,call=self.fake(batch,fail_at=2)
+          ^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 130, in admit
+    result=self.client.post(f'/encounters/{self.encounter.pk}/generate/',
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1156, in post
+    response = super().post(
+               ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 499, in post
+    return self.generic(
+           ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 671, in generic
+    return self.request(**r)
+           ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1090, in request
+    self.check_exception(response)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 805, in check_exception
+    raise exc_value
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/views/decorators/http.py", line 64, in inner
+    return func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/views.py", line 1033, in generate_view
+    job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/jobs.py", line 222, in enqueue
+    return batch_jobs.enqueue(encounter,user,config or generation.configuration(),expected_revision)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 86, in enqueue
+    event(batch,'admitted',details={'charge_limit':str(held),'parts':len(children),'plan_sha256':batch.plan_sha256})
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 34, in event
+    return GenerationBatchEvent.objects.get_or_create(event_key=key, defaults={
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 955, in get_or_create
+    return self.create(**params), True
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+======================================================================
+ERROR: test_plan_and_attempt_records_are_immutable_in_database (core.tests.test_generation_batch.BatchWorkflow.test_plan_and_attempt_records_are_immutable_in_database)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 948, in get_or_create
+    return self.get(**kwargs), False
+           ^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 635, in get
+    raise self.model.DoesNotExist(
+core.models.GenerationBatchEvent.DoesNotExist: GenerationBatchEvent matching query does not exist.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AmbiguousColumn: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 201, in test_plan_and_attempt_records_are_immutable_in_database
+    batch=self.admit();part=batch.parts.first()
+          ^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 130, in admit
+    result=self.client.post(f'/encounters/{self.encounter.pk}/generate/',
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1156, in post
+    response = super().post(
+               ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 499, in post
+    return self.generic(
+           ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 671, in generic
+    return self.request(**r)
+           ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1090, in request
+    self.check_exception(response)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 805, in check_exception
+    raise exc_value
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/views/decorators/http.py", line 64, in inner
+    return func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/views.py", line 1033, in generate_view
+    job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/jobs.py", line 222, in enqueue
+    return batch_jobs.enqueue(encounter,user,config or generation.configuration(),expected_revision)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 86, in enqueue
+    event(batch,'admitted',details={'charge_limit':str(held),'parts':len(children),'plan_sha256':batch.plan_sha256})
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/batch_jobs.py", line 34, in event
+    return GenerationBatchEvent.objects.get_or_create(event_key=key, defaults={
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 955, in get_or_create
+    return self.create(**params), True
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column reference "p.job_id" is ambiguous
+LINE 1: ...ion r JOIN core_generationbatchpart p ON r.job_id=p.job_id W...
+                                                             ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  SELECT coalesce(sum(r.amount),0)             FROM core_reservation r JOIN core_generationbatchpart p ON r.job_id=p.job_id WHERE p.batch_id=b.id AND r.state='held'
+CONTEXT:  PL/pgSQL function quillmd_batch_event_guard() line 11 at SQL statement
+
+----------------------------------------------------------------------
+Ran 8 tests in 11.739s
+
+FAILED (errors=4)
+Destroying test database for alias 'default' ('test_quillmd_ci')...
+ OK
+System check identified no issues (0 silenced).

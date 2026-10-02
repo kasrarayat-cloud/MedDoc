@@ -1,0 +1,139 @@
+{
+  "frozen_head": "90297ea971528b0b90f68a0e770ea89088672761",
+  "source_hashes": {
+    "core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "documents/word_v3.py": "ffcba8b32e52aa7f0702c776ab4c7d0fae86e18f2e733a24f1dc1980e5bb97e4"
+  },
+  "network_database_provider_calls": 0,
+  "cases": [
+    {
+      "name": "scalar-duplicate-properties-conflicting-placeholder",
+      "expected": "REFUSED",
+      "outcome": "ACCEPTED",
+      "match": false,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "fa68ee1baf0c0d115a54d053d675856b5d3cdc61e3d4d9494572c3d4f4bee157"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "74481b703b212c7a4f279ce7e72cd308b6ee051cf71715a4f716f83af6f125de",
+      "export_sha256": "1ee4844ab1955c22d28dd4acb5a5b19a7e69855d1d8856ca366412bff6fe3c2d"
+    },
+    {
+      "name": "dropdown-duplicate-properties-conflicting-placeholder",
+      "expected": "REFUSED",
+      "outcome": "ACCEPTED",
+      "match": false,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "1c127d385967e4ae8e202c7450554a6fc796e6edebcb152600db45e8fcb79562"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "d9918f02c1ba84c01705101141bec3241c7db7046f7ee7a3f74b26cd1a220d49",
+      "export_sha256": "ee12858100fb0a088696ac9144964111bf92e50c1a3e6d3e33dd17c44846cf9a"
+    }
+  ],
+  "unexpected": [
+    "scalar-duplicate-properties-conflicting-placeholder",
+    "dropdown-duplicate-properties-conflicting-placeholder"
+  ]
+}

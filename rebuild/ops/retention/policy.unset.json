@@ -17,6 +17,91 @@
     "downloaded_exports": "unresolved"
   },
   "classes": {
+    "disposition_policy_admissions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_instructions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_approvals": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_tombstones": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_completions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_requests": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_plans": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_reviews": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "restore_preparations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "restore_admissions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "retention_hold_replays": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "redaction_requests": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "redaction_tombstones": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "retention_holds": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "retention_hold_releases": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "preserved_clinical_rows": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "preserved_file_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "accounts": {
       "mode": "unresolved",
       "anchor": null,
@@ -108,6 +193,26 @@
       "days": null
     },
     "jobs": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "generation_batches": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "generation_parts": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "generation_attempt_events": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "generation_response_references": {
       "mode": "unresolved",
       "anchor": null,
       "days": null

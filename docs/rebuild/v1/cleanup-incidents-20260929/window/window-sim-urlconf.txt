@@ -1,0 +1,6 @@
+after boot: 11 first-party modules resident, 0 from candidate source: -
+request in window  GET /health/ -> EXCEPTION ESCAPED DJANGO: ImportError: cannot import name 'PreservedFile' from 'core.models' (/opt/meddoc-pro/rebuild/.runtime/v1-closeout-20260929/agents/wind
+after window request: 11 first-party modules resident, 0 from candidate source: -
+request after      GET /health/ -> ('200 OK', 105)
+request after      GET /login/  -> ('200 OK', 2304)
+after restore: 32 first-party modules resident, 0 from candidate source: -

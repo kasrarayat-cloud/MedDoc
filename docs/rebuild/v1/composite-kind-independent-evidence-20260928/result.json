@@ -1,0 +1,87 @@
+{
+  "candidate_sha256": "21399290ec826f9c0c2b9e419b725a93008f39da565558ded076372990af0bc6",
+  "baseline_sha256": "c82ef298b59780238c4f995c6da4056d87ca939282b62c15e74ef185f362cad8",
+  "cases": [
+    {
+      "label": "Date of birth",
+      "base_kind": "date",
+      "candidate_kind": "date",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "D.O.B.",
+      "base_kind": "date",
+      "candidate_kind": "date",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Time (24 h)",
+      "base_kind": "time",
+      "candidate_kind": "time",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Date and description of restrictions",
+      "base_kind": "date",
+      "candidate_kind": "long_text",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Date and details of examination",
+      "base_kind": "date",
+      "candidate_kind": "long_text",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Time and reason for attendance",
+      "base_kind": "time",
+      "candidate_kind": "long_text",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Signature and comments",
+      "base_kind": "signature",
+      "candidate_kind": "signature",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Initials and details",
+      "base_kind": "initials",
+      "candidate_kind": "initials",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Patient name",
+      "base_kind": "text",
+      "candidate_kind": "text",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "label": "Comments",
+      "base_kind": "long_text",
+      "candidate_kind": "long_text",
+      "all_other_metadata_identical": true,
+      "export_equal_when_applicable": true
+    },
+    {
+      "native_alias": "Date and summary of findings",
+      "base_equals_candidate": true,
+      "kind": "date"
+    },
+    {
+      "native_alias": "Time and history details",
+      "base_equals_candidate": true,
+      "kind": "date"
+    }
+  ],
+  "finding": "NOTHING FOUND within bounded claims"
+}

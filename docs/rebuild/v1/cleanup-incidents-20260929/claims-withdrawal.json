@@ -1,0 +1,88 @@
+{
+ "note": "Part (d). Commit messages are immutable: \"recommended\" wording is for a dated amendment in a committed record, not a history rewrite.",
+ "claims": [
+  {
+   "id": "D1",
+   "scope": "event 2",
+   "file": "commit a68ee3ec message (feat/v1-sonnet5-campaign; reachable from v1/release-integration via b2976c97)",
+   "line": "message lines \"Mutation proofs (...)\"",
+   "sentence": "Mutation proofs (baseline unmutated green first; each anchor count asserted == 1; the mutated file read back and its sha256 compared; 600 s deadline; original restored in finally and asserted by sha256): 74 of 74 KILLED \u2014 68 under plain unittest, 6 under the QA test runner.",
+   "lost": "per-mutant records (application, sha256 read-back, restore, killing test) of 64 of the 68 plain mutants: P04-P06, P08-P56, S01-S12 (r2fix/mutation-plain.log and mutation-plain.json, shredded 09:42:51Z)",
+   "survives": "the runner count 67 KILLED + the P07 SURVIVED line (agent-ae86c9551080201b3.jsonl:343), P01/P02 lines (:339), P03/P07 re-run (:360), all six QA-runner lines (:368, :374); the 74 mutant definitions (recovered/RECONSTRUCTED-event2__r2fix__mutate.py)",
+   "recommended": "Append to the campaign record: \"Amendment 2026-09-29: the per-mutant log of a68ee3ec's plain mutation run was destroyed with the session scratch at 09:42Z. The 74-of-74 figure is now evidenced only in aggregate (the runner's own count: 67 KILLED and P07 SURVIVED of 68, then P03 and P07 re-run KILLED; the six QA-runner mutants in full). The per-mutant read-back and sha256-restore evidence for P04-P06, P08-P56 and S01-S12 no longer exists; re-run the reconstructed runner against a68ee3ec before citing it per mutant.\""
+  },
+  {
+   "id": "D2",
+   "scope": "event 1 and 2 (incident record)",
+   "file": "docs/rebuild/v1/qualification-milestone-report-20260929.md (v1/release-integration debaefd9)",
+   "line": "101-102",
+   "sentence": "Scratch shredded. A diagnostics repair agent shredded 30 files in the shared session scratchpad. Live evidence was verified intact; one mutation-proof log was lost. Agents now get their own scratch subdirectory.",
+   "lost": "not a verification claim itself, but it is now wrong by omission: 34 s after this commit (09:42:17Z) the lead shredded 6,537 more files (event 2); and the one \"lost\" log (mutation_proofs.log) is reconstructable while a68ee3ec's per-mutant log is not",
+   "recommended": "\"Scratch shredded, twice. At 00:58Z a diagnostics repair agent's close-out reap shredded 227 files, 30 of them other agents' (the cited residual evidence is committed and hash-checked; the harness, the 8359c053/231183b3 mutation scripts and log are reconstructed from the session transcript). At 09:42-09:46Z, after this report was committed, the lead session shredded 6,537 further files across the whole scratchpad, emptying a clone's git index to get past the reaper's tracked-file guard. Paid-run evidence under rebuild/.runtime was outside both and is intact. Irretrievably lost: the per-mutant log of a68ee3ec's 64 plain mutants and the mapping verifier's raw output log; the verifier's probe and the committed mutation runners' scratch dependencies are reconstructed (incident report).\""
+  },
+  {
+   "id": "D3",
+   "scope": "event 1",
+   "file": "docs/rebuild/v1/sonnet5-campaign/diagnostics/REPAIR.md",
+   "line": "14",
+   "sentence": "Of 227 shredded files, 205 were mine. The 22 others were the full `evidence/` (11), `harness/` (8) and `camp/` (3) directories, plus 8 top-level files: ...",
+   "lost": "arithmetic: 205 + 22 + 8 = 235 != 227; the 205 counted the 8 top-level files twice (agent-a72f8adaf164f1511.jsonl:631 classified every top-level file as its own)",
+   "recommended": "\"Of 227 shredded files, 197 were mine and 30 were not: the full evidence/ (11), harness/ (8) and camp/ (3) directories and 8 top-level files: ...\""
+  },
+  {
+   "id": "D4",
+   "scope": "event 1",
+   "file": "docs/rebuild/v1/sonnet5-campaign/diagnostics/REPAIR.md",
+   "line": "16",
+   "sentence": "`camp/` (`msg-approval.txt`, `diag-results.json`, `msg-diag.txt`) and `evidence/` had a modification time of the same minute, so they may have been in active use. Shredded files cannot be recovered.",
+   "lost": "the same-minute directory time was produced by the shred itself (shred -u removes entries); last writes were 00:14:32Z (camp/msg-diag.txt, P.jsonl:16911) and about 00:35Z (evidence/core-full.log, suite started 00:05:16Z, 29m42s). \"Cannot be recovered\" is wrong for the content of 26 of the 30: see evidence-reliance.json",
+   "recommended": "\"The directories' times were changed by the shred itself; the last writes were 00:14:32Z (camp/) and about 00:35Z (evidence/). The lead wrote to camp/ again at 00:58:14Z, 7 s after the reap started. The shredded files cannot be restored as files, but the cited residual evidence is committed (ra-red.txt hash-verified against a sha256 recorded before the shred), and the harness, mutation scripts, mutation log and commit messages are reconstructed from the session transcript.\""
+  },
+  {
+   "id": "D5",
+   "scope": "event 2",
+   "file": "docs/rebuild/v1/sonnet5-campaign/mapping-repair-stop-20260929.md (feat/v1-sonnet5-campaign 4a818937; v1/release-integration)",
+   "line": "24",
+   "sentence": "Both reproduced by the verifier on synthetic blank forms (probe `mp2verify.py`, session scratch, not retained).",
+   "lost": "the probe was retained when this was committed (09:35:47Z) and destroyed at 09:42:51Z; its raw output (extra.log) is lost; the probe itself is recovered and verified (size, line count, 30-line grep)",
+   "recommended": "\"Both reproduced by the verifier on synthetic blank forms (probe mp2verify.py; the scratch copy was destroyed at 09:42Z and is reconstructed from the session transcript, 15,249 bytes, equal to the verifier's own listing; its raw output log was not recovered, the per-case results survive in the session transcript).\" The R1/R2 findings themselves are not withdrawn: their code citations are checkable at 48aa5e8d and the per-case outputs survive."
+  },
+  {
+   "id": "D6",
+   "scope": "event 1",
+   "file": "commit 3c943d01 message (feat/v1-sonnet5-diagnostics; merged into feat/v1-sonnet5-campaign 2e3eb2f8)",
+   "line": "message line 4-5",
+   "sentence": "... the paid campaign evidence, the ledger and the credential live outside it and are intact, and the residual assessment's evidence was already committed ...",
+   "lost": "true for every file the assessment cites (hash chain verified); not true for the mutation harness and mutant specs behind ra-mutation.txt / rb-mutation.txt, the full core-suite log (only an excerpt is committed) and the raw explorer JSON (only derived files are committed)",
+   "recommended": "\"... the evidence files the residual assessment cites were already committed (ra-red.txt matches a sha256 recorded before the shred); its mutation harness and mutant specs were not, and are reconstructed from the session transcript; the full core-suite log survives only as the committed excerpt.\""
+  },
+  {
+   "id": "D7",
+   "scope": "event 2 (rs) and owner reap 03:49Z (rr2)",
+   "file": "docs/rebuild/v1/residuals-evidence-20260929/rs_mutate.py and rr2_mutate.py (fix/v1-residuals, v1/release-integration)",
+   "line": "rs_mutate.py:13, rr2_mutate.py:16",
+   "sentence": "RUN = '/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/pyenv/run-tests.sh'  /  RUN = '.../scratchpad/rr2repair/run-tests.sh'",
+   "lost": "the runners these committed proofs execute no longer exist, so the proofs are not re-runnable as committed; both runners are reconstructed (pyenv/run-tests.sh verified against two recorded cats)",
+   "recommended": "No claim to withdraw. Add to the assessment's Evidence section: \"rs_mutate.py and rr2_mutate.py name runners in the session scratchpad that no longer exist (pyenv/run-tests.sh shredded 09:42Z; rr2repair/run-tests.sh reaped 03:49Z by its own agent). Reconstructed copies are in the incident record; commit them beside the scripts before re-running.\""
+  },
+  {
+   "id": "D8",
+   "scope": "outside both events (owner direct shred 09:03:08Z)",
+   "file": "commit 48aa5e8d message (fix/v1-mapping-partial)",
+   "line": "\"Mutation proofs: 33 mutants ...\"",
+   "sentence": "... restored with sha256 compared; unmutated baseline green first; 33 killed, all by assertion failures (...)",
+   "lost": "mp3/mutation.log was shredded by the repair agent itself with `find $S -type f -exec shred -u -n 1 -z {} +` (agent-ac6af68060deafea1.jsonl:704), outside the reaper; the transcript and tasks/bpj0f60xk.output carry per-mutant lines for 32 of 33; A8 (\"label not read\") appears only as \"mutation applied: True\" (:612), and its kill and kill mode are evidenced only by the first run's summary \"killed 32 of 33 applied\" with A2 the survivor",
+   "recommended": "\"33 killed (the individual record of A8 was lost with the repair agent's scratch; the run's own summary counts it killed); all others by assertion failures.\""
+  }
+ ],
+ "checked_and_not_lost": [
+  "8359c053 \"8 of 8 KILLED, every file restored byte-identical\": log and script reconstructed; the final run targeted exactly the committed files (sha256 match)",
+  "231183b3 \"8 of 8 KILLED \u2014 M1..M8\": per-mutant lines in agent-a23989dfeb6b73899.jsonl:123; script reconstructed",
+  "eef29795 \"31 of 31 KILLED\" and bb8f27f2 \"28 of 28 KILLED\": per-mutant JSON in agent-abd8c23ef055f97e1.jsonl:303 and :865/:871 and tasks/bnqk2s06m.output (scratch reaped by its owner 04:10Z, not by either event)",
+  "9b316c9e \"18 of 18 KILLED\": M01-M18 lines in agent-a114f1ef461405d2f.jsonl:452 (scratch rp3 reaped by owner 05:28Z)",
+  "d40c8689 \"29 mutants ... all killed (one first survived ...)\": A1-A19, W1-W11 minus W3 = 29 ids; A10 survivor and its later kill at agent-a6ed90f55e1e760d5.jsonl:447,453 (scratch reaped by owner 06:53Z)",
+  "61c5cc8f, d5367521, 54265ffe (residuals): mutation and run evidence committed in residuals-evidence-20260929",
+  "REPAIR.md positive-control table (:171-181): outputs in agent-a72f8adaf164f1511.jsonl:542,567,572,577; RECHECK.md reproduced the records",
+  "paid-run evidence (rebuild/.runtime/v1-sonnet5-campaign ledger, evidence/001-017, transcripts): outside the scratchpad, not touched by either event, no file modified after 09:42Z"
+ ]
+}

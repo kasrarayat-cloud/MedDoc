@@ -1,0 +1,30 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................E........................................................................................................
+======================================================================
+ERROR: test_clinically_related_assessment_does_not_release_allergy_medication_or_smoker (core.tests.test_v3_history_context.HistoryContextContract.test_clinically_related_assessment_does_not_release_allergy_medication_or_smoker)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_history_context.py", line 132, in test_clinically_related_assessment_does_not_release_allergy_medication_or_smoker
+    out = offered(notes, case['fields'], case['original_all_picks'])
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_history_context.py", line 44, in offered
+    selections = h.HistorySelections.model_validate(body(notes, fields, picks, overrides))
+                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_history_context.py", line 31, in body
+    fields_out = [{'key': f['key'], 'unit_ids': [by_quote[q] for q in picks.get(f['label'], [])],
+                                                 ~~~~~~~~^^^
+KeyError: 'Assessment is tension-type headache.'
+
+----------------------------------------------------------------------
+Ran 127 tests in 59.279s
+
+FAILED (errors=1)
+Preserving test database for alias 'default'...
+Found 127 test(s).
+System check identified no issues (0 silenced).

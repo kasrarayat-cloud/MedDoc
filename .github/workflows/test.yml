@@ -17,11 +17,11 @@ jobs:
   python-checks:
     name: Fresh Python (${{ matrix.lane }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        lane: [core, support]
+        lane: [core-1, core-2, support]
     services:
       postgres:
         image: postgres:16-alpine
@@ -81,6 +81,14 @@ jobs:
         run: python3 -B scripts/ops/tests/test_reviewer_tunnel_access.py -v
       - name: Fresh Python partition
         run: bash scripts/ci/verify-fresh.sh python-${{ matrix.lane }}
+      - name: Preserve core discovery manifest
+        if: always() && matrix.lane != 'support'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-${{ matrix.lane }}-manifest
+          path: rebuild/.runtime/${{ matrix.lane == 'core-1' && 'core-shard-1' || 'core-shard-2' }}.json
+          if-no-files-found: error
+          include-hidden-files: true
       - name: Actual Word adapter and kernel qualification
         if: matrix.lane == 'support'
         working-directory: rebuild
@@ -103,6 +111,14 @@ jobs:
         env:
           QUILLMD_PYTHON_RESULT: ${{ needs.python-checks.result }}
         run: test "$QUILLMD_PYTHON_RESULT" = success
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fresh-core-*-manifest
+          path: core-manifests
+          merge-multiple: true
+      - name: Prove exact core discovery coverage
+        run: python3 rebuild/ops/ci_test_shards.py --source-sha '${{ github.sha }}' core-manifests/core-shard-1.json core-manifests/core-shard-2.json
 
   marketing:
     name: Marketing build
@@ -188,18 +204,25 @@ jobs:
         run: |
           gunicorn quillmd.wsgi:application --bind 127.0.0.1:9130 --workers 1 --timeout 60 > .runtime/browser-server.log 2>&1 &
           browser_server_pid=$!
+          # The console exists on the administration surface only (inventory 7A, F1): a second process, as in production.
+          QUILLMD_ADMIN_SITE=1 gunicorn quillmd.wsgi:application --bind 127.0.0.1:9131 --workers 1 --timeout 60 > .runtime/browser-admin-server.log 2>&1 &
+          browser_admin_server_pid=$!
           python manage.py worker > .runtime/browser-worker.log 2>&1 &
           browser_worker_pid=$!
-          trap 'kill "$browser_server_pid" "$browser_worker_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null; then break; fi
-            sleep 1
+          trap 'kill "$browser_server_pid" "$browser_admin_server_pid" "$browser_worker_pid" 2>/dev/null || true' EXIT
+          for port in 9130 9131; do
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent "http://127.0.0.1:$port/health/" > /dev/null; then break; fi
+              sleep 1
+            done
+            curl --fail --silent "http://127.0.0.1:$port/health/" > /dev/null
           done
-          curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null
           node browser-tests.mjs
           python prepare-wm-browser.py
           node wm-browser-tests.mjs
           node input-workflow-browser.mjs "$PWD/.runtime/input-workflow-browser"
+          python prepare-word-authority-browser.py
+          node word-authority-browser.mjs
       - name: Upload synthetic browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -212,3 +235,4 @@ jobs:
             rebuild/.runtime/browser-artifacts/report.json
             rebuild/.runtime/wm-browser-artifacts/report.json
             rebuild/.runtime/input-workflow-browser/result.json
+            rebuild/.runtime/word-authority-artifacts/*/result.json

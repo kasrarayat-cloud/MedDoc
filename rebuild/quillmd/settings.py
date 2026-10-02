@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import json
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 from quillmd import application_profile as _profile
@@ -32,7 +33,7 @@ except _profile.ProfileError as exc:
 SYNTHETIC_ONLY = QUILLMD_DATA_MODE == 'synthetic'
 RELEASE_SHA = os.getenv('QUILLMD_RELEASE_SHA', 'development-unrecorded')
 INSTALLED_APPS = ['django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions','django.contrib.messages','django.contrib.staticfiles','django_otp','django_otp.plugins.otp_totp','core']
-MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','core.preview_access.PreviewAccessMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
+MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','core.disposition.RestoreQuarantineMiddleware','core.preview_access.PreviewAccessMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
 ROOT_URLCONF = 'quillmd.urls'
 TEMPLATES = [{'BACKEND':'django.template.backends.django.DjangoTemplates','DIRS':[BASE_DIR/'templates'],'APP_DIRS':True,'OPTIONS':{'context_processors':['django.template.context_processors.request','django.contrib.auth.context_processors.auth','django.contrib.messages.context_processors.messages','core.context.common']}}]
 WSGI_APPLICATION = 'quillmd.wsgi.application'
@@ -53,7 +54,9 @@ FILE_UPLOAD_PERMISSIONS=0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o700
 DATA_UPLOAD_MAX_MEMORY_SIZE=20*1024*1024
 FILE_UPLOAD_MAX_MEMORY_SIZE=0
-DATA_UPLOAD_MAX_NUMBER_FIELDS=1000
+# Existing large drafts must remain reviewable if generation is switched off.
+# Bound the whole review form (up to1500 mapped fields); body-size limits still apply.
+DATA_UPLOAD_MAX_NUMBER_FIELDS=16000
 SESSION_COOKIE_NAME='quillmd_admin_session' if ADMIN_SITE else 'quillmd_doctor_session'
 CSRF_COOKIE_NAME='quillmd_admin_csrf' if ADMIN_SITE else 'quillmd_doctor_csrf'
 SESSION_COOKIE_HTTPONLY=True
@@ -82,11 +85,21 @@ DEFAULT_AUTO_FIELD='django.db.models.BigAutoField'
 # Word contract for NEW template inspections: 'legacy' (v1/v2 tables, placeholders, tab lines) or 'v3' (every
 # structure, clinician-reviewed mapping). Stored mappings always fill under the contract that made them.
 QUILLMD_WORD_ENGINE=os.getenv('QUILLMD_WORD_ENGINE','legacy')
+QUILLMD_LAYOUT_SOCKET=os.getenv('QUILLMD_LAYOUT_SOCKET','')
+QUILLMD_LAYOUT_SERVICE_UID=os.getenv('QUILLMD_LAYOUT_SERVICE_UID','')
 QUILLMD_MAPPING_ASSISTANCE=os.getenv('QUILLMD_MAPPING_ASSISTANCE','0')=='1'
 # Separate admission: exposing offline review is never authority for provider spending.
 QUILLMD_MAPPING_ASSISTANCE_LIVE=os.getenv('QUILLMD_MAPPING_ASSISTANCE_LIVE','0')=='1'
 if QUILLMD_WORD_ENGINE not in ('legacy','v3'):
     raise ImproperlyConfigured("QUILLMD_WORD_ENGINE must be 'legacy' or 'v3'.")
+# Role suggestions on the legacy default path (core.destination_roles.suggestion_scope): '1' asks a field held ONLY
+# because its printed label reads as a signature or initials role as an ordinary question, and offers the reading as
+# an explicit-accept suggestion that is never adopted; '0' (the default) never asks it, exactly as before. Read like
+# every V1 0/1 switch (application_profile.flag): unset or empty is '0', anything but 0/1 refuses to start.
+try:
+    QUILLMD_ROLE_SUGGESTIONS='1' if _profile.flag(os.environ,'QUILLMD_ROLE_SUGGESTIONS','0') else '0'
+except _profile.ProfileError as exc:
+    raise ImproperlyConfigured(str(exc)) from None
 QUILLMD_EMAIL_MODE=os.getenv('QUILLMD_EMAIL_MODE','file')
 EMAIL_BACKEND='core.email_backend.ResendEmailBackend' if QUILLMD_EMAIL_MODE=='resend' else 'core.email_backend.PrivateFileEmailBackend'
 EMAIL_FILE_PATH=STATE_DIR/'mail'
@@ -123,6 +136,10 @@ AI_INFERENCE_GEO=os.getenv('QUILLMD_AI_INFERENCE_GEO','')
 # enabled for doctors, and not live-verified. Shared generation/review changes have separate acceptance evidence;
 # a disabled WM flag does not establish their behavior or discharge the required ordinary-note workflow.
 WM_NARRATIVE=os.getenv('QUILLMD_WM_NARRATIVE','0')=='1'
+# Prepared only: exact-model context qualification is still a release gate.
+V3_HISTORY_CONTEXT=os.getenv('QUILLMD_V3_HISTORY_CONTEXT','0')=='1'
+V3_GENERATION_BATCHES=os.getenv('QUILLMD_V3_GENERATION_BATCHES','0')=='1'
+V3_FIELD_RELATIONS=os.getenv('QUILLMD_V3_FIELD_RELATIONS','0')=='1'
 # Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
 AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
@@ -151,3 +168,22 @@ if QUILLMD_STRIPE_MODE=='live':
     _refusals+=_profile.stripe_live_problems(os.environ,allowed_hosts=ALLOWED_HOSTS,secret_key=STRIPE_SECRET_KEY,webhook_secret=STRIPE_WEBHOOK_SECRET,app_base_url=QUILLMD_APP_BASE_URL)
 if _refusals:
     raise ImproperlyConfigured('QuillMD refuses to start: '+'; '.join(_refusals)+'.')
+
+# Preparation cannot release quarantine or grant destruction authority.
+RESTORE_QUARANTINE = os.getenv('QUILLMD_RESTORE_QUARANTINE', '0') != '0'
+RESTORE_INSTANCE_ID = os.getenv('QUILLMD_RESTORE_INSTANCE_ID', '')
+# No keys, schedule or executable authority ship with the product. Tombstones
+# remain enforced when execution is disabled; turning a feature off is no release.
+DISPOSITION_ENABLED = os.getenv('QUILLMD_DISPOSITION_ENABLED', '0') == '1'
+DISPOSITION_NAMESPACE = os.getenv('QUILLMD_DISPOSITION_NAMESPACE', '')
+DISPOSITION_AUTHORITY_KEYS = json.loads(os.getenv('QUILLMD_DISPOSITION_AUTHORITY_KEYS', '{}'))
+DISPOSITION_CHECKPOINT_KEYS = json.loads(os.getenv('QUILLMD_DISPOSITION_CHECKPOINT_KEYS', '{}'))
+DISPOSITION_JOURNAL_KEYS = json.loads(os.getenv('QUILLMD_DISPOSITION_JOURNAL_KEYS', '{}'))
+DISPOSITION_JOURNAL_KEY_ID = os.getenv('QUILLMD_DISPOSITION_JOURNAL_KEY_ID', '')
+DISPOSITION_JOURNAL_PRIVATE_KEY = os.getenv('QUILLMD_DISPOSITION_JOURNAL_PRIVATE_KEY', '')
+DISPOSITION_JOURNAL_PATH = os.getenv('QUILLMD_DISPOSITION_JOURNAL_PATH', '')
+# Readiness thresholds (core.readiness, GET /health/ready/). The defaults and the alarm table they belong to are
+# ops/alarms.json; empty keeps the default, and an invalid value answers not ready rather than ready.
+READINESS_WORKER_HEARTBEAT_SECONDS = os.getenv('QUILLMD_READINESS_WORKER_HEARTBEAT_SECONDS', '')
+READINESS_OLDEST_QUEUED_SECONDS = os.getenv('QUILLMD_READINESS_OLDEST_QUEUED_SECONDS', '')
+READINESS_QUEUE_DEPTH = os.getenv('QUILLMD_READINESS_QUEUE_DEPTH', '')

@@ -1,0 +1,31 @@
+{
+  "engine_sha256": "123c293b6f74f9d15685269c802276689d382c10b15b06957fb8eb0e94517520",
+  "cases": [
+    {
+      "case": "D30",
+      "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+      "fields": 63,
+      "notes_unchanged": false,
+      "changes": [
+        {
+          "key": "v3_11",
+          "label": "Deprivation of Liberty Safeguards (DOLS): set out date of Order and details of any restrictions and safeguards (if applicable)",
+          "source": "b/tbl[0]/tr[9]/tc[1]",
+          "changes": {
+            "kind": [
+              "date",
+              "long_text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case": "D31",
+      "original_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+      "fields": 67,
+      "notes_unchanged": false,
+      "changes": []
+    }
+  ]
+}

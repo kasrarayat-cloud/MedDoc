@@ -1,0 +1,16 @@
+{
+  "core_leaf_nodes": [
+    [
+      "core",
+      "0029_merge_batch_disposition"
+    ]
+  ],
+  "model_migration_changes": [],
+  "closed_catalog_matches": true,
+  "expected_guards": 63,
+  "expected_function_bodies": 18,
+  "batch_feature_default": false,
+  "restore_quarantine_default": false,
+  "network": "denied",
+  "database_connections": 0
+}

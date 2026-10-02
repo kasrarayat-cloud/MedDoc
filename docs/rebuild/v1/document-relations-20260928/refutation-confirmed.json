@@ -1,0 +1,76 @@
+{
+  "source_sha256": "ee0d4951be27a713279f92ea18af34fc7d3fadfb1d729c286c57e2608e692b3b",
+  "source_unchanged": true,
+  "pure_synthetic": true,
+  "cases": {
+    "conditional_choice": {
+      "input": "If pain is present, select one severity: / a. Mild / b. Severe / For help, please refer to the guidance at: / fixed link",
+      "baseline_fields": [
+        {
+          "label": "If pain is present, select one severity",
+          "options": [
+            "Mild",
+            "Severe"
+          ]
+        },
+        {
+          "label": "For help, please refer to the guidance at",
+          "options": null
+        }
+      ],
+      "new_fields": [],
+      "demonstrated_wrong_output": true
+    },
+    "moved_reference_destination": {
+      "mapping_target": "b/tbl[1]/tr[0]/tc[0]",
+      "relation": [
+        {
+          "relation": "immediate_previous_question",
+          "question": "What symptoms were observed?",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "fingerprint": "b7b7b668c1be14e9331cd13c0aa3c8af93e353080ff3f948b7e105c74d571273"
+          },
+          "reference": {
+            "part": "word/document.xml",
+            "slot": "b/p[2]",
+            "fingerprint": "5069a9fe56e02b04c7b52fb394a1e19221b156afb2a3783a60192392d11b24bb"
+          }
+        }
+      ],
+      "fresh_relation_count": 0,
+      "physical_box_values_after_fill": [
+        "",
+        "SYNTHETIC patient response",
+        ""
+      ],
+      "demonstrated_wrong_output": true
+    },
+    "other_author_box": {
+      "statement_matches_authorship": true,
+      "field": {
+        "key": "v3_1",
+        "label": "Other (please specify)",
+        "kind": "long_text",
+        "context": "Parent comments > This section is for the parent to provide comments: > Printed options: No comments | Other (please specify)",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+        }
+      },
+      "exported_author_box": "SYNTHETIC parent agrees",
+      "demonstrated_wrong_output": true
+    },
+    "filled_author_box": {
+      "input": "A nonempty author-only comments box and forged unprotected current-anchor mapping",
+      "exported_author_box": "SYNTHETIC forged replacement",
+      "demonstrated_wrong_output": true
+    }
+  }
+}

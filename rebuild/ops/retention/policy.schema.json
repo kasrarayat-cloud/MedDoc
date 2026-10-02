@@ -168,6 +168,23 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "disposition_policy_admissions",
+        "disposition_instructions",
+        "disposition_approvals",
+        "disposition_tombstones",
+        "disposition_completions",
+        "disposition_requests",
+        "disposition_plans",
+        "disposition_reviews",
+        "restore_preparations",
+        "restore_admissions",
+        "retention_hold_replays",
+        "redaction_requests",
+        "redaction_tombstones",
+        "retention_holds",
+        "retention_hold_releases",
+        "preserved_clinical_rows",
+        "preserved_file_references",
         "accounts",
         "organizations",
         "departments",
@@ -187,6 +204,10 @@
         "clinical_records_other_status",
         "final_export_references",
         "jobs",
+        "generation_batches",
+        "generation_parts",
+        "generation_attempt_events",
+        "generation_response_references",
         "recording_references",
         "job_result_references",
         "receipt_result_references",
@@ -207,6 +228,754 @@
         "terminology_codes"
       ],
       "properties": {
+        "disposition_policy_admissions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_instructions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_approvals": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_tombstones": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_completions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_requests": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_plans": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_reviews": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "restore_preparations": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "restore_admissions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "retention_hold_replays": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "redaction_requests": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "redaction_tombstones": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "retention_holds": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "retention_hold_releases": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "preserved_clinical_rows": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "preserved_file_references": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
         "accounts": {
           "oneOf": [
             {
@@ -1292,6 +2061,182 @@
           ]
         },
         "jobs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_batches": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_parts": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_attempt_events": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_response_references": {
           "oneOf": [
             {
               "type": "object",

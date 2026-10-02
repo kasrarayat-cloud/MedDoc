@@ -1,0 +1,31 @@
+{
+  "observed_at": "2026-09-28T03:00:19.927785+00:00",
+  "source_head": "90297ea971528b0b90f68a0e770ea89088672761",
+  "source_before": {
+    "rebuild/core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "rebuild/documents/word_v3.py": "ffcba8b32e52aa7f0702c776ab4c7d0fae86e18f2e733a24f1dc1980e5bb97e4",
+    "rebuild/documents/service.py": "e8b17bce53fed735faed7452f33e8d8dc1838bce98b934c63d9705be5dfef8a6",
+    "rebuild/documents/engine.py": "c1e1313df1a37476c7d05e8a461f4feca1f00204f3ab5e8041b434fd89eab8ae"
+  },
+  "source_after": {
+    "rebuild/core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "rebuild/documents/word_v3.py": "ffcba8b32e52aa7f0702c776ab4c7d0fae86e18f2e733a24f1dc1980e5bb97e4",
+    "rebuild/documents/service.py": "e8b17bce53fed735faed7452f33e8d8dc1838bce98b934c63d9705be5dfef8a6",
+    "rebuild/documents/engine.py": "c1e1313df1a37476c7d05e8a461f4feca1f00204f3ab5e8041b434fd89eab8ae"
+  },
+  "source_unchanged": true,
+  "results": [
+    {
+      "case": "replay",
+      "returncode": 0,
+      "result": "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/.runtime/independent-batch/root-final-replay-results.json",
+      "sha256": "7f0495284ab03ba4d1f4729e5d73014806f89aa6fb0ba7caf3dcc1fabb78c207"
+    },
+    {
+      "case": "positive",
+      "returncode": 0,
+      "result": "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/.runtime/independent-batch/root-final-positive-results.json",
+      "sha256": "61b5e2e8713e2f74fdc22836c93708f7d51727a4fde38653b52388c182abef12"
+    }
+  ]
+}

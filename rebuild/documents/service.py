@@ -70,6 +70,9 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         (workspace / "request.json").write_bytes(raw_request)
         from .sdk_service import WM_IOV_SHA256, run as run_sdk, SdkUnavailable
         if suffix == ".docx" and digest == WM_IOV_SHA256:
+            if operation == "roles":
+                # The qualified WM form keeps its own reviewed contract; its roles are not read by this parser.
+                raise DocumentError("The qualified Word form keeps its own mapping contract.", "unsupported_format")
             sdk_request = {"operation": operation}
             if operation != "inspect":
                 metadata = document_backend or {}
@@ -108,6 +111,27 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                 response = json.loads(result.stdout)
             except (ValueError, UnicodeError) as exc:
                 raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed") from exc
+        needs_layout = response.get("code") == "layout_verification_required"
+        if (operation == "inspect" and response.get("layout_pending")) or needs_layout:
+            from .layout_transport import verify_document
+            try:
+                verified, actual = verify_document(payload, mapping if needs_layout else None,
+                                                   answers if needs_layout else None)
+            except DocumentError as exc:
+                if needs_layout:
+                    raise
+                response["warnings"].append(str(exc))
+            else:
+                response = {"format": "docx", "contract": "v3", "adapter": "word-v3",
+                    "sandbox": "landlock+seccomp", "fields": mapping if needs_layout else verified["fields"],
+                    "warnings": verified["warnings"], "layout_receipt": verified["receipt"]}
+                if needs_layout:
+                    if operation in ("effective_options", "effective_values"):
+                        response["states"] = verified["states"]
+                    else:
+                        (workspace / "output.docx").write_bytes(actual)
+                        response["filled"] = sum(answers.get(field["key"]) not in (None, "", []) for field in mapping)
+                        response["missing"] = [field["key"] for field in mapping if answers.get(field["key"]) in (None, "", [])]
         if "error" in response:
             raise DocumentError(response["error"], response.get("code", "invalid_document"))
         response["sha256"] = digest
@@ -158,6 +182,33 @@ def locate_fields(path, targets: list):
     if not isinstance(targets, list) or len(targets) > 200:
         raise DocumentError("Add at most 200 fields at a time.", "invalid_mapping")
     return _run(path, "locate", engine="v3", targets=targets)
+
+
+def destination_roles(path, mapping: list, *, engine):
+    """The original's destination roles, read in the isolated parser from a FRESH inspection (never from the stored
+    mapping): for a contract v3 original, every role place and each mapping field that touches one it may not take;
+    for a legacy original, each stored field's printed label and the role the engine's kind rule gives it."""
+    if not isinstance(mapping, list) or len(mapping) > 1500 or engine not in ("v3", "legacy"):
+        raise DocumentError("Destination role mapping is invalid.", "invalid_mapping")
+    return _run(path, "roles", mapping, None, engine=engine)
+
+
+def effective_options(path, mapping: list, answers: dict):
+    """Read the constrained controls after their actual writes, inside the sandbox.
+
+    No export is persisted and the original remains untouched. Existing upload,
+    request, memory/CPU and process-time bounds apply to this operation too.
+    """
+    if not isinstance(mapping, list) or not 0 < len(mapping) <= 1500 or not isinstance(answers, dict):
+        raise DocumentError("Constrained option mapping is invalid.", "invalid_mapping")
+    return _run(path, "effective_options", mapping, answers, engine="v3")
+
+
+def effective_values(path, mapping: list, answers: dict):
+    """Source-bound scalar and option read-back under the existing sandbox limits."""
+    if not isinstance(mapping, list) or not 0 < len(mapping) <= 1500 or not isinstance(answers, dict):
+        raise DocumentError("Constrained answer mapping is invalid.", "invalid_mapping")
+    return _run(path, "effective_values", mapping, answers, engine="v3")
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,

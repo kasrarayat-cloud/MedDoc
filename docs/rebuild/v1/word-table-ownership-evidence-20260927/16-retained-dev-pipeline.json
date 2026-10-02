@@ -1,0 +1,2107 @@
+{
+  "scope": "33 rights-supported original DEV only; existing results; no new compatibility score",
+  "source_result_sha256": "076165a61828fe89538751c82d1b0632417ad7cd3b0f08d65ec706d0d5db7de4",
+  "rows": [
+    {
+      "id": "D01",
+      "lineage": "owner-wm-iov",
+      "source_org": "Owner practice (West Medical)",
+      "original_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+      "title": "VENOUS DUPLEX of LOWER EXTREMITIES ULTRASOUND REPORT",
+      "families": [],
+      "expected_areas": 92,
+      "expected_kind_counts": {
+        "choice": 28,
+        "date": 3,
+        "text": 8,
+        "measurement": 52,
+        "signature": 1
+      },
+      "expected_areas_excluding_signature_initials": 91,
+      "historical_actual_fields": 96,
+      "historical_actual_answerable": 96,
+      "historical_failures": [
+        "detection: 1 missed, 0 wrong, 5 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 1,
+        "wrong": 0,
+        "extras": 5
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            3,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            3,
+            14
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D02",
+      "lineage": "owner-colonoscopy",
+      "source_org": "Owner practice",
+      "original_sha256": "8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a",
+      "title": "OPERATIVE NOTE",
+      "families": [],
+      "expected_areas": 24,
+      "expected_kind_counts": {
+        "text": 15,
+        "date": 4,
+        "long_text": 3,
+        "measurement": 1,
+        "signature": 1
+      },
+      "expected_areas_excluding_signature_initials": 23,
+      "historical_actual_fields": 24,
+      "historical_actual_answerable": 23,
+      "historical_failures": [],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 0,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            1,
+            1
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            1,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D03",
+      "lineage": "zenodo-4756701",
+      "source_org": "Zenodo deposit: Kaniuka-Jakubowska S. (acromegaly headache)",
+      "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+      "title": "Detailed Patient Headache Questionnaire (Current Headache)",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F8",
+        "F9"
+      ],
+      "expected_areas": 88,
+      "expected_kind_counts": {
+        "text": 18,
+        "number": 7,
+        "choice": 23,
+        "long_text": 9,
+        "multi_choice": 26,
+        "measurement": 5
+      },
+      "expected_areas_excluding_signature_initials": 88,
+      "historical_actual_fields": 50,
+      "historical_actual_answerable": 50,
+      "historical_failures": [
+        "detection: 43 missed, 18 wrong, 5 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 43,
+        "wrong": 18,
+        "extras": 5
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            4,
+            4
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            4,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D04",
+      "lineage": "zenodo-8004749",
+      "source_org": "Zenodo deposit: Vishwakarma D. (geriatric depression, Wardha)",
+      "original_sha256": "cebb55cd73453bdb6c8caf0fc040861daf9b074bf3cca278b6243e98e02da175",
+      "title": "The prevalence of depression and its associated factor among the geriatric population living in the rural area of Wardha District of Maharashtra: A cross-sectional study",
+      "families": [
+        "F1",
+        "F5",
+        "F6"
+      ],
+      "expected_areas": 27,
+      "expected_kind_counts": {
+        "text": 4,
+        "choice": 23
+      },
+      "expected_areas_excluding_signature_initials": 27,
+      "historical_actual_fields": 16,
+      "historical_actual_answerable": 16,
+      "historical_failures": [
+        "detection: 11 missed, 0 wrong, 0 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 11,
+        "wrong": 0,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            3,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            3,
+            4
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D05",
+      "lineage": "NIDCR Clinical Research Tools & Templates",
+      "source_org": "NIH / NIDCR",
+      "original_sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a",
+      "title": "Site Screening and Enrollment Log",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 6,
+      "expected_kind_counts": {
+        "text": 3,
+        "table_rows": 1,
+        "number": 1,
+        "checkbox": 1
+      },
+      "expected_areas_excluding_signature_initials": 6,
+      "historical_actual_fields": 9,
+      "historical_actual_answerable": 9,
+      "historical_failures": [
+        "detection: 0 missed, 0 wrong, 3 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 0,
+        "extras": 3
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            3,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            3,
+            4
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D07",
+      "lineage": "NINDS CDE CRF module / Rehabilitation Treatment",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+      "title": "Rehabilitation Treatment",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 28,
+      "expected_kind_counts": {
+        "text": 6,
+        "date": 4,
+        "long_text": 4,
+        "choice": 2,
+        "multi_choice": 6,
+        "checkbox": 2,
+        "number": 1,
+        "measurement": 1,
+        "signature": 1,
+        "initials": 1
+      },
+      "expected_areas_excluding_signature_initials": 26,
+      "historical_actual_fields": 26,
+      "historical_actual_answerable": 26,
+      "historical_failures": [
+        "detection: 8 missed, 5 wrong, 6 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 8,
+        "wrong": 5,
+        "extras": 6
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            4,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            4,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D08",
+      "lineage": "NINDS CDE CRF module / Acute Admission/Discharge",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+      "title": "Acute Admission / Discharge",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 41,
+      "expected_kind_counts": {
+        "text": 5,
+        "choice": 15,
+        "date": 15,
+        "time": 3,
+        "checkbox": 2,
+        "number": 1
+      },
+      "expected_areas_excluding_signature_initials": 41,
+      "historical_actual_fields": 42,
+      "historical_actual_answerable": 42,
+      "historical_failures": [
+        "detection: 2 missed, 10 wrong, 5 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 2,
+        "wrong": 10,
+        "extras": 5
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            5,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            5,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D09",
+      "lineage": "NINDS CDE CRF module / Physical Exam",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "b04f37b4ff081529644b1d16c225bf4603c1749e392d8327ed0eb3943019822a",
+      "title": "Physical Exam",
+      "families": [
+        "F1",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 47,
+      "expected_kind_counts": {
+        "text": 2,
+        "date": 1,
+        "choice": 30,
+        "long_text": 14
+      },
+      "expected_areas_excluding_signature_initials": 47,
+      "historical_actual_fields": 47,
+      "historical_actual_answerable": 47,
+      "historical_failures": [],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 0,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            3,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            3,
+            7
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D10",
+      "lineage": "NINDS CDE CRF module / Physical Exam",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+      "title": "Physical Examination",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 198,
+      "expected_kind_counts": {
+        "text": 10,
+        "measurement": 15,
+        "choice": 118,
+        "long_text": 55
+      },
+      "expected_areas_excluding_signature_initials": 198,
+      "historical_actual_fields": 226,
+      "historical_actual_answerable": 226,
+      "historical_failures": [
+        "detection: 14 missed, 3 wrong, 42 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 14,
+        "wrong": 3,
+        "extras": 42
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            15,
+            16
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            15,
+            41
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": true,
+      "illustrative_independent_100_field_chunks": 2,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D11",
+      "lineage": "NINDS CDE CRF module / Laboratory Tests",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "500efd5985a715277144cfaa42d8dbe72ee748fa11bb43a6215ed944b0bc352d",
+      "title": "Laboratory Tests",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 559,
+      "expected_kind_counts": {
+        "text": 271,
+        "choice": 196,
+        "date": 2,
+        "time": 1,
+        "checkbox": 89
+      },
+      "expected_areas_excluding_signature_initials": 559,
+      "historical_actual_fields": 549,
+      "historical_actual_answerable": 549,
+      "historical_failures": [
+        "detection: 12 missed, 0 wrong, 2 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 12,
+        "wrong": 0,
+        "extras": 2
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            14,
+            14
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            14,
+            36
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": true,
+      "illustrative_independent_100_field_chunks": 6,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D12",
+      "lineage": "NINDS CDE CRF module / Electrocardiogram",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "934bf431af0b1486f5f809d83a14a61c6e6721342e1e4c377153e1df640a3604",
+      "title": "Electrocardiogram (ECG)",
+      "families": [
+        "F1",
+        "F2",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 19,
+      "expected_kind_counts": {
+        "text": 3,
+        "date": 1,
+        "measurement": 5,
+        "choice": 7,
+        "multi_choice": 3
+      },
+      "expected_areas_excluding_signature_initials": 19,
+      "historical_actual_fields": 15,
+      "historical_actual_answerable": 15,
+      "historical_failures": [
+        "detection: 4 missed, 1 wrong, 0 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 4,
+        "wrong": 1,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            2,
+            2
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            2,
+            2
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D13",
+      "lineage": "NINDS CDE CRF module / Risk Factor Questionnaire - Physical Activity and Sleep",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "75b75da8559db2a5849343d6809e3171c254a538870e0da40b0a15d367160a92",
+      "title": "RFQ – Physical Activity and Sleep",
+      "families": [
+        "F1",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 11,
+      "expected_kind_counts": {
+        "text": 2,
+        "choice": 9
+      },
+      "expected_areas_excluding_signature_initials": 11,
+      "historical_actual_fields": 11,
+      "historical_actual_answerable": 11,
+      "historical_failures": [],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 0,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            2,
+            2
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            2,
+            2
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D14",
+      "lineage": "NINDS CDE CRF module / Lower Extremity Orthopedic Surgical Procedures - Hip",
+      "source_org": "NIH / NINDS (Common Data Elements project)",
+      "original_sha256": "5089ad547ee0d0527f687bec1e8f26a35f5204e68e7c50b8bd8ae296983a2a50",
+      "title": "Lower Extremity Orthopedic Surgical Procedures - Hip",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 55,
+      "expected_kind_counts": {
+        "text": 22,
+        "choice": 22,
+        "multi_choice": 9,
+        "measurement": 2
+      },
+      "expected_areas_excluding_signature_initials": 55,
+      "historical_actual_fields": 34,
+      "historical_actual_answerable": 34,
+      "historical_failures": [
+        "detection: 22 missed, 11 wrong, 1 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 22,
+        "wrong": 11,
+        "extras": 1
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            5,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            5,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D15",
+      "lineage": "zenodo-20125281-ecraid-icf",
+      "source_org": "ECRAID-Base consortium (Zenodo 20125281)",
+      "original_sha256": "19efe830ee0d049cae32236fe0db8bdfa1cfe5f17ab80f5a37cd66c7593663c2",
+      "title": "Guidance for users of the ECRAID Consortium Subject Information Sheet (SIS) and Informed Consent Form templates / Subject information for participation in medical research",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 70,
+      "expected_kind_counts": {
+        "text": 24,
+        "signature": 8,
+        "date": 11,
+        "choice": 27
+      },
+      "expected_areas_excluding_signature_initials": 62,
+      "historical_actual_fields": 143,
+      "historical_actual_answerable": 135,
+      "historical_failures": [
+        "detection: 2 missed, 3 wrong, 75 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 2,
+        "wrong": 3,
+        "extras": 75
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            21,
+            20
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            21,
+            31
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D16",
+      "lineage": "zenodo-13901089",
+      "source_org": "Zenodo deposit: Zitouni C. (osteoradionecrosis HBO study)",
+      "original_sha256": "51c6e400e89d631bf81959418c9cc5cc9631bfb3ac741a3bdce5d8f9a1e0273f",
+      "title": "Case Report Form (CRF) (Translated in English)",
+      "families": [
+        "F1",
+        "F6"
+      ],
+      "expected_areas": 55,
+      "expected_kind_counts": {
+        "text": 42,
+        "date": 2,
+        "number": 2,
+        "long_text": 3,
+        "measurement": 5,
+        "signature": 1
+      },
+      "expected_areas_excluding_signature_initials": 54,
+      "historical_actual_fields": 58,
+      "historical_actual_answerable": 57,
+      "historical_failures": [
+        "detection: 0 missed, 0 wrong, 3 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 0,
+        "extras": 3
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            3,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            3,
+            9
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D17",
+      "lineage": "laa-health-professional-evidence-letters",
+      "source_org": "Legal Aid Agency (Ministry of Justice)",
+      "original_sha256": "92b3e2ed55db0bba14bc20bdb5b27ad5253337075c1b042d0362663a7a16154a",
+      "title": "Response from health professional to request for evidence of injuries/condition consistent with domestic abuse",
+      "families": [
+        "F1",
+        "F2",
+        "F4",
+        "F5",
+        "F6"
+      ],
+      "expected_areas": 21,
+      "expected_kind_counts": {
+        "text": 12,
+        "long_text": 2,
+        "choice": 3,
+        "multi_choice": 2,
+        "date": 1,
+        "signature": 1
+      },
+      "expected_areas_excluding_signature_initials": 20,
+      "historical_actual_fields": 14,
+      "historical_actual_answerable": 14,
+      "historical_failures": [
+        "detection: 7 missed, 5 wrong, 0 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 7,
+        "wrong": 5,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            2,
+            2
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            2,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D18",
+      "lineage": "laa-health-professional-evidence-letters",
+      "source_org": "Legal Aid Agency (Ministry of Justice)",
+      "original_sha256": "73fe91e5501bad3fe7e5ad413f49934006965b8b2e1d2612f88e1daf78ac9f46",
+      "title": "Response from health professional to request for evidence of injuries/condition consistent with domestic violence",
+      "families": [
+        "F1",
+        "F2",
+        "F4",
+        "F6"
+      ],
+      "expected_areas": 21,
+      "expected_kind_counts": {
+        "text": 12,
+        "long_text": 2,
+        "choice": 2,
+        "multi_choice": 2,
+        "date": 1,
+        "checkbox": 1,
+        "signature": 1
+      },
+      "expected_areas_excluding_signature_initials": 20,
+      "historical_actual_fields": 14,
+      "historical_actual_answerable": 14,
+      "historical_failures": [
+        "detection: 7 missed, 5 wrong, 0 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 7,
+        "wrong": 5,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            1,
+            1
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            1,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D21",
+      "lineage": "NIH IRB (OHSRP) consent template family",
+      "source_org": "NIH Office of the Director / OHSRP (NIH IRB)",
+      "original_sha256": "d1c0e1234baeb32039bac32c1ba1f207d044da816df91ddb5e6d81e87125fcba",
+      "title": "NIH INFORMED CONSENT TEMPLATE FOR EXPANDED ACCESS (including single patient) AT THE NIH CLINICAL CENTER",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F10"
+      ],
+      "expected_areas": 52,
+      "expected_kind_counts": {
+        "text": 27,
+        "date": 9,
+        "long_text": 9,
+        "signature": 7
+      },
+      "expected_areas_excluding_signature_initials": 45,
+      "historical_actual_fields": 59,
+      "historical_actual_answerable": 57,
+      "historical_failures": [
+        "detection: 18 missed, 0 wrong, 25 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 18,
+        "wrong": 0,
+        "extras": 25
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            10,
+            10
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            10,
+            13
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D22",
+      "lineage": "NIH IRB (OHSRP) consent template family",
+      "source_org": "NIH Office of the Director / OHSRP (NIH IRB)",
+      "original_sha256": "e858648b9d5c52c920e64bfd8fe7cb925505ebddaefc320003f88a5d2e7ea020",
+      "title": "CONSENT ADDENDUM TO CONTINUE PARTICIPATION IN AN NIH CLINICAL RESEARCH STUDY",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F10"
+      ],
+      "expected_areas": 35,
+      "expected_kind_counts": {
+        "text": 18,
+        "date": 9,
+        "long_text": 1,
+        "signature": 7
+      },
+      "expected_areas_excluding_signature_initials": 28,
+      "historical_actual_fields": 40,
+      "historical_actual_answerable": 39,
+      "historical_failures": [
+        "detection: 12 missed, 0 wrong, 17 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 12,
+        "wrong": 0,
+        "extras": 17
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            3,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            3,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D26",
+      "lineage": "zenodo-7457938-smatb-templates",
+      "source_org": "SMA-TB consortium (Zenodo 7457938)",
+      "original_sha256": "0e247607a7388575f78b7be00bb172362830f7577178364bac2252a85a0454fb",
+      "title": "CODE BREAK REPORT",
+      "families": [
+        "F2",
+        "F3",
+        "F5",
+        "F6",
+        "F7",
+        "F10"
+      ],
+      "expected_areas": 10,
+      "expected_kind_counts": {
+        "text": 7,
+        "time": 1,
+        "date": 1,
+        "table_rows": 1
+      },
+      "expected_areas_excluding_signature_initials": 10,
+      "historical_actual_fields": 14,
+      "historical_actual_answerable": 14,
+      "historical_failures": [
+        "detection: 0 missed, 0 wrong, 4 extra, 0 duplicate",
+        "long render: overprinting +24 chars"
+      ],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 0,
+        "extras": 4
+      },
+      "historical_export_ok": false,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            2,
+            2
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            2,
+            3
+          ],
+          "overlap": [
+            0,
+            24
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D27",
+      "lineage": "zenodo-7457938-smatb-templates",
+      "source_org": "SMA-TB consortium (Zenodo 7457938)",
+      "original_sha256": "bc002ff4594eb374f1748c8e80a66dfa432bc1432d98cd4e218a06d3515d0c66",
+      "title": "SERIOUS ADVERSE EVENT REPORTING FORM",
+      "families": [
+        "F2",
+        "F3",
+        "F5",
+        "F6",
+        "F7",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 44,
+      "expected_kind_counts": {
+        "text": 11,
+        "choice": 9,
+        "number": 1,
+        "date": 7,
+        "measurement": 3,
+        "table_rows": 5,
+        "multi_choice": 1,
+        "checkbox": 1,
+        "long_text": 4,
+        "signature": 2
+      },
+      "expected_areas_excluding_signature_initials": 42,
+      "historical_actual_fields": 60,
+      "historical_actual_answerable": 58,
+      "historical_failures": [
+        "detection: 3 missed, 6 wrong, 19 extra, 0 duplicate",
+        "long render: overprinting +96 chars; 1 answers not visible in render"
+      ],
+      "historical_detection": {
+        "missed": 3,
+        "wrong": 6,
+        "extras": 19
+      },
+      "historical_export_ok": false,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            6,
+            6
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            6,
+            12
+          ],
+          "overlap": [
+            0,
+            96
+          ],
+          "missing": [
+            "v3_41"
+          ]
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D28",
+      "lineage": "SAMHSA CMHS NOMs client-level tool",
+      "source_org": "HHS / SAMHSA (SPARS)",
+      "original_sha256": "479946b2185f8d259b3de72375aa6ba941841f67ba2d676f61d714ddb9fc9786",
+      "title": "National Outcome Measures (NOMs) Client-Level Measures for Discretionary Programs Providing Direct Services — SERVICES TOOL — Child/Adolescent or Caregiver Combined Respondent Version (SAMHSA/CMHS)",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "expected_areas": 227,
+      "expected_kind_counts": {
+        "text": 10,
+        "choice": 185,
+        "date": 9,
+        "number": 13,
+        "multi_choice": 2,
+        "checkbox": 3,
+        "measurement": 5
+      },
+      "expected_areas_excluding_signature_initials": 227,
+      "historical_actual_fields": 399,
+      "historical_actual_answerable": 399,
+      "historical_failures": [
+        "detection: 12 missed, 48 wrong, 184 extra, 0 duplicate",
+        "long render: overprinting +35 chars; 3 answers not visible in render"
+      ],
+      "historical_detection": {
+        "missed": 12,
+        "wrong": 48,
+        "extras": 184
+      },
+      "historical_export_ok": false,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            26,
+            28
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            26,
+            38
+          ],
+          "overlap": [
+            0,
+            35
+          ],
+          "missing": [
+            "v3_288",
+            "v3_292",
+            "v3_296"
+          ]
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": true,
+      "illustrative_independent_100_field_chunks": 3,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D29",
+      "lineage": "zenodo-3738912-tbpoc",
+      "source_org": "Zenodo deposit: Van Hoving DJ (Stellenbosch Univ / Univ Cape Town EM)",
+      "original_sha256": "e01fb51a1ce2c1194f307916641590e7a8bd25657c69bb0892c8a4e4078ba1d8",
+      "title": "TB-POC STUDY: TB Diagnosis",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 125,
+      "expected_kind_counts": {
+        "text": 22,
+        "date": 9,
+        "choice": 56,
+        "multi_choice": 7,
+        "table_rows": 2,
+        "long_text": 3,
+        "checkbox": 1,
+        "measurement": 17,
+        "number": 1,
+        "signature": 3,
+        "time": 4
+      },
+      "expected_areas_excluding_signature_initials": 122,
+      "historical_actual_fields": 276,
+      "historical_actual_answerable": 274,
+      "historical_failures": [
+        "detection: 33 missed, 19 wrong, 184 extra, 0 duplicate",
+        "ordinary render: overprinting +18 chars",
+        "long render: overprinting +162 chars; 3 answers not visible in render"
+      ],
+      "historical_detection": {
+        "missed": 33,
+        "wrong": 19,
+        "extras": 184
+      },
+      "historical_export_ok": false,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            9,
+            10
+          ],
+          "overlap": [
+            14,
+            32
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            9,
+            46
+          ],
+          "overlap": [
+            14,
+            176
+          ],
+          "missing": [
+            "v3_212",
+            "v3_213",
+            "v3_214"
+          ]
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": true,
+      "illustrative_independent_100_field_chunks": 2,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D30",
+      "lineage": "hmpps-mhcs-restricted-patient-forms",
+      "source_org": "HM Prison and Probation Service - Mental Health Casework Section",
+      "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+      "title": "Report on conditionally discharged restricted patient",
+      "families": [
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 62,
+      "expected_kind_counts": {
+        "text": 12,
+        "date": 5,
+        "long_text": 41,
+        "multi_choice": 1,
+        "signature": 3
+      },
+      "expected_areas_excluding_signature_initials": 59,
+      "historical_actual_fields": 42,
+      "historical_actual_answerable": 36,
+      "historical_failures": [
+        "detection: 33 missed, 1 wrong, 13 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 33,
+        "wrong": 1,
+        "extras": 13
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            12,
+            12
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            12,
+            15
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D31",
+      "lineage": "hmpps-mhcs-restricted-patient-forms",
+      "source_org": "HM Prison and Probation Service - Mental Health Casework Section",
+      "original_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+      "title": "Discharge Application for Restricted Patients",
+      "families": [
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "expected_areas": 51,
+      "expected_kind_counts": {
+        "choice": 1,
+        "text": 8,
+        "date": 2,
+        "long_text": 38,
+        "multi_choice": 1,
+        "signature": 1
+      },
+      "expected_areas_excluding_signature_initials": 50,
+      "historical_actual_fields": 76,
+      "historical_actual_answerable": 75,
+      "historical_failures": [
+        "detection: 0 missed, 1 wrong, 25 extra, 0 duplicate",
+        "ordinary render: 1 answers not visible in render"
+      ],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 1,
+        "extras": 25
+      },
+      "historical_export_ok": false,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            9,
+            8
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": [
+            "v3_2"
+          ]
+        },
+        "long": {
+          "pages": [
+            9,
+            14
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D33",
+      "lineage": "NCI consent (ICD) template family (DCP variants)",
+      "source_org": "NIH / NCI - Division of Cancer Prevention",
+      "original_sha256": "45e292c57ec851c457297f421d3c0c844b61f7bef07aa0ed9af8f4c7b5cbac0c",
+      "title": "NCI, DCP Informed Consent Template for Consortia Chemoprevention Trials",
+      "families": [
+        "F1",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F10"
+      ],
+      "expected_areas": 11,
+      "expected_kind_counts": {
+        "choice": 7,
+        "signature": 2,
+        "date": 2
+      },
+      "expected_areas_excluding_signature_initials": 9,
+      "historical_actual_fields": 57,
+      "historical_actual_answerable": 54,
+      "historical_failures": [
+        "detection: 1 missed, 0 wrong, 47 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 1,
+        "wrong": 0,
+        "extras": 47
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            45,
+            46
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            45,
+            49
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D34",
+      "lineage": "NCI consent (ICD) template family (DCP variants)",
+      "source_org": "NIH / NCI - Division of Cancer Prevention",
+      "original_sha256": "35feb7a7ab6997b9f786ced2d30dd6460bf75c731c2c86990aaf3830c61879b0",
+      "title": "NCI, DCP Informed Consent Template for CP-CTNet Chemoprevention Trials",
+      "families": [
+        "F1",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F10"
+      ],
+      "expected_areas": 14,
+      "expected_kind_counts": {
+        "choice": 8,
+        "signature": 2,
+        "date": 2,
+        "text": 2
+      },
+      "expected_areas_excluding_signature_initials": 12,
+      "historical_actual_fields": 62,
+      "historical_actual_answerable": 58,
+      "historical_failures": [
+        "detection: 0 missed, 0 wrong, 48 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 0,
+        "wrong": 0,
+        "extras": 48
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            46,
+            46
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            46,
+            50
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D35",
+      "lineage": "NCI DCP SAE report form",
+      "source_org": "NIH / NCI - Division of Cancer Prevention",
+      "original_sha256": "cf9b240f3893f97bf168c7cd3ac808bb720b3bf0f65b168c9671c6827ca1a4b7",
+      "title": "NCI, DIVISION OF CANCER PREVENTION (DCP) SERIOUS ADVERSE EVENT REPORT FORM",
+      "families": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F9",
+        "F10"
+      ],
+      "expected_areas": 78,
+      "expected_kind_counts": {
+        "text": 30,
+        "date": 8,
+        "number": 2,
+        "measurement": 4,
+        "choice": 16,
+        "time": 2,
+        "long_text": 2,
+        "signature": 1,
+        "checkbox": 5,
+        "table_rows": 6,
+        "multi_choice": 2
+      },
+      "expected_areas_excluding_signature_initials": 77,
+      "historical_actual_fields": 308,
+      "historical_actual_answerable": 307,
+      "historical_failures": [
+        "detection: 13 missed, 10 wrong, 243 extra, 0 duplicate",
+        "long render: 1 answers not visible in render"
+      ],
+      "historical_detection": {
+        "missed": 13,
+        "wrong": 10,
+        "extras": 243
+      },
+      "historical_export_ok": false,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            8,
+            8
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            8,
+            20
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": [
+            "v3_307"
+          ]
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D36",
+      "lineage": "NCI consent (ICD) template family (CTEP)",
+      "source_org": "NIH / NCI - CTEP (DCTD)",
+      "original_sha256": "01b700ed8dd72eb46647f209f1608ceecfd7406fa34859a3b122eb497371fdf9",
+      "title": "NCI Clinical Trials Networks Informed Consent Document (ICD) Template",
+      "families": [
+        "F1",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F10"
+      ],
+      "expected_areas": 13,
+      "expected_kind_counts": {
+        "choice": 3,
+        "initials": 3,
+        "date": 3,
+        "signature": 2,
+        "text": 2
+      },
+      "expected_areas_excluding_signature_initials": 8,
+      "historical_actual_fields": 12,
+      "historical_actual_answerable": 9,
+      "historical_failures": [
+        "detection: 8 missed, 3 wrong, 7 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 8,
+        "wrong": 3,
+        "extras": 7
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            24,
+            24
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            24,
+            26
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D37",
+      "lineage": "NCI consent (ICD) template family (CTEP)",
+      "source_org": "NIH / NCI - CTEP (DCTD)",
+      "original_sha256": "01326e0d4d17d211cfda2757c34455b6bd132fb3bfc8b23f989e4a9635eef500",
+      "title": "NCI Informed Consent Template for Adult Cancer Trials",
+      "families": [
+        "F1",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F10"
+      ],
+      "expected_areas": 11,
+      "expected_kind_counts": {
+        "choice": 7,
+        "signature": 2,
+        "date": 2
+      },
+      "expected_areas_excluding_signature_initials": 9,
+      "historical_actual_fields": 50,
+      "historical_actual_answerable": 46,
+      "historical_failures": [
+        "detection: 4 missed, 0 wrong, 43 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 4,
+        "wrong": 0,
+        "extras": 43
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            51,
+            51
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            51,
+            56
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D38",
+      "lineage": "zenodo-10614582",
+      "source_org": "Zenodo deposit: Kanlerd A. et al. (caustic ingestion EGD vs CT)",
+      "original_sha256": "83769a3b2c6bc3920f4a37e7881b354e11107cdf079f1090e6865bf8cb6a1301",
+      "title": "Case record form",
+      "families": [
+        "F1",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "expected_areas": 60,
+      "expected_kind_counts": {
+        "text": 17,
+        "date": 5,
+        "time": 3,
+        "measurement": 8,
+        "choice": 5,
+        "multi_choice": 2,
+        "checkbox": 7,
+        "number": 6,
+        "checkbox_group": 7
+      },
+      "expected_areas_excluding_signature_initials": 60,
+      "historical_actual_fields": 46,
+      "historical_actual_answerable": 46,
+      "historical_failures": [
+        "detection: 20 missed, 3 wrong, 6 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 20,
+        "wrong": 3,
+        "extras": 6
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            6,
+            6
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            6,
+            10
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D39",
+      "lineage": "zenodo-proforma-creator-582b52",
+      "source_org": "Zenodo deposits sharing one document creator (hash 582b52)",
+      "original_sha256": "17e6d154693c4c7c41b31f20fd16dfb9560ff6e343cbc03af32b3b231ecc02cb",
+      "title": "Study Proforma",
+      "families": [
+        "F1",
+        "F5"
+      ],
+      "expected_areas": 60,
+      "expected_kind_counts": {
+        "text": 24,
+        "date": 1,
+        "number": 1,
+        "choice": 1,
+        "long_text": 5,
+        "measurement": 28
+      },
+      "expected_areas_excluding_signature_initials": 60,
+      "historical_actual_fields": 40,
+      "historical_actual_answerable": 40,
+      "historical_failures": [
+        "detection: 23 missed, 1 wrong, 3 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 23,
+        "wrong": 1,
+        "extras": 3
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            3,
+            3
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            3,
+            8
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    },
+    {
+      "id": "D40",
+      "lineage": "zenodo-proforma-creator-582b52",
+      "source_org": "Zenodo deposits sharing one document creator (hash 582b52)",
+      "original_sha256": "e24dc2605ffece80b31b1d8fb5fb35c6a1a8596fd6105c180b937648f903b6f4",
+      "title": "CLINICAL DATA PROFORMA",
+      "families": [
+        "F1",
+        "F5"
+      ],
+      "expected_areas": 38,
+      "expected_kind_counts": {
+        "text": 17,
+        "number": 1,
+        "date": 2,
+        "long_text": 11,
+        "measurement": 7
+      },
+      "expected_areas_excluding_signature_initials": 38,
+      "historical_actual_fields": 29,
+      "historical_actual_answerable": 29,
+      "historical_failures": [
+        "detection: 9 missed, 0 wrong, 0 extra, 0 duplicate"
+      ],
+      "historical_detection": {
+        "missed": 9,
+        "wrong": 0,
+        "extras": 0
+      },
+      "historical_export_ok": true,
+      "render_record": {
+        "ordinary": {
+          "pages": [
+            2,
+            2
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        },
+        "long": {
+          "pages": [
+            2,
+            5
+          ],
+          "overlap": [
+            0,
+            0
+          ],
+          "missing": []
+        }
+      },
+      "actual_full_app_acceptance": "not established by historical harness",
+      "potential_100_field_limit": false,
+      "illustrative_independent_100_field_chunks": 1,
+      "chunk_count_is_not_an_implemented_plan": true
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+[
+ {"name": "mp2-verify__mp2verify.py", "outdir": "recovered", "steps": [
+   ["write", "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl", 94],
+   ["edit", "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl", 99],
+   ["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl", 165, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mp2-verify/mp2verify.py", ">>"]]},
+ {"name": "mp2-protection__rebuild__core__tests__test_refute_mp2.py", "outdir": "recovered", "steps": [
+   ["write", "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl", 117],
+   ["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl", 138, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mp2-protection/rebuild/core/tests/test_refute_mp2.py", ">>"],
+   ["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl", 161, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mp2-protection/rebuild/core/tests/test_refute_mp2.py", ">>"]]},
+ {"name": "mp2-usefulness-size__probe__probe_usefulness.py", "outdir": "recovered", "steps": [
+   ["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl", 115, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mp2-usefulness-size/probe/probe_usefulness.py", ">"],
+   ["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl", 205, "$S/probe/probe_usefulness.py", ">>"],
+   ["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl", 226, "$S/probe/probe_usefulness.py", ">>"]]}
+]

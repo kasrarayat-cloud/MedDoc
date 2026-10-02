@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__rr__probes__money1.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-a7932d7ba0724de14.jsonl:78",
+   "timestamp": "2026-09-29T01:59:37.119Z",
+   "sha256_after": "4cfdf84e6bc3d881e9c22e4b6bcfac02582b1230a40b83f219409305fabac5e8",
+   "bytes_after": 6374
+  }
+ ],
+ "lines": 93,
+ "sha256": "4cfdf84e6bc3d881e9c22e4b6bcfac02582b1230a40b83f219409305fabac5e8"
+}

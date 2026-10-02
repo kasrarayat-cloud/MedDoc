@@ -1,0 +1,90 @@
+test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) ... 
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='shading') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='inherited_shading') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='highlight') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='number') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='bullet') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='run_border') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='strike') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='double_strike') ... FAIL
+  test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='leader_tab') ... FAIL
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='shading')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='inherited_shading')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='highlight')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='number')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='bullet')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='run_border')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='strike')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='double_strike')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+======================================================================
+FAIL: test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) (marker='leader_tab')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 167, in test_paired_spacing_keeps_shading_lists_and_run_answer_marks
+    self.assertEqual(len(result['fields']), 2)
+AssertionError: 1 != 2
+
+----------------------------------------------------------------------
+Ran 1 test in 0.688s
+
+FAILED (failures=9)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

@@ -1,0 +1,28 @@
+test_single_nested_option_keeps_its_complete_question_and_subsection (documents.test_question_boxes.NestedCheckboxOwnership.test_single_nested_option_keeps_its_complete_question_and_subsection) ... 
+  test_single_nested_option_keeps_its_complete_question_and_subsection (documents.test_question_boxes.NestedCheckboxOwnership.test_single_nested_option_keeps_its_complete_question_and_subsection) (subsection=False) ... FAIL
+  test_single_nested_option_keeps_its_complete_question_and_subsection (documents.test_question_boxes.NestedCheckboxOwnership.test_single_nested_option_keeps_its_complete_question_and_subsection) (subsection=True) ... FAIL
+
+======================================================================
+FAIL: test_single_nested_option_keeps_its_complete_question_and_subsection (documents.test_question_boxes.NestedCheckboxOwnership.test_single_nested_option_keeps_its_complete_question_and_subsection) (subsection=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 604, in test_single_nested_option_keeps_its_complete_question_and_subsection
+    self.assertIn(outer.paragraphs[0].text, group['context'])
+AssertionError: 'Which finding concerns the donor? Tick all that apply.' not found in 'Current visit'
+
+======================================================================
+FAIL: test_single_nested_option_keeps_its_complete_question_and_subsection (documents.test_question_boxes.NestedCheckboxOwnership.test_single_nested_option_keeps_its_complete_question_and_subsection) (subsection=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 606, in test_single_nested_option_keeps_its_complete_question_and_subsection
+    if subsection: self.assertIn('During exertion:', group['context'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'During exertion:' not found in 'Current visit > Which finding concerns the donor? Tick all that apply.'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.170s
+
+FAILED (failures=2)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

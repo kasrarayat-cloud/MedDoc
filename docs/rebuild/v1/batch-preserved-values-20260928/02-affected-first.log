@@ -1,0 +1,52 @@
+test_blank_preserves_precheck_and_complete_membership_uses_physical_export (core.tests.test_batch_effective_constraints.EffectiveRules.test_blank_preserves_precheck_and_complete_membership_uses_physical_export) ... ok
+test_merged_header_copies_must_agree_on_preserved_state (core.tests.test_batch_effective_constraints.EffectiveRules.test_merged_header_copies_must_agree_on_preserved_state) ... ok
+test_multichoice_active_membership_is_not_whole_newline_equality (core.tests.test_batch_effective_constraints.EffectiveRules.test_multichoice_active_membership_is_not_whole_newline_equality) ... ok
+test_predicate_options_and_preserved_unique_priority_are_checked (core.tests.test_batch_effective_constraints.EffectiveRules.test_predicate_options_and_preserved_unique_priority_are_checked) ... ok
+test_reviewed_blank_checkbox_clears_but_unreviewed_preserves (core.tests.test_batch_effective_constraints.EffectiveRules.test_reviewed_blank_checkbox_clears_but_unreviewed_preserves) ... ok
+test_unknown_constrained_state_locator_and_source_fail_closed (core.tests.test_batch_effective_constraints.EffectiveRules.test_unknown_constrained_state_locator_and_source_fail_closed) ... ok
+test_unread_annotation_holds_only_omitted_constrained_control (core.tests.test_batch_effective_constraints.EffectiveRules.test_unread_annotation_holds_only_omitted_constrained_control) ... ok
+test_actual_compiled_requests_are_fully_covered_by_aggregate_charge (core.tests.test_generation_batch.BatchContract.test_actual_compiled_requests_are_fully_covered_by_aggregate_charge) ... ok
+test_cross_part_repeated_questions_and_global_rules_keep_full_scope (core.tests.test_generation_batch.BatchContract.test_cross_part_repeated_questions_and_global_rules_keep_full_scope) ... FAIL
+test_exact_subset_union_and_actual_model_are_required (core.tests.test_generation_batch.BatchContract.test_exact_subset_union_and_actual_model_are_required) ... ok
+test_group_and_unknown_rule_admission_are_not_silent_splits (core.tests.test_generation_batch.BatchContract.test_group_and_unknown_rule_admission_are_not_silent_splits) ... ok
+test_known_existing_single_field_side_gap_is_not_clinical_acceptance (core.tests.test_generation_batch.BatchContract.test_known_existing_single_field_side_gap_is_not_clinical_acceptance) ... expected failure
+test_old_single_request_limit_and_bounded_complete_plan (core.tests.test_generation_batch.BatchContract.test_old_single_request_limit_and_bounded_complete_plan) ... ok
+test_request_hash_survives_database_json_key_order (core.tests.test_generation_batch.BatchContract.test_request_hash_survives_database_json_key_order) ... ok
+test_signing_fields_stay_visible_in_catalogue_and_are_never_requested (core.tests.test_generation_batch.BatchContract.test_signing_fields_stay_visible_in_catalogue_and_are_never_requested) ... ok
+test_unique_priorities_and_full_source_guards_cannot_be_split_away (core.tests.test_generation_batch.BatchContract.test_unique_priorities_and_full_source_guards_cannot_be_split_away) ... FAIL
+
+======================================================================
+FAIL: test_cross_part_repeated_questions_and_global_rules_keep_full_scope (core.tests.test_generation_batch.BatchContract.test_cross_part_repeated_questions_and_global_rules_keep_full_scope)
+----------------------------------------------------------------------
+django.core.exceptions.ValidationError: ['The original constrained exported values are required.']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-preserved-values/rebuild/core/tests/test_generation_batch.py", line 119, in test_cross_part_repeated_questions_and_global_rules_keep_full_scope
+    with self.assertRaisesMessage(ValidationError,'maximum selection'):b.assemble(plan,[response(plan,1),response(plan,2)])
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+AssertionError: 'maximum selection' not found in "['The original constrained exported values are required.']"
+
+======================================================================
+FAIL: test_unique_priorities_and_full_source_guards_cannot_be_split_away (core.tests.test_generation_batch.BatchContract.test_unique_priorities_and_full_source_guards_cannot_be_split_away)
+----------------------------------------------------------------------
+django.core.exceptions.ValidationError: ['The original constrained exported values are required.']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-preserved-values/rebuild/core/tests/test_generation_batch.py", line 126, in test_unique_priorities_and_full_source_guards_cannot_be_split_away
+    with self.assertRaisesMessage(ValidationError,'priority'):b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'1'}},e.template_version.fields)
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+AssertionError: 'priority' not found in "['The original constrained exported values are required.']"
+
+----------------------------------------------------------------------
+Ran 16 tests in 15.808s
+
+FAILED (failures=2, expected failures=1)
+Found 16 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

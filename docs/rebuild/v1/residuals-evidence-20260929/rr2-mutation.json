@@ -1,0 +1,648 @@
+{
+ "baseline": {
+  "email": {
+   "exit": 0,
+   "seconds": 3.5,
+   "summary": [
+    "Ran 23 tests in 1.980s",
+    "OK"
+   ],
+   "failures": []
+  },
+  "race": {
+   "exit": 0,
+   "seconds": 3.9,
+   "summary": [
+    "Ran 2 tests in 1.920s",
+    "OK"
+   ],
+   "failures": []
+  },
+  "lost": {
+   "exit": 0,
+   "seconds": 27.5,
+   "summary": [
+    "Ran 6 tests in 25.548s",
+    "OK"
+   ],
+   "failures": []
+  },
+  "result": {
+   "exit": 0,
+   "seconds": 9.5,
+   "summary": [
+    "Ran 2 tests in 7.603s",
+    "OK"
+   ],
+   "failures": []
+  }
+ },
+ "mutants": [
+  {
+   "mutant": "RR2-M1 address length not bounded",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "applied": true,
+   "exit": 1,
+   "seconds": 4.4,
+   "summary": [
+    "Ran 23 tests in 2.622s",
+    "FAILED (failures=11, errors=2)"
+   ],
+   "failures": [
+    {
+     "kind": "ERROR",
+     "test": "test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns",
+     "subtest": "length=300",
+     "raised": "django.db.transaction.TransactionManagementError: An error occurred in the current transaction. You can't execute queries until the end of the 'atomic' block."
+    },
+    {
+     "kind": "ERROR",
+     "test": "test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists",
+     "subtest": "email='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.org'",
+     "raised": "django.db.utils.DataError: value too long for type character varying(150)"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=151, kind='department'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=151, kind='clinic'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=254, kind='department'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=254, kind='clinic'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=151",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=254",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=300",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=320",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns",
+     "subtest": "length=151",
+     "raised": "AssertionError: 302 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_an_address_longer_than_the_account_columns",
+     "subtest": "length=151",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_an_address_longer_than_the_account_columns",
+     "subtest": "length=254",
+     "raised": "AssertionError: 500 != 200"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M2 bound taken from the email column (254), not the username column",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "applied": true,
+   "exit": 1,
+   "seconds": 4.4,
+   "summary": [
+    "Ran 23 tests in 2.569s",
+    "FAILED (failures=12, errors=1)"
+   ],
+   "failures": [
+    {
+     "kind": "ERROR",
+     "test": "test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists",
+     "subtest": "email='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.org'",
+     "raised": "django.db.utils.DataError: value too long for type character varying(150)"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=151, kind='department'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=151, kind='clinic'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=254, kind='department'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused",
+     "subtest": "length=254, kind='clinic'",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=151",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=254",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=300",
+     "raised": "AssertionError: 'at most 150 characters' not found in 'Enter an email address of at most 254 characters.'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns",
+     "subtest": "length=320",
+     "raised": "AssertionError: 'at most 150 characters' not found in 'Enter an email address of at most 254 characters.'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns",
+     "subtest": "length=151",
+     "raised": "AssertionError: 302 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns",
+     "subtest": "length=300",
+     "raised": "AssertionError: 'at most 150 characters' not found in 'Enter an email address of at most 254 characters.'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_an_address_longer_than_the_account_columns",
+     "subtest": "length=151",
+     "raised": "AssertionError: 500 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_an_address_longer_than_the_account_columns",
+     "subtest": "length=254",
+     "raised": "AssertionError: 500 != 200"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M3 bound off by one (150 refused)",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "applied": true,
+   "exit": 1,
+   "seconds": 3.2,
+   "summary": [
+    "Ran 23 tests in 1.708s",
+    "FAILED (failures=1, errors=1)"
+   ],
+   "failures": [
+    {
+     "kind": "ERROR",
+     "test": "test_an_address_of_exactly_the_column_length_creates_the_first_account",
+     "subtest": null,
+     "raised": "ops.production_operator.OperatorError: first_admin_email"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_of_exactly_the_column_length_still_creates_its_account",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: (200, 200) != (302, 302)"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M4 quoted local part accepted",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "applied": true,
+   "exit": 1,
+   "seconds": 3.9,
+   "summary": [
+    "Ran 23 tests in 2.254s",
+    "FAILED (failures=10)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists",
+     "subtest": "email='\"owner\"@example.org'",
+     "raised": "AssertionError: OperatorError not raised"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_a_quoted_local_part",
+     "subtest": "email='\"sam\"@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_a_quoted_local_part",
+     "subtest": "email='\"s\\\\am\"@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_form_that_chooses_an_address_refuses_a_quoted_local_part",
+     "subtest": "email='\"SAM\"@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_neither_invitation_creates_the_quoted_twin",
+     "subtest": "kind='department'",
+     "raised": "AssertionError: 302 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_neither_invitation_creates_the_quoted_twin",
+     "subtest": "kind='clinic'",
+     "raised": "AssertionError: 'without quotation marks' not found in 'An account with this email address already exists.'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_no_invitation_is_issued_to_a_quoted_local_part",
+     "subtest": null,
+     "raised": "AssertionError: 302 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_the_quoted_twin_of_an_existing_account",
+     "subtest": "email='\"sam\"@synthetic.invalid'",
+     "raised": "AssertionError: 302 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_the_quoted_twin_of_an_existing_account",
+     "subtest": "email='\"s\\\\am\"@synthetic.invalid'",
+     "raised": "AssertionError: 302 != 200"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_the_quoted_twin_of_an_existing_account",
+     "subtest": "email='\"SAM\"@synthetic.invalid'",
+     "raised": "AssertionError: 'without quotation marks' not found in 'An account with this email address already exists.'"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "d531deaf04d5a041e20f98bb85ecf4b9815d6fd96f72c2e66e0bb0443204f839",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M5 department acceptance: a used invitation under the lock answers 404 again",
+   "file": "core/views.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "applied": true,
+   "exit": 1,
+   "seconds": 3.8,
+   "summary": [
+    "Ran 2 tests in 1.917s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_one_department_invitation_accepted_twice_at_the_same_moment",
+     "subtest": null,
+     "raised": "AssertionError: Lists differ: [404, 200] != [200, 200]"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M6 clinic acceptance: a used invitation under the lock answers 404 again",
+   "file": "core/clinic_invitations.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "3183cb5b95c2994cc1e34a8671e412d6e4a0a8e7bffff503e4d0b7adb54a2185",
+   "applied": true,
+   "exit": 1,
+   "seconds": 3.7,
+   "summary": [
+    "Ran 2 tests in 1.806s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_one_clinic_invitation_accepted_twice_at_the_same_moment",
+     "subtest": null,
+     "raised": "AssertionError: Lists differ: [404, 200] != [200, 200]"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "3183cb5b95c2994cc1e34a8671e412d6e4a0a8e7bffff503e4d0b7adb54a2185",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M7 mapping handler: a committed outcome overwritten (no state check under the lock)",
+   "file": "core/mapping_jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "applied": true,
+   "exit": 1,
+   "seconds": 26.1,
+   "summary": [
+    "Ran 6 tests in 24.298s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Mapping output could not be adopted.') != ('succeeded', '')"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M8 mapping handler: decided without the job row lock",
+   "file": "core/mapping_jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "applied": true,
+   "exit": 1,
+   "seconds": 27.7,
+   "summary": [
+    "Ran 6 tests in 25.733s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Mapping output could not be adopted.') != ('succeeded', '')"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M9 mapping handler: an in-doubt settlement decided from the ledger",
+   "file": "core/mapping_jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "applied": true,
+   "exit": 1,
+   "seconds": 26.2,
+   "summary": [
+    "Ran 6 tests in 24.166s",
+    "FAILED (failures=2)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('reconciliation', 'Provider outcome or settlement is uncerta[140 chars]777') != ('reconciliation', 'The settlement outcome of th"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Mapping outpu[173 chars]85d') != ('reconciliation', 'The settlement outcome [173 chars]7ef')"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M10 mapping handler: settlement doubt never computed",
+   "file": "core/mapping_jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "applied": true,
+   "exit": 1,
+   "seconds": 26.0,
+   "summary": [
+    "Ran 6 tests in 23.866s",
+    "FAILED (failures=2)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('reconciliation', 'Provider outcome or settlement is uncerta[140 chars]804') != ('reconciliation', 'The settlement outcome of th"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Mapping outpu[173 chars]6de') != ('reconciliation', 'The settlement outcome [173 chars]6a3')"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M11 mapping handler: settlement doubt never cleared (the adoption read as a settlement)",
+   "file": "core/mapping_jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "applied": true,
+   "exit": 1,
+   "seconds": 26.2,
+   "summary": [
+    "Ran 6 tests in 24.149s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed",
+     "subtest": null,
+     "raised": "AssertionError: 'reconciliation' != 'failed'"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M12 mapping handler: its own database failure re-raised, the job left running",
+   "file": "core/mapping_jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "applied": true,
+   "exit": 1,
+   "seconds": 28.1,
+   "summary": [
+    "Ran 6 tests in 25.953s",
+    "FAILED (errors=1)"
+   ],
+   "failures": [
+    {
+     "kind": "ERROR",
+     "test": "test_a_handler_whose_first_statement_loses_the_connection_holds_the_job",
+     "subtest": null,
+     "raised": "django.db.utils.OperationalError: terminating connection due to administrator command"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "ec1076289168b65a7940040ce752e6368df487553adfdd845df4881e7a4ef4bd",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M13 job_result scoped by encounter only (the old query)",
+   "file": "core/views.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "applied": true,
+   "exit": 1,
+   "seconds": 9.7,
+   "summary": [
+    "Ran 2 tests in 7.397s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_charged_mapping_result_is_downloadable_under_the_generation_rule",
+     "subtest": null,
+     "raised": "AssertionError: 404 != 200"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M14 job_result: any mapping job, any department",
+   "file": "core/views.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "applied": true,
+   "exit": 1,
+   "seconds": 10.7,
+   "summary": [
+    "Ran 2 tests in 8.440s",
+    "FAILED (failures=2)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_charged_mapping_result_is_downloadable_under_the_generation_rule",
+     "subtest": "person='mapping-outsider@synthetic.invalid'",
+     "raised": "AssertionError: 200 != 404"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_charged_mapping_result_is_downloadable_under_the_generation_rule",
+     "subtest": null,
+     "raised": "AssertionError: 200 != 404"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M15 job_result: uncharged output delivered",
+   "file": "core/views.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "applied": true,
+   "exit": 1,
+   "seconds": 9.4,
+   "summary": [
+    "Ran 2 tests in 7.302s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_an_uncharged_mapping_result_is_never_delivered",
+     "subtest": null,
+     "raised": "AssertionError: 200 != 404"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "bf3f84e6ea9d29e75e0071431b0870a0a64e587e5ce3c137b16b86ae572bb4db",
+   "restored": true
+  },
+  {
+   "mutant": "RR2-M16 mapping page: no result link",
+   "file": "core/mapping_views.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "5d3465a4005769af4f5e67db8cdbb0e96fa49a11ec7cc9aaff13807d294ca7d5",
+   "applied": true,
+   "exit": 1,
+   "seconds": 9.6,
+   "summary": [
+    "Ran 2 tests in 7.757s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_charged_mapping_result_is_downloadable_under_the_generation_rule",
+     "subtest": null,
+     "raised": "AssertionError: False is not true : Couldn't find '/jobs/ce2e80f3-ed0b-450f-86e0-5b010346988a/result/' in the following response"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "5d3465a4005769af4f5e67db8cdbb0e96fa49a11ec7cc9aaff13807d294ca7d5",
+   "restored": true
+  }
+ ]
+}

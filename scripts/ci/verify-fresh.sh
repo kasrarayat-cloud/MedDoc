@@ -10,11 +10,11 @@ if [[ "$quillmd_ci_python" == */* && "$quillmd_ci_python" != /* ]]; then
 fi
 
 case "$gate" in
-  python|python-core|python-support|marketing|all) ;;
-  *) echo 'Usage: bash scripts/ci/verify-fresh.sh [python|python-core|python-support|marketing|all]' >&2; exit 2 ;;
+  python|python-core|python-core-1|python-core-2|python-support|marketing|all) ;;
+  *) echo 'Usage: bash scripts/ci/verify-fresh.sh [python|python-core|python-core-1|python-core-2|python-support|marketing|all]' >&2; exit 2 ;;
 esac
 
-if [[ "$gate" == python || "$gate" == python-core || "$gate" == python-support || "$gate" == all ]]; then
+if [[ "$gate" == python || "$gate" == python-core || "$gate" == python-core-1 || "$gate" == python-core-2 || "$gate" == python-support || "$gate" == all ]]; then
   : "${QUILLMD_SECRET_KEY:?Supply a synthetic CI secret}"
   : "${QUILLMD_DB_PASSWORD:?Supply the isolated CI database password}"
   # Django reports success when zero tests are discovered; require the core suite.
@@ -27,12 +27,19 @@ if [[ "$gate" == python || "$gate" == python-core || "$gate" == python-support |
     if [[ "$gate" != python-support ]]; then
       "$quillmd_ci_python" manage.py check
       "$quillmd_ci_python" manage.py makemigrations --check --dry-run
-      "$quillmd_ci_python" manage.py test core.tests --verbosity 2
+      if [[ "$gate" == python-core-1 || "$gate" == python-core-2 ]]; then
+        core_shard=${gate##*-}
+        "$quillmd_ci_python" manage.py test core.tests --verbosity 2 \
+          --testrunner ops.ci_test_runner.CoreShardRunner --core-shard "$core_shard" \
+          --core-shard-manifest ".runtime/core-shard-${core_shard}.json"
+      else
+        "$quillmd_ci_python" manage.py test core.tests --verbosity 2
+      fi
     fi
-    if [[ "$gate" != python-core ]]; then
+    if [[ "$gate" != python-core && "$gate" != python-core-1 && "$gate" != python-core-2 ]]; then
     # ⚠️ This list is EXPLICIT, not discovered: a new documents/test_*.py that is not named
     # here never runs in CI and is inert. Add the module in the same change as the test.
-    "$quillmd_ci_python" -m unittest documents.tests documents.test_tab_form documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout documents.test_unmapped_areas documents.test_multicolumn_and_mixed documents.test_word_v3 documents.test_signing_areas documents.test_question_boxes -v
+    "$quillmd_ci_python" -m unittest documents.tests documents.test_tab_form documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout documents.test_unmapped_areas documents.test_multicolumn_and_mixed documents.test_word_v3 documents.test_signing_areas documents.test_question_boxes documents.test_composite_kind documents.test_hyperlink_destinations documents.test_document_relations documents.test_paragraph_list_boxes documents.test_source_policy documents.test_layout_verification documents.test_layout_containment documents.test_guidance_preservation documents.test_checkbox_history documents.test_structural_columns documents.test_destination_roles -v
     "$quillmd_ci_python" -m unittest discover -s ops -p 'test_*.py' -v
     fi
   )

@@ -1,0 +1,54 @@
+test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) ... 
+  test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) (mode='begin_text') ... FAIL
+  test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) (mode='separator_text') ... FAIL
+  test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) (mode='end_text') ... FAIL
+
+======================================================================
+FAIL: test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) (mode='begin_text')
+----------------------------------------------------------------------
+django.core.exceptions.ValidationError: ['The complete form has an invalid or repeated priority value.']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-preserved-values/rebuild/core/tests/test_batch_preserved_values.py", line 252, in test_malformed_legacy_boundaries_never_become_known_empty
+    with self.assertRaisesMessage(ValidationError, 'unreadable'):
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+AssertionError: 'unreadable' not found in "['The complete form has an invalid or repeated priority value.']"
+
+======================================================================
+FAIL: test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) (mode='separator_text')
+----------------------------------------------------------------------
+django.core.exceptions.ValidationError: ['The complete form has an invalid or repeated priority value.']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-preserved-values/rebuild/core/tests/test_batch_preserved_values.py", line 252, in test_malformed_legacy_boundaries_never_become_known_empty
+    with self.assertRaisesMessage(ValidationError, 'unreadable'):
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+AssertionError: 'unreadable' not found in "['The complete form has an invalid or repeated priority value.']"
+
+======================================================================
+FAIL: test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) (mode='end_text')
+----------------------------------------------------------------------
+django.core.exceptions.ValidationError: ['The complete form has an invalid or repeated priority value.']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-preserved-values/rebuild/core/tests/test_batch_preserved_values.py", line 252, in test_malformed_legacy_boundaries_never_become_known_empty
+    with self.assertRaisesMessage(ValidationError, 'unreadable'):
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+AssertionError: 'unreadable' not found in "['The complete form has an invalid or repeated priority value.']"
+
+----------------------------------------------------------------------
+Ran 1 test in 4.867s
+
+FAILED (failures=3)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

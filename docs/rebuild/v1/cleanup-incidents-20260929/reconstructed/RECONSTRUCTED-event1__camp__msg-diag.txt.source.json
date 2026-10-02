@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__camp__msg-diag.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P.jsonl:16911",
+   "timestamp": "2026-09-29T00:14:32.586Z",
+   "sha256_after": "5edb9273f32b3c2709a8ac3ff07d4add4b6e6f749a31a7b9190c79ee92e1b75f",
+   "bytes_after": 1660
+  }
+ ],
+ "lines": 23,
+ "sha256": "5edb9273f32b3c2709a8ac3ff07d4add4b6e6f749a31a7b9190c79ee92e1b75f"
+}

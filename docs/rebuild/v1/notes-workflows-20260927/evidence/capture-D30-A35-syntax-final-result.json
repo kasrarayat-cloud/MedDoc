@@ -1,0 +1,56 @@
+{
+  "notes": "The patient attends an art class every Monday.",
+  "field": {
+    "key": "v3_35",
+    "kind": "long_text",
+    "label": "What structured activities does the patient partake in including employment, study, or other interests? If the patient has no structured activity, how do they occupy their time and will this pose a problem from a risk perspective in the long term? Have they been supported in disclosure of their offending history (where appropriate?)",
+    "context": "Part B > Social Supervisor\u2019s Report > Activities and Employment",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[18]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "669c0231b684827ed141142857e7cb1a9744a60b59d904826c5d5fd7fbad63fd"
+    }
+  },
+  "final_answer": {
+    "text": "The patient attends an art class every Monday. Support with disclosure of offending history is not documented in the source notes.",
+    "status": "edited",
+    "evidence": [
+      {
+        "end": 46,
+        "quote": "The patient attends an art class every Monday.",
+        "start": 0
+      }
+    ],
+    "reviewed": true,
+    "edited_by": "94b16663-0b33-4962-a283-04fdd561e170",
+    "accepted_by": null,
+    "reviewed_by": "94b16663-0b33-4962-a283-04fdd561e170",
+    "own_evidence": [
+      {
+        "end": 46,
+        "quote": "The patient attends an art class every Monday.",
+        "start": 0
+      }
+    ],
+    "accepted_suggestion": false
+  },
+  "field_count": 71,
+  "warnings": [
+    "Unassigned answer box at word/document.xml#b/tbl[4]/tr[0]/tc[0]. No unambiguous adjacent printed question.",
+    "Unassigned answer box at word/document.xml#b/tbl[9]/tr[0]/tc[0]. The question refers to another area; review both source questions. Printed text: In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?",
+    "Unassigned answer box at word/document.xml#b/tbl[21]/tr[0]/tc[0]. No unambiguous adjacent printed question. Printed text: This section is for the line manager of the social supervisor to add any comments or highlight any concerns that have arisen out of this report.",
+    "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+    "Answers expand and can change pagination. Review the exported document's layout."
+  ],
+  "simulated": true,
+  "charged_cost": "0E-12",
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "export_sha256": "363449a19a8a0e1fe27183ec91ba131658c30c55a98aa8e6d17786d548d036c1",
+  "source_activities_supported": true,
+  "whole_compound_question_automatic": false,
+  "disclosure_not_documented": true
+}

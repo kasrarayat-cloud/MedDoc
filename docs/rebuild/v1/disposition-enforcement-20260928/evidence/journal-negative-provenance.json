@@ -1,0 +1,5 @@
+{
+  "method": "Reconstructed only the exact two-line path fix from current source; bytes verified against immutable first-run source hash.",
+  "expected_sha256": "1765166971a8bb1a4bd80444901d6daaf4e1364f31f91d3925948bfafb6ff780",
+  "actual_sha256": "1765166971a8bb1a4bd80444901d6daaf4e1364f31f91d3925948bfafb6ff780"
+}

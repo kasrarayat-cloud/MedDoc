@@ -1,0 +1,22 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.........................................../opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+................x........................................................F
+======================================================================
+FAIL: test_published_schema_and_unset_policy_match_runtime_exactly (core.tests.test_retention_readiness.RetentionPublishedPolicy.test_published_schema_and_unset_policy_match_runtime_exactly)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_retention_readiness.py", line 178, in test_published_schema_and_unset_policy_match_runtime_exactly
+    self.assertEqual(json.loads((root/'policy.schema.json').read_text()),retention.policy_schema())
+AssertionError: {'$de[2585 chars]s', 'recording_references', 'job_result_refere[23474 chars]}}}]} != {'$de[2585 chars]s', 'generation_batches', 'generation_parts', [25280 chars]}}}]}
+Diff is 107867 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 117 tests in 67.156s
+
+FAILED (failures=1, expected failures=1)
+Destroying test database for alias 'default'...
+Found 117 test(s).
+System check identified no issues (0 silenced).

@@ -1,0 +1,11 @@
+{
+  "spacy": "3.8.16",
+  "model": "3.8.0",
+  "source_sha256": "61ffd082f4267ce059affe67def3c37b180eda2dacf6fd12adf3d3a78efbef8d",
+  "manifest_sha256": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+  "verified_local_load": true,
+  "elapsed_seconds": 1.1865151629899628,
+  "maxrss_kib": 133792,
+  "provider_calls": 0,
+  "not_application_language_model": true
+}

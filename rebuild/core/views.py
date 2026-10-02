@@ -1,3 +1,4 @@
+from .retention import cleanup_file
 import bisect
 import hashlib
 import json
@@ -10,10 +11,10 @@ from pathlib import Path
 from uuid import UUID
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout
+from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout,update_session_auth_hash
 from django.core.exceptions import PermissionDenied,ValidationError
 from django.core import signing
-from django.db import transaction,IntegrityError
+from django.db import transaction,IntegrityError,DatabaseError
 from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
@@ -28,8 +29,11 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit,client_address
 from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,stripe_key_configured,reconcile_usage,release
 from .context import integration_status
-from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
+from . import batch_jobs, generation_batch
+from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full,LATE_RECEIPT_ACTION
+from .doctor_status import doctor_status,encounter_label,for_others,reuse_message
 from .billing import available_balance
+from .admin_authority import reenrolment_open
 from . import wm_review
 from . import v3_mapping
 from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_INPUT_UNITS
@@ -37,6 +41,12 @@ from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_INPUT_UNITS
 
 def error_message(exc):
     return '; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc)
+
+
+def unavailable(exc):
+    """A refusal because the document itself is gone (disposed of while the request ran): its page would be a 404."""
+    from .disposition_execution import DocumentUnavailable
+    return isinstance(exc,DocumentUnavailable)
 
 
 def document_backend(info):
@@ -236,18 +246,31 @@ def health_data_mode():
     return 'real' if getattr(settings,'QUILLMD_DATA_MODE','synthetic')=='real' else 'live'
 def health(request): return JsonResponse({'status':'ok','data_mode':health_data_mode(),'surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
+def health_ready(request):
+    """Readiness, separate from liveness (core.readiness): 200 ready, 503 not ready. On the host only: a request that came
+    through the host proxy, or from any non-loopback peer, is answered 404."""
+    from . import readiness
+    if not readiness.on_host(request):raise Http404
+    value=readiness.report()
+    return JsonResponse(value,status=200 if value['ready'] else 503)
+
 @require_http_methods(['GET','POST'])
 def login_view(request):
     form=LoginForm(request.POST or None)
     next_url=request.POST.get('next',request.GET.get('next',''))
     if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
     if request.method=='POST' and form.is_valid():
-        email=form.cleaned_data['email'].lower()
-        if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+email):
+        email=account_lookup_email(form.cleaned_data['email'])
+        # The account this address reaches (forms.accounts_at), and the limit keyed on it: one bucket per account, whatever
+        # the spelling that reached it.
+        found=next(iter(accounts_at(form.cleaned_data['email'])),None)
+        if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+account_limit_key(found,email)):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
-            found=User.objects.filter(email__iexact=email).first()
             user=authenticate(request,username=found.username if found else email,password=form.cleaned_data['password'])
+            # WHY it failed, for the audit trail only (inventory 7A, F4): the person signing in still reads one sentence
+            # whatever the reason, so the classification tells an administrator what an attacker is never told.
+            reason=None if user else 'unknown_account' if found is None else 'inactive' if not found.is_active else 'password'
             device=None
             enrol=False
             # Administrators always need a confirmed authenticator. With QUILLMD_MFA_REQUIRED_ALL every account
@@ -257,8 +280,10 @@ def login_view(request):
                 with transaction.atomic():
                     device=TOTPDevice.objects.select_for_update().filter(user=user,confirmed=True).first()
                     if device:
-                        if not device.verify_token(form.cleaned_data['otp']): user=None
-                    elif user.is_staff: user=None
+                        if not device.verify_token(form.cleaned_data['otp']): user=None;reason='authenticator'
+                    # An administrator without one signs in only to re-enrol after a DECLARED reset, on the
+                    # administration surface, inside its window (core.admin_authority.reenrolment_open).
+                    elif user.is_staff and not reenrolment_open(user): user=None;reason='authenticator_missing'
                     else: enrol=True
             if user and user.verified_at and (not settings.ADMIN_SITE or user.is_staff):
                 auth_login(request,user)
@@ -268,7 +293,8 @@ def login_view(request):
                     return redirect('mfa_setup')
                 audit(user,'auth.login')
                 return redirect(next_url or ('admin_dashboard' if settings.ADMIN_SITE else 'dashboard'))
-            audit(None,'auth.login_failed',details='No credentials recorded')
+            if user:reason='unverified' if not user.verified_at else 'not_administrator'
+            audit(None,'auth.login_failed',found.pk if found else '',details='No credentials recorded',reason=reason)
             form.add_error(None,'Sign-in failed. Check your credentials, verification, and authenticator code.')
     return render(request,'login.html',{'form':form,'next':next_url})
 
@@ -288,10 +314,16 @@ def register(request):
     form=RegisterForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
         if not rate_limit('register:'+client_address(request),limit=5):return HttpResponse('Try again later.',status=429)
-        with transaction.atomic():
-            user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
-            raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
-            audit(user,'account.register')
+        try:
+            with transaction.atomic():
+                user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
+                raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
+                audit(user,'account.register')
+        except IntegrityError:
+            # The same address registered by another request a moment earlier (R-A, forms.account_created_meanwhile).
+            if not account_created_meanwhile(form.cleaned_data['email']):raise
+            form.add_error('email',ACCOUNT_EXISTS)
+            return render(request,'register.html',{'form':form})
         delivery=verification_mail(user,raw,verification)
         if delivery.status=='outbox':messages.success(request,'Verification created in the private development outbox. Email delivery is not live yet.')
         elif delivery.status=='accepted':messages.success(request,'Verification submitted to the email provider. Check your inbox; inbox delivery is not yet confirmed.')
@@ -306,7 +338,9 @@ def verify(request,raw):
         label=welcome_credit_label() if settings.QUILLMD_REGISTRATION=='open' else ''
         return render(request,'confirm.html',{'title':'Verify your test account' if settings.SYNTHETIC_ONLY else 'Verify your account','description':f'Confirm ownership of this email to activate your personal {label} welcome credit.' if label else 'Confirm ownership of this email to activate your account.'})
     with transaction.atomic():
-        user=User.objects.select_for_update().get(pk=v.user_id)
+        # FOR NO KEY UPDATE, as welcome_credit (below) takes it: never FOR UPDATE on an account this transaction holds
+        # while it locks a wallet (the global lock order, core.retention; RF-R1).
+        user=User.objects.select_for_update(no_key=True).get(pk=v.user_id)
         v=Verification.objects.select_for_update().get(pk=v.pk)
         if v.used_at or v.expires_at<=timezone.now() or user.verified_at or not user.is_active: raise Http404
         user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
@@ -327,19 +361,47 @@ def verify(request,raw):
 @require_http_methods(['GET','POST'])
 def mfa_setup(request):
     if not request.user.is_authenticated: return redirect('login')
-    device=TOTPDevice.objects.filter(user=request.user).first()
-    if not device:device=TOTPDevice.objects.create(user=request.user,name='Authenticator',confirmed=False)
+    device=TOTPDevice.objects.filter(user=request.user,confirmed=True).order_by('pk').first() or enrolment_device(request)
     form=OTPForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
         with transaction.atomic():
-            device=TOTPDevice.objects.select_for_update().get(pk=device.pk)
-            if device.verify_token(form.cleaned_data['code']):
-                device.confirmed=True;device.save(update_fields=['confirmed']);otp_login(request,device);audit(request.user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
+            user=User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
+            device=TOTPDevice.objects.select_for_update().filter(pk=device.pk,user=user).first()
+            if device and device.verify_token(form.cleaned_data['code']):
+                if not device.confirmed:
+                    # A new authenticator is a new credential. Every other session of this account ends here — one
+                    # opened with the password alone in an enrolment window included — and every other session's
+                    # unconfirmed key is discarded; this session continues under the new session version.
+                    device.confirmed=True;device.save(update_fields=['confirmed'])
+                    TOTPDevice.objects.filter(user=user,confirmed=False).delete()
+                    user.session_version+=1;user.save(update_fields=['session_version'])
+                    update_session_auth_hash(request,user)
+                    request.session.pop(ENROLMENT_DEVICE,None)
+                otp_login(request,device);audit(user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
         form.add_error('code','Invalid or already used code.')
     # QUILLMD_MFA_REQUIRED_ALL puts every clinician through this page, many on a phone that cannot scan its own
     # screen: the same key is also shown as grouped text for manual entry. Default mode renders the page as before.
     secret=manual_entry_key(device) if settings.QUILLMD_MFA_REQUIRED_ALL and not device.confirmed else ''
     return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device,'secret':secret})
+
+#: The session key holding the unconfirmed authenticator THIS session was shown.
+ENROLMENT_DEVICE='mfa_enrolment_device'
+
+def enrolment_device(request):
+    """The unconfirmed authenticator this session enrols, created the first time this session opens the page and kept
+    for its reloads. An unconfirmed key another session was shown is never reused: it is deleted and this session gets
+    its own, so the key a confirmation proves is known only to the session that confirmed it. Before this, every
+    password-only session shared the first unconfirmed device, and a second holder of the password learned the secret
+    the administrator then confirmed (refutation R4)."""
+    with transaction.atomic():
+        user=User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
+        own=request.session.get(ENROLMENT_DEVICE)
+        device=TOTPDevice.objects.filter(pk=own,user=user,confirmed=False).first() if isinstance(own,int) else None
+        if device is None:
+            TOTPDevice.objects.filter(user=user,confirmed=False).delete()
+            device=TOTPDevice.objects.create(user=user,name='Authenticator',confirmed=False)
+            request.session[ENROLMENT_DEVICE]=device.pk
+    return device
 
 def manual_entry_key(device):
     """The device's base32 key — exactly the `secret` in its otpauth URI — in groups of four for typing."""
@@ -368,10 +430,10 @@ def template_upload(request):
             info=inspect_template(private_path(relative),engine=word_engine())
             contract=v3_mapping.CONTRACT if info.get('contract')==v3_mapping.CONTRACT else ''
             if contract:
-                # ⚠️ The engine maps far more than 100 areas, but generation still refuses more than 100 fields, so a
-                # larger v3 form is refused here, whole and with the count, rather than trimmed or left unusable.
+                # Preserve every answer area. The default single-request limit remains100;
+                # the prepared batch flag has its own bounded admission and rule-coverage gate.
                 answerable=len(v3_mapping.answerable(info['fields']))
-                if answerable>v3_mapping.GENERATION_FIELD_LIMIT:raise ValidationError(v3_mapping.too_many_fields(answerable))
+                if answerable>v3_mapping.field_limit():raise ValidationError(v3_mapping.too_many_fields(answerable))
             elif len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
                 t=Template.objects.create(department=department,name=form.cleaned_data['name'],format=info['format'],original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=info['sha256'],warnings=info.get('warnings',[]),created_by=request.user)
@@ -380,7 +442,7 @@ def template_upload(request):
             if contract:messages.info(request,f'QuillMD found {len(info["fields"])} answer areas automatically. Check every one against your form, correct the mapping, and confirm it before creating a document.')
             return redirect('template_detail',pk=t.pk)
         except (ValidationError,DocumentError) as exc:
-            if relative:private_path(relative).unlink(missing_ok=True)
+            if relative:cleanup_file(private_path(relative))
             form.add_error(None,error_message(exc))
             # The engine's wording names an adapter the doctor cannot choose. Add what they CAN do,
             # keyed on the refusal's own text, without changing the refusal itself.
@@ -528,7 +590,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'find':query,'outline_error':outline_error,'posted_slot':posted.get('slot',''),'posted_add_label':posted.get('label',''),
         'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
         'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
-        'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.GENERATION_FIELD_LIMIT,
+        'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.field_limit(),
         'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
         'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
 
@@ -626,11 +688,18 @@ def v3_add_field(request,t):
             return v3_page(request,t,t.versions.order_by('-number').first(),status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
         fields=v3_mapping.insert_in_document_order(latest.fields,[field],outline)
         answerable=len(v3_mapping.answerable(fields))
-        if answerable>v3_mapping.GENERATION_FIELD_LIMIT:
-            raise ValidationError(f'Adding this field would give the form {answerable} answer areas; QuillMD can generate answers for at most {v3_mapping.GENERATION_FIELD_LIMIT} per form today. Nothing was saved.')
+        if answerable>v3_mapping.field_limit():
+            raise ValidationError(f'Adding this field would give the form {answerable} answer areas; QuillMD can generate answers for at most {v3_mapping.field_limit()} per form today. Nothing was saved.')
         version=v3_new_version(request,t,latest,fields,added=[field['key']])
     messages.success(request,f'Added "{field["label"]}" ({v3_mapping.KIND_NAMES.get(field["kind"],field["kind"])}) as a manual field in mapping version {version.number}. Confirm the mapping before creating documents.')
     return redirect('template_detail',pk=t.pk)
+
+ROLE_CONFIRM_REFUSAL=('These fields sit on a signing, initials, consent or protected place of the original form, or lack '
+                      "that place's printed authorship or review requirement, so they can never be answered there: ")
+ROLE_SAVE_REFUSAL=('These answers sit on a signing, initials, consent or protected place of the original form, which never '
+                   'takes a typed or generated answer: ')
+LEGACY_ROLE_SAVE_REFUSAL=('These answers were generated from the notes or accepted from a suggestion, but the form prints '
+                          'them as a signature, initials or signer row, which QuillMD never fills from notes: ')
 
 def v3_confirm(request,t):
     """The clinician's statement that every field was checked against the form, recorded with who and when."""
@@ -648,6 +717,12 @@ def v3_confirm(request,t):
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
         off_box=v3_mapping.checkboxes_off_box(latest.fields)
         if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
+        # ⚠️ READ FROM THE ORIGINAL, NEVER FROM THIS MAPPING: a field on a signing, initials, consent or protected place
+        # (or without the place's printed authorship/review requirement) can never be answered there, whoever put it
+        # there - a removed engine field re-added by hand, a model proposal, or a version stored before this check.
+        from . import destination_roles
+        held=destination_roles.v3_held(latest)
+        if held:raise ValidationError(ROLE_CONFIRM_REFUSAL+field_list([v3_mapping.label_of(f) for f in latest.fields if f['key'] in held])+' Remove each one (only a Signature or Initials field may sit there), then confirm.')
         if latest.confirmed:
             messages.info(request,'This mapping version was already confirmed.')
             return redirect('template_detail',pk=t.pk)
@@ -700,11 +775,12 @@ def encounter_detail(request,pk):
         # Retain historical suggestions, but do not display licensed descriptors
         # after entitlement expires or changes to a different licensed feed.
         cpt=models.Q(terminology__release__system='CPT')
-        if cpt_licensed():
-            visible_codes=visible_codes.exclude(cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID))
-        else:
-            visible_codes=visible_codes.exclude(cpt)
-        codes=list(visible_codes)
+        hidden=cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID) if cpt_licensed() else cpt
+        # An acceptance of a hidden code (CPT is locked, or another licence) can still be withdrawn, without showing the
+        # code or its descriptor: it would otherwise block finalizing once marked for re-review (refutation F7).
+        hidden_accepted=[{'pk':row.pk,'review_required':row.review_required,'acceptance':row.acceptance}
+                         for row in visible_codes.filter(hidden,accepted_by__isnull=False)]
+        codes=list(visible_codes.exclude(hidden))
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
     is_v3=v3_mapping.is_v3_version(e.template_version)
@@ -717,6 +793,16 @@ def encounter_detail(request,pk):
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
     from .tab_review import clinician_identity
+    from .destination_roles import ROLE_NOT_GENERATED as role_not_generated
+    printed_roles={}
+    if not is_wm and not is_v3 and e.status!='finalized':
+        # Identity is read from each field's PRINTED label (core.destination_roles), as saving and finalization read it.
+        from . import destination_roles
+        try:printed_roles=destination_roles.legacy_roles(e.template_version)
+        except (ValidationError,DocumentError):printed_roles={}
+        from .destination_roles import printed as printed_field
+    else:
+        printed_field=lambda field,roles:field
     editors={str(pk):email for pk,email in User.objects.filter(
         pk__in={row.get('edited_by') for row in rows} - {None}).values_list('pk','email')}
     deciders={str(pk):email for pk,email in User.objects.filter(
@@ -734,6 +820,15 @@ def encounter_detail(request,pk):
                         if wm_narrative.active(e.template_version.fields,e.answers) else None)
         rows=[wm_narrative.as_currently_held(row,row,narrative_read) if narrative_read and wm_narrative.has_unit_evidence(row)
               else as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+    from . import destination_roles
+    # Role suggestions are offered on a legacy draft only (never the qualified Word form, contract v3 or a finalized record).
+    # ... and only where THIS request can reach the act: the middleware's own decision (RS3A-1), never the setting again.
+    from .middleware import role_act_routed
+    role_offers=(not is_wm and not is_v3 and e.status!='finalized' and bool(e.answers) and bool(printed_roles)
+                 and role_act_routed(request))
+    # Every offer read again from the current notes at once (core.destination_roles.current_suggestions).
+    role_current=(destination_roles.current_suggestions(e.template_version.fields,e.answers,printed_roles,e.notes,
+                                                        statement_labels) if role_offers else {})
     if is_v3:
         # ⚠️ A QUESTION LABEL THE FORM REPEATS IS SHOWN WITH ITS CONTEXT (counted with generation's own normalizer):
         # two questions reading "Effusion" are told apart only by where they sit on the form.
@@ -745,7 +840,7 @@ def encounter_detail(request,pk):
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
         # "Leave blank — reviewed" is offered on ordinary forms only: a qualified Word form keeps
         # its own "No answer documented" choice, and a signature keeps the identity rules.
-        row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(row)
+        row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(printed_field(row,printed_roles))
         row['left_blank']=row.get('status')=='left_blank'
         row['blank_by_email']=deciders.get(str((row.get('blank_decision') or {}).get('by') or ''),'')
         # (who gave the answer, from its stored status — the badge below shows the review's, `conflict` until reviewed)
@@ -765,7 +860,14 @@ def encounter_detail(request,pk):
         row['stored_reviewed']=answer.get('reviewed') is True
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
-        row['identity']=clinician_identity(row)
+        row['identity']=clinician_identity(printed_field(row,printed_roles))
+        # Why a signing or initials row was never generated (destination roles): the stored answer's reason, shown on
+        # the page so the clinician is told rather than only seeing 'no supporting passage' (demo rehearsal gap).
+        row['destination_reason']=(answer.get('reason') if answer.get('status')=='missing'
+                                   and answer.get('reason')==role_not_generated else '')
+        # A role suggestion (QUILLMD_ROLE_SUGGESTIONS): shown only while it is still offered, by the same reader the
+        # accepting act applies (core.destination_roles.current_suggestions). It is never the answer: the box stays empty.
+        row['role_offer']=role_current.get(row['key'])
         if is_v3:
             # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
             kind=row.get('kind')
@@ -777,6 +879,7 @@ def encounter_detail(request,pk):
             # What the export does with this answer, in the page's words (the export sets every box of an answered
             # option field, unticks a reviewed checkbox left unticked, and keeps an unanswered choice as printed).
             row['v3_note']=v3_mapping.review_note(row)
+            row['question_parts']=v3_mapping.question_parts(row)
             row['blank_note']=v3_mapping.blank_note(row)
             row['v3_final']=v3_mapping.finalized_note(row,row)
             row['v3_context']=(row.get('review_reason') if row.get('write_protected') else
@@ -843,16 +946,49 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
-    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
-    except ValidationError:maximum_charge=None
+    quote_config=configuration(e.template_version.fields);generation_quote_error='';batch_constraint_error=''
+    if e.answers:
+        try:generation_batch.check_answers(e.template_version,e.answers)
+        except ValidationError as exc:batch_constraint_error=error_message(exc)
+    try:
+        if generation_batch.needed(e.template_version.fields, e.notes, quote_config):
+            quote_config,maximum_charge=batch_jobs.quote(e,quote_config)
+        else:
+            maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
+    except ValidationError as exc:
+        maximum_charge=None
+        generation_quote_error=error_message(exc)
     audit(request.user,'encounter.view',e.pk,department=e.department)
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
     # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only
     # where the server allows it, and receives provider output only for requests that stand charged.
-    prior_generations=sum(1 for job in jobs if job.kind=='generation' and billable_outcome(job))
-    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
+    # The doctor reads one status vocabulary (core.doctor_status): never an internal state word or an administrator's note.
     for job in jobs:
-        job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+        # A charged completion keeps the page's own next-step text (the transcript or the draft is ready below).
+        # Another person's request reads in the third person here too (refutation R4B-1 of b3d8111d): every member of the
+        # department sees every request on the document, with no requester named.
+        job.doctor_status=doctor_status(job) if job.user_id==request.user.pk else for_others(doctor_status(job))
+        job.display_error='' if job.doctor_status.key=='completed' else job.doctor_status.explanation
+        job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+    # ⚠️ "Earlier requests remain charged" is read from the LEDGER, as the request list beside it is (doctor_status): the
+    # job state said so for a request whose charge a reconciliation had credited back in full, beside "No charge is
+    # recorded for it" (refutation M3 of 4cfa4301). An ended request with a net charge counts.
+    def charged_earlier(job):return job.doctor_status.charged and not job.doctor_status.pending
+    prior_generations=sum(1 for job in jobs if job.kind=='generation' and charged_earlier(job))
+    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and charged_earlier(job))
+    # One visible outcome per complete form. Child receipts stay in the admin
+    # record; a staged child is never shown as a ready answer draft.
+    visible_jobs=[]
+    for job in jobs:
+        if job.kind=='generation_part':
+            part=job.generation_part
+            if part.ordinal!=1:continue
+            batch=part.batch
+            job.display_kind='Generation'
+            job.state=batch.state
+            prior_generations+=int(charged_earlier(job))  # part 1's status speaks for the whole batch's ledger
+        visible_jobs.append(job)
+    jobs=visible_jobs
     transcript_reviews=[]
     applied=set(AuditEvent.objects.filter(action='transcription.applied',target__in=[str(job.pk) for job in jobs]).values_list('target',flat=True))
     for job in jobs:
@@ -866,9 +1002,11 @@ def encounter_detail(request,pk):
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
     from . import wm_narrative
-    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'hidden_accepted':hidden_accepted,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
+        'role_suggestion_warning':destination_roles.ROLE_SUGGESTION_WARNING,
+        'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
         'export_refusal':v3_mapping.export_refusal(e.template_version.template) if is_v3 else ''})
 
 def clinician_decided(e):
@@ -892,8 +1030,13 @@ def same_text(posted,stored):
 def notes_save_clears(e):
     """What a changed notes save would clear, as the page's warning names it ('' when nothing): the same parts, from the
     same counts, that the save audits and then states — so the warning names only what would be cleared (refutation round
-    4, R4-7), and it and the saved message cannot disagree."""
-    return listed(cleared_parts(review_state_counts(e)))
+    4, R4-7), and it and the saved message cannot disagree. Accepted codes are not cleared (notes_save_marks)."""
+    return listed(cleared_parts(review_state_counts(e,codes=False)))
+
+def notes_save_marks(e):
+    """The accepted codes a changed notes save would keep and mark for re-review, as the page names them ('' when none)."""
+    count=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count()
+    return f'{count} accepted code{"" if count==1 else "s"}' if count else ''
 
 ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edited_not_accepted','answers_reviewed_unedited',
                'answers_unreviewed_unedited')
@@ -971,7 +1114,7 @@ def clear_review(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     membership(request.user,e.department,roles=['owner','clinician'])
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():
+    if batch_jobs.pending(e):
         return document_refusal(request,e,'Wait until the pending job is resolved. Nothing was cleared.',409)
     if request.POST.get('revision')!=str(e.revision):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it before clearing. Nothing was cleared.',409)
@@ -983,16 +1126,78 @@ def clear_review(request,pk):
     audit(request.user,'encounter.review_cleared',e.pk,department=e.department,revision=e.revision,cleared=cleared)
     messages.success(request,'Answers and review cleared. The notes and accepted codes are kept. Generate a new draft when ready.')
     return redirect('encounter_detail',pk=pk)
+
+@require_POST
+@transaction.atomic
+def accept_role_suggestion(request,pk):
+    """"Use this value": a clinician's explicit act that enters a role suggestion (core.destination_roles) as their OWN
+    answer - the record typing it into the box and saving would store for THIS field (save_answers: 'edited', by this
+    clinician, not reviewed, not an accepted suggestion), so the legacy rule that a role row keeps the clinician's own
+    typed value and never generated or accepted text applies to it unchanged. Refused, with nothing written, unless the
+    document is an unfinalized draft at the posted revision, the actor may make clinical decisions, the suggestion is
+    still offered NOW (current_suggestions, the page's own reader) and the posted value is that suggestion. Audited with
+    the field key and the new revision only - nothing derived from the value. Routed only while QUILLMD_ROLE_SUGGESTIONS
+    is on, on the doctor surface (quillmd/urls_doctor_role_suggestions.py): otherwise no request reaches this view.
+
+    RECORDED (refutation round 3, RS3A-2): it is not save_answers in every state. save_answers refuses while ANY role
+    row holds generated text (a draft from before the destination-roles salvage); this act writes only its own row, and
+    the generated_text check below reads only that row, which it has just made the clinician's own - so that check
+    cannot fire. Nothing wrong reaches a record: every later save, and so finalization, is refused until the other row
+    is cleared."""
+    from documents import DocumentError
+    from . import destination_roles
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
+    if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
+    if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version. Nothing was saved.',409)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    refusal='There is no suggestion to use for this answer now. Type your own answer if it belongs here. Nothing was saved.'
+    key=request.POST.get('key','')
+    field=next((f for f in e.template_version.fields if f['key']==key),None)
+    # (applies() is False for the qualified Word form, whose document_backend is set: one arm, not two - refutation F05)
+    if field is None or v3_mapping.is_v3_version(e.template_version) or not destination_roles.applies(e.template_version):
+        return document_refusal(request,e,refusal,400)
+    previous=e.answers.get(key)
+    try:
+        roles=destination_roles.legacy_roles(e.template_version)
+        statement_labels=[row['label'] for row in e.template_version.review_requirements]
+        offer=destination_roles.current_suggestions(e.template_version.fields,e.answers,roles,e.notes,statement_labels,
+                                                    keys={key}).get(key)
+    except (ValidationError,DocumentError) as exc:
+        return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
+    if offer is None:return document_refusal(request,e,refusal,400)
+    posted=request.POST.get('value','').replace('\r\n','\n').replace('\r','\n')
+    if posted!=offer['text'].replace('\r\n','\n').replace('\r','\n'):
+        return document_refusal(request,e,'The value sent is not the suggestion shown for "'+field['label']+'". Reopen the document and try again. Nothing was saved.',400)
+    value=offer['text']
+    answers=dict(e.answers)
+    answers[key]={**previous,'text':value,'reviewed':False,'accepted_suggestion':False,'accepted_by':None,'status':'edited',
+                  'reviewed_by':None,'edited_by':str(request.user.pk)}
+    # save_answers' own role rule, read the same way: generated or accepted text never stays on a role row.
+    if destination_roles.generated_text(answers[key]):return document_refusal(request,e,LEGACY_ROLE_SAVE_REFUSAL+field_list([field['label']])+' Nothing was saved.',400)
+    try:generation_batch.check_answers(e.template_version,answers)
+    except ValidationError as exc:return document_refusal(request,e,error_message(exc),409)
+    e.answers=answers;e.revision+=1;e.status='review';wm_review.invalidate_review(e)
+    e.save(update_fields=['answers','revision','status','template_review'])
+    # ⚠️ IDENTIFIERS ONLY, as encounter.answers_saved (refutation L-1): a digest of a short value - a lab value, a pair of
+    # initials - is the value to anyone who can enumerate it, and this table is append-only and read by platform staff.
+    audit(request.user,'encounter.role_suggestion_accepted',e.pk,department=e.department,field=key,revision=e.revision)
+    messages.success(request,'"'+field['label']+'" now holds the suggested value as your own entry. Review it, tick its review box and save before finalizing.')
+    return redirect('encounter_detail',pk=pk)
 def cited_spans(evidence):
     """The source units an answer cites, as (start, end), in order."""
     return sorted((item.get('start'),item.get('end')) for item in evidence if isinstance(item,dict) and item.get('kind','unit')=='unit')
 
 
+#: Generations one user may request per window. The standing QA runner reads these two names to pace its sends
+#: (ops/sonnet5_stages.generation_headroom), so a change here moves both.
+GENERATION_RATE_LIMIT=30
+GENERATION_RATE_WINDOW_SECONDS=600
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     try:
-        if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
+        if not rate_limit('generate:'+str(request.user.pk),limit=GENERATION_RATE_LIMIT,seconds=GENERATION_RATE_WINDOW_SECONDS):raise ValidationError('Generation rate limit reached.')
         # (a finalized record says so first: the advice below names an action it refuses — refutation R2)
         if e.status=='finalized':raise ValidationError('Finalized documents are immutable.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
@@ -1009,12 +1214,19 @@ def generate_view(request,pk):
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
             # Reached from a stale page (Back, or a second tab): a generation does not renumber the
-            # revision, so the succeeded job still holds this request key. Saying "queued" would
-            # promise a request that was not made and answers that will not change.
-            messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
+            # revision, so the earlier job still holds this request key. Saying "queued" would
+            # promise a request that was not made; saying "answer draft" while that job is still
+            # queued or running promises answers that do not exist yet (doctor_status.reuse_message).
+            messages.info(request,reuse_message(job))
         else:
             messages.success(request,'Generation queued. Refresh this page to view the result.')
-    except ValidationError as exc:messages.error(request,error_message(exc))
+    except ValidationError as exc:
+        messages.error(request,error_message(exc))
+        if unavailable(exc):return redirect('dashboard')
+    except DatabaseError:
+        # enqueue is one transaction: a database failure (a deadlock victim, a lock timeout, a lost connection) rolled all
+        # of it back, so nothing was queued, held, sent or charged (RF-R1). Said so, never a 500.
+        messages.error(request,'The generation could not be queued. Nothing was sent or charged. Try again.')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1039,7 +1251,7 @@ def save_answers(request,pk):
     from .tab_review import clinician_identity
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
+    if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version before editing.',409)
     is_wm=bool(e.template_version.document_backend)
     is_v3=v3_mapping.is_v3_version(e.template_version)
@@ -1048,6 +1260,16 @@ def save_answers(request,pk):
         membership(request.user,e.department,roles=['owner','clinician'])
     answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
     previous_answers=dict(e.answers)
+    # The ORIGINAL's destination roles (core.destination_roles), read at most once per save and only when needed: a
+    # legacy field's printed label decides identity and role, never the mapping's edited label.
+    from . import destination_roles
+    role_cache={}
+    def legacy_roles():
+        if 'legacy' not in role_cache:role_cache['legacy']=destination_roles.legacy_roles(e.template_version)
+        return role_cache['legacy']
+    def identity(field):
+        if is_wm or is_v3 or not destination_roles.applies(e.template_version):return clinician_identity(field)
+        return clinician_identity(destination_roles.printed(field,legacy_roles()))
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
     from . import wm_narrative
@@ -1075,7 +1297,7 @@ def save_answers(request,pk):
             narrative_held=narrative_held if narrative_held is not previous else None
             supported_context=narrative_held['held_candidate']['context'] if narrative_held else None
         else:
-            supported_context=governed_supported(governance,e.notes,previous,field['label'])
+            supported_context=governed_supported(governance,e.notes,previous,field['label'],field_key=field['key'])
         governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN
@@ -1124,7 +1346,10 @@ def save_answers(request,pk):
         if blank and prior_blank and (value.strip() or request.POST.get('accept_'+key)=='on'):
             blank=False
         if blank:
-            if is_wm or clinician_identity(field):
+            try:identity_row=is_wm or identity(field)
+            except (ValidationError,DocumentError) as exc:
+                return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
+            if identity_row:
                 return document_refusal(request,e,'"'+field['label']+'" cannot be marked "Leave blank — reviewed". Nothing was saved.',400)
             if value.strip() or request.POST.get('accept_'+key)=='on':
                 return document_refusal(request,e,'Choose one decision for "'+field['label']+'": your own answer, the offered suggestion, or leave it blank. Nothing was saved.',400)
@@ -1239,6 +1464,26 @@ def save_answers(request,pk):
                 answers[key].update(status='edited' if value.strip() or origin not in ('conflict','missing') else origin,
                                     blank_history=history)
                 withdrawn_blank.append(key)
+    # ⚠️ A ROLE PLACE NEVER TAKES GENERATED OR ACCEPTED TEXT, read from the ORIGINAL (never from this mapping). A v3
+    # place takes no text at all (the export refuses it, so the page refuses it first); a legacy signature, initials or
+    # signer row keeps the clinician's own typed value (it exports) but never generation's or a suggestion's.
+    if destination_roles.applies(e.template_version) and not is_wm:
+        try:
+            if is_v3:
+                texted=[f for f in e.template_version.fields if (answers[f['key']].get('text') or '').strip()
+                        and f.get('kind') not in v3_mapping.SIGNING_KINDS and not f.get('write_protected')]
+                report=destination_roles.report(e.template_version) if texted else None
+                held=(report or {}).get('violations') or {}
+                refused=[f['label'] for f in texted if f['key'] in held];refusal=ROLE_SAVE_REFUSAL
+            else:
+                generated=[f for f in e.template_version.fields if destination_roles.generated_text(answers[f['key']])]
+                refused=[f['label'] for f in generated if destination_roles.legacy_reason(f,legacy_roles().get(f['key']))]
+                refusal=LEGACY_ROLE_SAVE_REFUSAL
+        except (ValidationError,DocumentError) as exc:
+            return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
+        if refused:
+            return document_refusal(request,e,refusal+field_list(refused)+(' Clear each one: it is completed by hand on the printed form.'
+                                    if is_v3 else ' Clear each one and save; you may then type your own entry.')+' Nothing was saved.',400)
     decisions={}
     if is_wm:
         for requirement in e.template_version.review_requirements:
@@ -1270,6 +1515,8 @@ def save_answers(request,pk):
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
     kept_proposals=(e.template_review or {}).get('proposals') if is_wm and not (e.template_review or {}).get('decisions') else None
     previous_decisions=dict((e.template_review or {}).get('decisions') or {}) if is_wm else {}
+    try:generation_batch.check_answers(e.template_version,answers)
+    except ValidationError as exc:return document_refusal(request,e,error_message(exc),409)
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
     if kept_proposals:e.template_review={'proposals':kept_proposals}
     clinician=is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
@@ -1354,9 +1601,24 @@ def finalize(request,pk):
             e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
             membership(request.user,e.department,roles=['owner','clinician'])
             if e.status=='finalized':return redirect('encounter_detail',pk=pk)
+            # ⚠️ BEFORE ANYTHING IS FILLED. The form refuses to START a document on an unconfirmed contract v3 mapping, but a
+            # draft the previous release started while a rollback had removed the database gate survives re-installing it
+            # (R1), and finalizing it produced an export no clinician's mapping check stood behind. The database refuses
+            # the move too; this says why and what to do, and leaves no filled export behind.
+            if e.template_version.needs_confirmation:
+                raise ValidationError(f"This document's form mapping (version {e.template_version.number}) has not been confirmed by a "
+                                      'clinician, so it cannot be finalized. Nothing was finalized. A clinician can confirm that '
+                                      "mapping version on the form's page if it is still the form's current mapping; otherwise "
+                                      "start a new document from the form's confirmed mapping.")
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
-            if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():raise ValidationError('Resolve pending jobs before finalizing.')
+            if batch_jobs.pending(e):raise ValidationError('Resolve pending jobs before finalizing.')
+            # The coding ledger freezes at finalization (0034): an acceptance the notes have since changed under is
+            # confirmed or withdrawn first, never frozen as it stands.
+            if CodeSuggestion.objects.filter(encounter=e,review_required=True).exists():
+                raise ValidationError('An accepted code is marked for re-review because the notes changed after it was accepted. '
+                                      'Accept it again or withdraw it on the Coding tab (a hidden CPT code can only be '
+                                      'withdrawn). Nothing was finalized.')
             is_v3=v3_mapping.is_v3_version(e.template_version)
             # A v3 signature or initials area holds no answer (it is signed by hand on the printed form), so there is
             # nothing in it to review; every other field still needs the clinician's review.
@@ -1374,6 +1636,7 @@ def finalize(request,pk):
             governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
             if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
+            generation_batch.check_answers(e.template_version,e.answers)
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
@@ -1411,7 +1674,23 @@ def finalize(request,pk):
                 # made `fill_template`'s legacy-contract fallback unreachable, because the caller
                 # passed the fresh fields as the mapping and the two were equal by construction.
                 version=e.template_version
-                validate_identity(version.fields,e.answers,request.user)
+                # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read now (core.destination_roles): a role place never exports
+                # generated or accepted text, and identity reads each legacy field's PRINTED label, never an edited one.
+                from . import destination_roles
+                identity_fields=version.fields
+                if destination_roles.applies(version):
+                    if is_v3:
+                        held=destination_roles.v3_held(version)
+                        refused=[f['label'] for f in version.fields if f['key'] in held
+                                 and (e.answers.get(f['key'],{}).get('text') or '').strip()]
+                        if refused:raise ValidationError(ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one: it is completed by hand on the printed form. Nothing was finalized.')
+                    else:
+                        roles=destination_roles.legacy_roles(version,fresh=True)
+                        refused=[f['label'] for f in version.fields if destination_roles.legacy_reason(f,roles.get(f['key']))
+                                 and destination_roles.generated_text(e.answers.get(f['key']))]
+                        if refused:raise ValidationError(LEGACY_ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one and save; you may then type your own entry. Nothing was finalized.')
+                        identity_fields=[destination_roles.printed(f,roles) for f in version.fields]
+                validate_identity(identity_fields,e.answers,request.user)
                 # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an
                 # option label, a list of labels, a ticked box, table rows. The engine checks every anchor's
                 # fingerprint and refuses a stale one; its message is shown as it is.
@@ -1483,16 +1762,26 @@ def voice(request,pk):
                 'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
                 'standard_limit':Decimal(over.quote['standard_limit']),
                 'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
-        if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
+        if job.input_path!=relative:cleanup_file(private_path(relative),encounter_id=e.pk)
         if getattr(job,'reused',False):
             # The identical recording already holds this request key; the redundant upload was just
             # removed above. Nothing was sent to the provider and nothing was charged again.
-            messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
+            messages.info(request,reuse_message(job,recording=True))
         else:
             messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
-        if relative:private_path(relative).unlink(missing_ok=True)
+        if relative:cleanup_file(private_path(relative))
         messages.error(request,error_message(exc))
+        if unavailable(exc):return redirect('dashboard')
+    except DatabaseError:
+        # enqueue is one transaction, so a database failure (a lock timeout, a deadlock victim, a lost connection) rolled
+        # all of it back: nothing was queued, held, sent or charged. The stored recording has no owner; remove it (RF-1).
+        if relative:cleanup_file(private_path(relative))
+        messages.error(request,'The recording could not be queued. Nothing was sent or charged. Upload it again.')
+    except BaseException:
+        # Anything else is a defect and is reported as one, but it never strands the recording it interrupted.
+        if relative:cleanup_file(private_path(relative))
+        raise
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1524,7 +1813,7 @@ def voice_approve(request,pk):
             if Job.objects.filter(input_path=relative).exists():
                 messages.info(request,'This recording was already approved and queued; its request is listed below.')
                 return redirect('encounter_detail',pk=pk)
-            path.unlink(missing_ok=True)
+            cleanup_file(path,encounter_id=e.pk)
         messages.info(request,'Nothing was sent. Upload a shorter segment: recordings that fit the displayed limit are processed straight away.')
         return redirect('encounter_detail',pk=pk)
     try:
@@ -1532,8 +1821,14 @@ def voice_approve(request,pk):
             raise ValidationError('The document changed after the quote. Upload the recording again; nothing was sent.')
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
             raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
-        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
-        if job.input_path!=relative:path.unlink(missing_ok=True)
+        try:job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
+        except DatabaseError:
+            # enqueue rolled back whole: nothing was queued, held, sent or charged (RF-R1). Only this call: a failure after
+            # it returned would follow a queued job. The recording stays with its signed approval, which is still valid, so
+            # it can be approved again; the reaper removes it if nobody does.
+            messages.error(request,'The approved recording could not be queued. Nothing was sent or charged. Approve it again, or upload it again.')
+            return redirect('encounter_detail',pk=pk)
+        if job.input_path!=relative:cleanup_file(path,encounter_id=e.pk)
         audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")
     except ValidationError as exc:
@@ -1573,7 +1868,7 @@ def team(request):
         else:messages.warning(request,'Invitation saved, but email delivery could not be confirmed. Ask your administrator to recover the private invitation link or send a new invitation after delivery is repaired.')
         return redirect('team')
     ds=departments(request.user)
-    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds,'now':timezone.now()})
+    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(user=request.user),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds,'now':timezone.now()})
 
 @require_POST
 @transaction.atomic
@@ -1589,15 +1884,17 @@ def invitation_revoke(request,pk):
 @require_POST
 @transaction.atomic
 def create_department(request):
-    form=DepartmentForm(request.POST)
-    owner=Membership.objects.filter(user=request.user,active=True,role='owner').select_related('department__organization').first()
-    if not owner:raise PermissionDenied
+    form=DepartmentForm(request.POST,user=request.user)
+    if not form.owned:raise PermissionDenied
     if form.is_valid():
-        d=Department.objects.create(organization=owner.department.organization,**form.cleaned_data)
+        organization=form.cleaned_data['organization']
+        # The choice is re-read under this transaction: an active owner membership in THAT organization, locked.
+        if not Membership.objects.select_for_update().filter(user=request.user,active=True,role='owner',department__organization=organization).exists():raise PermissionDenied
+        d=Department.objects.create(organization=organization,name=form.cleaned_data['name'],organization_pays=form.cleaned_data['organization_pays'])
         Membership.objects.create(user=request.user,department=d,role='owner')
         Wallet.objects.get_or_create(organization=d.organization,kind='paid')
         audit(request.user,'department.create',d.pk,department=d)
-    else:messages.error(request,'Enter a department name.')
+    else:messages.error(request,' '.join(error for errors in form.errors.values() for error in errors) or 'Enter a department name.')
     return redirect('team')
 
 @require_POST
@@ -1614,6 +1911,9 @@ def membership_update(request,pk):
 
 @require_http_methods(['GET','POST'])
 def invite_accept(request,raw):
+    # A department invitation is accepted on the doctor surface only, as a clinic-owner invitation is (clinic_invitations):
+    # on the administration host a signed-in administrator would join a clinic through it (inventory 7A, LOW).
+    if settings.ADMIN_SITE:raise Http404
     invite=get_object_or_404(Invitation,token_hash=digest(raw),expires_at__gt=timezone.now(),accepted_at__isnull=True)
     existing_account=User.objects.filter(email__iexact=invite.email).exists()
     form=RegisterForm(request.POST or None,initial={'email':invite.email})
@@ -1623,22 +1923,31 @@ def invite_accept(request,raw):
         if existing or form.is_valid():
             if not existing and form.cleaned_data['email']!=invite.email:form.add_error('email','Use the invited email address.')
             else:
-                with transaction.atomic():
-                    invite=Invitation.objects.select_for_update().get(pk=invite.pk)
-                    if invite.accepted_at or invite.expires_at<=timezone.now():raise Http404
-                    # An outstanding invitation cannot outlive its issuer's authority.
-                    membership(invite.invited_by,invite.department,roles=['owner','manager'])
-                    if existing:user=existing
-                    else:user=form.save(commit=False);user.username=invite.email;user.verified_at=timezone.now();user.save()
-                    current_membership=Membership.objects.select_for_update().filter(user=user,department=invite.department).first()
-                    if current_membership and not current_membership.active:
-                        return HttpResponse('Your department access is inactive. Ask the organization owner to restore it. This invitation has not been used.',status=409,content_type='text/plain')
-                    # Possession of the emailed high-entropy invitation verifies this mailbox.
-                    if not user.verified_at:user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
-                    Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
-                    welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
-                    audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
-                messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
+                try:
+                    with transaction.atomic():
+                        invite=Invitation.objects.select_for_update().get(pk=invite.pk)
+                        # Accepted by a simultaneous submission of this same invitation (RR2-ACC-3): this one wrote nothing.
+                        if invite.accepted_at:messages.info(request,INVITATION_ALREADY_ACCEPTED);return redirect('login')
+                        if invite.expires_at<=timezone.now():raise Http404
+                        # An outstanding invitation cannot outlive its issuer's authority.
+                        membership(invite.invited_by,invite.department,roles=['owner','manager'])
+                        if existing:user=existing
+                        else:user=form.save(commit=False);user.username=invite.email;user.verified_at=timezone.now();user.save()
+                        current_membership=Membership.objects.select_for_update().filter(user=user,department=invite.department).first()
+                        if current_membership and not current_membership.active:
+                            return HttpResponse('Your department access is inactive. Ask the organization owner to restore it. This invitation has not been used.',status=409,content_type='text/plain')
+                        # Possession of the emailed high-entropy invitation verifies this mailbox.
+                        if not user.verified_at:user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
+                        Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
+                        welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
+                        audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
+                except IntegrityError:
+                    # Another request created this address's account first (R-A, forms.account_created_meanwhile): answered as the
+                    # same request a moment later is. The whole acceptance rolled back, so this invitation is unused.
+                    if existing or not account_created_meanwhile(invite.email):raise
+                    messages.error(request,ACCOUNT_CREATED_MEANWHILE);existing_account=True
+                else:
+                    messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
 #: ⚠️ A FINALIZED RECORD'S CODES ARE PART OF IT. Finalization does not renumber the revision (see `finalize`), so a Coding tab
@@ -1690,6 +1999,23 @@ def coding(request,pk):
     from .coding import MAX_SUGGESTIONS
     over=(f' {result.omitted} further documented code{" was" if result.omitted==1 else "s were"} not suggested: a document holds '
           f'at most {MAX_SUGGESTIONS} code suggestions.' if result.omitted else '')
+    unmatched=(f' {result.unmatched} entr{"y" if result.unmatched==1 else "ies"} in the notes written like a diagnosis code '
+               f'{"is" if result.unmatched==1 else "are"} not a code in that release and {"was" if result.unmatched==1 else "were"} '
+               'not suggested; check the code and its dot.' if result.unmatched else '')
+    withheld=(f' {result.cpt_withheld} CPT code{"" if result.cpt_withheld==1 else "s"} named in the notes {"was" if result.cpt_withheld==1 else "were"} '
+              'not looked up: CPT content is not licensed for use in this product.' if result.cpt_withheld else '')
+    dotless=(f' {result.dotless} entr{"y" if result.dotless==1 else "ies"} in the notes {"looks" if result.dotless==1 else "look"} like a '
+             'code written without a dot; not looked up. Type a diagnosis code with its dot (R07.9, not R079) to have it '
+             'suggested.' if result.dotless else '')
+    one=result.unlabelled==1
+    unlabelled=(f' {result.unlabelled} three-character entr{"y" if one else "ies"} in the notes match{"es" if one else ""} a diagnosis '
+                f'code but {"is" if one else "are"} not labelled as one; not suggested (p53 or B12 can name a lab test or a gene). '
+                'Write the code after a code label, such as "ICD-10: I10", to have it suggested.' if result.unlabelled else '')
+    two=result.touching!=1
+    touching=(f' {result.touching} code{"s" if two else ""} from the release in effect {"are" if two else "is"} written touching '
+              f'other characters (as in "1.R07.9" or "R07.9.Plan") and {"were" if two else "was"} not suggested; leave a space '
+              'before and after a code to have it suggested.' if result.touching else '')
+    over+=unmatched+dotless+unlabelled+touching+withheld
     if result.covered:
         messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
@@ -1726,7 +2052,7 @@ def accept_code(request,pk,code_pk):
     if posted!=str(e.revision):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
                                           'was accepted. Reopen it to see the current notes and codes.',409)
-    if item.accepted_by_id:
+    if item.accepted_by_id and not item.review_required:
         # ⚠️ AN ACCEPTANCE BELONGS TO WHOEVER MADE IT. Accepting does not renumber the revision, so a page opened before
         # clinician A accepted still posts the current revision, and B's Accept from it re-stamped the code as B's, with a
         # second coding.accept (refutation round 4, R4-6). Refused, not answered as a no-op: B is told the acceptance is
@@ -1734,24 +2060,105 @@ def accept_code(request,pk,code_pk):
         when=timezone.localtime(item.accepted_at).strftime('%Y-%m-%d %H:%M %Z') if item.accepted_at else 'an unrecorded time'
         return document_refusal(request,e,f'This code was already accepted by {item.accepted_by.email}, at {when}. '
                                           'Nothing was accepted. Reopen the document to see its current codes.',409)
-    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
-    if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
+    withdraw=' Withdraw this acceptance instead.' if item.review_required else ''
+    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.'+withdraw)
+    if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.'+withdraw)
     if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
-    item.accepted_by=request.user;item.accepted_at=timezone.now();item.save(update_fields=['accepted_by','accepted_at'])
-    audit(request.user,'coding.accept',item.pk,department=e.department,code=item.code,release=item.terminology.release.version)
+    release=item.terminology.release
+    if item.release_sha256 not in ('',release.sha256):raise ValidationError('This code no longer names its release; generate new coding suggestions.')
+    previous=item.accepted_by_id
+    item.accepted_by=request.user;item.accepted_at=timezone.now();item.review_required=False
+    item.save(update_fields=['accepted_by','accepted_at','review_required'])
+    audit(request.user,'coding.reaccept' if previous else 'coding.accept',item.pk,department=e.department,code=item.code,
+          release=release.version,release_sha256=release.sha256,**({'previously_accepted_by':str(previous)} if previous else {}))
+    return redirect('/encounters/'+str(pk)+'/?tab=coding')
+
+@require_POST
+@transaction.atomic
+def withdraw_code(request,pk,code_pk):
+    """A clinician's explicit withdrawal of an accepted code on an unfinalized document: the acceptance is cleared, then
+    the suggestion removed (0034 never lets an accepted code be deleted directly). Audited; finalized codes are frozen."""
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was withdrawn.',409)
+    if request.POST.get('revision')!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
+                                          'was withdrawn. Reopen it to see the current notes and codes.',409)
+    item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e,accepted_by__isnull=False).first()
+    if item is None:return document_refusal(request,e,'This accepted code is unavailable. Nothing was withdrawn.',409)
+    # ⚠️ THE ACCEPTANCE THE PAGE SHOWED, not only its revision: accepting does not renumber the revision, so a withdraw from
+    # a page loaded before another clinician accepted again deleted that newer acceptance (refutation C5 of 4cfa4301).
+    if request.POST.get('accepted')!=item.acceptance:
+        return document_refusal(request,e,'This code was accepted again after you opened the page. Nothing was withdrawn. '
+                                          'Reopen the document to see who accepted it.',409)
+    previous,release=item.accepted_by_id,item.terminology.release
+    CodeSuggestion.objects.filter(pk=item.pk).update(accepted_by=None,accepted_at=None)
+    CodeSuggestion.objects.filter(pk=item.pk).delete()
+    # ⚠️ A CPT CODE IS NEVER DISPLAYED WHILE CPT IS LOCKED, and the audit console renders every detail: a hidden CPT
+    # acceptance's withdrawal records its system, never its code (refutation R3C-4 of 75d11c09: '99213' was rendered).
+    from .coding import cpt_licensed
+    shown=item.system!='CPT' or (cpt_licensed() and release.license_reference==settings.CPT_LICENSE_ID)
+    audit(request.user,'coding.withdraw',item.pk,department=e.department,**({'code':item.code} if shown else {'system':'CPT'}),
+          release=release.version,release_sha256=release.sha256,previously_accepted_by=str(previous),
+          review_required=item.review_required)
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 def billing(request):
     from .billing import checkout_form
     from .admin_queries import page_for,searched
     query=request.GET.get('q','').strip()[:100]
-    owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
+    owned_orgs=owned_organizations(request.user)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
     usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
+    held=held_requests(request.user)
     ledger=searched(LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
     payments=searched(Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at','pk'),query,['status','stripe_session','stripe_intent'])
     up=page_for(request,usage,'usage_page','usage');lp=page_for(request,ledger,'ledger_page','ledger');pp=page_for(request,payments,'payments_page','payments')
-    return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+    return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'held_requests':held,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+
+#: What a request is called on the doctor's pages: a complete-form part is part of one generation (refutation F11).
+REQUEST_LABELS={'generation':'Generation','generation_part':'Generation','transcription':'Transcription','mapping':'Form mapping'}
+MAX_HELD_ROWS=500
+
+def owned_organizations(user):
+    """The organizations whose billing a viewer reads: those in which the viewer holds an active owner membership (the
+    Organization owner role, held through any of its departments). ONE answer for the wallet strip, the list of requests
+    holding funds and the charge page (refutation M1 of 4cfa4301: the list asked which DEPARTMENTS the viewer owns while
+    the other two asked this, so the owner of another department of the paying organization saw that wallet's funds
+    reserved beside "No request is holding funds", and still opened the request's charge page)."""
+    return set(Membership.objects.filter(user=user,active=True,role='owner').values_list('department__organization_id',flat=True))
+
+def billed_jobs(user):
+    """The requests whose charges a viewer reads: their own, and those an organization the viewer owns pays for."""
+    return models.Q(user=user)|models.Q(payer__in=[f'organization:{org}' for org in owned_organizations(user)])
+
+def held_requests(user):
+    """Requests holding funds, newest first: exactly those whose charge page the viewer opens (billed_jobs; refutation F11
+    of dc33e094 and M1 of 4cfa4301), so every row links to its page. A complete-form generation is one row, its parts'
+    holds summed. At most MAX_HELD_ROWS rows: the cap counts requests, never reservations, so a row always carries its
+    request's whole held amount (refutation M4: cutting 500 reservations left a batch row with one part's). Read-only: the
+    reservations decide every amount (core.billing)."""
+    held=(Reservation.objects.filter(state='held',job__in=Job.objects.filter(billed_jobs(user))).order_by('-created_at','pk')
+          .values_list('job_id','amount','job__kind','job__generation_part__batch_id'))
+    amounts={}
+    for job_id,amount,kind,batch_id in held.iterator():
+        key=('batch',batch_id) if kind=='generation_part' else ('job',job_id)
+        if key not in amounts:
+            if len(amounts)>=MAX_HELD_ROWS:continue
+            amounts[key]=Decimal('0')
+        amounts[key]+=amount
+    firsts={part.batch_id:part.job for part in GenerationBatchPart.objects.filter(
+        batch_id__in=[ident for kind,ident in amounts if kind=='batch'],ordinal=1).select_related('job__user')}
+    singles=Job.objects.select_related('user').in_bulk([ident for kind,ident in amounts if kind=='job'])
+    rows=[]
+    for (kind,ident),amount in amounts.items():
+        job=firsts.get(ident) if kind=='batch' else singles.get(ident)
+        if job is not None:
+            # Another person's request is told in the third person: its requester approved its maximum, not this viewer
+            # (refutation R3B-2 of 75d11c09).
+            status=doctor_status(job) if job.user_id==user.pk else for_others(doctor_status(job))
+            rows.append({'job':job,'label':REQUEST_LABELS.get(job.kind,'Request'),'amount':amount,'status':status})
+    return rows
 
 def usage_rows(usage):
     # Reconciled and absorbed evidence is read from the append-only ledger; the usage rows themselves are never edited.
@@ -1796,7 +2203,12 @@ def checkout(request):
         if payer=='personal':wallet=Wallet.objects.get(user=request.user,kind='paid')
         else:
             organization_id=payer.split(':',1)[1]
-            if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
+            # FOR NO KEY UPDATE (the global lock order, core.retention): this join also locks the owner's account and
+            # department rows, held while the Payment row's commit-time check waits for the organization's paid wallet,
+            # which a request in that department holds before its own commit takes FOR KEY SHARE on the department.
+            # FOR UPDATE refused that: the top-up was a deadlock victim (RF-R1's class). Suspension, demotion and
+            # membership changes still wait for this check.
+            if not Membership.objects.select_for_update(no_key=True).filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
             wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
         # Real data mode never spends a balance sandbox payments funded (reserve() refuses it), so live money is never
         # taken into one: refused before any Payment row or Stripe call. The payer is told what to do, and nothing that
@@ -1907,11 +2319,19 @@ def billing_job_detail(request,pk):
     from .admin_queries import financial_context
     # Personal billing history remains available after clinical membership revocation.
     # Organization owners can inspect organization-paid charges without clinical access.
-    owned=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
-    allowed=models.Q(user=request.user)|models.Q(payer__in=[f'organization:{pk}' for pk in owned])
-    job=get_object_or_404(Job.objects.filter(allowed).select_related('user','encounter__department'),pk=pk)
+    owned=owned_organizations(request.user)
+    job=get_object_or_404(Job.objects.filter(billed_jobs(request.user)).select_related('user','encounter__department'),pk=pk)
     visible=set(Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned)).values_list('pk',flat=True))
     context=financial_context(job,visible);context.pop('audit_targets')
+    context['doctor_status']=doctor_status(job)
+    context['request_label']=REQUEST_LABELS.get(job.kind,'Request')
+    if job.kind=='generation_part':
+        # The held list's one row of a complete form links here (part 1): the page names the part and the whole request's
+        # reservations, in the doctor's words (refutation M2 of 4cfa4301: "Total reserved for this request" was one part's).
+        part=job.generation_part
+        jobs=list(part.batch.parts.values_list('job_id',flat=True))
+        context['batch_part']={'ordinal':part.ordinal,'parts':len(jobs),
+                               'reserved':Reservation.objects.filter(job_id__in=jobs).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')}
     audit(request.user,'billing.job_read',job.pk)
     return render(request,'financial_detail.html',context)
 
@@ -1942,6 +2362,9 @@ def admin_platform_cost(request):
 @transaction.atomic
 def admin_resolve_job(request,pk):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
+    # Batch resolution locks its parent before the child and never frees a consumed key.
+    if Job.objects.filter(pk=pk,kind='generation_part').exists():
+        return batch_jobs.resolve_view(request,pk)
     # Lock only the job row, as settle, cancel and absorb do: locking the encounter and department before the wallets deadlocks a wallet holder that audits.
     job=get_object_or_404(Job.objects.select_for_update(of=('self',)).select_related('encounter__department'),pk=pk)
     if job.state!='reconciliation':return HttpResponse('Only jobs held for reconciliation can be resolved.',status=409)
@@ -1951,9 +2374,15 @@ def admin_resolve_job(request,pk):
     from .billing import absorb_failed_job
     settled=Usage.objects.filter(job=job,simulated=False).first()
     simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind in ('generation','mapping') and job.config.get('mode',settings.AI_MODE)!='live')
+    # ⚠️ A DURABLE RECEIPT WITH NO USAGE ROW IS PROVIDER COST QUILLMD ALREADY EVIDENCES: the provider completed and metered the
+    # request, and only settlement failed (a DatabaseError or a refusal inside settle(); R-B, docs/rebuild/v1/residuals-
+    # assessment-20260929.md). The platform absorbs the receipt's cost whatever the form carried, as the settled branch below
+    # and the batch resolution (batch_jobs.resolve_view) already do. It used to record 'no provider cost evidenced' and no
+    # platform cost on 'release_no_cost', and the typed amount on 'absorb_platform_failure'.
+    receipt=None if settled or simulated else ProviderReceipt.objects.filter(job=job,simulated=False).first()
     release(job)
     job.state='failed';job.finished_at=timezone.now()
-    job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
+    job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: the provider cost of its durable receipt absorbed by QuillMD.' if receipt else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
     # A resolved job ended without success: free its request key so the same revision or recording can be requested again.
     job.request_key=ended_key(job,'failed')
     job.save(update_fields=['state','error','finished_at','request_key'])
@@ -1961,6 +2390,29 @@ def admin_resolve_job(request,pk):
         # The worker settled the charge before the outcome became uncertain: reverse it, whatever amount the form carried.
         absorbed=absorb_failed_job(job,actor=request.user,note=note)
     elif simulated: absorbed=None
+    elif receipt:
+        absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':receipt.actual_cost,'description':'Provider cost absorbed: provider completed, settlement failed','evidence_reference':f'receipt:{receipt.pk} {note}'[:240],'recorded_by':request.user})
+        if absorbed.amount!=receipt.actual_cost:
+            # ⚠️ A RECEIPT THAT ARRIVED AFTER A TYPED RESOLUTION (L1:R1-1). An administrator resolved the job with a typed
+            # amount while no receipt existed; the provider then completed and core.jobs.hold_late_receipt reopened the job
+            # (provider.receipt_late). The receipt is the evidence, so this resolution sets the absorbed platform cost to the
+            # receipt's amount, on the same row, and audits both amounts; the user is not charged either way. It used to
+            # refuse, and the job then stayed in reconciliation for good: every resolution answered 400, the audit failed and
+            # the encounter refused all new work (pending() counts 'reconciliation'). The batch resolution
+            # (batch_jobs.resolve_view) still refuses its own conflicting amount, as it did before this change.
+            # Every other product path records a receipt-backed job's absorbed amount FROM that receipt, so a conflict with
+            # no late receipt has an origin this view cannot see: it is refused, and nothing of this resolution stands.
+            if not AuditEvent.objects.filter(action=LATE_RECEIPT_ACTION,target=str(job.pk)).exists():
+                raise ValidationError('The provider receipt conflicts with the previously recorded platform cost, and no late receipt explains it; independent financial reconciliation is required.')
+            previous=(absorbed.amount,absorbed.description,absorbed.evidence_reference,absorbed.recorded_by_id)
+            absorbed.amount=receipt.actual_cost
+            absorbed.description='Provider cost absorbed: the provider completed after an earlier resolution; amount set from its late receipt'
+            absorbed.evidence_reference=f'receipt:{receipt.pk} {note}'[:240];absorbed.recorded_by=request.user
+            absorbed.save(update_fields=['amount','description','evidence_reference','recorded_by'])
+            audit(request.user,'platform_cost.adjusted_to_receipt',job.pk,department=job.department,platform_cost=str(absorbed.pk),
+                  receipt=str(receipt.pk),previous_amount=str(previous[0]),amount=str(receipt.actual_cost),
+                  previous_description=previous[1],previous_evidence_reference=previous[2],
+                  previous_recorded_by=str(previous[3]) if previous[3] else None,evidence_note=note)
     elif data['outcome']=='absorb_platform_failure':
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
     else: absorbed=None
@@ -2028,7 +2480,7 @@ def api_encounter(request,pk):
 @transaction.atomic
 def encounter_notes(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
-    if e.status=='finalized' or Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'This document is locked.',409)
+    if e.status=='finalized' or batch_jobs.pending(e):return document_refusal(request,e,'This document is locked.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'The notes changed after you opened this document, in another window or by a colleague. Reopen it to see the current notes before editing.',409)
     transcript_job=None;raw_transcript=None
     if request.POST.get('transcript_job'):
@@ -2051,20 +2503,31 @@ def encounter_notes(request,pk):
     # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
     if transcript_job is None and same_text(notes,e.notes):
         messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
-    cleared=review_state_counts(e)
+    # ⚠️ A CHANGED SAVE NEVER DELETES AN ACCEPTED CODE (0034 refuses it): the acceptance is kept and marked for the
+    # clinician to accept again or withdraw; finalizing waits for that. Suggestions nobody accepted are cleared as before.
+    cleared=review_state_counts(e,codes=False)
+    marked=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count()
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
-    CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
-    CodeSuggestion.objects.filter(encounter=e).delete()
-    audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)
-    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared)
+    invalidate_codes(e)
+    audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department,kept_for_review=marked)
+    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared,
+          codes_marked_for_review=marked)
     if transcript_job:
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
     # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
     # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
-    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+'Generate and review a new answer draft.')
+    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+marked_sentence(marked)+'Generate and review a new answer draft.')
     return redirect('encounter_detail',pk=pk)
+
+def invalidate_codes(e):
+    """After the notes changed: suggestions nobody accepted are removed; accepted codes are kept and marked for re-review."""
+    CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=True).delete()
+    return CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False,review_required=False).update(review_required=True)
+
+def marked_sentence(count):
+    return f'Kept and marked for re-review: {count} accepted code{"" if count==1 else "s"}. ' if count else ''
 
 def review_transcript(job):
     """Read only the bounded, hash-bound retained result for a reviewed transcript."""
@@ -2079,14 +2542,20 @@ def review_transcript(job):
 
 
 def job_result(request,pk):
-    job=get_object_or_404(Job.objects.filter(encounter__department__in=departments(request.user)),pk=pk)
+    # One rule for every job's stored output: an active member of the job's department. A mapping job has no encounter; its
+    # department is its template's, which scoping by encounter alone never matched (RR2-L1: its requester got 404).
+    visible=departments(request.user)
+    job=get_object_or_404(Job.objects.filter(models.Q(encounter__department__in=visible)|models.Q(mapping_version__template__department__in=visible)),pk=pk)
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
+    # A redacted document's provider output was removed with its content; the financial receipt is retained.
+    if job.encounter_id and RedactionTombstone.objects.filter(target_id=job.encounter_id).exists():
+        raise Http404('Provider output was removed with the redacted document; the financial receipt is retained.')
     # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
     if not deliverable(job):raise Http404('Provider output is delivered only for charged requests and usable transcripts.')
     path=private_path(job.result_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=job.result_sha256:raise ValidationError('Provider output integrity check failed.')
-    audit(request.user,'job.result_download',job.pk,department=job.encounter.department)
+    audit(request.user,'job.result_download',job.pk,department=job.department)
     return FileResponse(path.open('rb'),as_attachment=True,filename=f'quillmd-provider-result-{str(job.pk)[:8]}.json',content_type='application/json')
 
 

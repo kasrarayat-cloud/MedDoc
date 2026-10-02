@@ -1,6 +1,7 @@
 """Operational navigation and financial-only access; no live provider calls."""
 from decimal import Decimal
 from django.test import TestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from core.models import User, AuditEvent, Membership, Wallet, Job, LedgerEntry, Reservation, Usage
@@ -10,6 +11,7 @@ from core.tests.test_security import SyntheticFixture
 
 @override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES={'default':{'BACKEND':'django.core.files.storage.FileSystemStorage'},'staticfiles':{'BACKEND':'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class AdminEvidenceTests(SyntheticFixture, TestCase):
+    client_class = SurfaceClient
     def setUp(self):
         self.scope=self.make_scope('charge-reader')
         self.user,self.org,self.department,self.patient,self.template,self.encounter,_=self.scope
@@ -112,7 +114,7 @@ class AdminEvidenceTests(SyntheticFixture, TestCase):
 
     def test_account_access_change_has_attribution_and_immediate_denial(self):
         from django.test import Client
-        old=Client();old.force_login(self.user)
+        old=SurfaceClient();old.force_login(self.user)
         self.admin_login();self.client.post(f'/console/accounts/{self.user.pk}/',{})
         self.assertEqual(old.get('/api/patients/').status_code,302)
         self.assertTrue(AuditEvent.objects.filter(actor=self.admin,action='admin.account_access',target=self.user.pk,details__active=False).exists())

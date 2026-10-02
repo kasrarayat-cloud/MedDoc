@@ -1,0 +1,139 @@
+{
+  "contract": "d30-accommodation-original-audit-v2",
+  "status": "append-only correction; implementation awaiting independent refutation; no corpus rescoring",
+  "source_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "original_only_audit_sha256": "ea1ea9b75c0a7505565f3ad46dd2e1d3172191aeb34bf451aeae005ac4770dbf",
+  "audit_order": "Original DOCX and original-only pages4/5 inspected before reading annotator/reviewer maps or implementing ownership change.",
+  "retained_maps": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D30-fdeafbee872f.json",
+      "sha256": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+      "areas": 62,
+      "original_entries": [
+        {
+          "id": "A20",
+          "label": "What type of accommodation is the patient’s residence:",
+          "context": "Part B > Social Supervisor’s Report > Accommodation",
+          "kind": "multi_choice",
+          "slots": [
+            "word/document.xml#b/p[73]",
+            "word/document.xml#b/p[74]",
+            "word/document.xml#b/p[75]",
+            "word/document.xml#b/p[76]",
+            "word/document.xml#b/p[77]",
+            "word/document.xml#b/p[78]",
+            "word/document.xml#b/p[79]",
+            "word/document.xml#b/p[80]"
+          ],
+          "location": "body",
+          "duplicate_label": false,
+          "notes": "options are plain bulleted list paragraphs (hollow \"o\" Courier New list bullets; numId 23 = first four accommodation types, numId 24 = own flat/house, with family, with partner, other), NOT checkboxes or glyph runs: there is no tick target, so the selection must be shown by marking/keeping the chosen option paragraph(s) (e.g. highlight/bold or removing the others). Reviewer: multi_choice because the options mix accommodation type with tenure/co-residence and several can be true at once (e.g. own flat/house + with partner; Local Authority accommodation + with family). \"other (please specify)\" is specified in the box that follows (tbl[4], area A21). List spans the page 4/5 break",
+          "options": [
+            "24-hour supported accommodation",
+            "Care Home",
+            "9-5 staffed accommodation",
+            "Local Authority accommodation",
+            "own flat/house",
+            "with family",
+            "with partner",
+            "other (please specify)"
+          ]
+        },
+        {
+          "id": "A21",
+          "label": "other (please specify)",
+          "context": "Part B > Social Supervisor’s Report > Accommodation > What type of accommodation is the patient’s residence",
+          "kind": "text",
+          "slots": [
+            "word/document.xml#b/tbl[4]/tr[0]/tc[0]"
+          ],
+          "location": "table",
+          "duplicate_label": false,
+          "notes": "the unlabelled box directly after the accommodation option list; it is the specify blank for \"other\" and may also be used for accommodation details"
+        }
+      ]
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D30-fdeafbee872f.annotator.json",
+      "sha256": "888a639e5ae4d834e4cbc19738ecb5eb843ebbd29995e6a838f63185cdb0dcd9",
+      "areas": 62,
+      "original_entries": [
+        {
+          "id": "A20",
+          "label": "What type of accommodation is the patient’s residence:",
+          "context": "Part B > Social Supervisor’s Report > Accommodation",
+          "kind": "choice",
+          "slots": [
+            "word/document.xml#b/p[73]",
+            "word/document.xml#b/p[74]",
+            "word/document.xml#b/p[75]",
+            "word/document.xml#b/p[76]",
+            "word/document.xml#b/p[77]",
+            "word/document.xml#b/p[78]",
+            "word/document.xml#b/p[79]",
+            "word/document.xml#b/p[80]"
+          ],
+          "location": "body",
+          "duplicate_label": false,
+          "notes": "options are plain bulleted list paragraphs (hollow \"o\" list bullets, numIds 23 and 24), NOT checkboxes or glyph runs: there is no tick target, so the selection must be shown by marking/keeping the chosen option paragraph (e.g. highlight/bold or removing the others). Options are not strictly exclusive (e.g. own flat/house + with partner), so a reviewer may prefer multi_choice. \"other (please specify)\" is specified in the box that follows (tbl[4]). List spans the page 4/5 break",
+          "options": [
+            "24-hour supported accommodation",
+            "Care Home",
+            "9-5 staffed accommodation",
+            "Local Authority accommodation",
+            "own flat/house",
+            "with family",
+            "with partner",
+            "other (please specify)"
+          ]
+        },
+        {
+          "id": "A21",
+          "label": "other (please specify)",
+          "context": "Part B > Social Supervisor’s Report > Accommodation > What type of accommodation is the patient’s residence",
+          "kind": "text",
+          "slots": [
+            "word/document.xml#b/tbl[4]/tr[0]/tc[0]"
+          ],
+          "location": "table",
+          "duplicate_label": false,
+          "notes": "the unlabelled box directly after the accommodation option list; it is the specify blank for \"other\" and may also be used for accommodation details"
+        }
+      ]
+    }
+  ],
+  "correction": {
+    "replaces_area_ids": [
+      "A20",
+      "A21"
+    ],
+    "area_id": "A20",
+    "label": "What type of accommodation is the patient’s residence:",
+    "context": "Part B > Social Supervisor’s Report > Accommodation",
+    "kind": "long_text",
+    "cardinality": "unspecified",
+    "destination": "word/document.xml#b/tbl[4]/tr[0]/tc[0]",
+    "question_source": "word/document.xml#b/p[72]",
+    "descriptor_sources": [
+      "word/document.xml#b/p[73]",
+      "word/document.xml#b/p[74]",
+      "word/document.xml#b/p[75]",
+      "word/document.xml#b/p[76]",
+      "word/document.xml#b/p[77]",
+      "word/document.xml#b/p[78]",
+      "word/document.xml#b/p[79]",
+      "word/document.xml#b/p[80]"
+    ],
+    "preserve": "Every descriptor, numbering definition/reference, relationship, original formatting and surrounding question remains unchanged. A21 is not a second independent answer destination.",
+    "rationale": "The original offers ordinary bullet paragraphs and one blank answer box. It prints no marking or exclusivity rule. The old map invents a bold/highlight/delete convention and splits a single printed question/destination. Complete explicit text in the available box avoids inventing a marking convention or cardinality.",
+    "blank": "Keep box blank and all descriptors unchanged.",
+    "single": "Preserve the complete explicitly supplied residence answer in the box.",
+    "combined": "Preserve residence type and co-residence together in the same box."
+  },
+  "scoring": {
+    "historical_metric": "Parent-retained 61/62 under original62-area map stays historical and unchanged.",
+    "new_score": null,
+    "all_area_coverage_claim": false,
+    "denominator_note": "Merging these two old entries would make61areas in an amended map; that arithmetic is not a verified61/61or62/62coverage result. No complete corpus map or score is overwritten."
+  }
+}

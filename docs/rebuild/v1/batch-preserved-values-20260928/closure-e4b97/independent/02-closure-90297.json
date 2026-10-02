@@ -1,0 +1,2172 @@
+{
+  "frozen_head": "952c7e2100e451882c1fd837980ab0212dc4f586",
+  "source_hashes": {
+    "core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "documents/word_v3.py": "ffcba8b32e52aa7f0702c776ab4c7d0fae86e18f2e733a24f1dc1980e5bb97e4",
+    "core/v3_mapping.py": "0c51c7908524e4c568017c6e80bd926cd8b13cfd77296102a41c835f479c4d19"
+  },
+  "on_off_semantics": {
+    "0": false,
+    "false": false,
+    "off": false,
+    "1": true,
+    "true": true,
+    "on": true
+  },
+  "network_database_provider_calls": 0,
+  "cases": [
+    {
+      "name": "F-B3-original",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        }
+      ],
+      "input_sha256": "d9bb9090fa5d17861dfb6e90650fdd7389eff27d474adb8ba717a8462fcf2377",
+      "export_sha256": "2a744936058726502f5cc6a5339ed7f74fedc82de93829f4c6e67b8d3f363ad5"
+    },
+    {
+      "name": "F-B3-explicit-resolve",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "2"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 2",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        }
+      ],
+      "input_sha256": "d9bb9090fa5d17861dfb6e90650fdd7389eff27d474adb8ba717a8462fcf2377",
+      "export_sha256": "6d83ec5e48ce2c0e33974d734e945e2baae512ccfea3260558ce63c710bbd09e"
+    },
+    {
+      "name": "F-B4-original",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 4",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "27fd83e469ad6d6671ee657e967de31ed4986e52c3235e9010de8995467dd9ae"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "ead4ed819cb2b4227ea89cb53546e410b9a065bea856a4d477f29bf813ea770d",
+      "export_sha256": "ead4ed819cb2b4227ea89cb53546e410b9a065bea856a4d477f29bf813ea770d"
+    },
+    {
+      "name": "F-B4-explicit-resolve",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "3"
+        ],
+        "v3_2": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 3",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "27fd83e469ad6d6671ee657e967de31ed4986e52c3235e9010de8995467dd9ae"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "6d602d93cd74b63e0b5e911eaf033177bc43ef5d441513f790fa3aefbacede76",
+      "export_sha256": "a1796130c0b97bf5e13d4176868f64027637ff4e458a66f6d46242c8d07e4e93"
+    },
+    {
+      "name": "legacy-hyperlink",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        }
+      ],
+      "input_sha256": "693c662b22b601ae0ff565f6abacf0fdd7d4044d36daef95544aca61dbe99b27",
+      "export_sha256": "7d6425287aff9838cf92d878ee9d1c853bf18565f7ae8c70caa6b99a574237b9"
+    },
+    {
+      "name": "legacy-nested",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        }
+      ],
+      "input_sha256": "d4ae258e2c109677d674118d8766f370117af3b42908cc71dba57be2ffadf82d",
+      "export_sha256": "c372c2c7b7840e457629a8d8e43d74590ab936f1261cbcbc5f47e7318773a054"
+    },
+    {
+      "name": "legacy-no_separator",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        }
+      ],
+      "input_sha256": "59abaa56b5db684bab4b6752b69ef2b941c23a4b865f6d36f2f8deb53b341233",
+      "export_sha256": "1a75c7b3feef3ff03bd4d7a83b058dbff3cf0787fb314be4531702d9385e42d8"
+    },
+    {
+      "name": "legacy-default-only",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: ",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "4a7e68eca2f4fe9e059d9567cb5ae50c6c85e40ca201c15832a833c95cbbbbc2"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        }
+      ],
+      "input_sha256": "f39017fd071fb5a0cb73a6e7b473185973bb39e58fd73877b8ae4ad2a4fa32eb",
+      "export_sha256": "f39017fd071fb5a0cb73a6e7b473185973bb39e58fd73877b8ae4ad2a4fa32eb"
+    },
+    {
+      "name": "legacy-genuinely-empty",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [],
+        "v3_2": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: ",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/ff[0]",
+            "target": {
+              "type": "ff_text"
+            },
+            "fingerprint": "47f7643350bf45459de9ccc80b611b1bb5d91b5818245cf7478aef5246b2c5af"
+          }
+        }
+      ],
+      "input_sha256": "2a4b73f6dcb1a2015af8f9d435b9c546eb47473854872967af4d203b95e98ee8",
+      "export_sha256": "2a4b73f6dcb1a2015af8f9d435b9c546eb47473854872967af4d203b95e98ee8"
+    },
+    {
+      "name": "scalar-placeholder-0",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "8a715d9fe29fcb9efa8aaf8ae41ea8d80e4cc24987003acce60107e0971156f6"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "1756dfa4579226b91c033584dec2ebf8987dbcf3f737f947dbbfbb3554a5650a",
+      "export_sha256": "5ce98d63806024620aa85c52b614ad2296dd4dcf64b7d891fcb1afd7537c7717"
+    },
+    {
+      "name": "scalar-placeholder-false",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "50ad043b342d0521dfa8d457be4f12c47fac0ece58d33558724dffc4ebc971c4"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "8dfe768c68b98a14b57c0232b899ff55e1521e46b509d1423e6687459e87fe4d",
+      "export_sha256": "dc6c4330fb208ea88d8424b2604136cd395f9f3438530c4a56b865923482f427"
+    },
+    {
+      "name": "scalar-placeholder-off",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "b748317ab3b87cd04f98f54db4c0d5268e9cff93e2ba30f2345c424578c29654"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "f0c37a9f2eaa4103f10319be39816ccf7d4f0f3402e14db787b1df54a2c21356",
+      "export_sha256": "2614a30654d77fe0eda49ca09fdab6bcf11608820f61155908f808ee6721b894"
+    },
+    {
+      "name": "scalar-placeholder-bogus",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "fe70849a873f0169d52cce90022a5e3bf18df57339b430e8df2ec13aee6ca8e9"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "c887cc41ddcf58597b7777939355863bb34a6a1c03c7005f9584ee5644994d38",
+      "export_sha256": "75743e3ab5e61ce5ea464dee13f288af61a37e5cc9751698e046fbef689d8cd8"
+    },
+    {
+      "name": "scalar-real-placeholder",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [],
+        "v3_2": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: Choose an item.",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "14d74cbcb29b56a9643660034c8adff2b48d1e1a648c7ae66c64cd745662778b"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "8a29868fc9e48fcc94e2bbea4c5abacfa6ac93be8c6ef82f6d4792cdec2cea0b",
+      "export_sha256": "8a29868fc9e48fcc94e2bbea4c5abacfa6ac93be8c6ef82f6d4792cdec2cea0b"
+    },
+    {
+      "name": "scalar-missing-content",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: ",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "6de20aee15f1b539b18c0d2ec641a79831604437d42ba69244afbd3de533b11a"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "f0bec7b4c7d2913efe3145a38eb4880508ac98d6f51986053e533055939cd029",
+      "export_sha256": "f0bec7b4c7d2913efe3145a38eb4880508ac98d6f51986053e533055939cd029"
+    },
+    {
+      "name": "scalar-known-value",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "2b952123acebd321bfc9005876ced65e8647c7f5e2145bf05a5f20badde77364",
+      "export_sha256": "2b952123acebd321bfc9005876ced65e8647c7f5e2145bf05a5f20badde77364"
+    },
+    {
+      "name": "scalar-known-duplicate",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+          }
+        }
+      ],
+      "input_sha256": "2b952123acebd321bfc9005876ced65e8647c7f5e2145bf05a5f20badde77364",
+      "export_sha256": "668b65353bc431e9f94220eef63a4dac9f10ff1fb3806973bc6d3cb352d507e1"
+    },
+    {
+      "name": "scalar-replicas-11",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "3"
+        ],
+        "v3_103": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 1"
+        ],
+        "word/header2.xml": [
+          "Priority A: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true,
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+                }
+              ]
+            },
+            "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+          },
+          "max_chars": 120
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "386ddc547f2b7c6d917315a2988596d3b461d1c06a706bdeede6cd384b01797f"
+          }
+        }
+      ],
+      "input_sha256": "9a016255efef6165b7683ebfda452ff27e6c5a7f4c5d948de58da931477f1b9e",
+      "export_sha256": "9a016255efef6165b7683ebfda452ff27e6c5a7f4c5d948de58da931477f1b9e"
+    },
+    {
+      "name": "scalar-replicas-explicit-11",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "3"
+        ],
+        "v3_103": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 2"
+        ],
+        "word/header2.xml": [
+          "Priority A: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true,
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+                }
+              ]
+            },
+            "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+          },
+          "max_chars": 120
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "386ddc547f2b7c6d917315a2988596d3b461d1c06a706bdeede6cd384b01797f"
+          }
+        }
+      ],
+      "input_sha256": "9a016255efef6165b7683ebfda452ff27e6c5a7f4c5d948de58da931477f1b9e",
+      "export_sha256": "ee16e29227fe46306b7b053324013b35eb086f2a8c1420cee8e486f6b8341e06"
+    },
+    {
+      "name": "scalar-replicas-12",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The exported value of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 1"
+        ],
+        "word/header2.xml": [
+          "Priority A: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true,
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+                }
+              ]
+            },
+            "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+          },
+          "max_chars": 120
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "386ddc547f2b7c6d917315a2988596d3b461d1c06a706bdeede6cd384b01797f"
+          }
+        }
+      ],
+      "input_sha256": "38b2567b09411993496a86d5cfcc25ca3ab5c46e438917dc6fea6f1c19363c9c",
+      "export_sha256": "38b2567b09411993496a86d5cfcc25ca3ab5c46e438917dc6fea6f1c19363c9c"
+    },
+    {
+      "name": "scalar-replicas-explicit-12",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "3"
+        ],
+        "v3_103": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 2"
+        ],
+        "word/header2.xml": [
+          "Priority A: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true,
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "3ae815690ec3d1ff6f5a2b78e770fad64ad7367197a13ffb98cb903cd809de1c"
+                }
+              ]
+            },
+            "fingerprint": "3602c98b105d934c672329232dad31afcae7ee5f1d6d5d05f24bc083f1015cfd"
+          },
+          "max_chars": 120
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_text",
+              "date": true
+            },
+            "fingerprint": "386ddc547f2b7c6d917315a2988596d3b461d1c06a706bdeede6cd384b01797f"
+          }
+        }
+      ],
+      "input_sha256": "2683140bdeb5f76ac2a2adeab09fac5259fcaa7e69c983c4b3082e1b802ad04c",
+      "export_sha256": "3da4aaae09d6bdf9018bfa8bd9b5e7f1e6d8005e79f44d9ba5c59ee1ba5e2108"
+    },
+    {
+      "name": "dropdown-placeholder-0",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c6ef2c0758785ae69cd48832fbcc8d1f905052f9030a66285f32dc8ebc48dd89"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "c9830aa2c6b810f88a7c3159d1b9bccd0e49d33f1cc67024320d2bd6c2ef2498",
+      "export_sha256": "55f56f6e5cfaf24d165248c52272b2a17adbc2c46cfcc6d4ac83461a17818d34"
+    },
+    {
+      "name": "dropdown-placeholder-false",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "37ac971fe5c5decf1ecc8e74345a82568671c002507a52820ff0ac5dda5bde78"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "d94e12839c3debce49ed28eab20ecc07a88f492df1ba0dd69b3415ad0a10c15d",
+      "export_sha256": "9b1ecc223c8888ebfe8cfc7e14009854e144654c12d8f0b8b34591aed2015cf4"
+    },
+    {
+      "name": "dropdown-placeholder-off",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "7d670edc31a28cd026dd6401176bb4062f5f6f46bcd7da2e737b5414e11ba1d3"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "a5b5e1d699907dc666b30edfe7b38c0143d4981893d7ba6664a0d73e2a4d4237",
+      "export_sha256": "56d014769cf02db77f9e9bb4a5c5d8c3a14a16bf94ec82bc8c2a60215a508dc6"
+    },
+    {
+      "name": "dropdown-placeholder-bogus",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "747dbe01b302bfd6b0ae7844e827f561896ad91af75fa393a43b9b72c1ce27c0"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "cda31f62a517a3e24da63ad2a9225198fea30a8e5d487a0bd82b4dcac2538bff",
+      "export_sha256": "ab64659e4ae93a087525abc123a70707626fe05bb131cb45293853ca91c8095b"
+    },
+    {
+      "name": "dropdown-real-placeholder",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [],
+        "v3_2": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: Choose an item.",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "6881264faee2e4143ad60fc32578585cb64af182f55b392400f0c8533516271d"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "8c143501fb49456b1cc3228912ea58d60b7d7edaffcf47ceef34a5a56ee36ebd",
+      "export_sha256": "8c143501fb49456b1cc3228912ea58d60b7d7edaffcf47ceef34a5a56ee36ebd"
+    },
+    {
+      "name": "dropdown-missing-content",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: ",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "0db88f9086db771e79a6a0335a77beb797343751061723f627f2ff7ab968d8c3"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "114e4096c071e711f42153ca48cd897bdfe3ffc90190b28a47ee062cc4c012aa",
+      "export_sha256": "114e4096c071e711f42153ca48cd897bdfe3ffc90190b28a47ee062cc4c012aa"
+    },
+    {
+      "name": "dropdown-known-value",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            0
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "4f6a5ee695108a773391bbc42b4f151bae449c2191a3f09f4a56454df6d42df5",
+      "export_sha256": "4f6a5ee695108a773391bbc42b4f151bae449c2191a3f09f4a56454df6d42df5"
+    },
+    {
+      "name": "dropdown-known-duplicate",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The complete form has an invalid or repeated priority value.']",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "1"
+        ],
+        "v3_2": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority A: 1",
+          "Priority B: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_1",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            0
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            1
+          ]
+        }
+      ],
+      "input_sha256": "4f6a5ee695108a773391bbc42b4f151bae449c2191a3f09f4a56454df6d42df5",
+      "export_sha256": "76b2539879a78cd05fe7ede461798a234ebe2469eb686140299b976b1dbf9c05"
+    },
+    {
+      "name": "dropdown-replicas-11",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "3"
+        ],
+        "v3_103": [
+          "1"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 1"
+        ],
+        "word/header2.xml": [
+          "Priority A: 1"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_choice",
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+                }
+              ]
+            },
+            "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            0
+          ]
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "7dea9406dd120846bd7fa130a8ffc5f5a88323141c1b8ce8f750f4990fd044f8"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            2
+          ]
+        }
+      ],
+      "input_sha256": "6d96c5d043c23221776abcf6d44791db5d2ea00c663e8073f8446dfe8c680294",
+      "export_sha256": "6d96c5d043c23221776abcf6d44791db5d2ea00c663e8073f8446dfe8c680294"
+    },
+    {
+      "name": "dropdown-replicas-explicit-11",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "3"
+        ],
+        "v3_103": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 2"
+        ],
+        "word/header2.xml": [
+          "Priority A: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_choice",
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+                }
+              ]
+            },
+            "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            0
+          ]
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "7dea9406dd120846bd7fa130a8ffc5f5a88323141c1b8ce8f750f4990fd044f8"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            2
+          ]
+        }
+      ],
+      "input_sha256": "6d96c5d043c23221776abcf6d44791db5d2ea00c663e8073f8446dfe8c680294",
+      "export_sha256": "c831fe8c646a9fd2606cee6cdee143b368423cab7d6a7bbba24b42e07c7e1e53"
+    },
+    {
+      "name": "dropdown-replicas-12",
+      "expected": "REFUSED",
+      "outcome": "REFUSED",
+      "match": true,
+      "reason": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']",
+      "field_count": 103,
+      "effective_values": {
+        "error": "ValidationError: ['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']"
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 1"
+        ],
+        "word/header2.xml": [
+          "Priority A: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_choice",
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+                }
+              ]
+            },
+            "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            0
+          ]
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "7dea9406dd120846bd7fa130a8ffc5f5a88323141c1b8ce8f750f4990fd044f8"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            2
+          ]
+        }
+      ],
+      "input_sha256": "f06e129043415223f82f1de034759d8c165d3ea63c14c9be01a8fb81d13d921a",
+      "export_sha256": "f06e129043415223f82f1de034759d8c165d3ea63c14c9be01a8fb81d13d921a"
+    },
+    {
+      "name": "dropdown-replicas-explicit-12",
+      "expected": "ACCEPTED",
+      "outcome": "ACCEPTED",
+      "match": true,
+      "reason": "",
+      "field_count": 103,
+      "effective_values": {
+        "v3_1": [
+          "3"
+        ],
+        "v3_103": [
+          "2"
+        ]
+      },
+      "exported": {
+        "word/document.xml": [
+          "Each priority must be unique and in 1, 2, 3.",
+          "Priority B: 3",
+          "Ordinary 000: ____________"
+        ],
+        "word/header1.xml": [
+          "Priority A: 2"
+        ],
+        "word/header2.xml": [
+          "Priority A: 2"
+        ]
+      },
+      "constrained_fields": [
+        {
+          "key": "v3_103",
+          "label": "Priority A",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/header1.xml",
+            "slot": "hf/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_choice",
+              "copies": [
+                {
+                  "part": "word/header2.xml",
+                  "slot": "hf/p[0]/sdt[0]",
+                  "fingerprint": "c0ab92c36c377e84cc7fcc68c32c9a98b023c40d8a4236649890de1921c9664b"
+                }
+              ]
+            },
+            "fingerprint": "47278c756a4d1b2d1a6292633e6fe815df2504eb5783b264e2ec7b6f980f16de"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            0
+          ]
+        },
+        {
+          "key": "v3_1",
+          "label": "Priority B",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]/sdt[0]",
+            "target": {
+              "type": "sdt_choice"
+            },
+            "fingerprint": "7dea9406dd120846bd7fa130a8ffc5f5a88323141c1b8ce8f750f4990fd044f8"
+          },
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "printed_ticked": [
+            2
+          ]
+        }
+      ],
+      "input_sha256": "f06e129043415223f82f1de034759d8c165d3ea63c14c9be01a8fb81d13d921a",
+      "export_sha256": "c831fe8c646a9fd2606cee6cdee143b368423cab7d6a7bbba24b42e07c7e1e53"
+    }
+  ],
+  "unexpected": []
+}

@@ -1,0 +1,123 @@
+Creating test database for alias 'default' ('test_v1_disposition_19_history_final')...
+Found 53 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying core.0023_retention_preservation... OK
+  Applying core.0024_preserved_file... OK
+  Applying core.0025_preservation_guards... OK
+  Applying core.0026_preservation_scope_identity... OK
+  Applying core.0028_disposition_preparation... OK
+  Applying core.0027_generation_batches... OK
+  Applying core.0029_merge_batch_disposition... OK
+  Applying core.0030_empty_draft_disposition... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_age_cohort_and_wrong_department_are_not_eligible (core.tests.test_disposition_execution.EmptyDraftExecution.test_age_cohort_and_wrong_department_are_not_eligible) ... ok
+test_any_clinical_review_signing_or_export_payload_refuses (core.tests.test_disposition_execution.EmptyDraftExecution.test_any_clinical_review_signing_or_export_payload_refuses) ... ok
+test_database_shape_or_hash_claim_does_not_grant_signed_policy_authority (core.tests.test_disposition_execution.EmptyDraftExecution.test_database_shape_or_hash_claim_does_not_grant_signed_policy_authority) ... ok
+test_db_rollback_after_delete_keeps_journal_intent_enforced_then_exact_retry_completes (core.tests.test_disposition_execution.EmptyDraftExecution.test_db_rollback_after_delete_keeps_journal_intent_enforced_then_exact_retry_completes) ... ok
+test_distinct_review_stale_digest_and_late_change_refuse (core.tests.test_disposition_execution.EmptyDraftExecution.test_distinct_review_stale_digest_and_late_change_refuse) ... ok
+test_exact_prospective_approval_deletes_only_empty_draft_and_retries_idempotently (core.tests.test_disposition_execution.EmptyDraftExecution.test_exact_prospective_approval_deletes_only_empty_draft_and_retries_idempotently) ... ok
+test_expired_authority_revoked_signer_or_suspended_reviewer_cannot_execute (core.tests.test_disposition_execution.EmptyDraftExecution.test_expired_authority_revoked_signer_or_suspended_reviewer_cannot_execute) ... ok
+test_jobs_batches_historical_holds_archives_and_old_review_audit_refuse (core.tests.test_disposition_execution.EmptyDraftExecution.test_jobs_batches_historical_holds_archives_and_old_review_audit_refuse) ... ok
+test_journal_fsync_failure_preserves_row_and_complete_pending_intent_denies_access (core.tests.test_disposition_execution.EmptyDraftExecution.test_journal_fsync_failure_preserves_row_and_complete_pending_intent_denies_access) ... ok
+test_journal_inside_any_selected_state_directory_refuses (core.tests.test_disposition_execution.EmptyDraftExecution.test_journal_inside_any_selected_state_directory_refuses) ... ok
+test_next_instruction_needs_new_independent_head_checkpoint (core.tests.test_disposition_execution.EmptyDraftExecution.test_next_instruction_needs_new_independent_head_checkpoint) ... ok
+test_patient_review_keeps_instruction_history_after_empty_row_is_deleted (core.tests.test_disposition_execution.EmptyDraftExecution.test_patient_review_keeps_instruction_history_after_empty_row_is_deleted) ... ok
+test_read_only_journal_can_be_verified_for_quarantined_replay (core.tests.test_disposition_execution.EmptyDraftExecution.test_read_only_journal_can_be_verified_for_quarantined_replay) ... ok
+test_replay_on_older_conflicting_snapshot_only_suppresses_and_never_erases_it (core.tests.test_disposition_execution.EmptyDraftExecution.test_replay_on_older_conflicting_snapshot_only_suppresses_and_never_erases_it) ... ok
+test_replay_requires_quarantine_exact_checkpoint_and_complete_untampered_chain (core.tests.test_disposition_execution.EmptyDraftExecution.test_replay_requires_quarantine_exact_checkpoint_and_complete_untampered_chain) ... ok
+test_reverse_migration_refuses_instruction_history (core.tests.test_disposition_execution.EmptyDraftExecution.test_reverse_migration_refuses_instruction_history) ... ok
+test_sql_cannot_resurrect_or_attach_work_and_new_instruction_history_is_immutable (core.tests.test_disposition_execution.EmptyDraftExecution.test_sql_cannot_resurrect_or_attach_work_and_new_instruction_history_is_immutable) ... ok
+test_unknown_catalog_and_untrusted_checkpoint_refuse_before_journal (core.tests.test_disposition_execution.EmptyDraftExecution.test_unknown_catalog_and_untrusted_checkpoint_refuse_before_journal) ... ok
+test_unknown_or_duplicate_policy_members_and_wrong_namespace_refuse (core.tests.test_disposition_execution.EmptyDraftExecution.test_unknown_or_duplicate_policy_members_and_wrong_namespace_refuse) ... ok
+test_unset_untrusted_tampered_expired_or_nonprospective_policy_refuses (core.tests.test_disposition_execution.EmptyDraftExecution.test_unset_untrusted_tampered_expired_or_nonprospective_policy_refuses) ... ok
+test_authenticated_two_custodian_exact_flow_and_explicit_confirmation (core.tests.test_disposition_execution.ExecutionAdministration.test_authenticated_two_custodian_exact_flow_and_explicit_confirmation) ... /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_default_off_and_clinician_or_unverified_admin_cannot_execute (core.tests.test_disposition_execution.ExecutionAdministration.test_default_off_and_clinician_or_unverified_admin_cannot_execute) ... ok
+test_public_envelope_admission_and_checkpoint_flow (core.tests.test_disposition_execution.ExecutionAdministration.test_public_envelope_admission_and_checkpoint_flow) ... ok
+test_quarantine_allows_only_verified_suppression_replay (core.tests.test_disposition_execution.ExecutionAdministration.test_quarantine_allows_only_verified_suppression_replay) ... ok
+test_real_csrf_check_rejects_authenticated_submission_without_token (core.tests.test_disposition_execution.ExecutionAdministration.test_real_csrf_check_rejects_authenticated_submission_without_token) ... Forbidden (CSRF cookie not set.): /console/disposition-execution/
+ok
+test_untrusted_duplicate_and_missing_approval_are_visible_refusals (core.tests.test_disposition_execution.ExecutionAdministration.test_untrusted_duplicate_and_missing_approval_are_visible_refusals) ... ok
+test_admin_recorded_recovery_refuses_quarantine (core.tests.test_disposition_integration.QuarantinedAdoption.test_admin_recorded_recovery_refuses_quarantine) ... ok
+test_direct_recorded_adoption_refuses_quarantine (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_adoption_refuses_quarantine) ... /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_database_refuses_false_restore_journal_and_mismatched_target_claims (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_false_restore_journal_and_mismatched_target_claims) ... ok
+test_database_refuses_plan_for_another_scope_or_string_authority (core.tests.test_disposition_integration.RecoveredBoundaries.test_database_refuses_plan_for_another_scope_or_string_authority) ... ok
+test_known_batch_schema_is_supported_without_weakening_unknown_schema_refusal (core.tests.test_disposition_integration.RecoveredBoundaries.test_known_batch_schema_is_supported_without_weakening_unknown_schema_refusal) ... ok
+test_late_batch_event_invalidates_review_snapshot (core.tests.test_disposition_integration.RecoveredBoundaries.test_late_batch_event_invalidates_review_snapshot) ... ok
+test_proposals_preserve_signatures_consent_accounts_finance_and_existing_audit (core.tests.test_disposition_integration.RecoveredBoundaries.test_proposals_preserve_signatures_consent_accounts_finance_and_existing_audit) ... ok
+test_quarantine_preserves_preview_authentication_and_public_css (core.tests.test_disposition_integration.RecoveredBoundaries.test_quarantine_preserves_preview_authentication_and_public_css) ... ok
+test_restore_quarantine_rejects_direct_mapping_and_batch_workers (core.tests.test_disposition_integration.RecoveredBoundaries.test_restore_quarantine_rejects_direct_mapping_and_batch_workers) ... ok
+test_terminal_batch_keeps_late_child_and_immutable_response_in_graph (core.tests.test_disposition_integration.RecoveredBoundaries.test_terminal_batch_keeps_late_child_and_immutable_response_in_graph) ... ok
+test_changed_graph_or_digest_requires_new_plan (core.tests.test_disposition_preparation.DispositionPreparation.test_changed_graph_or_digest_requires_new_plan) ... ok
+test_empty_guard_reverse_can_be_rolled_back_without_losing_catalog (core.tests.test_disposition_preparation.DispositionPreparation.test_empty_guard_reverse_can_be_rolled_back_without_losing_catalog) ... ok
+test_held_funds_and_changed_shared_reference_are_part_of_plan (core.tests.test_disposition_preparation.DispositionPreparation.test_held_funds_and_changed_shared_reference_are_part_of_plan) ... ok
+test_hold_archive_and_shared_source_remain_blocked (core.tests.test_disposition_preparation.DispositionPreparation.test_hold_archive_and_shared_source_remain_blocked) ... ok
+test_mfa_csrf_actual_forms_and_scope_errors (core.tests.test_disposition_preparation.DispositionPreparation.test_mfa_csrf_actual_forms_and_scope_errors) ... Forbidden (CSRF token missing.): /console/disposition/
+ok
+test_migration_reverse_refuses_when_any_preparation_evidence_exists (core.tests.test_disposition_preparation.DispositionPreparation.test_migration_reverse_refuses_when_any_preparation_evidence_exists) ... ok
+test_proposal_and_review_are_immutable_review_only (core.tests.test_disposition_preparation.DispositionPreparation.test_proposal_and_review_are_immutable_review_only) ... ok
+test_quarantine_blocks_direct_data_worker_cleanup_but_auth_health_and_review_survive (core.tests.test_disposition_preparation.DispositionPreparation.test_quarantine_blocks_direct_data_worker_cleanup_but_auth_health_and_review_survive) ... ok
+test_raw_sql_cannot_forge_self_review_or_mutate_evidence (core.tests.test_disposition_preparation.DispositionPreparation.test_raw_sql_cannot_forge_self_review_or_mutate_evidence) ... ok
+test_restore_missing_target_never_admits (core.tests.test_disposition_preparation.DispositionPreparation.test_restore_missing_target_never_admits) ... ok
+test_scope_self_review_suspension_and_conflicting_reuse_refuse (core.tests.test_disposition_preparation.DispositionPreparation.test_scope_self_review_suspension_and_conflicting_reuse_refuse) ... ok
+test_terminal_job_receipt_and_late_reconciliation_remain_financial_blockers (core.tests.test_disposition_preparation.DispositionPreparation.test_terminal_job_receipt_and_late_reconciliation_remain_financial_blockers) ... ok
+test_unknown_model_edge_column_and_oversized_graph_refuse_atomically (core.tests.test_disposition_preparation.DispositionPreparation.test_unknown_model_edge_column_and_oversized_graph_refuse_atomically) ... ok
+test_committed_hold_wins_before_waiting_disposition (core.tests.test_disposition_execution.ExecutionConcurrency.test_committed_hold_wins_before_waiting_disposition) ... ok
+test_committed_job_wins_before_waiting_disposition (core.tests.test_disposition_execution.ExecutionConcurrency.test_committed_job_wins_before_waiting_disposition) ... ok
+test_disposition_commits_before_waiting_job_and_reservation_graph (core.tests.test_disposition_execution.ExecutionConcurrency.test_disposition_commits_before_waiting_job_and_reservation_graph) ... ok
+test_disposition_commits_before_waiting_target_hold (core.tests.test_disposition_execution.ExecutionConcurrency.test_disposition_commits_before_waiting_target_hold) ... ok
+
+----------------------------------------------------------------------
+Ran 53 tests in 20.842s
+
+OK
+Destroying test database for alias 'default' ('test_v1_disposition_19_history_final')...
+ OK
+System check identified no issues (0 silenced).

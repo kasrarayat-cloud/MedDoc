@@ -1,0 +1,99 @@
+{
+  "source_sha256": "f3afb208c085c6edaa64f97d26ebe7f76739fe0c07ac87b26f91da6207ae8077",
+  "positive": [
+    {
+      "control": "glyph",
+      "blank": "underscores",
+      "original_checked": false,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "glyph",
+      "blank": "underscores",
+      "original_checked": true,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "glyph",
+      "blank": "tab",
+      "original_checked": false,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "glyph",
+      "blank": "tab",
+      "original_checked": true,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "sdt",
+      "blank": "underscores",
+      "original_checked": false,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "sdt",
+      "blank": "underscores",
+      "original_checked": true,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "sdt",
+      "blank": "tab",
+      "original_checked": false,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "sdt",
+      "blank": "tab",
+      "original_checked": true,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "ff",
+      "blank": "underscores",
+      "original_checked": false,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "ff",
+      "blank": "underscores",
+      "original_checked": true,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "ff",
+      "blank": "tab",
+      "original_checked": false,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    },
+    {
+      "control": "ff",
+      "blank": "tab",
+      "original_checked": true,
+      "physical_answer_exact": true,
+      "original_checkbox_unchanged": true
+    }
+  ],
+  "visible_refusals": [
+    "multiple_blanks",
+    "trailing_word",
+    "new_box",
+    "signing",
+    "consent",
+    "drawing",
+    "empty_label"
+  ],
+  "result": "PASS; no concrete counterexample found in this bounded review"
+}

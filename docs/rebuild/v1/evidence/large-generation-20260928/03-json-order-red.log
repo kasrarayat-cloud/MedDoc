@@ -1,0 +1,20 @@
+test_request_hash_survives_database_json_key_order (core.tests.test_generation_batch.BatchContract.test_request_hash_survives_database_json_key_order) ... FAIL
+
+======================================================================
+FAIL: test_request_hash_survives_database_json_key_order (core.tests.test_generation_batch.BatchContract.test_request_hash_survives_database_json_key_order)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 58, in test_request_hash_survives_database_json_key_order
+    self.assertEqual(b.digest(b.request(stored,1)),plan['parts'][0]['request_sha256'])
+AssertionError: 'd3a43acb6e4b2eb58a10b00185835bfb4d7af932e58d2c835d88cb223272d387' != '4b43bb385dc7dbeb67fc0f91cd427ac188db60ee4cdad23cabf4e9cb47ee89ab'
+- d3a43acb6e4b2eb58a10b00185835bfb4d7af932e58d2c835d88cb223272d387
++ 4b43bb385dc7dbeb67fc0f91cd427ac188db60ee4cdad23cabf4e9cb47ee89ab
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.822s
+
+FAILED (failures=1)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

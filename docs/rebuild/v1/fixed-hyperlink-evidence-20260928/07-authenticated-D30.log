@@ -1,0 +1,26 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+E.
+======================================================================
+ERROR: test_long_mapping_review_save_add_and_oversized_post_preserve_versions (test_d30_links.FixedD30.test_long_mapping_review_save_add_and_oversized_post_preserve_versions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/core/tests/test_question_box_workflow.py", line 61, in test_long_mapping_review_save_add_and_oversized_post_preserve_versions
+    template, version = self.uploaded(data=original, name='SYNTHETIC long mapping metadata')
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/test_d30_links.py", line 44, in uploaded
+    template, version = super().uploaded(**kw)
+                        ^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/test_d30_links.py", line 17, in uploaded
+    (self.capture_dir/'uploaded-map.json').write_text(json.dumps(version.fields,ensure_ascii=False,indent=2))
+     ^^^^^^^^^^^^^^^^
+AttributeError: 'FixedD30' object has no attribute 'capture_dir'
+
+----------------------------------------------------------------------
+Ran 2 tests in 13.329s
+
+FAILED (errors=1)
+Destroying test database for alias 'default'...
+Found 2 test(s).
+System check identified no issues (0 silenced).

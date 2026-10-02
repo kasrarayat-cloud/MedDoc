@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__mutation_proofs.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_345deca9-b32/agent-aebee20aa731fa229.jsonl:369",
+   "timestamp": "2026-09-29T00:03:27.628Z",
+   "sha256_after": "988fe9f5bd8d78f0a711c99ffe03b5aff2c55f4f09f490395eb4707893f8bc77",
+   "bytes_after": 5228
+  }
+ ],
+ "lines": 88,
+ "sha256": "988fe9f5bd8d78f0a711c99ffe03b5aff2c55f4f09f490395eb4707893f8bc77"
+}

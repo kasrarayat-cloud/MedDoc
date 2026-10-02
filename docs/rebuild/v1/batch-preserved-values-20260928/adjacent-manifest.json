@@ -1,0 +1,28 @@
+{
+  "first_source_commit": "952c7e2100e451882c1fd837980ab0212dc4f586",
+  "source_sha256": {
+    "rebuild/core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "rebuild/core/tests/test_batch_preserved_values.py": "ccec4e38baeafa9976bdd6eb664200bdb121e235d82d90d6c08ab907785dfceb",
+    "rebuild/core/tests/test_generation_batch.py": "f495cf440009e0ebe1971275e10c310b6069d27ff5b94f54774082c0589d0793",
+    "rebuild/documents/word_v3.py": "ffcba8b32e52aa7f0702c776ab4c7d0fae86e18f2e733a24f1dc1980e5bb97e4",
+    "rebuild/documents/engine.py": "c1e1313df1a37476c7d05e8a461f4feca1f00204f3ab5e8041b434fd89eab8ae",
+    "rebuild/documents/service.py": "e8b17bce53fed735faed7452f33e8d8dc1838bce98b934c63d9705be5dfef8a6"
+  },
+  "evidence_sha256": {
+    "second-independent-probe.py": "fa0776607d323f6287e995526a31d32001819e42333205e778a597fff882766e",
+    "second-independent-original.json": "90e433b4693f04efc32a505befe6e5c189203f8aea17049c71b1d5dee3c36914",
+    "second-independent-report.md": "9f5095892a73999072d9e9cb5f40543ff108ba807be8fcdc28c41bb766e7ebd1",
+    "07-independent-before.json": "0a59aa87e86a4ea4e876fe18a37e11777d5dc45b60a178732f5ca441c98f4144",
+    "08-adjacent-focused.log": "43c88a70b3ab8e6909386bce4eb7cb0df75faf8891760b2fb5661241b9d52e97",
+    "09-independent-after.json": "cd921c88f95aada8d437b066c739f2ec97e7e613be2ca39946b3576e39918735",
+    "10-adjacent-affected.log": "c1044f68babf53320847223abd3bf113a394fcb5e8fca4d0e97ad6612f13c285",
+    "11-marker-text-before.log": "4f5ec1c6944405808d7916691073fbb7dd93473c4846539c76098cf1e511b06b",
+    "12-marker-text-distinct-before.log": "0614c2c1586333419eb70fcd2e801ea590949d12b880df8819e7d8739985d5ad",
+    "13-final-focused.log": "270c0c9642ba43ae64273ba8cf62b705145b09e71670598a3ac0885b2b661494",
+    "14-final-affected.log": "e41b39a52d8f55dda3b6b43a7386466c0956f419ac3351138cb150ab749c8a0e",
+    "15-final-independent-replay.json": "810b72b4b338a78eca77a05bc63357af30302c4a3d10a3dc988ba03bd23b05d0"
+  },
+  "result": "14 focused PASS;24 affected=23PASS+1 known opposite-side expected failure; unchanged33-case author replay zero mismatches",
+  "primary_placeholder_reference": "https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.showingplaceholder?view=openxml-3.0.1",
+  "provenance_limit": "F-B6 malformed XML boundary, no native Word rendering claim; independent final review pending"
+}

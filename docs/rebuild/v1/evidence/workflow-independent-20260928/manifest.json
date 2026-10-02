@@ -1,0 +1,42 @@
+[
+  {
+    "file": "shards-result.json",
+    "sha256": "ee737705764b0ad2b0c87eeebd628f33aa9a2c62bf8ad4f1f5504f0190df76f0",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/ci-repair-20260928/shards-root/result.json"
+  },
+  {
+    "file": "shards-focused.log",
+    "sha256": "4fb5bcaae4c1492bf9c23a52b64ac60defe45d42eabef823b0e570b8c49a7ec8",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/ci-repair-20260928/shards-independent.log"
+  },
+  {
+    "file": "lock-result.json",
+    "sha256": "3548ee90fdfa052f707b2a95559f28abfcc41f44f06ed7be6e001e9d35b13212",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/ci-repair-20260928/independent-lock.json"
+  },
+  {
+    "file": "writein-independent.json",
+    "sha256": "fc8d33771d15e05adc5d7f7bc487f116f70283c80af81e9b5cdf3ce64e9677d0",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/other-writein-root-review-20260928/result.json"
+  },
+  {
+    "file": "repeated-context.json",
+    "sha256": "12bdbbf3b6d9fc6dd45b7c1ea2bf60606647d453bc679c3e1428d4617474dec3",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/other-writein-root-review-20260928/repeated-context.json"
+  },
+  {
+    "file": "writein-engine.log",
+    "sha256": "4b5ab7d202141f133be4eccdda326c34b6527d261592bfe1abbfd993a9bb9a0f",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/workflow-integration-20260928/11-writein-integrated-engine.log"
+  },
+  {
+    "file": "writein-first-db-refusal.log",
+    "sha256": "b7f7d88fa9fa899cc22d1d728188ff2e843460ce5bd1446904e6cf72891b5d5d",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/workflow-integration-20260928/10-writein-integrated-http.log"
+  },
+  {
+    "file": "writein-authenticated.log",
+    "sha256": "c29a507df022b0a43678da367e3b4e3c2bb7be616946bfcbc3f9e87469a1608b",
+    "private_source": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.runtime/workflow-integration-20260928/12-writein-unique-db-http.log"
+  }
+]

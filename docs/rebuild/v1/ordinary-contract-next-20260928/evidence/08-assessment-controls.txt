@@ -1,0 +1,9 @@
+test_clinically_related_assessment_does_not_release_allergy_medication_or_smoker (core.tests.test_v3_history_context.HistoryContextContract.test_clinically_related_assessment_does_not_release_allergy_medication_or_smoker) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.207s
+
+OK
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

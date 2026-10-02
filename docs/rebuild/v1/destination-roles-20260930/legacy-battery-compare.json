@@ -1,0 +1,760 @@
+{
+ "r3_signs/rows": "identical",
+ "r3_signs/tab_lines": "identical",
+ "r3_numerals/rows": "identical",
+ "r3_numerals/tab_lines": "identical",
+ "r3_other/rows": "identical",
+ "r3_other/tab_lines": "identical",
+ "a1_checklist_signed/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Signed off by consultant",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "a1_checklist_signed/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Signed off by consultant",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "a1_initial_readings/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "a1_initial_readings/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "pc07/rows": "identical",
+ "pc07/tab_lines": "identical",
+ "pc09/rows": "identical",
+ "pc09/tab_lines": "identical",
+ "rr1_10/rows": "identical",
+ "rr1_10/tab_lines": "identical",
+ "must_hold/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Patient signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Witness signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Consultant signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature of examining clinician",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Participant's signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial here",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial each page",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature and date",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature (patient)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed by (witness)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial:",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Staff initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials — Nurse",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "must_hold/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Patient signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Witness signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Consultant signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature of examining clinician",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Participant's signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial here",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial each page",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature and date",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature (patient)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed by (witness)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial:",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Staff initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials — Nurse",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "r2_06_residual/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Consent form signed by patient",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Drug chart signed by prescriber",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Patient signature obtained",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Witness signature obtained",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Lactate (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial / repeat",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "r2_06_residual/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Consent form signed by patient",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Drug chart signed by prescriber",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Patient signature obtained",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Witness signature obtained",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Lactate (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial / repeat",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "l01/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Patient signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "l01/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Patient signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ]
+ },
+ "r1_04/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Initial and ongoing management",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Visit type (initial/follow-up)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial (baseline) weight",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin — Initial (ng/L)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Gene expression signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed on admission",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth"
+  ],
+  "released_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth"
+  ]
+ },
+ "r1_04/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Initial and ongoing management",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Visit type (initial/follow-up)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial (baseline) weight",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin — Initial (ng/L)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Gene expression signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed on admission",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth"
+  ],
+  "released_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth"
+  ]
+ },
+ "pc05/rows": {
+  "restored_vs_258650f2": [
+   "Sign and symptom review"
+  ],
+  "released_vs_258650f2": [
+   "Sign and symptom review"
+  ]
+ },
+ "pc05/tab_lines": {
+  "restored_vs_258650f2": [
+   "Sign and symptom review"
+  ],
+  "released_vs_258650f2": [
+   "Sign and symptom review"
+  ]
+ },
+ "labels_all/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Participant signature and date",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature (patient, dd/mm/yyyy)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed by (witness, DOB)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial and ongoing management",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Visit type (initial/follow-up)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial (baseline) weight",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin — Initial (ng/L)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Gene expression signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed on admission",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Dose (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed off by consultant",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial / repeat",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Consent form signed by patient",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Patient initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth",
+   "Date of diagnosis / initial stage",
+   "Sign and symptom review"
+  ],
+  "released_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth",
+   "Date of diagnosis / initial stage",
+   "Sign and symptom review"
+  ]
+ },
+ "labels_all/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Participant signature and date",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature (patient, dd/mm/yyyy)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed by (witness, DOB)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial and ongoing management",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Visit type (initial/follow-up)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial (baseline) weight",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin — Initial (ng/L)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Gene expression signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed on admission",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Dose (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed off by consultant",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial / repeat",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Consent form signed by patient",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Patient initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth",
+   "Date of diagnosis / initial stage",
+   "Sign and symptom review"
+  ],
+  "released_vs_258650f2": [
+   "Tinel sign both wrists",
+   "Consent form signed and dated",
+   "Date signed / date received",
+   "Care plan signed and date of next review",
+   "Date of referral / initial contact",
+   "Patient initials and date of birth",
+   "Date of diagnosis / initial stage",
+   "Sign and symptom review"
+  ]
+ },
+ "residual_inputs/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial:",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Patient signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature (patient's consultant)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed by (doctor responsible for patient)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Time out signed by",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Sign & stamp",
+   "Sign and print name",
+   "Sign below"
+  ],
+  "released_vs_258650f2": [
+   "Sign & stamp",
+   "Sign and print name",
+   "Sign below"
+  ]
+ },
+ "residual_inputs/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Initial",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initial:",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Initials",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Nurse (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Patient signature",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature (patient's consultant)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signed by (doctor responsible for patient)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Time out signed by",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Troponin (initial)",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Sign & stamp",
+   "Sign and print name"
+  ],
+  "released_vs_258650f2": [
+   "Sign & stamp",
+   "Sign and print name"
+  ]
+ },
+ "declared_cost/rows": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Please sign and date below",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Signature and date of signing",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Date and signature of clinician",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Sign below",
+   "Sign and print name",
+   "Sign & stamp",
+   "Signatures",
+   "Sign each page",
+   "Sign overleaf",
+   "Please sign and return",
+   "Sign or symptom",
+   "Sign to confirm",
+   "Sign the declaration",
+   "Initials and date of birth",
+   "Nurse initials and date checked"
+  ],
+  "released_vs_258650f2": [
+   "Sign below",
+   "Sign and print name",
+   "Sign & stamp",
+   "Signatures",
+   "Sign each page",
+   "Sign overleaf",
+   "Please sign and return",
+   "Sign or symptom",
+   "Sign to confirm",
+   "Sign the declaration",
+   "Initials and date of birth",
+   "Nurse initials and date checked"
+  ]
+ },
+ "declared_cost/tab_lines": {
+  "43fcf214_generates_repair_not": [
+   [
+    "Signature and date of signing",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ],
+   [
+    "Date and signature of clinician",
+    "Signed or initialled by hand on the printed form: this answer area is never generated from"
+   ]
+  ],
+  "restored_vs_258650f2": [
+   "Sign and print name",
+   "Sign & stamp",
+   "Signatures",
+   "Sign each page",
+   "Sign overleaf",
+   "Please sign and return",
+   "Sign or symptom",
+   "Sign to confirm",
+   "Sign the declaration",
+   "Initials and date of birth",
+   "Nurse initials and date checked"
+  ],
+  "released_vs_258650f2": [
+   "Sign and print name",
+   "Sign & stamp",
+   "Signatures",
+   "Sign each page",
+   "Sign overleaf",
+   "Please sign and return",
+   "Sign or symptom",
+   "Sign to confirm",
+   "Sign the declaration",
+   "Initials and date of birth",
+   "Nurse initials and date checked"
+  ]
+ },
+ "totals_generated": {
+  "43fcf214": 608,
+  "258650f2": 423,
+  "repair": 481,
+  "labels": 670
+ }
+}

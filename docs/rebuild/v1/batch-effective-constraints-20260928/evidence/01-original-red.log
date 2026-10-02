@@ -1,0 +1,139 @@
+{
+  "source_commit": "b1c3b95cca1a807f31eb5e3244258e8373bf9751",
+  "generation_batch_sha256": "0d9400c9e2d6f27fd5b63e76a2ab601e4b1e3dfcb1df159619f3416e2526d63f",
+  "field_count": 103,
+  "batch_needed": true,
+  "fields": {
+    "Group A": {
+      "key": "v3_1",
+      "label": "Group A",
+      "kind": "choice",
+      "context": "Group A",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+              "glyph": 0
+            },
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+              "glyph": 1
+            }
+          ]
+        },
+        "fingerprint": "436a953598136e4677969970818870627909b6fb41116544ed42a74a36726c8d"
+      },
+      "options": [
+        "Active",
+        "Inactive"
+      ],
+      "printed_ticked": [
+        0
+      ]
+    },
+    "Group B": {
+      "key": "v3_2",
+      "label": "Group B",
+      "kind": "choice",
+      "context": "Group B",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+              "glyph": 0
+            },
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+              "glyph": 1
+            }
+          ]
+        },
+        "fingerprint": "46ea2fc203f358dd8fbfc1ff08558bc86b98cf15bb75792a1f26138f8c2f5f29"
+      },
+      "options": [
+        "Active",
+        "Inactive"
+      ]
+    }
+  },
+  "constraints": {
+    "contract": "v3-form-constraints-v1",
+    "source_sha256": "f3807dc2eb330aaa67ed2c694e25451b06bd94c40e3bf9c287577c0d7f4d3b03",
+    "fields_sha256": "bd8ed26c3478019a4c0ab9e45ee665521576470077c909085a9a859708a41b24",
+    "coverage": "complete",
+    "provenance": "reviewed_assisted",
+    "evidence_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "instruction_references": [
+      {
+        "id": "rule",
+        "part": "word/document.xml",
+        "slot": "b/p[0]",
+        "sha256": "c41144b20deea96a437102f7f7f1822c08fe259cc262ab54fcb2433cba90844f"
+      }
+    ],
+    "rules": [
+      {
+        "kind": "max_active_groups",
+        "source_id": "rule",
+        "maximum": 1,
+        "groups": [
+          [
+            {
+              "key": "v3_1",
+              "values": [
+                "Active"
+              ]
+            }
+          ],
+          [
+            {
+              "key": "v3_2",
+              "values": [
+                "Active"
+              ]
+            }
+          ]
+        ]
+      }
+    ]
+  },
+  "answers": {
+    "Group A": {
+      "text": "",
+      "status": "missing",
+      "reviewed": true,
+      "left_blank": true
+    },
+    "Group B": {
+      "text": "Active",
+      "status": "supported",
+      "reviewed": true,
+      "edited_by": "synthetic-clinician"
+    }
+  },
+  "constraint_validation": "accepted",
+  "physical_export": {
+    "Group A": "☒ Active ☐ Inactive",
+    "Group B": "☒ Active ☐ Inactive"
+  },
+  "input_sha256": "f3807dc2eb330aaa67ed2c694e25451b06bd94c40e3bf9c287577c0d7f4d3b03",
+  "export_sha256": "6e8d7dbca092dfa288f0e655a70654cd67dd1d1296e88acb147e5c01e8a434cd"
+}

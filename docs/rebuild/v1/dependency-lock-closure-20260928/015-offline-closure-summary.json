@@ -1,0 +1,6 @@
+{
+  "resolved_packages": 89,
+  "all_local_file_urls": true,
+  "hashes_match": true,
+  "mode": "dry-run ignore-installed no-index require-hashes only-binary"
+}

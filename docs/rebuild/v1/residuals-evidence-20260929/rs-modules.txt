@@ -1,0 +1,230 @@
+manage.py test --keepdb --parallel 1 <modules below>, throwaway database quillmd_qa_resid2_t1, tree = 61c5cc8f + this change (uncommitted)
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................................................................................................................F....F...FF............/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(PydanticSerializationUnexpectedValue: Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections]
+PydanticSerializationUnexpectedValue: Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ParsedResponseFunctionToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFileSearchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionWebSearch` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `AdditionalTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseReasoningItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `Program` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ProgramOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalRequest` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalResponse` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ImageGenerationCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallAction` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpListTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCodeInterpreterToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCompactionItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  PydanticSerializationUnexpectedValue(Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  return self.__pydantic_serializer__.to_python(
+.../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.............................................................Forbidden (CSRF cookie not set.): /console/accounts/81d152b6-ae91-4911-8c77-04e4955fba2e/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/829a2840-d958-48bd-a356-fa78014342b2/
+Forbidden (CSRF cookie not set.): /console/departments/e45b6e72-869e-4ea2-8268-25cbeaf96c0d/payer/
+.........................................................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...................................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......./opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.....Forbidden (CSRF cookie not set.): /recovery/
+Forbidden (CSRF cookie not set.): /verification/resend/
+.....................................................Forbidden (CSRF cookie not set.): /encounters/c295c31c-bae9-45b9-acd0-749bf05d8dc6/generate/
+................................................................................................................/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......................................
+======================================================================
+FAIL: test_absorbed_status_admits_no_reconciliation_entries (core.tests.test_billing_policy.RefutationRegressions.test_absorbed_status_admits_no_reconciliation_entries)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 529, in test_absorbed_status_admits_no_reconciliation_entries
+    job,usage=self.failed_unabsorbed_job('regress-r2-absorbed-entries')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 427, in failed_unabsorbed_job
+    job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'reconciliation' != 'failed'
+- reconciliation
++ failed
+
+
+======================================================================
+FAIL: test_credit_back_then_absorb_reverses_only_the_net_charge (core.tests.test_billing_policy.RefutationRegressions.test_credit_back_then_absorb_reverses_only_the_net_charge)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 438, in test_credit_back_then_absorb_reverses_only_the_net_charge
+    job,usage=self.failed_unabsorbed_job('regress-credit-then-absorb')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 427, in failed_unabsorbed_job
+    job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'reconciliation' != 'failed'
+- reconciliation
++ failed
+
+
+======================================================================
+FAIL: test_pending_additional_charge_is_never_applied_after_absorption (core.tests.test_billing_policy.RefutationRegressions.test_pending_additional_charge_is_never_applied_after_absorption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 449, in test_pending_additional_charge_is_never_applied_after_absorption
+    job,usage=self.failed_unabsorbed_job('regress-pending-then-absorb')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 427, in failed_unabsorbed_job
+    job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'reconciliation' != 'failed'
+- reconciliation
++ failed
+
+
+======================================================================
+FAIL: test_pending_charge_held_then_absorbed_is_marked_when_applied_later (core.tests.test_billing_policy.RefutationRegressions.test_pending_charge_held_then_absorbed_is_marked_when_applied_later)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 460, in test_pending_charge_held_then_absorbed_is_marked_when_applied_later
+    job,usage=self.failed_unabsorbed_job('regress-pending-later')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 427, in failed_unabsorbed_job
+    job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'reconciliation' != 'failed'
+- reconciliation
++ failed
+
+
+----------------------------------------------------------------------
+Ran 540 tests in 523.088s
+
+FAILED (failures=4)
+Preserving test database for alias 'default'...
+Found 540 test(s).
+System check identified no issues (0 silenced).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).
+{
+  "checked_at": "2026-09-29T01:44:40.548291+00:00",
+  "scope": "Read-only fresh application records; no external requests; no clinical text or credentials exported.",
+  "charge_policy": "User charge is exactly 1.5 \u00d7 the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.",
+  "platform_costs": {
+    "totals_by_kind": {
+      "fixed_overhead": "0",
+      "absorbed_failure": "0",
+      "absorbed_over_limit": "0"
+    },
+    "rows": 0,
+    "policy": "Fixed overhead and absorbed platform-failure cost are tracked separately and never charged to users."
+  },
+  "reconciliation_summary": {
+    "evidence_kinds": {
+      "unclassified": 0,
+      "provider_report": 0,
+      "invoice": 0
+    },
+    "reconciled_rows": 0,
+    "unreconciled_rows": 0,
+    "pending_funds": 0,
+    "absorbed_rows": 0
+  },
+  "cost_basis": "Original usage is provider-metered units priced at configured USD rates; reservations are estimates. Classified reconciliation evidence and adjustments are reported separately.",
+  "fingerprint_limit": "A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.",
+  "rate_reference_reviewed_on": "2026-09-17",
+  "rate_references": [
+    "https://platform.claude.com/docs/en/about-claude/pricing",
+    "https://deepgram.com/pricing"
+  ],
+  "rows": [],
+  "wallets": [
+    {
+      "wallet_id": "7550f9b6-b613-4f17-86a8-ef8aae3c1a93",
+      "kind": "promo",
+      "balance_usd": "10.000000000000",
+      "ledger_sum_usd": "10.000000000000",
+      "reserved_usd": "0.010000000000",
+      "held_reservations_usd": "0.010000000000",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    },
+    {
+      "wallet_id": "bf39cf41-d8d3-413c-b5b8-5a9e1780e2e8",
+      "kind": "paid",
+      "balance_usd": "0E-12",
+      "ledger_sum_usd": "0",
+      "reserved_usd": "0E-12",
+      "held_reservations_usd": "0",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    }
+  ],
+  "unsettled_provider_receipts": [],
+  "unresolved_jobs": [],
+  "ledger_policy": {
+    "orphan_policy_entries": 0,
+    "checks": {
+      "policy_ledger_entries_bound_to_jobs": true,
+      "over_limit_absorptions_bound_to_settled_usage": true
+    }
+  },
+  "cancellation_policy": {
+    "cancelled_jobs": 0,
+    "checks": {
+      "cancelled_jobs_have_no_usage": true,
+      "cancelled_jobs_have_no_provider_receipt": true,
+      "cancelled_jobs_have_no_ledger_entries": true,
+      "cancelled_jobs_hold_no_funds": true
+    }
+  },
+  "hold_policy": {
+    "ended_jobs_holding_funds": [
+      "ce2d9481-7d89-41ed-bb09-999b6f6504eb"
+    ],
+    "checks": {
+      "ended_jobs_hold_no_funds": false
+    }
+  },
+  "generation_batches": [],
+  "all_checks_pass": false,
+  "durable_receipt_gaps": 0,
+  "invoice_reconciliation": {
+    "invoice_rows": 0,
+    "provider_report_rows": 0,
+    "unclassified_rows": 0,
+    "scope": "Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.",
+    "provenance": "Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity."
+  }
+}
+
+real	8m48.245s
+user	6m3.504s
+sys	1m24.477s
+
+Note: the 4 failures above are RefutationRegressions.failed_unabsorbed_job, a fixture that manufactured a 'failed, settled, unabsorbed' job through the RS-3 defect itself. It now asserts the held job and writes the pre-repair row explicitly; core.tests.test_billing_policy then ran 33 of 33 OK, and the whole core suite (rs-core-suite.txt) ran after that change.

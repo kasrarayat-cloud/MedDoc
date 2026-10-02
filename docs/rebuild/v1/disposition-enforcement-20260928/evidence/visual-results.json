@@ -1,0 +1,86 @@
+[
+  {
+    "page": "approved",
+    "width": 1280,
+    "title": "Empty-draft disposition · QuillMD",
+    "heading": "Empty-draft disposition",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 6,
+    "buttons": [
+      "Sign out",
+      "Verify journal checkpoint",
+      "Admit signed policy",
+      "Prepare exact instruction",
+      "Approve exact instruction",
+      "Delete approved empty draft"
+    ]
+  },
+  {
+    "page": "unavailable",
+    "width": 1280,
+    "title": "Empty-draft disposition · QuillMD",
+    "heading": "Empty-draft disposition",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 1,
+    "buttons": [
+      "Sign out"
+    ]
+  },
+  {
+    "page": "replay",
+    "width": 1280,
+    "title": "Empty-draft disposition · QuillMD",
+    "heading": "Empty-draft disposition",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 2,
+    "buttons": [
+      "Sign out",
+      "Replay suppression instructions"
+    ]
+  },
+  {
+    "page": "approved",
+    "width": 390,
+    "title": "Empty-draft disposition · QuillMD",
+    "heading": "Empty-draft disposition",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 6,
+    "buttons": [
+      "Sign out",
+      "Verify journal checkpoint",
+      "Admit signed policy",
+      "Prepare exact instruction",
+      "Approve exact instruction",
+      "Delete approved empty draft"
+    ]
+  },
+  {
+    "page": "unavailable",
+    "width": 390,
+    "title": "Empty-draft disposition · QuillMD",
+    "heading": "Empty-draft disposition",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 1,
+    "buttons": [
+      "Sign out"
+    ]
+  },
+  {
+    "page": "replay",
+    "width": 390,
+    "title": "Empty-draft disposition · QuillMD",
+    "heading": "Empty-draft disposition",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 2,
+    "buttons": [
+      "Sign out",
+      "Replay suppression instructions"
+    ]
+  }
+]

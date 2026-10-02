@@ -1,0 +1,40 @@
+{
+  "authority_id": "quillmd-v1-private-api-testing-standing-20260930",
+  "project": "QuillMD V1 (rebuild), private synthetic-only engineering and qualification",
+  "mode": "standing_unlimited_monetary",
+  "owner_imposed_monetary_ceiling": null,
+  "per_batch_monetary_confirmation_required": false,
+  "owner_words": "also add thsi propmt like if they need to sue real test with api they can have no limitation also tel lthem to switch to sonnet 5.5 to the brand new one pelase also tel lthem to finish all the  stuuf like Custom word and everything else then give me a results i need that custo mword get focus and at least weve seen some advance things am i right or no?",
+  "owner_words_note": "verbatim as quoted in the handoff, typos included; the owner gave this instruction to Codex and the handoff quoting it was pasted by the owner into this session's own user turn on 2026-10-01",
+  "provenance": {
+    "channel": "owner's own user turn in this VPS session (pasted handoff), 2026-10-01",
+    "desktop_record": "outputs/QuillMD-V1-Standing-API-Testing-Authority-20260930.json on the owner's desktop; NOT present on this VPS (searched), so this record is built from the handoff text, which states the owner words and terms so that it is self-contained",
+    "strength": "owner words relayed through another assistant and delivered by the owner directly into this session; stronger than a peer-session claim, weaker than a captured owner signature"
+  },
+  "scope": [
+    "genuine calls to the existing authorized model provider (Anthropic direct API) for private synthetic QuillMD testing: model migration to claude-sonnet-5-5, Word mapping, ordinary notes, diagnosis, repair and qualification",
+    "genuine calls to the existing authorized transcription provider for authorized synthetic audio in voice workflow testing",
+    "isolated QA environments first; the existing authorized private installation process when its checks pass"
+  ],
+  "not_covered": [
+    "live Stripe payments, refunds, payouts or account changes",
+    "third-party messages or phone calls; unrequested emails",
+    "new subscriptions, contracts, infrastructure purchases",
+    "restricted document uploads (development originals marked no provider upload stay off providers)",
+    "real patient data; public launch"
+  ],
+  "controls_retained": [
+    "bounded batches: concurrency, request/output limits, deadlines, no blind retries, no unbounded loops",
+    "Stop file, authentication, tenant isolation, credential restrictions (protected QA credential route only), input rights, resource checks",
+    "duplicate-attempt prevention; unknown-outcome reconciliation; verified cleanup",
+    "a safety failure stops the affected execution path until diagnosed and repaired; the failed evidence is retained",
+    "actual provider quota, rate-limit or payment failures are reported as external conditions"
+  ],
+  "historical": {
+    "preserved_authority": "quillmd-v1-sonnet5-staged-40-call_9fkOp2kqbQ28e17HqXgHFlzk",
+    "preserved_campaign": "quillmd-v1-sonnet5-staged-40 (closed for new sends under this authority; its limits, attempts 1-24, failures and verdicts remain historical facts)",
+    "historical_exposure_usd": "0.130880 over 24 attempts, 0 open (2026-10-01)"
+  },
+  "replaces": "the $40 and $5/$25/$10 funding restrictions for FUTURE eligible testing only; does not rewrite historical records and does not waive technical or clinical safety failures",
+  "recorded_by": "Claude Code session on the QuillMD VPS, 2026-10-01"
+}

@@ -1,0 +1,22 @@
+test_exported_scalar_unknowns_and_missing_values_cannot_count_as_blank (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_exported_scalar_unknowns_and_missing_values_cannot_count_as_blank) ... ok
+test_false_placeholder_flags_preserve_value_and_true_flags_remain_placeholders (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_false_placeholder_flags_preserve_value_and_true_flags_remain_placeholders) ... ok
+test_legacy_default_without_visible_result_requires_explicit_answer (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_legacy_default_without_visible_result_requires_explicit_answer) ... ok
+test_legacy_dropdown_invalid_index_is_unknown_and_replacement_is_readable (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_legacy_dropdown_invalid_index_is_unknown_and_replacement_is_readable) ... ok
+test_malformed_legacy_boundaries_never_become_known_empty (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_legacy_boundaries_never_become_known_empty) ... ok
+test_malformed_placeholder_and_missing_content_are_unknown (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_malformed_placeholder_and_missing_content_are_unknown) ... ok
+test_placeholder_and_known_displayed_dropdown_remain_usable (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_placeholder_and_known_displayed_dropdown_remain_usable) ... ok
+test_plain_cells_and_separate_spans_read_written_values_and_blanks (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_plain_cells_and_separate_spans_read_written_values_and_blanks) ... ok
+test_preserved_native_scalar_duplicate_refuses_and_explicit_change_succeeds (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_preserved_native_scalar_duplicate_refuses_and_explicit_change_succeeds) ... ok
+test_preserved_scalar_applies_to_maximum_active_groups_too (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_preserved_scalar_applies_to_maximum_active_groups_too) ... ok
+test_preserved_sdt_date_scalar_is_counted (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_preserved_sdt_date_scalar_is_counted) ... ok
+test_scalar_replicas_must_agree_and_explicit_write_updates_both (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_scalar_replicas_must_agree_and_explicit_write_updates_both) ... ok
+test_shifted_neighbouring_spans_refuse_ambiguous_readback (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_shifted_neighbouring_spans_refuse_ambiguous_readback) ... ok
+test_unknown_displayed_dropdown_is_unreadable_and_explicit_change_succeeds (core.tests.test_batch_preserved_values.PreservedConstraintValues.test_unknown_displayed_dropdown_is_unreadable_and_explicit_change_succeeds) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 34.566s
+
+OK
+Found 14 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

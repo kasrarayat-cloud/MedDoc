@@ -1,6 +1,6 @@
 # V1 — consolidated external dependencies
 
-Updated 2026-09-27 during the Astra continuation. **This is a prepared request, not approval or a new
+Updated 2026-09-28 during the Astra continuation. **This is a prepared request, not approval or a new
 allowance.** Engineering repairs, WM narrative integration and offline mapping work continue independently.
 The V1 Word gate is unchanged. No contract was accepted, infrastructure bought or provider generation sent.
 
@@ -31,6 +31,15 @@ synthetic-only under its published terms. The account consoles/signatures are ex
 engineering decisions an assistant can accept for the company.
 
 ## 2. Bounded synthetic verification spending, only after a frozen eligible candidate
+
+> **Status 2026-09-28 23:00Z — APPROVED by the owner, staged, provider cost:** "Approve the staged $40 maximum"
+> (authority `quillmd-v1-sonnet5-staged-40-call_9fkOp2kqbQ28e17HqXgHFlzk`). $5 model check first; up to $25 mapping
+> and $10 notes only after it succeeds. One campaign; caps cumulative across sessions, retries and workers; no
+> transfer between stages. The separate live Stripe payment (≤ $5) is **not** approved. Record:
+> `docs/foundation/mutations/20260928-quillmd-v1-sonnet5-staged-campaign.md` and
+> `QuillMD-V1-Sonnet5-Budget-Approval-20260928.json`. The text below is the request as it was made and is kept
+> unchanged. **Still external:** a campaign credential the QA runner can use without any session reading
+> `rebuild/.env` (see the declaration); until it exists, no request can be sent.
 
 The old Stage 1 grant names a different revision/model and cannot fund this work. Metadata retrieval and
 eight native token-count requests were free (four tokenizer comparisons, three expanded mapping-output sizing probes and one compact-output sizing probe); no generation validation has run. The earlier proposed caps are
@@ -67,7 +76,8 @@ Configuration and restart use the deployment gate and approved credential proced
 ## 4. Required human work and precise access gap
 
 - Authorized native Microsoft Word desktop access for final qualified outputs and their controls. The current
-  connected-document query found **no Word sessions**; both registered remote devices were **offline**.
+  connected-document query found **no Word sessions**. The earlier two-device offline observation is
+  historical; no callable remote-device tool is currently available to recheck it.
   The VPS/repository is accessible. This is a desktop gap, not a missing project/VPS session.
 - Independent security review of the actual production target/candidate and retest of serious findings.
 - Counsel's retention/deletion schedule, breach-notification procedure and downstream agreement requirements.
@@ -77,22 +87,36 @@ engineering qualification → account/contract/budget admission → isolated tar
 alert/payment/security/native-Word acceptance → reviewed cutover → invited real-patient admission. Independent
 preparation continues while external inputs are pending; no launch switch relaxes the Word or clinical gates.
 
-## 5. Corpus rights dependency established after the bounded local audit
+## 5. Independent corpus and permissions still required
 
-The existing inventory was exhausted as a feasibility review, without buying or acquiring more files.
-Its 158 originals divide into four qualification-source aliases, 51 records without the required
-applicable exact-file rights proof (including explicit restrictions), and 103 from one source capped
-at eight. Even granting every unresolved intrinsic requirement optimistically, eight cannot supply
-the ten additional independent development lineages. This is not eight already qualified forms.
+A separate authorized40-development/20-qualification corpus is still needed, with exact-source permissions,
+independent authorship/derivation and source separation established before admission. Existing60 files
+represent44 declared lineages; the offline-supported development subset is33 files across25 declared groups,
+not a proven independent40. The bounded investigation added **one** independently authored licensed blank
+DOCX lineage, currently unallocated. No corpus was replaced or rescored.
 
-Applicable commercial adaptation rights for at least two source-disjoint existing lineages would
-remove that particular ceiling; a complete development supplement still needs ten exact authorized
-blank originals with independent lineage, blankness and source separation established. Authorized
-clinic-supplied originals and their reuse authority can also supply the missing evidence. See
-`corpus-development-inventory-adjudication-20260927.md`. This adds the proven dependency to the same
-consolidated request; it authorizes no acquisition campaign or denominator replacement. The original
-60-file manifest and every first-pass result remain unchanged.
+The bounded original-only investigation found seven additional offline-supported blank files, representing
+five conservative independent lineages, plus one unresolved embedded-component rights case. They share an
+existing development source. Its original eight supported files already occupy seven declared lineages;
+with the eight-per-source cap, the five additions increase a possible cohort by at most **one**.
 
+Current supported originals therefore offer a conditional ceiling of **26/40**, or **27/40** if the one
+new-source licensed lead is assigned to development: at least14 or13 additional eligible development
+lineages remain missing. These are upper bounds, not certified cohort counts. If all30 original groups
+later clear rights and independence, the corresponding ceilings are31/40 or32/40. Earlier additive
+25+9 planning was too loose because it did not apply the source cap jointly; the earlier evidence remains.
+
+If the new-source lead is assigned to qualification, eligible inventory is4/20 across2sources; if assigned
+to development, qualification has3/20 from1source. It cannot count in both. No allocation, corpus freeze or
+candidate qualification attempt has been made. See `corpus-eight-development-adjudication-20260928.md`
+for the sealed original-only adjudication and exact joint counts.
+
+Applicable rights/lineage evidence or genuinely new authorized source material must fill the remaining gaps.
+Clinic-supplied blank originals with explicit reuse/adaptation authority can contribute. Cosmetic variants,
+relabeling frozen unseen cases, and moving a source between DEV and qualification do not qualify.
+See that adjudication and the preserved `corpus-independent-renewal-final-20260928.md` for the inventory
+history, audit seals and remaining checks. The original60 and every first pass remain unchanged. The preserved frozenN20 has three legacy
+`.doc` refusals; it is not replaced or admitted for a doomed attempt. No new acquisition spending is requested.
 
 ## Human dictation acceptance detail (same pending request)
 
@@ -108,3 +132,57 @@ synthetic-content human Deepgram transcription**, leaving at most$9.70 for its S
 checks. This does not increase the $40 total or authorize retries. Exact account/rate and displayed
 hold must fit before sending; otherwise the case stays unrun. Preserve original audio, as-spoken
 review, raw transcript, corrections and final Word evidence. No real patient data is permitted.
+
+
+## Current engineering and execution boundary
+
+The continuation has made no new provider generation, token-count, payment, activation or infrastructure
+purchase. The installed financial aggregate was reconciled at2026-09-27T23:41:52Z:27 settled reservations,
+26 provider receipts, no queued/running/unknown jobs. Historical Anthropic rows remain Sonnet4.6.
+The old Stage1 grant remains ineligible; the40USD/Stripe request above remains unapproved.
+
+Legal-hold preservation, archived-file recovery checks and administration are now implemented and independently
+reviewed on the local candidate. This does not close retention: disposition approvals, tombstones, general
+purge and external/backup reconciliation remain engineering work, alongside counsel's schedule. Ordinary-note
+usefulness and full-document completeness also remain engineering/qualification gates. Buying hosting or
+signing agreements does not close those gates. Updated local repairs are not installed.
+
+
+## 2026-09-28 continuation reconciliation
+
+The 05:20 UTC continuation adds no paid requests or activation. The latest
+read-only installed financial receipt is 2026-09-28 03:28:35 UTC: 29 terminal
+jobs, 27 settled reservations, 26 receipts, zero active or unknown jobs. Two
+historical paid receipt gaps and one simulated absence remain separately
+identified; none has been converted into a new invoice or retry authority.
+The proposed $40 provider total and separate ≤$5 Stripe payment plus fee above
+remain the only pending financial request. No new approval is inferred.
+
+The additional 20k ordinary response profile is separately identified; historical
+8k/16k request bytes, model identities, receipts and the 1.5× retail multiplier
+remain unchanged. Before eligible paid verification, the actual frozen candidate,
+served worker, exact rates, request bounds and all reservations must be reconciled.
+A prepared profile or a mocked worker is not evidence of served Sonnet 5.
+
+Engineering continues on whole-document mapping, ordinary-note usefulness and
+combined candidate qualification. Retention now includes a disabled, reviewed
+empty-draft-only execution adapter, while general clinical/files/backup/provider
+reconciliation and restore admission remain developer-owned work. The adapter
+also needs the already requested retention policy and independent custody;
+its existence does not grant policy authority or enable deletion.
+
+
+## Bounded corpus metadata continuation, 2026-09-28
+
+Two predeclared metadata searches preserved all old corpus/holdout hashes and
+acquired no originals. The first found10 official clinical DOCX leads whose
+applicable rights remain unresolved/restrictive for the intended use. A separate
+Gold Coast route verified that publisher's own CC BY4.0 terms and exceptions,
+but found no eligible clinical DOCX within its two-query/six-landing-page bound.
+No new source or independent lineage is admitted. This does not claim that those
+publishers are exhausted. Exact blank-original permissions and independent
+source material remain the same consolidated corpus request; no acquisition
+spending or altered denominator is proposed. Shared durable reports are
+`corpus-metadata-renewal/004-REPORT.md` and
+`corpus-goldcoast-20260928-word-review/009-REPORT.md` beneath
+`rebuild/.runtime/v1-full-release-20260928/`.

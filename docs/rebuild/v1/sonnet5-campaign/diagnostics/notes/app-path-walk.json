@@ -1,0 +1,2336 @@
+{
+ "schema": "quillmd-sonnet5-notes-app-path-walk/1",
+ "started_at": "2026-09-29T03:02:10Z",
+ "completed_at": "2026-09-29T03:03:34Z",
+ "head": "10db4197b7aca86896d57e7ef9caa82a82485951",
+ "rebuild_equals_candidate": true,
+ "rebuild_compared": "rebuild/ outside rebuild/ops/ (the campaign runner)",
+ "test_database": "quillmd_qa_diag_notes_refrozenthree",
+ "database_server": "127.0.0.1:55731 (campaign QA PostgreSQL)",
+ "exit_code": 0,
+ "harness_sha256": {
+  "app_path_walk.py": "0f407081859522077983ef5d570fd9692774cc840b2d0c48348278617c629433",
+  "app_path_steps.py": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+  "app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
+  "run_app_path_walk.py": "f42bc3a0d08de040bf27ac99ea8d3b7b64c8e2f392caa8e9be570facf9c2fb14"
+ },
+ "cases_sha256": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+ "observations_sha256": "1feaa5ed6598f06ea6f33621feb48918378b3d81404c71c4ae3f5fbdf6d00a0e",
+ "provider": "mocked (anthropic.Anthropic patched to return each case's reference selection); Python sockets denied",
+ "source_unchanged": true,
+ "summary": {
+  "walks": 21,
+  "workflow_success": 21,
+  "failure_boundaries": {},
+  "exceptions": {},
+  "mapping_equals_cases_json": 21,
+  "fields_compared_with_replay": 91,
+  "fields_disagreeing_with_replay": []
+ },
+ "walks": {
+  "N01-default": {
+   "case": "N01",
+   "path": "default",
+   "form": "r1-11",
+   "form_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 10,
+     "source_units": 10,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 5455
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_4": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_5": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_6": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_7": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_8": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_9": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_10": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_11": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true,
+    "v3_4": true,
+    "v3_5": true,
+    "v3_6": true,
+    "v3_7": true,
+    "v3_8": true,
+    "v3_9": true,
+    "v3_10": true,
+    "v3_11": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict",
+    "v3_3": "missing",
+    "v3_4": "conflict",
+    "v3_5": "conflict",
+    "v3_6": "conflict",
+    "v3_7": "conflict",
+    "v3_8": "conflict",
+    "v3_9": "conflict",
+    "v3_10": "missing",
+    "v3_11": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "64ec30e7271608d3227f088ee1e917d6d4244398fd5085e7c7e16b63ec65e017",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N02-default": {
+   "case": "N02",
+   "path": "default",
+   "form": "n02-repeated-other",
+   "form_sha256": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 3,
+     "source_units": 2,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3484
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict",
+    "v3_3": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N02-field_relations": {
+   "case": "N02",
+   "path": "field_relations",
+   "form": "n02-repeated-other",
+   "form_sha256": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "catalogue",
+      "catalogue_sha256",
+      "context_labels",
+      "context_order",
+      "contract",
+      "form_constraints",
+      "notes",
+      "option_catalogue",
+      "requested_field_ids",
+      "requirements",
+      "source_units"
+     ],
+     "relations_payload": true,
+     "questions": 0,
+     "source_units": 2,
+     "catalogue": 3,
+     "max_tokens": 20000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4622
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "supported",
+     "text": "The patient describes the pain as a tight band around her head."
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true
+   },
+   "review_rows": {
+    "v3_1": "supported",
+    "v3_2": "conflict",
+    "v3_3": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "edcb70218c26942d6a515567d1d2760d4400af6fedde9e8f591d554eaa4c6c51",
+   "zip_members_unchanged": true,
+   "changed_parts": [
+    "word/document.xml"
+   ],
+   "supported_answers_in_their_fields": {
+    "v3_1": true
+   }
+  },
+  "N03-default": {
+   "case": "N03",
+   "path": "default",
+   "form": "n03-order-question",
+   "form_sha256": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 2,
+     "source_units": 2,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3418
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N03-field_relations": {
+   "case": "N03",
+   "path": "field_relations",
+   "form": "n03-order-question",
+   "form_sha256": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "catalogue",
+      "catalogue_sha256",
+      "context_labels",
+      "context_order",
+      "contract",
+      "form_constraints",
+      "notes",
+      "option_catalogue",
+      "requested_field_ids",
+      "requirements",
+      "source_units"
+     ],
+     "relations_payload": true,
+     "questions": 0,
+     "source_units": 2,
+     "catalogue": 2,
+     "max_tokens": 20000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4347
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "supported",
+     "text": "The patient is subject to a Community Treatment Order (CTO)."
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "supported",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "e726893f15c36ae9cb3f0d659e3f2627be8fe1d2660e72a095d75478c3bfb988",
+   "zip_members_unchanged": true,
+   "changed_parts": [
+    "word/document.xml"
+   ],
+   "supported_answers_in_their_fields": {
+    "v3_1": true
+   }
+  },
+  "N04-default": {
+   "case": "N04",
+   "path": "default",
+   "form": "r1-11",
+   "form_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 10,
+     "source_units": 7,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 5103
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_4": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_5": {
+     "status": "supported",
+     "text": "penicillin."
+    },
+    "v3_6": {
+     "status": "supported",
+     "text": "No"
+    },
+    "v3_7": {
+     "status": "supported",
+     "text": "On examination there is a small effusion and medial joint line tenderness."
+    },
+    "v3_8": {
+     "status": "supported",
+     "text": "a probable medial meniscus tear."
+    },
+    "v3_9": {
+     "status": "supported",
+     "text": "an MRI of the right knee and physiotherapy referral."
+    },
+    "v3_10": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_11": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true,
+    "v3_4": true,
+    "v3_5": true,
+    "v3_6": true,
+    "v3_7": true,
+    "v3_8": true,
+    "v3_9": true,
+    "v3_10": true,
+    "v3_11": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict",
+    "v3_3": "conflict",
+    "v3_4": "conflict",
+    "v3_5": "supported",
+    "v3_6": "supported",
+    "v3_7": "supported",
+    "v3_8": "supported",
+    "v3_9": "supported",
+    "v3_10": "missing",
+    "v3_11": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "519f76b600d407ce338c0d3952ee997e215d7bd3aec08591a91b5ca6fabb8982",
+   "zip_members_unchanged": true,
+   "changed_parts": [
+    "word/document.xml"
+   ],
+   "supported_answers_in_their_fields": {
+    "v3_5": true,
+    "v3_6": true,
+    "v3_7": true,
+    "v3_8": true,
+    "v3_9": true
+   }
+  },
+  "N05-default": {
+   "case": "N05",
+   "path": "default",
+   "form": "r1-11",
+   "form_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 10,
+     "source_units": 9,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 5189
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_4": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_5": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_6": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_7": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_8": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_9": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_10": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_11": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true,
+    "v3_4": true,
+    "v3_5": true,
+    "v3_6": true,
+    "v3_7": true,
+    "v3_8": true,
+    "v3_9": true,
+    "v3_10": true,
+    "v3_11": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict",
+    "v3_3": "conflict",
+    "v3_4": "conflict",
+    "v3_5": "conflict",
+    "v3_6": "conflict",
+    "v3_7": "conflict",
+    "v3_8": "conflict",
+    "v3_9": "conflict",
+    "v3_10": "missing",
+    "v3_11": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "64ec30e7271608d3227f088ee1e917d6d4244398fd5085e7c7e16b63ec65e017",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N06-default": {
+   "case": "N06",
+   "path": "default",
+   "form": "r1-11",
+   "form_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 10,
+     "source_units": 6,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4868
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_4": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_5": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_6": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_7": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_8": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_9": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_10": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_11": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true,
+    "v3_4": true,
+    "v3_5": true,
+    "v3_6": true,
+    "v3_7": true,
+    "v3_8": true,
+    "v3_9": true,
+    "v3_10": true,
+    "v3_11": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "missing",
+    "v3_3": "missing",
+    "v3_4": "missing",
+    "v3_5": "missing",
+    "v3_6": "missing",
+    "v3_7": "missing",
+    "v3_8": "missing",
+    "v3_9": "conflict",
+    "v3_10": "conflict",
+    "v3_11": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "64ec30e7271608d3227f088ee1e917d6d4244398fd5085e7c7e16b63ec65e017",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N07-default": {
+   "case": "N07",
+   "path": "default",
+   "form": "r1-11",
+   "form_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 10,
+     "source_units": 1,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4457
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_4": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_5": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_6": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_7": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_8": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_9": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_10": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_11": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true,
+    "v3_4": true,
+    "v3_5": true,
+    "v3_6": true,
+    "v3_7": true,
+    "v3_8": true,
+    "v3_9": true,
+    "v3_10": true,
+    "v3_11": true
+   },
+   "review_rows": {
+    "v3_1": "missing",
+    "v3_2": "missing",
+    "v3_3": "missing",
+    "v3_4": "missing",
+    "v3_5": "missing",
+    "v3_6": "missing",
+    "v3_7": "missing",
+    "v3_8": "missing",
+    "v3_9": "missing",
+    "v3_10": "missing",
+    "v3_11": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "64ec30e7271608d3227f088ee1e917d6d4244398fd5085e7c7e16b63ec65e017",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N08-default": {
+   "case": "N08",
+   "path": "default",
+   "form": "n08-knee-and-findings",
+   "form_sha256": "60c486ab1aa18b18ace4e4b04be4bca002325365a89d460c2f6ef393f85c9b61",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 2,
+     "source_units": 1,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3145
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "missing",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "supported",
+     "text": "The patient has left knee pain."
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "missing",
+    "v3_2": "supported"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "eee0e36455df97ef0f1a56688ee44bdc1eb476440ddd484792e417af5c4a646e",
+   "zip_members_unchanged": true,
+   "changed_parts": [
+    "word/document.xml"
+   ],
+   "supported_answers_in_their_fields": {
+    "v3_2": true
+   }
+  },
+  "N09-default": {
+   "case": "N09",
+   "path": "default",
+   "form": "n09-knee-pair",
+   "form_sha256": "79310a2ba7ef95bda06621a9baf9b426ae3f21fd82296ffbb690dcbfcdc882f8",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 2,
+     "source_units": 1,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3139
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "missing",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "missing"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "79310a2ba7ef95bda06621a9baf9b426ae3f21fd82296ffbb690dcbfcdc882f8",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N10-default": {
+   "case": "N10",
+   "path": "default",
+   "form": "n10-smoker-allergies",
+   "form_sha256": "7b8edc65f832ceb8094b8ac6f89153b048976f542d5598f6840117e48edd43d6",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 2,
+     "source_units": 2,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3256
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "supported",
+     "text": "none known."
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "supported"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "c91e9f912e606aef5d16a3798805f7b534ac256184a9cdcbd79fc91284f374e5",
+   "zip_members_unchanged": true,
+   "changed_parts": [
+    "word/document.xml"
+   ],
+   "supported_answers_in_their_fields": {
+    "v3_2": true
+   }
+  },
+  "N10-field_relations": {
+   "case": "N10",
+   "path": "field_relations",
+   "form": "n10-smoker-allergies",
+   "form_sha256": "7b8edc65f832ceb8094b8ac6f89153b048976f542d5598f6840117e48edd43d6",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "catalogue",
+      "catalogue_sha256",
+      "context_labels",
+      "context_order",
+      "contract",
+      "form_constraints",
+      "notes",
+      "option_catalogue",
+      "requested_field_ids",
+      "requirements",
+      "source_units"
+     ],
+     "relations_payload": true,
+     "questions": 0,
+     "source_units": 2,
+     "catalogue": 2,
+     "max_tokens": 20000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4392
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "supported",
+     "text": "No"
+    },
+    "v3_2": {
+     "status": "supported",
+     "text": "none known."
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "supported",
+    "v3_2": "supported"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "87dce7987580f043d87ad25aa73fa994a06a8b6c6ca3f8341994573ca0db6969",
+   "zip_members_unchanged": true,
+   "changed_parts": [
+    "word/document.xml"
+   ],
+   "supported_answers_in_their_fields": {
+    "v3_1": true,
+    "v3_2": true
+   }
+  },
+  "N11-default": {
+   "case": "N11",
+   "path": "default",
+   "form": "n11-n12-correction",
+   "form_sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 3,
+     "source_units": 3,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3562
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict",
+    "v3_3": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N12-default": {
+   "case": "N12",
+   "path": "default",
+   "form": "n11-n12-correction",
+   "form_sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 3,
+     "source_units": 4,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3655
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_3": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true,
+    "v3_3": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict",
+    "v3_3": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N13-default": {
+   "case": "N13",
+   "path": "default",
+   "form": "n13-risk-and-medication",
+   "form_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 2,
+     "source_units": 4,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3594
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N13-field_relations": {
+   "case": "N13",
+   "path": "field_relations",
+   "form": "n13-risk-and-medication",
+   "form_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "catalogue",
+      "catalogue_sha256",
+      "context_labels",
+      "context_order",
+      "contract",
+      "form_constraints",
+      "notes",
+      "option_catalogue",
+      "requested_field_ids",
+      "requirements",
+      "source_units"
+     ],
+     "relations_payload": true,
+     "questions": 0,
+     "source_units": 4,
+     "catalogue": 2,
+     "max_tokens": 20000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4713
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N14-field_relations": {
+   "case": "N14",
+   "path": "field_relations",
+   "form": "n14-smoking-and-mental-state",
+   "form_sha256": "e0d8133fba02ee2dc12912df8b998f27e52e9bcc00ea1cb0b64586a8017706e4",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "catalogue",
+      "catalogue_sha256",
+      "context_labels",
+      "context_order",
+      "contract",
+      "form_constraints",
+      "notes",
+      "option_catalogue",
+      "requested_field_ids",
+      "requirements",
+      "source_units"
+     ],
+     "relations_payload": true,
+     "questions": 0,
+     "source_units": 4,
+     "catalogue": 2,
+     "max_tokens": 20000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4702
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "e0d8133fba02ee2dc12912df8b998f27e52e9bcc00ea1cb0b64586a8017706e4",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N15-field_relations": {
+   "case": "N15",
+   "path": "field_relations",
+   "form": "n15-risk-and-arrangements",
+   "form_sha256": "3804e0fa77aff59f2d6d6023b524c9e13936026aa4d2f03ad615577b12dc4f3c",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "catalogue",
+      "catalogue_sha256",
+      "context_labels",
+      "context_order",
+      "contract",
+      "form_constraints",
+      "notes",
+      "option_catalogue",
+      "requested_field_ids",
+      "requirements",
+      "source_units"
+     ],
+     "relations_payload": true,
+     "questions": 0,
+     "source_units": 4,
+     "catalogue": 2,
+     "max_tokens": 20000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4700
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "3804e0fa77aff59f2d6d6023b524c9e13936026aa4d2f03ad615577b12dc4f3c",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N16-default": {
+   "case": "N16",
+   "path": "default",
+   "form": "n16-mood-and-allergies",
+   "form_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "context_labels",
+      "notes",
+      "questions",
+      "source_units"
+     ],
+     "relations_payload": false,
+     "questions": 2,
+     "source_units": 4,
+     "catalogue": 0,
+     "max_tokens": 8000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 3558
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  },
+  "N16-field_relations": {
+   "case": "N16",
+   "path": "field_relations",
+   "form": "n16-mood-and-allergies",
+   "form_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+   "network": "denied (positive control: create_connection raised the denial)",
+   "http": [
+    {
+     "stage": "mapping-review",
+     "status": 200
+    },
+    {
+     "stage": "new-encounter",
+     "status": 302
+    },
+    {
+     "stage": "before-generation",
+     "status": 200
+    },
+    {
+     "stage": "generate",
+     "status": 302
+    },
+    {
+     "stage": "generated-review",
+     "status": 200
+    },
+    {
+     "stage": "save-review",
+     "status": 302
+    },
+    {
+     "stage": "finalize",
+     "status": 302
+    },
+    {
+     "stage": "export",
+     "status": 200
+    }
+   ],
+   "workflow_success": true,
+   "mapping_equals_cases_json": true,
+   "quote_error": "",
+   "requests": [
+    {
+     "payload_keys": [
+      "catalogue",
+      "catalogue_sha256",
+      "context_labels",
+      "context_order",
+      "contract",
+      "form_constraints",
+      "notes",
+      "option_catalogue",
+      "requested_field_ids",
+      "requirements",
+      "source_units"
+     ],
+     "relations_payload": true,
+     "questions": 0,
+     "source_units": 4,
+     "catalogue": 2,
+     "max_tokens": 20000,
+     "model": "claude-sonnet-5",
+     "request_bytes": 4677
+    }
+   ],
+   "worker_ran": true,
+   "provider_calls": 1,
+   "jobs": [
+    {
+     "state": "succeeded",
+     "error": ""
+    }
+   ],
+   "fields": {
+    "v3_1": {
+     "status": "held",
+     "text": ""
+    },
+    "v3_2": {
+     "status": "held",
+     "text": ""
+    }
+   },
+   "agrees_with_generation_layer_replay": {
+    "v3_1": true,
+    "v3_2": true
+   },
+   "review_rows": {
+    "v3_1": "conflict",
+    "v3_2": "conflict"
+   },
+   "encounter_status": "finalized",
+   "export_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+   "zip_members_unchanged": true,
+   "changed_parts": [],
+   "supported_answers_in_their_fields": {}
+  }
+ }
+}

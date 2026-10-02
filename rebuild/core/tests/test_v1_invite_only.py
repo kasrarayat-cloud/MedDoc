@@ -12,6 +12,7 @@ import tempfile
 from unittest.mock import patch
 
 from django.test import Client, TestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -27,6 +28,7 @@ PASSWORD = 'Synthetic-Only-4821!private'
 @override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES, QUILLMD_EMAIL_MODE='file',
                    EMAIL_BACKEND='core.email_backend.PrivateFileEmailBackend')
 class InviteFixture(TestCase):
+    client_class = SurfaceClient
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -37,7 +39,7 @@ class InviteFixture(TestCase):
         self.admin = User.objects.create_user(username='platform-admin', email='platform-admin@synthetic.invalid',
                                               verified_at=timezone.now(), is_staff=True)
         self.device = TOTPDevice.objects.create(user=self.admin, name='Synthetic authenticator', confirmed=True)
-        self.console = Client()
+        self.console = SurfaceClient()
         self.console.force_login(self.admin)
         session = self.console.session
         session['otp_device_id'] = self.device.persistent_id
@@ -54,7 +56,7 @@ class InviteFixture(TestCase):
         return re.findall(r'http://localhost:9130(/invite/clinic/[^\s/]+/)', self.mail())[-1]
 
     def accept(self, link, email='owner@clinic.invalid', client=None, **extra):
-        return (client or Client()).post(link, {'email': email, 'first_name': 'Synthetic', 'last_name': 'Owner',
+        return (client or SurfaceClient()).post(link, {'email': email, 'first_name': 'Synthetic', 'last_name': 'Owner',
                                                 'password1': PASSWORD, 'password2': PASSWORD, 'synthetic_only': 'on', **extra})
 
 
@@ -107,7 +109,7 @@ class InviteClinicOwner(InviteFixture):
     def test_accepting_creates_the_organization_department_owner_and_one_welcome_credit(self):
         self.invite()
         link = self.link()
-        self.assertContains(Client().get(link), 'Set up Synthetic Vein Clinic')
+        self.assertContains(SurfaceClient().get(link), 'Set up Synthetic Vein Clinic')
         self.assertEqual(self.accept(link).status_code, 302)
         owner = User.objects.get(email='owner@clinic.invalid')
         self.assertIsNotNone(owner.verified_at)
@@ -119,11 +121,11 @@ class InviteClinicOwner(InviteFixture):
         self.assertEqual(LedgerEntry.objects.get(key=f'welcome:{owner.pk}').amount, Decimal('10'))
         self.assertTrue(AuditEvent.objects.filter(action='clinic.invitation_accepted', target=str(invitation.pk)).exists())
         # Single use.
-        self.assertEqual(Client().get(link).status_code, 404)
+        self.assertEqual(SurfaceClient().get(link).status_code, 404)
         self.assertEqual(self.accept(link, email='owner@clinic.invalid').status_code, 404)
         self.assertEqual(Organization.objects.filter(name='Synthetic Vein Clinic').count(), 1)
         # The new owner can now invite colleagues the ordinary way.
-        member = Client()
+        member = SurfaceClient()
         member.force_login(owner)
         self.assertContains(member.get('/team/'), 'Create invitation')
 
@@ -140,11 +142,11 @@ class InviteClinicOwner(InviteFixture):
         stranger = User.objects.create_user(username='stranger', email='stranger@synthetic.invalid', verified_at=timezone.now())
         self.invite()
         link = self.link()
-        self.assertContains(Client().get(link), 'This email already has an account.')
-        wrong = Client()
+        self.assertContains(SurfaceClient().get(link), 'This email already has an account.')
+        wrong = SurfaceClient()
         wrong.force_login(stranger)
         self.assertEqual(wrong.post(link).status_code, 403)
-        right = Client()
+        right = SurfaceClient()
         right.force_login(existing)
         self.assertEqual(right.post(link).status_code, 302)
         self.assertTrue(Membership.objects.filter(user=existing, role='owner', department__name='Vascular lab').exists())
@@ -159,7 +161,7 @@ class InviteClinicOwner(InviteFixture):
         self.assertIsNotNone(invitation.revoked_at)
         self.assertEqual(invitation.status(), 'revoked')
         self.assertTrue(AuditEvent.objects.filter(action='admin.clinic_invitation_revoked', target=str(invitation.pk)).exists())
-        self.assertEqual(Client().get(revoked_link).status_code, 404)
+        self.assertEqual(SurfaceClient().get(revoked_link).status_code, 404)
         self.assertEqual(self.accept(revoked_link, email='revoked@clinic.invalid').status_code, 404)
 
         self.invite(email='late@clinic.invalid')
@@ -181,7 +183,7 @@ class InviteClinicOwner(InviteFixture):
         self.assertEqual(self.client.get('/console/clinic-invitations/').status_code, 404)
         self.assertEqual(self.client.post('/console/clinic-invitations/', {'email': 'x@clinic.invalid', 'organization_name': 'X',
                                                                            'department_name': 'Y'}).status_code, 404)
-        unverified = Client()
+        unverified = SurfaceClient()
         unverified.force_login(self.admin)  # staff, but no OTP verification in this session
         self.assertRedirects(unverified.get('/console/clinic-invitations/'), '/mfa/', fetch_redirect_response=False)
         self.assertFalse(ClinicInvitation.objects.exists())
@@ -297,7 +299,7 @@ class DoctorPagesFollowTheWelcomeCreditSetting(TestCase):
         for value, promised in ((Decimal('10'), True), (Decimal('0'), False)):
             with self.subTest(setting=value), override_settings(QUILLMD_WELCOME_CREDIT=value), \
                     patch('core.views.verification_mail', return_value=Delivery(status='failed', recovery_staged=True)):
-                client = Client()
+                client = SurfaceClient()
                 response = client.post('/register/', {'email': f'walk-in-{value}@synthetic.invalid', 'first_name': 'Walk',
                                                        'last_name': 'In', 'password1': password, 'password2': password,
                                                        'synthetic_only': 'on'}, follow=True)

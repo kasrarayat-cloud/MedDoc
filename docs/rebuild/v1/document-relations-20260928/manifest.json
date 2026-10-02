@@ -1,0 +1,21 @@
+{
+  "utc": "2026-09-28T03:52:09.050161+00:00",
+  "base": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+  "files": {
+    "rebuild/documents/word_v3.py": "b364091d33851a51edd8b88c374effd0aab8aea103f4015cfa656702d6444849",
+    "rebuild/documents/test_document_relations.py": "1e6dd03f4807caf84d40eb77b1e3c3c01c0fe71e8bf2cf86be71dffcc39a69b7",
+    "docs/rebuild/v1/document-relations-20260928/PLAN.json": "bd5bfd808818d4311391d61a371966e6db536fc02aba51bd9076b651f118a290",
+    "docs/rebuild/v1/document-relations-20260928/independent-probe.py": "cb77d3fa11e9abb77c2ff110039628b91a1063c102e50324f60b4c7f0b30e712",
+    "docs/rebuild/v1/document-relations-20260928/old-mapping-export-equivalence.json": "8f700f6e9fe344159d5a0c4367bfa885fdd3df3b6bdeba2d5f8db78660df0a71",
+    "docs/rebuild/v1/document-relations-20260928/refutation-after.json": "64cdeba93a228c69b37a5b9e2b01fdc96a1bc1fe1c83e74707a2e8bd301f803d",
+    "docs/rebuild/v1/document-relations-20260928/refutation-confirmed.json": "71151a3b6a3144f0fce41ed5741a527af9ea82b80f0c1fe5c9d79b5cee579bbc",
+    "docs/rebuild/v1/document-relations-20260928/relations-after-01.log": "84b39ce80a9e429ad2c5ef91dd2fc4955934093e6250fc6719e9e0b79e06edf1",
+    "docs/rebuild/v1/document-relations-20260928/relations-after-02.log": "b9319581da3cf3aae24ab3537e3fdb7cf6c91687d4565a382e3c62e3a357ea3f",
+    "docs/rebuild/v1/document-relations-20260928/relations-all-before.log": "5b7b92abb990b35cce340c0023281505a6f443b0c66f949034b85af1fe44c005",
+    "docs/rebuild/v1/document-relations-20260928/relations-before.log": "9b7c505c8577c5e7da44f19e0ae2c7ba6cd4b55dfddc78aec91a6be62bd690bb",
+    "docs/rebuild/v1/document-relations-20260928/relations-final-engine.log": "600444184c430fdc4687eb327346893738fb7df068cb6e0187c67f82df59f6af"
+  },
+  "private_original_and_mapping_evidence": "/opt/meddoc-pro/.worktrees/v1-release-integration/rebuild/.runtime/release-integration/d30-continuation",
+  "native_word": false,
+  "provider_calls": 0
+}

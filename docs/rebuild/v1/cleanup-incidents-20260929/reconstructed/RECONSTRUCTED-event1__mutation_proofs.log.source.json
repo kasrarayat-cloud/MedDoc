@@ -1,0 +1,11 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__mutation_proofs.log",
+ "label": "RECONSTRUCTED from session transcript",
+ "basis": [
+  "P/subagents/workflows/wf_345deca9-b32/agent-aebee20aa731fa229.jsonl:396 (tool output of the FINAL run, 2026-09-29T00:05:27Z; the log was written by `tee` and the terminal copy passed through grep -E \"applied|KILLED|SURVIVED|restored|ALL|BASELINE|exit 0\")",
+  "one line the grep dropped (\"MUTANTS (each must make its targeted test FAIL):\") restored from the full first run at agent-aebee20aa731fa229.jsonl:372 (00:03:31Z), where it is static text printed by mutation_proofs.py"
+ ],
+ "caveat": "no sha256 of the original log was ever recorded, so byte identity cannot be proven; trailing newline assumed",
+ "sha256": "98abb51386216da41a9259c986294df763f51d68a57d08026677d6d7381fb23c",
+ "lines": 35
+}

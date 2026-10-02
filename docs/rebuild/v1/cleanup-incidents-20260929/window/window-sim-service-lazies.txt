@@ -1,0 +1,6 @@
+after boot: 11 first-party modules resident, 0 from candidate source: -
+request before     GET /health/ -> ('200 OK', 105)
+before window: 32 first-party modules resident, 0 from candidate source: -
+window: from documents.sdk_service import WM_IOV_SHA256, run, SdkUnavailable -> ok
+window: from core.wm_conflicts import WmConflicts, describe -> ok
+after restore: 34 first-party modules resident, 2 from candidate source: core.wm_conflicts documents.sdk_service

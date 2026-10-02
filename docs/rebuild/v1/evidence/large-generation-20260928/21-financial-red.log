@@ -1,0 +1,77 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFFF
+======================================================================
+FAIL: test_late_known_receipt_reopens_only_accounting_and_can_be_absorbed (core.tests.test_batch_closeout.BatchCloseout.test_late_known_receipt_reopens_only_accounting_and_can_be_absorbed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 79, in test_late_known_receipt_reopens_only_accounting_and_can_be_absorbed
+    batch,part,_=self.late_response()
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 67, in late_response
+    self.assertEqual(part.job.state,'reconciliation')
+AssertionError: 'failed' != 'reconciliation'
+- failed
++ reconciliation
+
+
+======================================================================
+FAIL: test_late_receipt_does_not_overwrite_conflicting_manual_platform_cost (core.tests.test_batch_closeout.BatchCloseout.test_late_receipt_does_not_overwrite_conflicting_manual_platform_cost)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 98, in test_late_receipt_does_not_overwrite_conflicting_manual_platform_cost
+    batch,part,_=self.late_response(prior_amount=Decimal('0.50'))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 67, in late_response
+    self.assertEqual(part.job.state,'reconciliation')
+AssertionError: 'failed' != 'reconciliation'
+- failed
++ reconciliation
+
+
+======================================================================
+FAIL: test_late_response_preserves_replacement_batch_and_its_holds (core.tests.test_batch_closeout.BatchCloseout.test_late_response_preserves_replacement_batch_and_its_holds)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 91, in test_late_response_preserves_replacement_batch_and_its_holds
+    batch,part,replacement=self.late_response(new_batch=True)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 67, in late_response
+    self.assertEqual(part.job.state,'reconciliation')
+AssertionError: 'failed' != 'reconciliation'
+- failed
++ reconciliation
+
+
+======================================================================
+FAIL: test_late_unreadable_metering_remains_visible_until_explicit_resolution (core.tests.test_batch_closeout.BatchCloseout.test_late_unreadable_metering_remains_visible_until_explicit_resolution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 105, in test_late_unreadable_metering_remains_visible_until_explicit_resolution
+    batch,part,_=self.late_response(unreadable=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 67, in late_response
+    self.assertEqual(part.job.state,'reconciliation')
+AssertionError: 'failed' != 'reconciliation'
+- failed
++ reconciliation
+
+
+======================================================================
+FAIL: test_recorded_final_interruption_financial_closeout_closes_staged_sibling (core.tests.test_batch_closeout.BatchCloseout.test_recorded_final_interruption_financial_closeout_closes_staged_sibling)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_batch_closeout.py", line 45, in test_recorded_final_interruption_financial_closeout_closes_staged_sibling
+    self.assertFalse(jobs.pending(self.encounter))
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 5 tests in 17.106s
+
+FAILED (failures=5)
+Destroying test database for alias 'default'...
+Found 5 test(s).
+System check identified no issues (0 silenced).

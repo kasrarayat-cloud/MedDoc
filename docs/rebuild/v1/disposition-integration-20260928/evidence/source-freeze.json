@@ -1,0 +1,32 @@
+{
+  "base": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+  "source": {
+    "rebuild/core/batch_jobs.py": "7e9f78b20ded82f604fac42b4164e60644124f3c531a5dc1d2161a12a5b4c2ae",
+    "rebuild/core/disposition.py": "8449b51bf49325962af1c879eebf5afceeb16932eea60c6db13d2366a2aaa460",
+    "rebuild/core/disposition_catalog.py": "1597fe31f5e3eac00b3b7af9166ce708601290077654582811fe0d9bd2475d4b",
+    "rebuild/core/disposition_views.py": "d3405c00f8dfe6ae01229785e741a0892d3aaa2c8e2b8e705861a3c4a45fbb1b",
+    "rebuild/core/jobs.py": "cf5d134864e5fc4c913070f69450183b63c0f80ad54ef8cdf6ecd292bc2d990f",
+    "rebuild/core/management/commands/worker.py": "08aa9721d4e058b0c33cfd5df117a7b928d862b50f334acb911dd871d54e8297",
+    "rebuild/core/mapping_jobs.py": "108d7bd1b762e69d82cd5e0e17c70ffdc72a2639efe8c2ee1a0bc7ba8f7f7bbd",
+    "rebuild/core/migrations/0028_disposition_preparation.py": "a29506a90269672983ee79da6d19adb802e2c5bc944486d3fff1b6ce50a6d379",
+    "rebuild/core/migrations/0029_merge_batch_disposition.py": "f8910d3e3ab81cd81b0d43db61dfcebd5bb8b09aa473b41281107f3f64879a82",
+    "rebuild/core/models.py": "be54e77f085966caa21d54f3bb847495177632b2302c955866867fadbfa2af7c",
+    "rebuild/core/retention.py": "0b1e904e804d10d7057d24f6a6e9c993959e9ac84e31704b29eabaa905b9663a",
+    "rebuild/core/retention_readiness.py": "a5249aa79fcbc0acf8135421123f43598ad1f31f8bad3bc688674c33abc154e3",
+    "rebuild/core/tests/test_disposition_integration.py": "4e5a2a0f82a0754a9e8e1cb79e473bc6d1b341de2a5ac946998607ebdf0a0bc9",
+    "rebuild/core/tests/test_disposition_preparation.py": "b9454a5288f6e3ba6bb09d1b16a80519d3053bb171135e7abe9389280c3304fc",
+    "rebuild/core/tests/test_restore_integrity_contract.py": "309a2dc9a82ab6c4a7d5dca24fc8ea0f9ea79d123843ccfc486710479952bbfd",
+    "rebuild/ops/integrity_contract.py": "f0a91150972055d6ddfdd2770edb4344f3ea45ed061b99b47afa80588cd29a61",
+    "rebuild/ops/production_restore_check.py": "0b78651993d4348642f8ace6ee5426946cbc9790c64505ce31955c0051bc6528",
+    "rebuild/ops/retention/policy.schema.json": "08f745d5ba1164a923ba846ab60c8bac78f0b794c60f5459dc05fe7e40ceb2d9",
+    "rebuild/ops/retention/policy.unset.json": "45591b8556a19608eccee933feccfba8f079dcef67de41f9339cc478fae54b39",
+    "rebuild/ops/test_production_restore_check.py": "8de78710c9d7af42c320a22eef90f47e52c765dd94036b374c2e91e1559d92c4",
+    "rebuild/quillmd/settings.py": "db9a1be173c09944c6fa279dd9c640f78f4c3b494f4770034fdf1f4d9367eb3a",
+    "rebuild/quillmd/urls.py": "a29e834963ccfca61a304d8791ee613ed80ebf2020a2ba0e96519631214b14cb",
+    "rebuild/templates/admin_dashboard.html": "b2ac43e9bc1006d3475660b6da9cd137d4f084793a8df1a687156114cec43723",
+    "rebuild/templates/disposition_review.html": "5652273c7c434d6e3c5dc9fa95c1f5f8ad0da8d1879ef16557a09ff8c0a202d4",
+    "rebuild/templates/restore_preparation.html": "296a800bae6701646339b981f7d4612eab8afdd61610198988ae2d72ebce8981"
+  },
+  "source_set_sha256": "fdff65f3b17e105b1ebd50cbcccea78505a7c08690e6792e391115a6cb3381c9",
+  "all_match_final_test_source": true
+}

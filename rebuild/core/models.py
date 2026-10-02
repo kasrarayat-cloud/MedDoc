@@ -31,6 +31,170 @@ class Entity(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     class Meta: abstract=True
 
+class RetentionHold(Entity):
+    """Preservation instruction; the reference is a document hash, never clinical prose.
+
+    Scope is immutable. Ending a hold appends a separate release; preserved evidence
+    survives release. No duration or deletion authority is inferred from this row.
+    """
+    scope=models.CharField(max_length=16)
+    organization=models.ForeignKey('Organization',null=True,on_delete=models.PROTECT)
+    department=models.ForeignKey('Department',null=True,on_delete=models.PROTECT)
+    patient=models.ForeignKey('Patient',null=True,on_delete=models.PROTECT)
+    encounter=models.ForeignKey('Encounter',null=True,on_delete=models.PROTECT)
+    authority_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+    request_key=models.UUIDField(unique=True)
+    class Meta:
+        constraints=[models.CheckConstraint(name='retention_hold_one_scope',condition=(
+            models.Q(scope='global',organization__isnull=True,department__isnull=True,patient__isnull=True,encounter__isnull=True)
+            |models.Q(scope='organization',organization__isnull=False,department__isnull=True,patient__isnull=True,encounter__isnull=True)
+            |models.Q(scope='department',organization__isnull=True,department__isnull=False,patient__isnull=True,encounter__isnull=True)
+            |models.Q(scope='patient',organization__isnull=True,department__isnull=True,patient__isnull=False,encounter__isnull=True)
+            |models.Q(scope='encounter',organization__isnull=True,department__isnull=True,patient__isnull=True,encounter__isnull=False)))]
+
+class RetentionHoldRelease(Entity):
+    hold=models.OneToOneField(RetentionHold,on_delete=models.PROTECT,related_name='release')
+    authority_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class PreservedRecord(Entity):
+    """Private clinical evidence captured by PostgreSQL before a held row changes.
+
+    Not an audit log or an admin-console response. Contains patient information;
+    uses the clinical database's access/backup boundary. Append-only at the DB.
+    """
+    source_table=models.CharField(max_length=64)
+    source_id=models.UUIDField()
+    operation=models.CharField(max_length=6)
+    hold_ids=models.JSONField()
+    prior_record=models.JSONField()
+
+class PreservedFile(Entity):
+    storage_key=models.CharField(max_length=100,unique=True)
+    sha256=models.CharField(max_length=64)
+    byte_count=models.PositiveBigIntegerField()
+    hold_ids=models.JSONField()
+
+class DispositionRequest(Entity):
+    """Review proposal only. No operation represented here authorizes deletion."""
+    department=models.ForeignKey('Department',on_delete=models.PROTECT)
+    scope=models.CharField(max_length=16)
+    target_id=models.UUIDField()
+    authority_sha256=models.CharField(max_length=64)
+    operation=models.CharField(max_length=16,default='review_only',editable=False)
+    request_key=models.UUIDField(unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionPlan(Entity):
+    request=models.ForeignKey(DispositionRequest,on_delete=models.PROTECT,related_name='plans')
+    graph=models.JSONField()
+    graph_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionReview(Entity):
+    plan=models.OneToOneField(DispositionPlan,on_delete=models.PROTECT,related_name='review')
+    decision=models.CharField(max_length=16)
+    graph_sha256=models.CharField(max_length=64)
+    evidence_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class RestorePreparation(Entity):
+    instance_id=models.UUIDField()
+    target=models.JSONField()
+    backup_sha256=models.CharField(max_length=64)
+    report=models.JSONField()
+    report_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionPolicyAdmission(Entity):
+    """Signed prospective authority; a historical review proposal cannot become this."""
+    policy_id=models.UUIDField(unique=True)
+    department=models.ForeignKey('Department',on_delete=models.PROTECT)
+    envelope=models.JSONField()
+    envelope_sha256=models.CharField(max_length=64,unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionInstruction(Entity):
+    policy=models.ForeignKey(DispositionPolicyAdmission,on_delete=models.PROTECT)
+    department=models.ForeignKey('Department',on_delete=models.PROTECT)
+    target_id=models.UUIDField()
+    snapshot_sha256=models.CharField(max_length=64)
+    source_snapshot=models.JSONField()
+    source_created_at=models.DateTimeField()
+    request_key=models.UUIDField(unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionApproval(Entity):
+    instruction=models.OneToOneField(DispositionInstruction,on_delete=models.PROTECT,related_name='approval')
+    snapshot_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionTombstone(Entity):
+    # Scalar identities deliberately survive removal of an eligible empty draft,
+    # and permit verified independent-journal replay onto an older backup.
+    target_id=models.UUIDField(unique=True)
+    department_id=models.UUIDField()
+    instruction_id=models.UUIDField(unique=True)
+    journal_entry=models.JSONField()
+    entry_sha256=models.CharField(max_length=64,unique=True)
+
+class DispositionCompletion(Entity):
+    tombstone=models.OneToOneField(DispositionTombstone,on_delete=models.PROTECT,related_name='completion')
+    outcome=models.CharField(max_length=24)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class RetentionHoldReplay(Entity):
+    """The imported-hold marker: one journaled hold or release replayed into a quarantined restored database.
+
+    Scalar identities, like a tombstone's, because the journaled target may be absent from an older backup. The outcome
+    states what this database holds for the entry (present, imported, or target_absent: the hold, and its release, then
+    apply if that target is inserted again). Append-only; the signed entry is kept verbatim and never contains clinical
+    prose.
+    """
+    record_id=models.UUIDField(unique=True)
+    hold_id=models.UUIDField()
+    event=models.CharField(max_length=8)
+    outcome=models.CharField(max_length=16)
+    journal_entry=models.JSONField()
+    entry_sha256=models.CharField(max_length=64,unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class RestoreAdmission(Entity):
+    """Append-only admission of one quarantined restored target. Quarantine lifts only against this record."""
+    instance_id=models.UUIDField(unique=True)
+    checkpoint=models.JSONField()
+    journal_sequence=models.PositiveIntegerField()
+    journal_head_sha256=models.CharField(max_length=64)
+    report=models.JSONField()
+    report_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class RedactionRequest(Entity):
+    """A first custodian's request to remove one draft's clinical content, naming that exact content by its digest.
+
+    The reason is a SHA-256 of the authority document, never prose. Append-only; a second, distinct custodian executes
+    it (core.redaction.execute), and only while the content still has this digest."""
+    encounter=models.ForeignKey('Encounter',on_delete=models.PROTECT,related_name='+')
+    department=models.ForeignKey('Department',on_delete=models.PROTECT,related_name='+')
+    reason_sha256=models.CharField(max_length=64)
+    content_sha256=models.CharField(max_length=64)
+    request_key=models.UUIDField(unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT,related_name='+')
+
+class RedactionTombstone(Entity):
+    """A draft whose clinical content was removed while its work, money and audit rows stay (every reference to an
+    encounter is PROTECT). Scalar identities, like a disposition tombstone's, so the verified journal entry can be
+    replayed onto an older restored backup that lacks the request. Who, when and why are the signed entry kept verbatim;
+    `files` lists the storage keys and digests whose bytes were removed. Append-only."""
+    target_id=models.UUIDField(unique=True)
+    department_id=models.UUIDField()
+    request_id=models.UUIDField(unique=True)
+    content_sha256=models.CharField(max_length=64)
+    files=models.JSONField()
+    journal_entry=models.JSONField()
+    entry_sha256=models.CharField(max_length=64,unique=True)
+
 class ProviderIdentifiers:
     @property
     def legacy_resource_identifier(self):
@@ -130,12 +294,25 @@ class TemplateVersion(Entity):
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
     # Contract v3 Word mappings only ('' for every legacy, tab, PDF and qualified WM mapping). Kept OUT of
     # `document_backend`, whose non-emptiness is how every page recognises the qualified WM form.
-    contract=models.CharField(max_length=12,blank=True,default='')
+    # The database defaults (db_default) exist for the previous release (dedac162, core 0001-0018): its INSERT omits
+    # these columns, and an image rollback onto this schema must still upload and edit mappings (MIG-1). Its versions
+    # are legacy mappings; one carrying v3 fields is refused by mapping_v3_fields_record_v3_contract below.
+    contract=models.CharField(max_length=12,blank=True,default='',db_default='')
     # The clinician's corrections that made THIS version from the previous one (v3 only):
     # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
-    corrections=models.JSONField(default=dict,blank=True)
-    assistance=models.JSONField(default=dict,blank=True)
-    class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
+    corrections=models.JSONField(default=dict,blank=True,db_default={})
+    assistance=models.JSONField(default=dict,blank=True,db_default={})
+    # Unknown on all historical mappings; absence is never proof of independent
+    # fields. This immutable version can carry a separately qualified rule manifest.
+    generation_constraints=models.JSONField(null=True,blank=True,default=None)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique'),
+            # Fields carrying a contract v3 locator make a v3 mapping, whoever writes the row. Without this, a writer that
+            # knows no contract (the previous release's mapping edit after an image rollback, whose INSERT gets the
+            # '' default) would record a v3 mapping as a legacy one, and a never-confirmed automatic mapping would
+            # then start documents with no confirmation gate. Versions are immutable, so this is checked at INSERT.
+            models.CheckConstraint(condition=models.Q(contract='v3')|~models.Q(fields__contains=[{'locator':{'contract':'v3'}}]),
+                                   name='mapping_v3_fields_record_v3_contract')]
     @property
     def confirmed(self):
         """The clinician's confirmation of this mapping version, or None. Mapping versions are immutable rows (a
@@ -219,6 +396,54 @@ class Job(ProviderIdentifiers,Entity):
     @property
     def pricing_snapshot(self):
         return self.config.get('pricing_version','Not captured for this historical job')
+class GenerationBatch(Entity):
+    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,related_name='generation_batches')
+    user=models.ForeignKey(User,on_delete=models.PROTECT)
+    admission_key=models.UUIDField(unique=True)
+    revision=models.PositiveIntegerField()
+    plan=models.JSONField()
+    plan_sha256=models.CharField(max_length=64)
+    maximum_charge=models.DecimalField(max_digits=24,decimal_places=12)
+    state=models.CharField(max_length=20,default='queued')
+    error=models.CharField(max_length=250,blank=True)
+    finished_at=models.DateTimeField(null=True)
+    class Meta:
+        constraints=[models.CheckConstraint(condition=models.Q(maximum_charge__gte=0),name='generation_batch_charge_nonnegative'),
+            models.UniqueConstraint(fields=['encounter'],condition=models.Q(state__in=['queued','running','validating','reconciliation']),name='one_active_generation_batch')]
+    @property
+    def department(self):return self.encounter.department
+
+
+class GenerationBatchPart(Entity):
+    batch=models.ForeignKey(GenerationBatch,on_delete=models.PROTECT,related_name='parts')
+    job=models.OneToOneField(Job,on_delete=models.PROTECT,related_name='generation_part')
+    ordinal=models.PositiveSmallIntegerField()
+    field_ids=models.JSONField()
+    request_sha256=models.CharField(max_length=64)
+    maximum_charge=models.DecimalField(max_digits=24,decimal_places=12)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['batch','ordinal'],name='generation_batch_ordinal_unique'),
+            models.CheckConstraint(condition=models.Q(ordinal__gte=1,ordinal__lte=8,maximum_charge__gte=0),name='generation_batch_part_bounds')]
+
+
+class GenerationBatchEvent(Entity):
+    batch=models.ForeignKey(GenerationBatch,on_delete=models.PROTECT,related_name='events')
+    part=models.ForeignKey(GenerationBatchPart,on_delete=models.PROTECT,null=True,related_name='events')
+    kind=models.CharField(max_length=32)
+    event_key=models.CharField(max_length=160,unique=True)
+    details=models.JSONField(default=dict)
+
+
+class GenerationBatchResponse(Entity):
+    part=models.OneToOneField(GenerationBatchPart,on_delete=models.PROTECT,related_name='response')
+    result_path=models.CharField(max_length=100)
+    result_sha256=models.CharField(max_length=64)
+    model=models.CharField(max_length=100)
+    stop_reason=models.CharField(max_length=100)
+    # The complete SDK response stays in the private child Job result artifact.
+    provider_resource_id=models.CharField(max_length=140,blank=True)
+
+
 class Wallet(Entity):
     user=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     organization=models.ForeignKey(Organization,on_delete=models.PROTECT,null=True)
@@ -335,12 +560,24 @@ class CodeSuggestion(Entity):
     evidence=models.TextField()
     accepted_by=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     accepted_at=models.DateTimeField(null=True)
+    # The identity of the release the code came from (its imported file's sha256), recorded with the suggestion and checked
+    # by the database against that release (0034); '' only on rows written before it. Releases and codes are append-only.
+    release_sha256=models.CharField(max_length=64,blank=True,default='',db_default='')
+    # A changed notes save never deletes an accepted code: it keeps the acceptance and marks it for the clinician to accept
+    # again or withdraw (0034's guard refuses deleting an accepted code). Finalization freezes every row (the same guard).
+    review_required=models.BooleanField(default=False,db_default=False)
     @property
     def system(self): return self.terminology.release.system
     @property
     def code(self): return self.terminology.code
     @property
     def description(self): return self.terminology.description
+    @property
+    def acceptance(self):
+        """The acceptance a page shows, posted back by its withdraw form: who accepted the code and when. Accepting does not
+        renumber the revision, so a withdraw from a page older than another clinician's acceptance is told apart only by
+        this (refutation C5 of 4cfa4301: it deleted that newer acceptance)."""
+        return f'{self.accepted_by_id}@{self.accepted_at.isoformat()}' if self.accepted_at else ''
     class Meta: constraints=[models.UniqueConstraint(fields=['encounter','terminology'],name='suggestion_once')]
 class AuditEvent(Entity):
     actor=models.ForeignKey(User,on_delete=models.PROTECT,null=True)

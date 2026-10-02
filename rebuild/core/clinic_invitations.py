@@ -17,14 +17,14 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .billing import welcome_credit, welcome_credit_label
-from .forms import RegisterForm
+from .forms import ACCOUNT_CREATED_MEANWHILE, INVITATION_ALREADY_ACCEPTED, RegisterForm, account_created_meanwhile
 from .models import ClinicInvitation, Department, Membership, Organization, User
 from .security import audit, digest, token
 
@@ -64,36 +64,51 @@ def accept(request, raw):
             if not existing and form.cleaned_data['email'] != invitation.email:
                 form.add_error('email', 'Use the invited email address.')
             else:
-                with transaction.atomic():
-                    invitation = ClinicInvitation.objects.select_for_update().get(pk=invitation.pk)
-                    if invitation.accepted_at or invitation.revoked_at or invitation.expires_at <= timezone.now():
-                        raise Http404
-                    if not issuer_still_authorised(invitation):
-                        return HttpResponse('This invitation is no longer valid. Ask QuillMD for a new one.',
-                                            status=409, content_type='text/plain')
-                    if existing:
-                        user = User.objects.select_for_update().get(pk=existing.pk)
-                    else:
-                        user = form.save(commit=False)
-                        user.username = invitation.email
-                        user.verified_at = timezone.now()
-                        user.save()
-                    # Possession of the emailed high-entropy token verifies this mailbox.
-                    if not user.verified_at:
-                        user.verified_at = timezone.now()
-                        user.save(update_fields=['verified_at'])
-                    organization = Organization.objects.create(name=invitation.organization_name)
-                    department = Department.objects.create(organization=organization, name=invitation.department_name)
-                    Membership.objects.create(user=user, department=department, role='owner')
-                    welcome_credit(user)
-                    invitation.accepted_at = timezone.now()
-                    invitation.accepted_by = user
-                    invitation.organization = organization
-                    invitation.save(update_fields=['accepted_at', 'accepted_by', 'organization'])
-                    audit(user, 'clinic.invitation_accepted', invitation.pk, department=department)
-                label = welcome_credit_label()
-                messages.success(request, f'{invitation.organization_name} is ready. Your {label} personal welcome credit is available.'
-                                 if label else f'{invitation.organization_name} is ready.')
-                return redirect('login')
+                try:
+                    with transaction.atomic():
+                        invitation = ClinicInvitation.objects.select_for_update().get(pk=invitation.pk)
+                        # Accepted by a simultaneous submission of this same invitation (RR2-ACC-3): this one wrote nothing.
+                        if invitation.accepted_at:
+                            messages.info(request, INVITATION_ALREADY_ACCEPTED)
+                            return redirect('login')
+                        if invitation.revoked_at or invitation.expires_at <= timezone.now():
+                            raise Http404
+                        if not issuer_still_authorised(invitation):
+                            return HttpResponse('This invitation is no longer valid. Ask QuillMD for a new one.',
+                                                status=409, content_type='text/plain')
+                        if existing:
+                            # FOR NO KEY UPDATE: welcome_credit locks this account's wallet next, and the account's own
+                            # in-flight requests take FOR KEY SHARE on this row at commit (core.retention, RF-R1).
+                            user = User.objects.select_for_update(no_key=True).get(pk=existing.pk)
+                        else:
+                            user = form.save(commit=False)
+                            user.username = invitation.email
+                            user.verified_at = timezone.now()
+                            user.save()
+                        # Possession of the emailed high-entropy token verifies this mailbox.
+                        if not user.verified_at:
+                            user.verified_at = timezone.now()
+                            user.save(update_fields=['verified_at'])
+                        organization = Organization.objects.create(name=invitation.organization_name)
+                        department = Department.objects.create(organization=organization, name=invitation.department_name)
+                        Membership.objects.create(user=user, department=department, role='owner')
+                        welcome_credit(user)
+                        invitation.accepted_at = timezone.now()
+                        invitation.accepted_by = user
+                        invitation.organization = organization
+                        invitation.save(update_fields=['accepted_at', 'accepted_by', 'organization'])
+                        audit(user, 'clinic.invitation_accepted', invitation.pk, department=department)
+                except IntegrityError:
+                    # Another request created this address's account first (R-A, forms.account_created_meanwhile): answered as
+                    # the same request a moment later is. The whole acceptance rolled back, so this invitation is unused.
+                    if existing or not account_created_meanwhile(invitation.email):
+                        raise
+                    messages.error(request, ACCOUNT_CREATED_MEANWHILE)
+                    existing_account = True
+                else:
+                    label = welcome_credit_label()
+                    messages.success(request, f'{invitation.organization_name} is ready. Your {label} personal welcome credit is available.'
+                                     if label else f'{invitation.organization_name} is ready.')
+                    return redirect('login')
     return render(request, 'clinic_invite.html', {'form': form, 'clinic_invitation': invitation,
                                                   'existing_invited_account': existing_account})

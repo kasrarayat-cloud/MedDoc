@@ -1,0 +1,62 @@
+[
+  {
+    "case": "character_underline",
+    "fields": [
+      {
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": "cell",
+        "label": "Date of Birth"
+      }
+    ],
+    "notes": [],
+    "original_sha256": "913ba6f86ce9abbcdea0dfb66c08501dff3f9119ddcd70ab10e107c98fdb0b85"
+  },
+  {
+    "case": "inherited_character_underline",
+    "fields": [
+      {
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": "cell",
+        "label": "Date of Birth"
+      }
+    ],
+    "notes": [],
+    "original_sha256": "74342df5dd2388b027fd4a781acbd5407c6b0fca33bd4686d87ddc8c99109c8c"
+  },
+  {
+    "case": "unknown_character",
+    "fields": [
+      {
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": "cell",
+        "label": "Date of Birth"
+      }
+    ],
+    "notes": [],
+    "original_sha256": "9ee6f6e0f65b75f6c8cbee2c32cef095c43b64410e7f9987f3cf61eb95da44a3"
+  },
+  {
+    "case": "default_table_underline",
+    "fields": [
+      {
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": "cell",
+        "label": "Date of Birth"
+      }
+    ],
+    "notes": [],
+    "original_sha256": "37e0027400b8a4d352833c297200c294eee6c644d9e379dc88577c99be26ea1c"
+  },
+  {
+    "case": "simple_spacing",
+    "fields": [
+      {
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": "cell",
+        "label": "Date of Birth"
+      }
+    ],
+    "notes": [],
+    "original_sha256": "462505ff5efee23b4b67f86cbbd61d261bf6f6b98254eb6849062cb66032540e"
+  }
+]

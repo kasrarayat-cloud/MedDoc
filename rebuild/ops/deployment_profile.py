@@ -88,6 +88,11 @@ FIXED = {
 # setting (preview gate credentials, preview auth) cannot be carried into production by copy.
 APPLICATION_FEATURE_FLAGS = frozenset({
     'QUILLMD_WM_NARRATIVE', 'QUILLMD_MAPPING_ASSISTANCE', 'QUILLMD_MAPPING_ASSISTANCE_LIVE',
+    # 2026-10-01: the ordinary field-relations contract's explicit production switch ('0' or '1'; the application
+    # refuses real mode with claude-sonnet-5-5 and no value, quillmd/application_profile.real_mode_problems).
+    'QUILLMD_V3_FIELD_RELATIONS',
+    # Role suggestions on the legacy default path ('0' or '1'; quillmd/settings.py refuses any other value).
+    'QUILLMD_ROLE_SUGGESTIONS',
 })
 ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_DEPLOYMENT_PROFILE', 'QUILLMD_DATA_MODE', 'QUILLMD_STRIPE_MODE', 'QUILLMD_REGISTRATION',
@@ -106,6 +111,7 @@ ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_WORD_RUNTIME', 'QUILLMD_WORD_MANIFEST', 'QUILLMD_WORD_MANIFEST_SHA256', 'QUILLMD_WORD_ENGINE',
     'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
     'QUILLMD_PAYER_ROLE_GRANTED', 'CPT_LICENSE_ID', 'CPT_LICENSE_EXPIRY',
+    'QUILLMD_READINESS_WORKER_HEARTBEAT_SECONDS', 'QUILLMD_READINESS_OLDEST_QUEUED_SECONDS', 'QUILLMD_READINESS_QUEUE_DEPTH',
 }) | APPLICATION_FEATURE_FLAGS
 # The application settings (quillmd/application_profile.py, docs/rebuild/v1/application-settings.md) that a
 # production profile's fixed modes select. The launcher forces them; a rendered environment may carry them only

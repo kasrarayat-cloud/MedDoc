@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-verify__summ.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl:110",
+   "timestamp": "2026-09-29T09:24:28.089Z",
+   "sha256_after": "aa28d591d05ddb03093b9a095de099c97eec8e561f0c86971f6f942eb8d55f72",
+   "bytes_after": 751
+  }
+ ],
+ "lines": 10,
+ "sha256": "aa28d591d05ddb03093b9a095de099c97eec8e561f0c86971f6f942eb8d55f72"
+}

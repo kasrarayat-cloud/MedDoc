@@ -1,0 +1,105 @@
+Creating test database for alias 'default' ('test_v1_disposition_04_adoption_counterexample')...
+Found 1 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying core.0023_retention_preservation... OK
+  Applying core.0024_preserved_file... OK
+  Applying core.0025_preservation_guards... OK
+  Applying core.0026_preservation_scope_identity... OK
+  Applying core.0028_disposition_preparation... OK
+  Applying core.0027_generation_batches... OK
+  Applying core.0029_merge_batch_disposition... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading) ... /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+
+  test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading) (operation=<function QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading.<locals>.<lambda> at 0x77af06bc2840>) ... FAIL
+  test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading) (operation=<function QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading.<locals>.<lambda> at 0x77af01404a40>) ... ERROR
+test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading) ... FAIL
+
+======================================================================
+ERROR: test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading) (operation=<function QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading.<locals>.<lambda> at 0x77af01404a40>)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 140, in test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading
+    operation()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 138, in <lambda>
+    for operation in (lambda: batch_jobs.finish(batch.pk), lambda: batch_jobs.recover_recorded(batch.pk, self.user)):
+                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/batch_jobs.py", line 427, in recover_recorded
+    require_admin(user)
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/batch_jobs.py", line 363, in require_admin
+    custodian(user)
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/retention.py", line 46, in custodian
+    raise PermissionDenied('An active verified administrator is required.')
+django.core.exceptions.PermissionDenied: An active verified administrator is required.
+
+======================================================================
+FAIL: test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading) (operation=<function QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading.<locals>.<lambda> at 0x77af06bc2840>)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 139, in test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading
+    with self.subTest(operation=operation), self.assertRaisesMessage(ValidationError, 'quarantined'):
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+AssertionError: ValidationError not raised
+
+======================================================================
+FAIL: test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading (core.tests.test_disposition_integration.QuarantinedAdoption.test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_integration.py", line 142, in test_direct_recorded_batch_adoption_and_recovery_refuse_before_reading
+    self.assertEqual(self.encounter.answers, before)
+AssertionError: {'v3_1': {'text': 'documented 000.', 'stat[16637 chars]lse}} != {}
+Diff is 26350 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 1 test in 5.991s
+
+FAILED (failures=2, errors=1)
+Destroying test database for alias 'default' ('test_v1_disposition_04_adoption_counterexample')...
+ OK
+System check identified no issues (0 silenced).

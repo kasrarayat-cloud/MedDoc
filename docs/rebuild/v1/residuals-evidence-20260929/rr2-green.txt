@@ -1,0 +1,167 @@
+GREEN run: the RR2 repairs (test_money_closeout loaded first, as the full suite loads it; see rr2-green-first.txt for the run without it)
+Using existing test database for alias 'default' ('quillmd_qa_resid3_t1')...
+test_batch_without_a_credential_is_proved_untransmitted_and_releases_every_hold (core.tests.test_money_closeout.NoCredentialBatch.test_batch_without_a_credential_is_proved_untransmitted_and_releases_every_hold) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_control_a_type_error_from_the_send_itself_keeps_the_part_in_reconciliation (core.tests.test_money_closeout.NoCredentialBatch.test_control_a_type_error_from_the_send_itself_keeps_the_part_in_reconciliation)
+Without the SDK's own proof, a send-intent child that raised is an unknown outcome, exactly as before. ... ok
+test_control_with_the_credential_every_part_leaves_once_and_the_form_is_adopted (core.tests.test_money_closeout.NoCredentialBatch.test_control_with_the_credential_every_part_leaves_once_and_the_form_is_adopted) ... ok
+test_control_a_connection_error_from_the_real_sdk_stays_an_unknown_outcome_with_its_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_a_connection_error_from_the_real_sdk_stays_an_unknown_outcome_with_its_hold)
+A subclass of OpenAIError raised by the real SDK after it tried to send is never read as 'nothing left'. ... ok
+test_control_a_stand_in_constructor_at_generates_own_call_site_stays_an_unknown_outcome (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_a_stand_in_constructor_at_generates_own_call_site_stays_an_unknown_outcome)
+Only the SDK's own constructor frame is proof. The same class and message raised at the very same call site by ... ok
+test_control_a_type_error_from_the_openai_send_itself_stays_an_unknown_outcome (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_a_type_error_from_the_openai_send_itself_stays_an_unknown_outcome) ... ok
+test_control_the_same_openai_error_from_the_send_stays_an_unknown_outcome_with_its_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_the_same_openai_error_from_the_send_stays_an_unknown_outcome_with_its_hold)
+The constructor's class and message, raised by the send itself, prove nothing: a failure after transmission ... ok
+test_control_with_the_credential_the_request_leaves_once_and_is_settled (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_with_the_credential_the_request_leaves_once_and_is_settled) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(PydanticSerializationUnexpectedValue: Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections]
+PydanticSerializationUnexpectedValue: Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ParsedResponseFunctionToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFileSearchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionWebSearch` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `AdditionalTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseReasoningItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `Program` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ProgramOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalRequest` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalResponse` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ImageGenerationCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallAction` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpListTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCodeInterpreterToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCompactionItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  PydanticSerializationUnexpectedValue(Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  return self.__pydantic_serializer__.to_python(
+ok
+test_legacy_form_with_only_an_admin_key_is_refused_at_request_build_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_legacy_form_with_only_an_admin_key_is_refused_at_request_build_and_releases_the_hold)
+The SDK is constructed (an admin key satisfies its constructor) but the Responses request carries no bearer ... ok
+test_legacy_form_without_any_credential_is_not_processed_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_legacy_form_without_any_credential_is_not_processed_and_releases_the_hold) ... ok
+test_control_a_type_error_from_anywhere_else_stays_an_unknown_outcome_with_its_hold (core.tests.test_money_closeout.NoCredentialSingleJob.test_control_a_type_error_from_anywhere_else_stays_an_unknown_outcome_with_its_hold)
+Only the SDK's own request-build refusal proves nothing left. The same class and message raised by the send ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_control_default_path_with_the_credential_leaves_once_and_is_settled (core.tests.test_money_closeout.NoCredentialSingleJob.test_control_default_path_with_the_credential_leaves_once_and_is_settled) ... ok
+test_control_ordinary_path_with_the_credential_leaves_once_and_is_settled (core.tests.test_money_closeout.NoCredentialSingleJob.test_control_ordinary_path_with_the_credential_leaves_once_and_is_settled) ... ok
+test_default_path_without_a_credential_is_not_processed_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialSingleJob.test_default_path_without_a_credential_is_not_processed_and_releases_the_hold) ... ok
+test_ordinary_path_without_a_credential_is_not_processed_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialSingleJob.test_ordinary_path_without_a_credential_is_not_processed_and_releases_the_hold) ... ok
+test_a_rate_change_at_finish_is_absorbed_not_billed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_a_rate_change_at_finish_is_absorbed_not_billed) ... ok
+test_an_unrelated_voice_setting_at_finish_is_absorbed_not_billed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_an_unrelated_voice_setting_at_finish_is_absorbed_not_billed) ... ok
+test_control_an_unchanged_configuration_is_adopted_and_charged (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_control_an_unchanged_configuration_is_adopted_and_charged) ... ok
+test_control_the_users_own_revoked_access_at_finish_stays_not_adopted_and_charged (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_control_the_users_own_revoked_access_at_finish_stays_not_adopted_and_charged)
+The design keeps not-adopted billing for the user's own source, permission or decision changes. ... ok
+test_our_change_is_never_billed_even_when_the_users_access_also_changed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_our_change_is_never_billed_even_when_the_users_access_also_changed)
+Both at once: QuillMD's change alone makes the output unusable, so the user is not charged for it. ... ok
+test_the_batch_flag_turned_off_at_finish_is_absorbed_not_billed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_the_batch_flag_turned_off_at_finish_is_absorbed_not_billed) ... ok
+test_an_address_of_exactly_the_column_length_still_creates_its_account (core.tests.test_account_email_rule.AccountEmailBounds.test_an_address_of_exactly_the_column_length_still_creates_its_account)
+Control: the bound is the column, not tighter. 150 characters is issued, accepted and registered. ... ok
+test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused (core.tests.test_account_email_rule.AccountEmailBounds.test_an_invitation_issued_before_the_bound_creates_no_account_and_stays_unused) ... ok
+test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_every_form_that_chooses_an_address_refuses_one_longer_than_the_account_columns) ... ok
+test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_no_invitation_is_issued_to_an_address_longer_than_the_account_columns) ... ok
+test_register_refuses_an_address_longer_than_the_account_columns (core.tests.test_account_email_rule.AccountEmailBounds.test_register_refuses_an_address_longer_than_the_account_columns) ... ok
+test_an_ordinary_address_is_stored_lowercased_and_its_case_variant_refused (core.tests.test_account_email_rule.AccountEmailRule.test_an_ordinary_address_is_stored_lowercased_and_its_case_variant_refused) ... ok
+test_an_ordinary_invitation_still_creates_its_account (core.tests.test_account_email_rule.AccountEmailRule.test_an_ordinary_invitation_still_creates_its_account) ... ok
+test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers (core.tests.test_account_email_rule.AccountEmailRule.test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers) ... ok
+test_clinic_invitation_cannot_create_the_long_s_twin (core.tests.test_account_email_rule.AccountEmailRule.test_clinic_invitation_cannot_create_the_long_s_twin) ... ok
+test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers (core.tests.test_account_email_rule.AccountEmailRule.test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers) ... ok
+test_department_invitation_cannot_create_the_long_s_twin (core.tests.test_account_email_rule.AccountEmailRule.test_department_invitation_cannot_create_the_long_s_twin) ... ok
+test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) ... ok
+test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) ... ok
+test_register_refuses_an_address_a_legacy_long_s_account_already_answers (core.tests.test_account_email_rule.AccountEmailRule.test_register_refuses_an_address_a_legacy_long_s_account_already_answers) ... ok
+test_register_refuses_the_long_s_twin_of_an_existing_account (core.tests.test_account_email_rule.AccountEmailRule.test_register_refuses_the_long_s_twin_of_an_existing_account) ... ok
+test_an_address_of_exactly_the_column_length_creates_the_first_account (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_of_exactly_the_column_length_creates_the_first_account) ... ok
+test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) ... ok
+test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_too_long_or_quoted_is_refused_by_name_before_any_account_exists)
+RR2-ACC-1 and RR2-ACC-2 at this door. RED on d5367521: the long address raised DataError from the insert, not ... ok
+test_an_ordinary_address_creates_the_first_account (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_ordinary_address_creates_the_first_account) ... ok
+test_every_form_that_chooses_an_address_refuses_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_every_form_that_chooses_an_address_refuses_a_quoted_local_part) ... ok
+test_neither_invitation_creates_the_quoted_twin (core.tests.test_account_email_rule.QuotedLocalPart.test_neither_invitation_creates_the_quoted_twin) ... ok
+test_no_invitation_is_issued_to_a_quoted_local_part (core.tests.test_account_email_rule.QuotedLocalPart.test_no_invitation_is_issued_to_a_quoted_local_part) ... ok
+test_register_refuses_the_quoted_twin_of_an_existing_account (core.tests.test_account_email_rule.QuotedLocalPart.test_register_refuses_the_quoted_twin_of_an_existing_account) ... ok
+test_a_charged_mapping_result_is_downloadable_under_the_generation_rule (core.tests.test_mapping_assistance.MappingAssistance.test_a_charged_mapping_result_is_downloadable_under_the_generation_rule) ... ok
+test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge (core.tests.test_mapping_assistance.MappingAssistance.test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge) ... ok
+test_administrator_financial_scope_and_unknown_resolution_are_usable (core.tests.test_mapping_assistance.MappingAssistance.test_administrator_financial_scope_and_unknown_resolution_are_usable) ... ok
+test_an_uncharged_mapping_result_is_never_delivered (core.tests.test_mapping_assistance.MappingAssistance.test_an_uncharged_mapping_result_is_never_delivered) ... ok
+test_complete_long_labels_are_priced_in_actual_request_and_old_profile_refuses (core.tests.test_mapping_assistance.MappingAssistance.test_complete_long_labels_are_priced_in_actual_request_and_old_profile_refuses) ... ok
+test_cross_department_quote_and_hidden_default_route (core.tests.test_mapping_assistance.MappingAssistance.test_cross_department_quote_and_hidden_default_route) ... ok
+test_definite_constructor_failure_releases_without_unknown_outcome (core.tests.test_mapping_assistance.MappingAssistance.test_definite_constructor_failure_releases_without_unknown_outcome) ... ok
+test_disabled_flag_cancel_and_revoked_membership_release_without_send (core.tests.test_mapping_assistance.MappingAssistance.test_disabled_flag_cancel_and_revoked_membership_release_without_send) ... ok
+test_existing_context_inherits_only_with_exact_resolved_locator (core.tests.test_mapping_assistance.MappingAssistance.test_existing_context_inherits_only_with_exact_resolved_locator) ... ok
+test_full_outline_and_fixed_schema_preserve_long_source_and_untrusted_words (core.tests.test_mapping_assistance.MappingAssistance.test_full_outline_and_fixed_schema_preserve_long_source_and_untrusted_words) ... ok
+test_incomplete_capacity_is_visible_and_prevents_unassisted_confirmation (core.tests.test_mapping_assistance.MappingAssistance.test_incomplete_capacity_is_visible_and_prevents_unassisted_confirmation) ... ok
+test_live_permission_off_refuses_before_reservation_or_provider (core.tests.test_mapping_assistance.MappingAssistance.test_live_permission_off_refuses_before_reservation_or_provider) ... ok
+test_manual_edit_cannot_clear_unresolved_assistance (core.tests.test_mapping_assistance.MappingAssistance.test_manual_edit_cannot_clear_unresolved_assistance) ... ok
+test_manual_resolution_records_assistance_and_old_version_is_preserved (core.tests.test_mapping_assistance.MappingAssistance.test_manual_resolution_records_assistance_and_old_version_is_preserved) ... ok
+test_mapping_is_included_in_operator_drain_state (core.tests.test_mapping_assistance.MappingAssistance.test_mapping_is_included_in_operator_drain_state) ... ok
+test_mapping_quote_prices_its_exact_profile_without_rewriting_generation (core.tests.test_mapping_assistance.MappingAssistance.test_mapping_quote_prices_its_exact_profile_without_rewriting_generation) ... ok
+test_minimum_and_maximum_metadata_quote_match_request_and_byte_admission (core.tests.test_mapping_assistance.MappingAssistance.test_minimum_and_maximum_metadata_quote_match_request_and_byte_admission) ... ok
+test_missing_duplicated_unknown_or_extra_schema_members_refuse (core.tests.test_mapping_assistance.MappingAssistance.test_missing_duplicated_unknown_or_extra_schema_members_refuse) ... ok
+test_missing_field_can_be_added_then_reviewed_finalized_and_exported (core.tests.test_mapping_assistance.MappingAssistance.test_missing_field_can_be_added_then_reviewed_finalized_and_exported) ... ok
+test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted (core.tests.test_mapping_assistance.MappingAssistance.test_mocked_incomplete_or_wrong_model_is_receipted_absorbed_and_never_adopted) ... ok
+test_mocked_native_receipt_charge_and_financial_views_keep_exact_model (core.tests.test_mapping_assistance.MappingAssistance.test_mocked_native_receipt_charge_and_financial_views_keep_exact_model) ... ok
+test_native_envelope_refusal_incomplete_and_wrong_model_never_parse (core.tests.test_mapping_assistance.MappingAssistance.test_native_envelope_refusal_incomplete_and_wrong_model_never_parse) ... ok
+test_no_provider_credential_is_not_processed_and_releases_the_hold (core.tests.test_mapping_assistance.MappingAssistance.test_no_provider_credential_is_not_processed_and_releases_the_hold)
+MONEY-2, the mapping path. Reproduce: live mapping, every ANTHROPIC_* variable unset, a HOME with no profile, ... ok
+test_old_queued_contract_refuses_before_new_compiler_and_releases (core.tests.test_mapping_assistance.MappingAssistance.test_old_queued_contract_refuses_before_new_compiler_and_releases) ... ok
+test_queued_http_cancellation_and_stale_operation_keep_financial_state (core.tests.test_mapping_assistance.MappingAssistance.test_queued_http_cancellation_and_stale_operation_keep_financial_state) ... ok
+test_reverse_scope_migration_refuses_to_erase_mapping_operations (core.tests.test_mapping_assistance.MappingAssistance.test_reverse_scope_migration_refuses_to_erase_mapping_operations) ... ok
+test_scope_and_source_config_are_immutable_in_database (core.tests.test_mapping_assistance.MappingAssistance.test_scope_and_source_config_are_immutable_in_database) ... ok
+test_signature_downgrade_remains_visible_and_preserves_existing_field (core.tests.test_mapping_assistance.MappingAssistance.test_signature_downgrade_remains_visible_and_preserves_existing_field) ... ok
+test_source_mutation_refuses_before_enqueue (core.tests.test_mapping_assistance.MappingAssistance.test_source_mutation_refuses_before_enqueue) ... ok
+test_tampered_mapping_profile_or_hash_refuses_unsent (core.tests.test_mapping_assistance.MappingAssistance.test_tampered_mapping_profile_or_hash_refuses_unsent) ... ok
+test_unknown_provider_outcome_keeps_hold_and_same_attempt_without_retry (core.tests.test_mapping_assistance.MappingAssistance.test_unknown_provider_outcome_keeps_hold_and_same_attempt_without_retry) ... ok
+test_upload_quote_queue_uses_existing_mapping_review_route (core.tests.test_mapping_assistance.MappingAssistance.test_upload_quote_queue_uses_existing_mapping_review_route) ... ok
+test_worker_uses_template_scope_receipt_ledger_and_review_without_patients (core.tests.test_mapping_assistance.MappingAssistance.test_worker_uses_template_scope_receipt_ledger_and_review_without_patients) ... ok
+test_wrong_slots_and_references_refuse_and_overlap_stays_visible (core.tests.test_mapping_assistance.MappingAssistance.test_wrong_slots_and_references_refuse_and_overlap_stays_visible) ... ok
+test_control_narrative_with_the_credential_sends_once (core.tests.test_money_closeout.NoCredentialNarrative.test_control_narrative_with_the_credential_sends_once) ... ok
+test_narrative_without_a_credential_is_proved_untransmitted (core.tests.test_money_closeout.NoCredentialNarrative.test_narrative_without_a_credential_is_proved_untransmitted) ... ok
+test_the_sdk_constructor_refusing_outside_generate_is_not_proof (core.tests.test_money_closeout.OpenAIConstructorProof.test_the_sdk_constructor_refusing_outside_generate_is_not_proof) ... ok
+test_one_clinic_invitation_accepted_twice_at_the_same_moment (core.tests.test_invitation_account_race.OneInvitationAcceptedTwiceAtOnce.test_one_clinic_invitation_accepted_twice_at_the_same_moment) ... ok
+test_one_department_invitation_accepted_twice_at_the_same_moment (core.tests.test_invitation_account_race.OneInvitationAcceptedTwiceAtOnce.test_one_department_invitation_accepted_twice_at_the_same_moment) ... ok
+test_clinic_invitation (core.tests.test_invitation_account_race.OtherIntegrityErrorsStayDefects.test_clinic_invitation) ... ok
+test_department_invitation (core.tests.test_invitation_account_race.OtherIntegrityErrorsStayDefects.test_department_invitation) ... ok
+test_a_department_and_a_clinic_invitation_accepted_at_the_same_moment (core.tests.test_invitation_account_race.TwoInvitationsForOneNewAddress.test_a_department_and_a_clinic_invitation_accepted_at_the_same_moment) ... ok
+test_two_clinic_invitations_accepted_at_the_same_moment (core.tests.test_invitation_account_race.TwoInvitationsForOneNewAddress.test_two_clinic_invitations_accepted_at_the_same_moment) ... ok
+test_two_department_invitations_accepted_at_the_same_moment (core.tests.test_invitation_account_race.TwoInvitationsForOneNewAddress.test_two_department_invitations_accepted_at_the_same_moment) ... ok
+test_an_unrelated_integrity_error_is_still_a_defect (core.tests.test_invitation_account_race.TwoRegistrationsForOneAddress.test_an_unrelated_integrity_error_is_still_a_defect) ... ok
+test_two_registrations_at_the_same_moment_create_one_account (core.tests.test_invitation_account_race.TwoRegistrationsForOneAddress.test_two_registrations_at_the_same_moment_create_one_account) ... ok
+test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged (core.tests.test_mapping_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged)
+RED on d5367521: 'failed' with 'platform_failure: Mapping output could not be adopted.', the charge reversed ... ok
+test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed (core.tests.test_mapping_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed) ... ok
+test_a_handler_whose_first_statement_loses_the_connection_holds_the_job (core.tests.test_mapping_outcome_unknown.HandlerStatementFails.test_a_handler_whose_first_statement_loses_the_connection_holds_the_job)
+The RS-2 shape on the mapping path: settlement committed, the output could not be used, and the server ended ... ok
+test_an_unusable_output_is_still_a_platform_failure_absorbed (core.tests.test_mapping_outcome_unknown.HandlerStatementFails.test_an_unusable_output_is_still_a_platform_failure_absorbed)
+Control: with nothing lost, the locked handler records what it always recorded. ... ok
+test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown (core.tests.test_mapping_outcome_unknown.SettlementCommitAnswerLost.test_a_settlement_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown) ... ok
+test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown (core.tests.test_mapping_outcome_unknown.SettlementCommitAnswerLost.test_a_settlement_that_landed_after_its_answer_was_lost_is_held_as_unknown) ... ok
+
+----------------------------------------------------------------------
+Ran 96 tests in 189.227s
+
+OK
+Preserving test database for alias 'default' ('quillmd_qa_resid3_t1')...
+Found 96 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

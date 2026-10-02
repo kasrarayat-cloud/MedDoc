@@ -1,0 +1,9 @@
+Consolidated report of the staged Sonnet 5 qualification milestone (not a readiness claim)
+
+One page: identities (installed dedac162, candidate 1c4c4233 code, claude-sonnet-5 settings,
+pricing versions, authority and declaration), money per stage ($0.079304 of $40.00; no open
+attempt; provider console charge not yet read), what each stage showed, evidence kept apart
+(QA worker live / mocked / native Word none / installed nothing new), fixed and open developer
+defects, the unchanged external inputs, the two incidents, and eight owner decisions.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

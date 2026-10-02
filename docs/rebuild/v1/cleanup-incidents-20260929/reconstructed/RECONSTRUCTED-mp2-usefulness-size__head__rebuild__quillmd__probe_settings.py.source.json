@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-usefulness-size__head__rebuild__quillmd__probe_settings.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl:222",
+   "timestamp": "2026-09-29T09:18:40.863Z",
+   "sha256_after": "e9ac117515ff9d51ea07c1b29d22d6a201d88a8fc2aa17440aa5211dbffc53b1",
+   "bytes_after": 115
+  }
+ ],
+ "lines": 2,
+ "sha256": "e9ac117515ff9d51ea07c1b29d22d6a201d88a8fc2aa17440aa5211dbffc53b1"
+}

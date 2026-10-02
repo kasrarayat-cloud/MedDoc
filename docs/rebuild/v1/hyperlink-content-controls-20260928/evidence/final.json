@@ -1,0 +1,110 @@
+{
+  "source": "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls",
+  "word_v3_sha256": "bc7933b67b044197c3ff632530af09ca5c8f9f32090a1f671b70fc46b6ebc7ff",
+  "cases": [
+    {
+      "case": "block-placeholder-fixed-link",
+      "original_sha256": "9ecf7b284b908a1e9053432d0a28898dd5070c1e9b1d39919957b72d460310ec",
+      "fields": [],
+      "notes": [
+        "A content control containing a fixed hyperlink was read by its parts. Location: word/document.xml#b/sdt[0]"
+      ],
+      "current_links_unchanged": true,
+      "current_answer_visible": false,
+      "historical_exception": {
+        "type": "V3Failure",
+        "message": "This mapping would change a fixed hyperlink in a content control. Review the original answer area.",
+        "code": "protected_hyperlink"
+      }
+    },
+    {
+      "case": "inline-linked-marker",
+      "original_sha256": "161b60de55719249e106446f2b9a00fc4f1bd878fbd90ba56878692996ce0c9b",
+      "fields": [],
+      "notes": [
+        "A content control containing a fixed hyperlink was read by its parts. Location: word/document.xml#b/p[0]/sdt[0]"
+      ],
+      "current_links_unchanged": true,
+      "current_answer_visible": false,
+      "historical_exception": {
+        "type": "V3Failure",
+        "message": "This mapping would change a fixed hyperlink in a content control. Review the original answer area.",
+        "code": "protected_hyperlink"
+      }
+    },
+    {
+      "case": "hyperlink-around-sdt",
+      "original_sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098",
+      "fields": [],
+      "notes": [],
+      "current_links_unchanged": true,
+      "current_answer_visible": false,
+      "historical_links_unchanged": true
+    },
+    {
+      "case": "unlinked-sdt-positive",
+      "original_sha256": "5fd5701d1c6ef5caf87593d063efe849e504827b040ba95d80a69700ace21e37",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Clinical report",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text"
+            },
+            "fingerprint": "25021581067de8b65fbae70f9be2adacf24442f687cde7911897b07efa654bb6"
+          }
+        }
+      ],
+      "notes": [],
+      "current_links_unchanged": true,
+      "current_answer_visible": true,
+      "historical_links_unchanged": true
+    },
+    {
+      "case": "linked-checkbox",
+      "original_sha256": "4a4382b0e12a62747dfe6af34d13e05a3f0cdf62394c150cc615ac82d6c5d1c8",
+      "fields": [],
+      "notes": [
+        "A checkbox inside a fixed hyperlink was kept unchanged. Location: word/document.xml#b/p[0]"
+      ],
+      "current_links_unchanged": true,
+      "current_answer_visible": false,
+      "historical_exception": {
+        "type": "V3Failure",
+        "message": "This mapping would change a checkbox inside a fixed hyperlink.",
+        "code": "protected_hyperlink"
+      }
+    },
+    {
+      "case": "separate-link-and-sdt-positive",
+      "original_sha256": "1a0360504fc88565dbdf18f8dbc0e0dcdbb3e84abe6f8d301f412ef6cdf24841",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Clinical report",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text"
+            },
+            "fingerprint": "25021581067de8b65fbae70f9be2adacf24442f687cde7911897b07efa654bb6"
+          }
+        }
+      ],
+      "notes": [],
+      "current_links_unchanged": true,
+      "current_answer_visible": true,
+      "historical_links_unchanged": true
+    }
+  ]
+}

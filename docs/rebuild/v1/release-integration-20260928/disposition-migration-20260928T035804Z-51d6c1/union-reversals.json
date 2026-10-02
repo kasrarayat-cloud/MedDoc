@@ -1,0 +1,10 @@
+{
+  "all_17_prior_function_hashes_retained": true,
+  "all_51_prior_guards_retained": true,
+  "empty_reverse_and_reapply_preserves_old_rows": true,
+  "evidence_bearing_reverse_refuses": {
+    "batch": true,
+    "disposition": true
+  },
+  "rollback_leaves_63_guards_intact": true
+}

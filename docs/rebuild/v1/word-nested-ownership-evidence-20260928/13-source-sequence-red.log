@@ -1,0 +1,18 @@
+test_nested_source_cannot_lose_local_subject_or_page_boundary (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_source_cannot_lose_local_subject_or_page_boundary) ... 
+  test_nested_source_cannot_lose_local_subject_or_page_boundary (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_source_cannot_lose_local_subject_or_page_boundary) (case='unpaired_subsection') ... FAIL
+
+======================================================================
+FAIL: test_nested_source_cannot_lose_local_subject_or_page_boundary (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_source_cannot_lose_local_subject_or_page_boundary) (case='unpaired_subsection')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 579, in test_nested_source_cannot_lose_local_subject_or_page_boundary
+    self.assertFalse(groups)
+AssertionError: [{'key': 'v3_1', 'label': 'During exertion:', 'kind': 'multi_choice', 'context': 'Which symptoms occur? Tick all that apply.', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'target': {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}]}, 'fingerprint': 'cc3e2f994e08c5fc8212bd66830172b7b7d350dced448ad44d57df22a3ff3cf9', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'fingerprint': '560b4e75cc5160114101366c6d688efce18b235fd526d5ad2dedb2ff78285992'}]}, 'options': ['Tightness', 'Nausea'], 'printed_ticked': [1]}] is not false
+
+----------------------------------------------------------------------
+Ran 1 test in 0.256s
+
+FAILED (failures=1)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

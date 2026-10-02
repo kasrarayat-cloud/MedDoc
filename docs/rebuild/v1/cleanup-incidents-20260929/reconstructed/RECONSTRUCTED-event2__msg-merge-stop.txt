@@ -1,0 +1,6 @@
+Integrate the mapping stage stop record (feat/v1-sonnet5-campaign 4a818937)
+
+Docs only: the mapping stage is not reopened after two repair rounds drew verified HIGH
+refutation findings; fix/v1-mapping-partial is not integrated.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

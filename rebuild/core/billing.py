@@ -58,7 +58,12 @@ def signed_exact(value):
 
 @transaction.atomic
 def welcome_credit(user):
-    user=User.objects.select_for_update().get(pk=user.pk)
+    # FOR NO KEY UPDATE, never FOR UPDATE (the global lock order, core.retention): this transaction goes on to lock the
+    # promotional wallet, and every request of this account that holds that wallet re-checks its new rows' foreign keys
+    # at commit with FOR KEY SHARE on this very row, which FOR UPDATE refuses. An existing clinician accepting an
+    # invitation deadlocked with their own upload, generation or settlement (RF-R1). This mode still serializes two
+    # grants for one account (it conflicts with itself) and excludes deletion and key changes.
+    user=User.objects.select_for_update(no_key=True).get(pk=user.pk)
     if not user.verified_at: raise ValidationError('Welcome credit requires a verified account.')
     wallet,_=Wallet.objects.get_or_create(user=user,kind='promo')
     Wallet.objects.get_or_create(user=user,kind='paid')
@@ -102,6 +107,21 @@ def real_mode_refuses(wallet):
 
 class SandboxFundsRefused(ValidationError):
     """Real data mode refused to debit a balance sandbox payments funded; nothing was charged."""
+
+
+class SettlementRefused(ValidationError):
+    """settle() refused a job whose state is not one its caller may settle from; nothing was written."""
+
+
+#: ⚠️ THE STATES A WORKER'S settle() ACCEPTS. A worker settles the job it set 'running' before its provider request. Any
+#: other state means somebody else ended or held the job while the request was in flight — the stale sweep
+#: ('reconciliation'), an administrator's resolution ('failed'), a cancellation ('cancelled') — and settling it anyway
+#: charged a job its record says was not charged, or overwrote a resolution (blockers.txt item 3, the two-worker probe).
+#: 'queued' is accepted because it is only ever a job's creation state: no code returns a job to it
+#: (core.tests.test_settlement_single_worker pins that), so a job that ran can never be 'queued' again; direct callers that
+#: settle a freshly created job (the demo seeder, tests) keep working. Administrator paths that settle a held job name the
+#: states they settle from (core.batch_jobs.resolve_view, recover_recorded).
+SETTLEABLE_STATES=('queued','running')
 
 
 def department_payer(user_id,department):
@@ -244,6 +264,18 @@ def real_mode_payment_problems():
     return problems
 
 
+def preservation_before_money():
+    """Level 3 of the global lock order (core.retention): the preservation lock before any Reservation or Wallet row.
+
+    Every preserved clinical write takes this lock through its trigger and holds it until commit, and reserve() writes
+    the job (taking it) before locking wallets. A transaction that locked a wallet first and saved a job afterwards (an
+    administrator's resolution, a batch stop or closeout) deadlocked with that payer's next request (RF-1). release,
+    settle and absorb_failed_job take it here, right after the job row, so the order is structural rather than a
+    property of each caller; reserve reaches it through its own job.save(payer) before the wallet locks."""
+    from .retention import lock_preservation
+    lock_preservation()
+
+
 def payer_wallets(user,department):
     """The personal promotional wallet and the paid wallet that pays for this user's requests in this department."""
     promo=Wallet.objects.get(user=user,kind='promo')
@@ -269,6 +301,7 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
     department=job.department
     promo,payer=payer_wallets(job.user,department)
     job.payer=department_payer(job.user_id,department)
+    # Level 3 of the lock order before any money row: this write takes the preservation lock (the job trigger).
     job.save(update_fields=['payer'])
     locked={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[promo.pk,payer.pk]).order_by('pk')}
     # Real data mode never spends sandbox-funded money: the whole request is refused, before any hold, rather than
@@ -291,13 +324,21 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
             remaining-=amount
 
 @transaction.atomic
-def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated=False,provider_resource_id=''):
+def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated=False,provider_resource_id='',
+           allowed_states=SETTLEABLE_STATES):
     # Lock the job first so replay cannot release/spend twice.
     from .models import Job
     # Lock only the job row: the related rows are read, not written, and locking them deadlocks a wallet holder that audits.
     job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department__organization','user').get(pk=job.pk)
+    # ⚠️ Under the job's row lock and before ANY read or write of money (SETTLEABLE_STATES): the state read here cannot change
+    # until this transaction ends, because any UPDATE of the job row waits for this lock. A refusal writes nothing; the
+    # worker's handler then finds the job not running and records nothing over what the other party recorded.
+    if job.state not in allowed_states:
+        raise SettlementRefused(f'Settlement refused: this request is {job.state}, not running. Nothing was charged; '
+                                'its provider receipt awaits administrator reconciliation.')
     existing=Usage.objects.filter(job=job).first()
     if existing: return existing
+    preservation_before_money()
     actual=exact(actual_cost)
     if simulated and actual!=0: raise ValidationError('Simulated integrations cannot create billable cost.')
     uncapped=exact(actual*MULTIPLIER)
@@ -343,6 +384,7 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
 def release(job):
     from .models import Job
     Job.objects.select_for_update().get(pk=job.pk)
+    preservation_before_money()
     reservations=list(Reservation.objects.select_for_update().filter(job=job,state='held').order_by('wallet_id'))
     wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[r.wallet_id for r in reservations]).order_by('pk')}
     for r in reservations:
@@ -516,7 +558,11 @@ def apply_pending_reconciliations(actor=None,wallet=None):
         try:
             with transaction.atomic():
                 Job.objects.select_for_update().get(pk=job_id)
-                row=CostReconciliation.objects.select_for_update().select_related('usage__department').get(pk=pk)
+                # of=('self',): the reconciliation row only, as absorb_failed_job locks it. A bare select_for_update()
+                # beside select_related() also locked the usage row and the department FOR UPDATE while this waits for the
+                # payer's wallet below, and a settlement in that department holding the wallet takes FOR KEY SHARE on the
+                # department at commit: the apply was a deadlock victim (the global lock order, core.retention).
+                row=CostReconciliation.objects.select_for_update(of=('self',)).select_related('usage__department').get(pk=pk)
                 if row.ledger_status!='pending_funds': continue
                 if LedgerEntry.objects.filter(job_id=row.usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=row.usage.job_id,kind='absorbed_failure').exists():
                     # The job was absorbed after this reconciliation was held: the user owes nothing further for it.
@@ -546,6 +592,7 @@ def absorb_failed_job(job,actor=None,note=''):
     if usage is None or usage.simulated: return None
     if job.state!='failed': raise ValidationError('Only a failed job can be absorbed; a succeeded or pending job keeps its charge.')
     if job.error.startswith('not_adopted:'): raise ValidationError('A successful generation the user did not adopt remains charged; there is no platform failure to absorb.')
+    preservation_before_money()
     reconciliation=CostReconciliation.objects.select_for_update().filter(usage=usage).first()
     net={}
     for entry in LedgerEntry.objects.filter(job=job,kind__in=['usage','reconciliation']).order_by('wallet_id'):

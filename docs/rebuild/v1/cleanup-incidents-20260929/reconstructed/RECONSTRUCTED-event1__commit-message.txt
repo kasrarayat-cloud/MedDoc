@@ -1,0 +1,37 @@
+Residuals R-A and R-B: the invitation race answered, settlement failure evidenced safe, resolution honours the receipt
+
+The final default-path refutation on d9fa3249 left two residuals called "no ordinary trigger
+found". The owner asked for an evidenced assessment: docs/rebuild/v1/residuals-assessment-20260929.md.
+
+R-A, reproduced deterministically and repaired. Two different still-valid invitations for one
+new address, accepted at the same moment (both requests held at a barrier right before their
+account insert, each on its own connection), answered [302, 500]: IntegrityError on
+core_user_username_key. Also two /register/ submissions of one address (open mode). The later
+request now gets the answer the same request gets a moment later: 200, the address already has
+an account, sign in; its transaction rolled back whole, so its invitation is unused and still
+valid, and signing in joins the account the first created. One account; no audit row touched.
+The handler catches the IntegrityError only when the account now exists
+(forms.account_created_meanwhile); any other IntegrityError is still a 500. invite_accept,
+clinic_invitations.accept and register. 7 tests (4 RED first), 8 of 8 repeated runs, 4 of 4
+mutants killed with sha256-verified restores.
+
+R-B (1), safe, no change. The database itself fails settle() (40P01 raised by the server at the
+job lock, after the money writes, at the last statement; a deferred foreign-key violation at
+COMMIT; a terminated connection, reachable or not): the job is held for reconciliation with the
+hold, wallets, ledger, receipts and the document byte-identical, nothing adopted, delivered,
+charged or retried. An error after COMMIT is absorbed, never charged. 5 tests; the two tempting
+wrong handlers are killed as mutants.
+
+R-B (2), no ordinary trigger, no change. Lock and constraint enumeration of settle against every
+other writer of its rows, and a two-party search over every lock-statement prefix of either side
+(docs/rebuild/v1/residuals-evidence-20260929/settle_interleavings.py): 654 scenarios against 34
+operations, 0 failures of any kind; the positive control (wallet before preservation lock)
+deadlocked exactly twice, where predicted, and the server counted exactly those two.
+
+R-B (3), LOW, repaired. admin_resolve_job ignored the durable ProviderReceipt of a job whose
+settlement failed: release_no_cost recorded "no provider cost evidenced" and no platform cost,
+absorb_platform_failure the typed amount. The receipt's cost is now the absorbed platform cost
+whatever the form carried, as the batch resolution and the settled branch already do.
+docs/rebuild/cost-definition.md states it. 2 tests RED first; 1 mutant killed.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__pyenv__sitecustomize.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl:129",
+   "timestamp": "2026-09-29T01:11:19.250Z",
+   "sha256_after": "a90c651a0b97958fe41eafe53f9a81c36f0b5a18ad98cd5be4ab2074f1bcbca0",
+   "bytes_after": 1307
+  }
+ ],
+ "lines": 47,
+ "sha256": "a90c651a0b97958fe41eafe53f9a81c36f0b5a18ad98cd5be4ab2074f1bcbca0"
+}

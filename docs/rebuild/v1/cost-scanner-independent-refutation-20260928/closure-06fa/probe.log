@@ -1,0 +1,47 @@
+[
+  {
+    "case": "unchanged",
+    "source_sha256": "253c28d982b81659222463f2c69b69bd36a53a293cad4a1dba38e53aec087737",
+    "scanners": {
+      "parent": {
+        "accepted": false,
+        "reason": "maximum_cost: rate term outside a bounded assignment"
+      },
+      "finished": {
+        "accepted": true,
+        "terms": "(12000, ('profile', frozenset({6000, 8000, 16000})))"
+      }
+    },
+    "cost_usd": "0.10956"
+  },
+  {
+    "case": "false_wrapper",
+    "source_sha256": "93a8598005fcb09937aa1bee33b89241112fb99cc58ed88053384b0fb9973916",
+    "scanners": {
+      "parent": {
+        "accepted": false,
+        "reason": "maximum_cost: rate term outside a bounded assignment"
+      },
+      "finished": {
+        "accepted": false,
+        "reason": "maximum_cost: history charge is not on the final priced execution path"
+      }
+    },
+    "cost_usd": "0.10502"
+  },
+  {
+    "case": "early_return",
+    "source_sha256": "9c520da2a6a5b7c929bfb48ea550c3340676fc8e7b5b314b1f92fd9fcc7d8428",
+    "scanners": {
+      "parent": {
+        "accepted": false,
+        "reason": "maximum_cost: rate term outside a bounded assignment"
+      },
+      "finished": {
+        "accepted": false,
+        "reason": "maximum_cost: history charge is not on the final priced execution path"
+      }
+    },
+    "cost_usd": "0.10502"
+  }
+]

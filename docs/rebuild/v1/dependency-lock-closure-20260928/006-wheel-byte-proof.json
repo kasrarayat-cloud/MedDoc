@@ -1,0 +1,8 @@
+{
+  "artifacts": 89,
+  "original64_preserved": true,
+  "added25_from_cached_reviewed_sha256": true,
+  "wheel_internal_identity_match": true,
+  "requirements_sha256": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+  "lock_sha256": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473"
+}

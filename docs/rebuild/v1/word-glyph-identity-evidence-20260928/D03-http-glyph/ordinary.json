@@ -1,0 +1,171 @@
+{
+  "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "source_engine_sha256": "c9794befe96fa34a678badf45d13c07293ee18f102d6cc4386ab57d86081e125",
+  "target": {
+    "key": "v3_16",
+    "kind": "multi_choice",
+    "label": "10. Please indicate what your headaches usually feel like: (tick all that apply):",
+    "context": "Detailed Patient Headache Questionnaire (Current Headache)",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+      "extra": [
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+          "fingerprint": "1957ca94415ff9ccdf2344ac90df70d5d1546f4c965936df794052a5835900dc"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+          "fingerprint": "0a5531b0dd3ad4dcb68e3889ac0de59d48aa8525a9ac9611760b7ae1d4641856"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+          "fingerprint": "ba2c897ca1299ba1fdee166c5848ff1ae384881cbb95e83126b1245a802da2b2"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+          "fingerprint": "a97ce79011d27a7d88d67ee0ef1494c35fa703a32b2fd4a325ea05bcdf145c48"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+          "fingerprint": "b2f0ffcfa8e93456dbf7e37c818db440091a057ec7810b26d55a43c9bdc63d0e"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+          "fingerprint": "f8292a050fbe24e3ed25f07a5e2df3977087c58e1351cd6ca5de47aa05230756"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+          "fingerprint": "91232567e66d5fcf7be38acd7ee9f16a2581ebc8201844c88b900806115b50a1"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+          "fingerprint": "8c410b973de9916e4b39105c63f4ba693c72690700929e93dffb06ce8eb1f329"
+        }
+      ],
+      "target": {
+        "type": "checkboxes",
+        "boxes": [
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+            "glyph": 0
+          },
+          {
+            "kind": "glyph",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs",
+            "glyph": 0
+          }
+        ]
+      },
+      "contract": "v3",
+      "fingerprint": "c789f192168e81883335e4f513e513aa78c253c3d9a670b0f6556a207679ea12"
+    },
+    "options": [
+      "Throbbing/Pulsing",
+      "Dull",
+      "Shooting",
+      "Achy",
+      "Stabbing",
+      "Burning",
+      "Tight",
+      "Pressure",
+      "Other"
+    ]
+  },
+  "notes": "The patient reports symptoms during a headache.",
+  "answer": {
+    "text": "Throbbing/Pulsing\nDull",
+    "status": "edited",
+    "evidence": [
+      {
+        "end": 47,
+        "quote": "The patient reports symptoms during a headache.",
+        "start": 0
+      }
+    ],
+    "reviewed": true,
+    "edited_by": "3e76fd10-ccad-4c99-b107-e8f35fa2b886",
+    "accepted_by": null,
+    "reviewed_by": "3e76fd10-ccad-4c99-b107-e8f35fa2b886",
+    "own_evidence": [
+      {
+        "end": 47,
+        "quote": "The patient reports symptoms during a headache.",
+        "start": 0
+      }
+    ],
+    "held_candidate": {
+      "text": "The patient reports symptoms during a headache.",
+      "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank — reviewed\".",
+      "context": [],
+      "evidence": [
+        {
+          "end": 47,
+          "quote": "The patient reports symptoms during a headache.",
+          "start": 0
+        }
+      ]
+    },
+    "accepted_suggestion": false
+  },
+  "export_sha256": "33cdae91b521a07fa8f886d78629268a1ad5e2070a56fd72dcb154f594dfd2cf",
+  "state": "finalized",
+  "original_download_identical": true,
+  "export_download_identical": true,
+  "outside_target_paragraphs_unchanged": true,
+  "ordinary_option_completion": "assisted; ordinary unlabelled option evidence held",
+  "document_success": false
+}

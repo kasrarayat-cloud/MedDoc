@@ -1,0 +1,153 @@
+{
+  "cases": [
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "disabled",
+      "geo": "",
+      "maximum_charge": "0.608076000000",
+      "last_request_bytes": 48851
+    },
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "disabled",
+      "geo": "us",
+      "maximum_charge": "0.669035400000",
+      "last_request_bytes": 48874
+    },
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "adaptive",
+      "geo": "",
+      "maximum_charge": "0.848214000000",
+      "last_request_bytes": 48874
+    },
+    {
+      "admitted": true,
+      "count": 101,
+      "parts": 2,
+      "thinking": "adaptive",
+      "geo": "us",
+      "maximum_charge": "0.933187200000",
+      "last_request_bytes": 48897
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "disabled",
+      "geo": "",
+      "maximum_charge": "1.332267000000",
+      "last_request_bytes": 95383
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "disabled",
+      "geo": "us",
+      "maximum_charge": "1.465721400000",
+      "last_request_bytes": 95406
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "adaptive",
+      "geo": "",
+      "maximum_charge": "1.692474000000",
+      "last_request_bytes": 95406
+    },
+    {
+      "admitted": true,
+      "count": 203,
+      "parts": 3,
+      "thinking": "adaptive",
+      "geo": "us",
+      "maximum_charge": "1.861949100000",
+      "last_request_bytes": 95429
+    },
+    {
+      "admitted": true,
+      "count": 559,
+      "parts": 6,
+      "thinking": "disabled",
+      "geo": "",
+      "maximum_charge": "5.591172000000",
+      "last_request_bytes": 258279
+    },
+    {
+      "admitted": true,
+      "count": 559,
+      "parts": 6,
+      "thinking": "disabled",
+      "geo": "us",
+      "maximum_charge": "6.150744600000",
+      "last_request_bytes": 258302
+    },
+    {
+      "admitted": true,
+      "count": 559,
+      "parts": 6,
+      "thinking": "adaptive",
+      "geo": "",
+      "maximum_charge": "6.311586000000",
+      "last_request_bytes": 258302
+    },
+    {
+      "admitted": true,
+      "count": 559,
+      "parts": 6,
+      "thinking": "adaptive",
+      "geo": "us",
+      "maximum_charge": "6.943200000000",
+      "last_request_bytes": 258325
+    },
+    {
+      "admitted": true,
+      "count": 800,
+      "parts": 8,
+      "thinking": "disabled",
+      "geo": "",
+      "maximum_charge": "10.094040000000",
+      "last_request_bytes": 368585
+    },
+    {
+      "admitted": true,
+      "count": 800,
+      "parts": 8,
+      "thinking": "disabled",
+      "geo": "us",
+      "maximum_charge": "11.104051200000",
+      "last_request_bytes": 368608
+    },
+    {
+      "admitted": true,
+      "count": 800,
+      "parts": 8,
+      "thinking": "adaptive",
+      "geo": "",
+      "maximum_charge": "11.054592000000",
+      "last_request_bytes": 368608
+    },
+    {
+      "admitted": true,
+      "count": 800,
+      "parts": 8,
+      "thinking": "adaptive",
+      "geo": "us",
+      "maximum_charge": "12.160658400000",
+      "last_request_bytes": 368631
+    }
+  ],
+  "case_count": 16,
+  "network_forbidden": true,
+  "provider_calls": 0,
+  "result": "PASS_WITH_EXPLICIT_REFUSALS",
+  "scope": "Actual compiler bound at fixed current native rates; not token-count/usage or clinical qualification."
+}

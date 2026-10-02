@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-root-review/rebuild/.runtime/batch-cost-contract/compiled-bound-probe.py", line 22, in <module>
+    plan=b.plan_for(e,g.configuration());total=Decimal(0)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-batch-root-review/rebuild/core/generation_batch.py", line 231, in plan_for
+    refuse('A complete-source request exceeds the bounded payload size.')
+  File "/opt/meddoc-pro/.worktrees/v1-batch-root-review/rebuild/core/generation_batch.py", line 59, in refuse
+    raise ValidationError(message + ' Nothing was sent or charged.')
+django.core.exceptions.ValidationError: ['A complete-source request exceeds the bounded payload size. Nothing was sent or charged.']

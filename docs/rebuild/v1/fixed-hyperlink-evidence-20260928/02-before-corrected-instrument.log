@@ -1,0 +1,228 @@
+test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) ... 
+  test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='body') ... FAIL
+  test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='table') ... FAIL
+  test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='header') ... FAIL
+  test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='footer') ... FAIL
+test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) ... 
+  test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) (text='________') ... FAIL
+  test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) (text='Enter name') ... FAIL
+  test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) (text='{{name}}') ... FAIL
+test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) ... 
+  test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) (offset=3) ... FAIL
+  test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) (offset=19) ... FAIL
+test_normal_blank_after_link_keeps_text_and_relationship (documents.test_hyperlink_destinations.HyperlinkDestinations.test_normal_blank_after_link_keeps_text_and_relationship) ... ok
+test_old_mapping_cannot_replace_fixed_hyperlink (documents.test_hyperlink_destinations.HyperlinkDestinations.test_old_mapping_cannot_replace_fixed_hyperlink) ... FAIL
+test_unlinked_colored_explicit_hint_remains_fillable (documents.test_hyperlink_destinations.HyperlinkDestinations.test_unlinked_colored_explicit_hint_remains_fillable) ... ok
+
+======================================================================
+FAIL: test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='body')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 41, in test_colored_contact_is_never_an_answer_hint_in_common_parts
+    self.assertEqual(w.inspect(data(d))['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Send the comple[270 chars]e'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Send the completed form to', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]', 'target': {'type': 'span', 'start': 28, 'end': 49, 'shape': 'hint'}, 'fingerprint': '0f78e7d2436a2171a83bd80523f43997cbd0115efd3fd977a572abe938daac3e'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Send the completed form to',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '0f78e7d2436a2171a83bd80523f43997cbd0115efd3fd977a572abe938daac3e',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]',
+-               'target': {'end': 49,
+-                          'shape': 'hint',
+-                          'start': 28,
+-                          'type': 'span'}}}]
+
+======================================================================
+FAIL: test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='table')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 41, in test_colored_contact_is_never_an_answer_hint_in_common_parts
+    self.assertEqual(w.inspect(data(d))['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Send the comple[289 chars]e'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Send the completed form to', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[0]', 'target': {'type': 'span', 'start': 28, 'end': 49, 'shape': 'hint'}, 'fingerprint': '0f78e7d2436a2171a83bd80523f43997cbd0115efd3fd977a572abe938daac3e'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Send the completed form to',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '0f78e7d2436a2171a83bd80523f43997cbd0115efd3fd977a572abe938daac3e',
+-               'part': 'word/document.xml',
+-               'slot': 'b/tbl[0]/tr[0]/tc[0]/p[0]',
+-               'target': {'end': 49,
+-                          'shape': 'hint',
+-                          'start': 28,
+-                          'type': 'span'}}}]
+
+======================================================================
+FAIL: test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='header')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 41, in test_colored_contact_is_never_an_answer_hint_in_common_parts
+    self.assertEqual(w.inspect(data(d))['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Send the comple[288 chars]120}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Send the completed form to', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/header1.xml', 'slot': 'hf/p[0]', 'target': {'type': 'span', 'start': 28, 'end': 49, 'shape': 'hint'}, 'fingerprint': '94a385224dc322dfdffa3605e4f3b6b60cc1527f9aba81a3b6ef1f07cde6bb0d'}, 'max_chars': 120}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Send the completed form to',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '94a385224dc322dfdffa3605e4f3b6b60cc1527f9aba81a3b6ef1f07cde6bb0d',
+-               'part': 'word/header1.xml',
+-               'slot': 'hf/p[0]',
+-               'target': {'end': 49,
+-                          'shape': 'hint',
+-                          'start': 28,
+-                          'type': 'span'}},
+-   'max_chars': 120}]
+
+======================================================================
+FAIL: test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) (position='footer')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 41, in test_colored_contact_is_never_an_answer_hint_in_common_parts
+    self.assertEqual(w.inspect(data(d))['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Send the comple[288 chars]120}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Send the completed form to', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/footer1.xml', 'slot': 'hf/p[0]', 'target': {'type': 'span', 'start': 28, 'end': 49, 'shape': 'hint'}, 'fingerprint': '7483a4800a4d1056a3ee92b7412e8a25b8681a8514f602866c555dfddc78bc2b'}, 'max_chars': 120}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Send the completed form to',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '7483a4800a4d1056a3ee92b7412e8a25b8681a8514f602866c555dfddc78bc2b',
+-               'part': 'word/footer1.xml',
+-               'slot': 'hf/p[0]',
+-               'target': {'end': 49,
+-                          'shape': 'hint',
+-                          'start': 28,
+-                          'type': 'span'}},
+-   'max_chars': 120}]
+
+======================================================================
+FAIL: test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) (text='________')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 48, in test_explicit_answer_marker_inside_link_is_visible_and_unassigned
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Name', 'kind': [248 chars]4'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Name', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]', 'target': {'type': 'span', 'start': 6, 'end': 14, 'shape': 'blank'}, 'fingerprint': '5f0a21b2605a65030066d2a5d36802171eda202d3b6ab4f5df3c94fe2aa58304'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Name',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '5f0a21b2605a65030066d2a5d36802171eda202d3b6ab4f5df3c94fe2aa58304',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]',
+-               'target': {'end': 14,
+-                          'shape': 'blank',
+-                          'start': 6,
+-                          'type': 'span'}}}]
+
+======================================================================
+FAIL: test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) (text='Enter name')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 48, in test_explicit_answer_marker_inside_link_is_visible_and_unassigned
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Name', 'kind': [247 chars]2'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Name', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]', 'target': {'type': 'span', 'start': 6, 'end': 16, 'shape': 'hint'}, 'fingerprint': 'd619ec5213880a1855075aca034748fc5f99b0c38abfa2d0f4feded6d3216be2'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Name',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': 'd619ec5213880a1855075aca034748fc5f99b0c38abfa2d0f4feded6d3216be2',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]',
+-               'target': {'end': 16,
+-                          'shape': 'hint',
+-                          'start': 6,
+-                          'type': 'span'}}}]
+
+======================================================================
+FAIL: test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) (text='{{name}}')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 48, in test_explicit_answer_marker_inside_link_is_visible_and_unassigned
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'name', 'kind': [248 chars]0'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'name', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]', 'target': {'type': 'span', 'start': 6, 'end': 14, 'shape': 'token'}, 'fingerprint': 'fc387bbe7e86e16e8056f640995bea6b8fbdca4ccc524df78ad4e47702d43c40'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'name',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': 'fc387bbe7e86e16e8056f640995bea6b8fbdca4ccc524df78ad4e47702d43c40',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]',
+-               'target': {'end': 14,
+-                          'shape': 'token',
+-                          'start': 6,
+-                          'type': 'span'}}}]
+
+======================================================================
+FAIL: test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) (offset=3)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 80, in test_insertion_in_or_at_end_of_hyperlink_refuses
+    with self.assertRaisesRegex(w.V3Failure, 'hyperlink'):
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) (offset=19)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 80, in test_insertion_in_or_at_end_of_hyperlink_refuses
+    with self.assertRaisesRegex(w.V3Failure, 'hyperlink'):
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_old_mapping_cannot_replace_fixed_hyperlink (documents.test_hyperlink_destinations.HyperlinkDestinations.test_old_mapping_cannot_replace_fixed_hyperlink)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 73, in test_old_mapping_cannot_replace_fixed_hyperlink
+    with self.assertRaisesRegex(w.V3Failure, 'hyperlink'):
+AssertionError: V3Failure not raised
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.755s
+
+FAILED (failures=10)

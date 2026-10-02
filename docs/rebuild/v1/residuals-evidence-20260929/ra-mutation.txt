@@ -1,0 +1,76 @@
+[RA-M1 invite_accept handler removed] expected 1 / measured 1
+[RA-M1 invite_accept handler removed] mutation applied: True
+[RA-M1 invite_accept handler removed] restored: True (sha256 7aff85a6440f92b1… before, 7aff85a6440f92b1… after)
+[RA-M2 clinic accept handler removed] expected 1 / measured 1
+[RA-M2 clinic accept handler removed] mutation applied: True
+[RA-M2 clinic accept handler removed] restored: True (sha256 6fe1f0ec0cccacc7… before, 6fe1f0ec0cccacc7… after)
+[RA-M3 register handler removed] expected 1 / measured 1
+[RA-M3 register handler removed] mutation applied: True
+[RA-M3 register handler removed] restored: True (sha256 7aff85a6440f92b1… before, 7aff85a6440f92b1… after)
+[RA-M4 handler swallows every IntegrityError] expected 1 / measured 1
+[RA-M4 handler swallows every IntegrityError] mutation applied: True
+[RA-M4 handler swallows every IntegrityError] restored: True (sha256 c267fdc0c0225d82… before, c267fdc0c0225d82… after)
+[
+ {
+  "id": "RA-M1 invite_accept handler removed",
+  "applied": true,
+  "exit": 1,
+  "summary": [
+   "Ran 1 test in 1.136s",
+   "FAILED (failures=1)"
+  ],
+  "failing": [
+   "test_two_department_invitations_accepted_at_the_same_moment"
+  ],
+  "killed": true,
+  "restored_sha256_equal": true,
+  "sha256": "7aff85a6440f92b1a44378cf46c7beda148e7e02155743b8013662a5f755bf49"
+ },
+ {
+  "id": "RA-M2 clinic accept handler removed",
+  "applied": true,
+  "exit": 1,
+  "summary": [
+   "Ran 1 test in 1.107s",
+   "FAILED (failures=1)"
+  ],
+  "failing": [
+   "test_two_clinic_invitations_accepted_at_the_same_moment"
+  ],
+  "killed": true,
+  "restored_sha256_equal": true,
+  "sha256": "6fe1f0ec0cccacc7417cdaeffbcbfa913ef1c05e7af9b8435fa421245aba866d"
+ },
+ {
+  "id": "RA-M3 register handler removed",
+  "applied": true,
+  "exit": 1,
+  "summary": [
+   "Ran 1 test in 1.335s",
+   "FAILED (failures=1)"
+  ],
+  "failing": [
+   "test_two_registrations_at_the_same_moment_create_one_account"
+  ],
+  "killed": true,
+  "restored_sha256_equal": true,
+  "sha256": "7aff85a6440f92b1a44378cf46c7beda148e7e02155743b8013662a5f755bf49"
+ },
+ {
+  "id": "RA-M4 handler swallows every IntegrityError",
+  "applied": true,
+  "exit": 1,
+  "summary": [
+   "Ran 3 tests in 2.530s",
+   "FAILED (failures=3)"
+  ],
+  "failing": [
+   "test_an_unrelated_integrity_error_is_still_a_defect",
+   "test_clinic_invitation",
+   "test_department_invitation"
+  ],
+  "killed": true,
+  "restored_sha256_equal": true,
+  "sha256": "c267fdc0c0225d82117f807bb54c5edaba054a52b3ea691651fcd29d1b4ef0a0"
+ }
+]

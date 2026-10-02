@@ -132,7 +132,7 @@ evidence. **Rollback:** terminate the instance and delete the unused volume (no 
    `operator/` only for the act.
 3. `with_db_role.py --profile production --role migrator -- migrate --noinput`, then
    `showmigrations` and `check`. Record the migration head and the number of QuillMD integrity
-   triggers and their release-bound definitions (17 in this candidate; the installed legacy revision has nine). The restored drill must match the selected release contract and the recorded count; a matching count alone is insufficient.
+   triggers and their release-bound definitions (107 in this candidate, `len(ops.integrity_contract.GUARDS)`; the installed legacy revision has nine). The restored drill must match the selected release contract and the recorded count; a matching count alone is insufficient.
 4. Re-import the recorded public ICD-10-CM releases with `import_terminology` through the wrapper,
    using the exact files, sha256 values and counts from the private import records (FY2026 and
    FY2027). CPT stays disabled.
@@ -244,17 +244,234 @@ Data-preserving, in this order:
    payments, through the admin console; nothing is replayed, refunded or discarded automatically.
 4. **Fix forward.** Install a schema-compatible release by host replacement (the rebuild path:
    new instance, same state volume moved over, `--existing-state-volume`, `migrate` only forward).
-   A code rollback is allowed only to a release whose migrations are a prefix of those applied; there
-   are no down-migrations.
+   A code rollback is allowed only to a release whose migrations are a prefix of those applied, that
+   enforces real-data mode, and only within the limits in *Code rollback onto a newer schema* below;
+   there are no down-migrations. **dedac162 is never a rollback target once real data exists** (next
+   section): it is synthetic-only by construction and drops the per-request transcription opt-out.
 5. **Data damage** (wrong writes, corruption): restore RDS to a point in time as a **new** instance,
    run `production_restore_check.py`, compare and reconcile the affected rows into the live database
    through a reviewed, declared correction that appends (ledger and audit are immutable). Never
-   restore over the live instance and never drop it.
+   restore over the live instance and never drop it. A restored instance is never served directly:
+   one that must take the live database's place goes through *Restoring a database into service*
+   below, and stays quarantined until its admission is recorded.
 6. **Host loss:** EC2 auto-recover, or the rebuild path with the surviving volume (RPO 0 for files)
    or the latest snapshot (RPO up to 1 hour for files; database unaffected on RDS).
 7. **Suspected PHI exposure:** follow the incident response plan (checklist J5): preserve evidence,
    rotate keys, assess breach notification with counsel on the HIPAA clock.
 8. Lift maintenance again only through the G9 step 3 checks.
+
+### Restoring a database into service (quarantine, replay, admission)
+
+Added 2026-09-30 with the restore-admission build (branch `fix/v1-retention-holds`). A restored
+database can be older than a disposition instruction or a preservation hold recorded after its
+restore point. Both are signed into the independent journal (outside the clinical database and the
+state volume) before their database rows commit; a hold release is signed there only after its row
+commits, so a release the application reported as not recorded never ends a hold in a restore.
+Nothing inside a restored database says it was restored, so the operator selects it, and the
+application stays quarantined until an admission record for that selection exists and for as long
+as the database lacks anything the journal preserves. No step below deletes restored content, and
+none needs a retention period, schedule or duration.
+
+1. Restore RDS (and, if needed, the state volume) as **new** resources; never over the live ones.
+   Record a new UUID as the restore instance id in the declaration.
+2. Start the restored target with `QUILLMD_RESTORE_QUARANTINE=1`,
+   `QUILLMD_RESTORE_INSTANCE_ID=<that UUID>` and the independent journal configured (path, journal
+   and checkpoint public keys; the journal file may be read-only for this host). Quarantine answers
+   503 for clinical routes and refuses workers and file cleanup.
+3. Obtain from the independent checkpoint signer, not from the host, an unexpired signed checkpoint
+   of the journal's current head (sequence and head sha256).
+4. **Replay.** A verified administrator runs the replay action at `/console/disposition-execution/`
+   (the only action offered while quarantined) with that checkpoint. It imports a tombstone for
+   every journaled disposition instruction and every journaled hold, each release only after its
+   hold. Restored rows are kept. A hold whose target was created after the restore point is
+   recorded as `target_absent`; if that target is later put back with its id (a data-damage
+   reconcile), the database applies the hold, and its journaled release, as the row is inserted.
+   Every journaled release was committed at its source, so it is imported and the hold ends as it
+   did there; a hold or release whose custodian's account is absent from the restored database is
+   recorded by the administrator running the replay, and its marker keeps the signed entry.
+   Every journaled redaction (`core/redaction.py`) is re-applied in journal order with the holds and
+   releases: the restored document's content is emptied again, its code suggestions removed, its
+   tombstone imported from the signed entry, and the listed file bytes removed from the restored
+   volume when they still have the journaled digest. A release journaled after its target was put
+   back is applied too (NEW-1, 2026-10-01).
+5. **Check:** `manage.py restore_admission --instance-id <UUID> --custodian <administrator email>
+   --checkpoint <checkpoint file> --expected-triggers <release count> --check-only`. It prints a
+   counts-only report and exits non-zero naming any blocker: `restore_check_failed` (the release's
+   production restore check, including every journaled hold being present or recorded absent),
+   `tombstone_replay_incomplete`, `hold_replay_incomplete`, `release_replay_incomplete`,
+   `redaction_replay_incomplete`, `journal_target_visible`. The release count for this build is 107
+   (`len(ops.integrity_contract.GUARDS)`: 92 plus 0033's ten redaction guards and 0034's five coding-ledger guards).
+6. **Admit:** the same command without `--check-only` writes the one append-only `RestoreAdmission`
+   record for that instance (the database refuses its update, deletion or truncation, and refuses a
+   report it can disprove). If the journal grew after the replay, for example a new hold, replay
+   again with a fresh checkpoint first.
+7. **Lift quarantine:** set `QUILLMD_RESTORE_QUARANTINE=0` and **keep**
+   `QUILLMD_RESTORE_INSTANCE_ID` unchanged. Make the journal file **writable** for this host (step 2
+   allowed it read-only) and stop the old host's access to it: from here this target is the only
+   writer. The application lifts quarantine only while a `RestoreAdmission` exists for that
+   instance id **and** the database accounts for every hold and release the journal names (re-read
+   whenever the journal file changes); the flag alone does not. If the journal grows past the
+   database (another host's hold or release, or a hold here whose database commit failed after its
+   journal append), or the journal becomes unreadable or unconfigured, the target answers 503 again:
+   repeat step 3 and step 4 (replay stays available while quarantined) and it lifts by itself once
+   the replay has imported what was missing; the admission record stands. Removing the instance id
+   as well also removes the quarantine, because nothing else identifies the database as restored:
+   never remove it from a restored target.
+8. Record the instance id, the admission record id, its `report_sha256`, and the journal sequence and
+   head in the declaration.
+
+Limits: a hold recorded while no journal was configured, or while the configured journal could not
+take the entry (missing, read-only, unverifiable, or at its 1000-entry or 8 MiB bound), is still recorded and
+enforced in the database that recorded it, with an error logged and `journaled: false` in its audit
+row; until its exact retry (same request key) or its release journals it, a restore older than that
+database loses it. A release whose journal copy failed after its commit is logged the same way; a
+restore older than it keeps the hold active until the custodian's exact retry journals it. A target
+without a configured, verifiable journal cannot be admitted and stays quarantined; the
+`production_restore_check.py` drill tool does not read the journal, so the journaled-hold check runs
+through `restore_admission` on the target.
+
+### Code rollback onto a newer schema (image rollback without a schema rollback)
+
+Verified 2026-09-28 for the installed private-beta release `dedac162` (core migrations 0001-0018,
+byte-identical in V1) on the V1 schema (core 0001-0031): dedac162's own code (`git archive`) was run
+against synthetic databases migrated to 0031, and dedac162's own core suite was run on that schema.
+Nothing here was tried on a database holding real data. A release older than dedac162 is not verified.
+
+**Before real data only.** Everything in this section applies to an image rollback to dedac162 while
+the database holds synthetic data. After real data exists, dedac162 is not a rollback target: fix
+forward (step 4 above) or roll back only to a release that enforces real-data mode. Reproduced
+2026-09-28 on throwaway synthetic databases, with the provider call replaced by a recorder and the
+network denied (MIG-R-1):
+
+- dedac162 is synthetic-only by construction (`SYNTHETIC_ONLY = True` in its settings). Its `/health/`
+  reports `synthetic-only` whatever `QUILLMD_DATA_MODE` says, and it refuses to start any document
+  without the "These are synthetic clinical notes." attestation. A clinician could continue working
+  under it only by attesting that real notes are synthetic.
+- dedac162's worker sends every transcription with fixed parameters and never reads the job's
+  recorded `deepgram_parameters`, so a recording V1 queued with `mip_opt_out=true` goes to the
+  provider **without** it and the job is marked succeeded. V1 in real-data mode refuses to send a
+  transcription without the opt-out ("Nothing was sent."). Every new dictation made under dedac162
+  would go out without it as well, so draining alone does not close the gap; the account-wide opt-out
+  (P4) reduces the exposure but does not restore the per-request control.
+
+- **Never reverse a migration to make an older release work.** 0020, 0021, 0022, 0025 to 0028, 0030
+  and 0031 refuse to reverse while their evidence exists (live payments or Stripe events; v3 mapping
+  confirmations, contracts or corrections; mapping jobs; retention holds and preserved records;
+  generation batches; disposition rows; for 0031, the same v3 mapping evidence as 0021; for 0033,
+  redaction requests or tombstones; for 0034, any code suggestion carrying a release identity or a
+  re-review mark, which every suggestion V1 writes carries). A refusal is
+  atomic for that one migration only: every later migration has already been reversed and committed,
+  so the database is left at an intermediate node (the refusals of 0020, 0021 and 0031 say so: "has
+  already been reversed and stays reversed"; the database-side refusals of 0022, 0025 to 0028 and 0030
+  do not). Run `migrate` forward again before starting any release.
+- **0031 refuses first.** It is the first migration reversed by any rollback toward dedac162's schema
+  (`migrate core 0018`, `0020`, `0030`, or any target before it), so on a database holding v3 mapping
+  evidence such a rollback is refused before anything core owns is dropped: 0031 stays applied, and so
+  does the database's confirmation gate. **Never target `zero`.** `otp_totp` depends on core 0001
+  (through the user model), so `migrate core zero` unapplies `otp_totp` 0003 to 0001 **before** 0031
+  refuses: every TOTP enrollment is dropped, `migrate` forward recreates the table empty, and every
+  clinician is offered enrollment again without the old second factor (MIG-R-2, measured 2026-09-28).
+  The supported target is `migrate core 0018`, which does not touch `otp_totp`; 0031's refusal message
+  says this. Before this, 0021 refused only after 0022 to 0031 had been reversed and
+  committed while its message said "Nothing was changed."; 0031's gate was gone, dedac162 started a
+  draft on a never-confirmed v3 mapping, re-applying 0031 did not look at that draft, and V1 finalized
+  and exported it (R1). A migration added after 0031 is reversed before 0031 is reached; if it drops
+  anything a rollback cannot give back, it needs its own guard. 0032, 0033 and 0034 each refuse first,
+  at the leaf, with 0031's message while v3 mapping evidence exists, so such a rollback reverses none
+  of them either.
+- **Why 0031 exists.** 0021 and 0022 added `core_templateversion.contract`, `corrections` and
+  `assistance` NOT NULL with no database default. On a 0030 schema dedac162's template upload and
+  mapping edit therefore failed with IntegrityError (a 500), and every failed upload left its stored
+  original behind in `originals/` (dedac162 removes it only on a validation or document error). 0031
+  gives the three columns database defaults (`''`, `{}`, `{}`), so dedac162's versions are recorded as
+  the legacy mappings they are. `core.tests.test_migration_rollback_safety` fails if a later migration
+  adds a NOT NULL column without a database default to any table dedac162 writes; move its
+  `PREVIOUS_RELEASE` when the installed release changes.
+- **What works under dedac162 on 0031** (measured by driving its views, and by its own core suite on
+  this schema): uploading a blank form; editing the labels of a legacy mapping (a new version);
+  starting, generating, reviewing, finalizing and exporting documents on legacy mappings. dedac162's
+  core suite on this schema: 1122 tests, 5 errors. Four also error on dedac162's own schema in the
+  test environment (two modules that do not import; two terminology imports that refuse a database
+  not named `quillmd_*`). The fifth is a test fixture that changes an existing job's `kind`, which
+  0022's job-scope trigger refuses; dedac162's application code never changes a job's kind.
+  Measured again after R1's repair with a test-harness shim, which changes only the test flush:
+  dedac162's test flush TRUNCATEs only its own tables, which Postgres
+  refuses on this schema (V1-only tables such as `core_retentionhold` and `core_clinicinvitation`
+  reference `core_patient` and `core_user`) and which V1's TRUNCATE guards refuse, so the shim lifts
+  those guards for the flush as V1's own `core/tests/__init__.py` does and adds CASCADE. Without it
+  the same run has 27 errors: the 5 above, 14 failed flushes and 8 duplicate keys left behind by
+  them, test for test the same on the schema before R1's repair. Production never flushes, so this is
+  not an application behavior.
+- **What the database refuses under dedac162, by design** (the request fails with a 500 and writes
+  nothing):
+  1. editing the labels of a contract v3 mapping. dedac162 knows no contract and copies the v3 fields
+     into a new version; CHECK `mapping_v3_fields_record_v3_contract` refuses it, because the row
+     would otherwise read as a legacy mapping that needs no confirmation once V1 is installed again;
+  2. starting a document on a contract v3 mapping that no clinician has confirmed. dedac162 has no
+     confirmation gate; `quillmd_encounter_guard` refuses it. Without this guard the draft dedac162
+     started was saved, finalized and exported after V1 was re-installed, with the mapping still
+     unconfirmed (V1 checked confirmation only when a document was started);
+  3. appending a transcription to a document that holds an **accepted** code (0034,
+     `quillmd_coding_guard`: an accepted code is never deleted). dedac162's and ac43e379's worker
+     (`core/jobs.py`, the non-review transcription append) delete every code suggestion of the
+     document; the guard refuses, so the adoption fails and the job ends as a platform failure: the
+     settled charge is reversed (absorbed, not charged to the doctor), the notes are **not** appended
+     and the accepted code is kept. Measured by the 7A refutation (P10: ac43e379's code on the
+     dc33e094 schema, synthetic). Their notes save is not refused: it clears the acceptance first and
+     then deletes the codes, as before 0034 (the re-review mark is V1's, not theirs). Before an image
+     rollback, count the documents this would affect:
+
+         SELECT count(DISTINCT encounter_id) FROM core_codesuggestion WHERE accepted_by_id IS NOT NULL
+          AND encounter_id IN (SELECT id FROM core_encounter WHERE status <> 'finalized');
+
+  4. any edit of a **redacted** document (0033, `quillmd_redaction_guard`), which the older releases
+     neither hide nor know: they would show its emptied page and the database refuses any content
+     written to it. None exists unless redaction was used (`SELECT count(*) FROM core_redactiontombstone`).
+- **Every backup run from dedac162's or ac43e379's image fails once any redaction exists** (the
+  7A refutation, round 2, R2D-D1: ac43e379's `FILE_QUERIES` run verbatim on a redacted synthetic
+  database). Their backup file queries have no redaction filter, so they still list the recording and
+  provider results whose bytes the redaction removed; reading one raises `FileNotFoundError`, and their
+  `backup()` then writes `INCOMPLETE` and stops. No new recovery point is made for as long as the older
+  image runs, and the backup alerts report the failed runs. Before an image rollback, count the
+  redactions with the query in item 4: if it is not zero, either take the last complete backup from
+  this release first and keep the rollback window short, or do not roll back past 0033's image; never
+  restore the removed bytes to make the older backup pass (they are redacted content).
+- **A document on an unconfirmed v3 mapping is held, never finalized.** The same guard refuses any
+  move to `finalized` of a document whose mapping is contract v3 with no confirmation, whoever writes
+  it, and V1's finalize refuses it first with a message naming the mapping version ("has not been
+  confirmed by a clinician ... Nothing was finalized"), before anything is filled. Such a document can
+  exist only if it was started while 0031's gate was missing (0031 reversed on a database without v3
+  evidence, a v3 mapping recorded afterwards, and dedac162 run on it). Re-applying 0031 does not refuse
+  it: the draft and its review are kept, and it finalizes once a clinician confirms that mapping
+  version (V1 confirms only a form's current mapping version; for an older one, start a new document
+  from the confirmed mapping). After any `migrate` forward from a rollback, count them:
+
+      SELECT count(*) FROM core_encounter e JOIN core_templateversion v ON v.id = e.template_version_id
+       WHERE v.contract = 'v3' AND e.status <> 'finalized'
+         AND NOT EXISTS (SELECT 1 FROM core_mappingconfirmation c WHERE c.version_id = v.id);
+
+  A non-zero count is not an error; tell the department's clinicians which forms need confirming.
+- **What cannot work under dedac162:** a document on a *confirmed* v3 mapping can be started and
+  generated (measured in fixture mode; live-mode charging was not exercised), but dedac162's export
+  refuses every v3 mapping ("The field mapping does not match this original"), so such documents stay
+  in review until V1 is installed again. Before an image rollback, count what would be stranded:
+
+      SELECT count(*) FROM core_templateversion WHERE contract = 'v3';
+      SELECT count(*) FROM core_encounter e JOIN core_templateversion v ON v.id = e.template_version_id
+       WHERE v.contract = 'v3' AND e.status <> 'finalized';
+
+  If either is non-zero, v3 forms cannot be exported while dedac162 runs; fix forward instead.
+- **Drain every job except generation first.** dedac162's worker takes the oldest queued job of any
+  kind. It failed a queued blank-mapping job (kind `mapping`, no document) with the misleading error
+  "Access was revoked before processing." (measured in fixture mode, which holds no funds), and it
+  sends a queued V1 transcription without its recorded opt-out (above). Batch-generation children
+  (kind `generation_part`, off unless `QUILLMD_V3_GENERATION_BATCHES=1`) were not exercised. Before
+  an image rollback this must return no rows (it counts `queued` transcriptions, which the earlier
+  version of this query excluded; step 3's inventory counts only `running` and `reconciliation`):
+
+      SELECT kind, state, count(*) FROM core_job
+       WHERE kind <> 'generation' AND state IN ('queued', 'running', 'reconciliation')
+       GROUP BY kind, state;
 
 ### Release updates after go-live
 

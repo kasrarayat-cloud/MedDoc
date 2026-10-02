@@ -1,0 +1,9 @@
+{
+  "source_commit": "904fa10c9f717582d0e405e0e445292e29003872",
+  "engine_sha256": "02c25c15110a9af367dae24e925f598a2e9aeeb6ffec4afee63357a009fdc235",
+  "viewer": "Astra engineering agent /root/word_recovery",
+  "files": ["render-output/D03-q10-original-page-2.png", "render-output/D03-q10-ordinary-page-2.png"],
+  "observed": "Original and export retain Q10 full wording and nine option labels; exactly Throbbing/Pulsing and Dull are marked. Other blank remains empty. Adjacent Q11 through Q16 wording, shaded areas and original controls remain visible with no observed overlap, clipping or overwritten neighbors. Both PDFs have four pages. This is an affected-page LibreOffice comparison, not native Microsoft Word acceptance or whole-document semantic qualification.",
+  "long_answer_disposition": "Checkbox selections have a finite existing option set; free-text long-answer insertion is not implemented by this slice. Other write-ins remain visible unresolved areas for the next disjoint-span repair.",
+  "workflow_reuse": "Final source-sequence guard changes no D03 fields or warnings versus authenticated workflow capture; exact result equality retained in 16-final-map-equivalence.json. Writer unchanged. Existing captures and render are reused, not represented as final-source reruns."
+}

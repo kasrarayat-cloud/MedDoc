@@ -1,0 +1,311 @@
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/selftest4.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/commit-b.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/commit-r1.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/make_freeze.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/overlap_probe.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/selftest3.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/bisect_n01.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/regrade-do_nothing.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/wc-after.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mutation_proofs.log
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/wc-before.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/selftest5.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mutate_r1.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/replay-record.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/wc-after4.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/obs-planted.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/pc.out
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/win_probe.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/qaenv.sh
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mutation_proofs.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/replay1.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/nf-inspect.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/selftest1.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/regrade-harmful.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/replay-check1.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/reap-out.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cases-before-repair.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/commit-message.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/replay-check2.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cases-altered.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/walk-try1.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/wc-after2.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/la.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/f2b-draft.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/selftest2.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/qa-test.sh
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/commit-a.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/responses.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/regrade-correct.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/wc-after3.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/wc-after5.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/proto/protolib.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/proto/proto3.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/proto/proto5.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/proto/proto.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/proto/proto4.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/proto/proto2.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/explorer-full.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/ra-red.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/ra-green-repeat.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/rb-green.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/rb-mutation.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/explorer-full.log
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/explorer-smoke.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/ra-green.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/ra-mutation.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/rb-red-resolution.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/evidence/core-full.log
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f2-leave-checkboxes.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f2b-leave-checkboxes-owner.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f6a-long-answer.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f5-negative-controls.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f4-exam-grid.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f6b-admin-missing.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/check_expected.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f1-guidance-confirmation.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/cepc/f3-selection-instructions.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.correct.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.harmful.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.expressible.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6b-admin-missing.app_fixture.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f5-negative-controls.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f1-guidance-confirmation.deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f4-exam-grid.app_fixture.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2b-leave-checkboxes-owner.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.correct.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f3-selection-instructions.do_nothing.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f6a-long-answer.harmful.output.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/dump5/f2-leave-checkboxes.do_nothing.graded.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/probe_terminate.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/ra-mutants.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/sitecustomize.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/run.sh
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/resid_settings.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/rb-mutants.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/mutate.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/camp/msg-approval.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/camp/diag-results.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/camp/msg-diag.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f6b-admin-missing.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f3-selection-instructions.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f6a-long-answer.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f5-negative-controls.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f2b-leave-checkboxes-owner.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f4-exam-grid.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f2-leave-checkboxes.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state3/files/originals/f1-guidance-confirmation.docx
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/render-test/wm.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/render-test/wm.pdf
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f6b-admin-missing.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f3-selection-instructions.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f6a-long-answer.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f5-negative-controls.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f2b-leave-checkboxes-owner.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f4-exam-grid.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f2-leave-checkboxes.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state5/files/originals/f1-guidance-confirmation.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/EXPECTED-SHA256SUMS
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/README.md
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f2-leave-checkboxes.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/build_forms.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/long-answer-readback.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/grade_app_path.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f2b-leave-checkboxes-owner.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f6a-long-answer.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f5-negative-controls.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f4-exam-grid.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/wording_check.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/wording-check.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f6b-admin-missing.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/app-path-selftest.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/measure_baseline.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/check_expected.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/baseline-deterministic.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f1-guidance-confirmation.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/long-answer.txt
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/long_answer_readback.py
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mbpc/mapping/f3-selection-instructions.expected.json
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/harness/__pycache__/sitecustomize.cpython-312.pyc
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f6b-admin-missing.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f3-selection-instructions.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f6a-long-answer.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f5-negative-controls.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f2b-leave-checkboxes-owner.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f4-exam-grid.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f2-leave-checkboxes.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state2/files/originals/f1-guidance-confirmation.docx
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D30-fdeafbee872f.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D30-fdeafbee872f.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D21-d1c0e1234bae.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D21-d1c0e1234bae.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D16-51c6e400e89d.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D16-51c6e400e89d.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D24-20a7df595e0f.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D24-20a7df595e0f.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D32-46a80892ef0d.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D32-46a80892ef0d.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D01-c1852a492221.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D01-c1852a492221.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D15-19efe830ee0d.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D15-19efe830ee0d.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D35-cf9b240f3893.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D35-cf9b240f3893.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D22-e858648b9d5c.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D22-e858648b9d5c.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D06-8c13e2d1c71c.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D06-8c13e2d1c71c.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D10-b54cc9e77067.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D10-b54cc9e77067.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D12-934bf431af0b.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D12-934bf431af0b.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D37-01326e0d4d17.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D37-01326e0d4d17.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D02-8ae1e2b0ebee.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D02-8ae1e2b0ebee.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D34-35feb7a7ab69.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D34-35feb7a7ab69.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D26-0e247607a738.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D26-0e247607a738.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D39-17e6d154693c.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D39-17e6d154693c.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D27-bc002ff4594e.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D27-bc002ff4594e.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D38-83769a3b2c6b.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D38-83769a3b2c6b.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D05-ab006eeb434e.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D05-ab006eeb434e.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D20-d35cb2a6f54e.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D20-d35cb2a6f54e.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D03-29dfcdd8a5da.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D03-29dfcdd8a5da.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D17-92b3e2ed55db.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D17-92b3e2ed55db.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D19-46f4c7cffa95.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D19-46f4c7cffa95.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D14-5089ad547ee0.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D14-5089ad547ee0.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D36-01b700ed8dd7.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D36-01b700ed8dd7.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D29-e01fb51a1ce2.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D29-e01fb51a1ce2.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D33-45e292c57ec8.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D33-45e292c57ec8.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D11-500efd5985a7.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D11-500efd5985a7.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D07-f43d08e3b436.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D07-f43d08e3b436.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D40-e24dc2605ffe.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D40-e24dc2605ffe.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D08-9eeac252e6d2.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D08-9eeac252e6d2.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D23-9e0857330b9e.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D23-9e0857330b9e.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D13-75b75da8559d.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D13-75b75da8559d.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D09-b04f37b4ff08.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D09-b04f37b4ff08.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D18-73fe91e5501b.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D18-73fe91e5501b.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D31-f730aa53671a.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D31-f730aa53671a.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D25-017d29aeeb69.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D25-017d29aeeb69.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D04-cebb55cd7345.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D04-cebb55cd7345.pdf
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D28-479946b2185f.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/eval/render-filled-r1/D28-479946b2185f.pdf
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f6b-admin-missing.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f3-selection-instructions.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f6a-long-answer.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f5-negative-controls.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f2b-leave-checkboxes-owner.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f4-exam-grid.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f2-leave-checkboxes.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state-final/files/originals/f1-guidance-confirmation.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f6b-admin-missing.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f3-selection-instructions.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f6a-long-answer.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f5-negative-controls.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f2b-leave-checkboxes-owner.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f4-exam-grid.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f2-leave-checkboxes.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state4/files/originals/f1-guidance-confirmation.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f6b-admin-missing.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f3-selection-instructions.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f6a-long-answer.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f5-negative-controls.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f2b-leave-checkboxes-owner.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f4-exam-grid.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f2-leave-checkboxes.docx
+   shredded: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/app-state1/files/originals/f1-guidance-confirmation.docx
+shred: /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/harness-v21/symcheck/work/out/wingdings-wt.pdf: failed to open for writing: Permission denied
+🔴 SHRED FAILED (exit 1): /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/harness-v21/symcheck/work/out/wingdings-wt.pdf

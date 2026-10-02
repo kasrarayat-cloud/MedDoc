@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__msg-report.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P.jsonl:18784",
+   "timestamp": "2026-09-29T09:42:17.376Z",
+   "sha256_after": "1b212533f5710407bcd294b323cce74415f8bc2bfa30bc1c1cf65a7bb34b3132",
+   "bytes_after": 620
+  }
+ ],
+ "lines": 9,
+ "sha256": "1b212533f5710407bcd294b323cce74415f8bc2bfa30bc1c1cf65a7bb34b3132"
+}

@@ -5,7 +5,7 @@ import secrets
 from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import DatabaseError, connection, transaction
 from django.utils import timezone
 from . import generation, mapping_assistance as mapping
 from .billing import reserve, release, settle, sandbox_hold, absorb_failed_job
@@ -77,9 +77,13 @@ def send(compiled,config):
     units['response_model']=getattr(response,'model','')
     return response,cost,units,recorded,provider,getattr(response,'_request_id','') or '',getattr(response,'id','') or '',False
 
-def parse_response(raw,simulated):
+def parse_response(raw,simulated,requested):
+    """The proposal of a mapping response. `requested` is the model the request named (the job's config): a response
+    from any other model, and every stop but a complete end_turn (refusal, max_tokens, model_context_window_exceeded), is
+    refused before anything is read."""
     if simulated:return raw
-    if getattr(raw,'model',None)!=generation.SONNET_5 or getattr(raw,'stop_reason',None)!='end_turn':
+    if (requested not in generation.NATIVE_MODELS or getattr(raw,'model',None)!=requested
+            or getattr(raw,'stop_reason',None)!='end_turn'):
         raise ValidationError('Mapping response model differs, was refused or was incomplete.')
     if any(getattr(block,'type','')=='refusal' for block in raw.content):
         raise ValidationError('Provider refused mapping assistance.')
@@ -94,12 +98,14 @@ def parse_response(raw,simulated):
     return json.loads(texts[0],object_pairs_hook=unique_pairs)
 
 def run_one():
-    from .jobs import NoProviderRequest, NotAdoptedByUser, ended_key
+    from .disposition import require_processing
+    require_processing()
+    from .jobs import NoProviderRequest, NotAdoptedByUser
     with transaction.atomic():
         job=Job.objects.select_for_update(skip_locked=True).filter(kind='mapping',state='queued').order_by('created_at').first()
         if not job:return False
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
-    sent=False;returned=False
+    sent=False;returned=False;settling=False;carrier=None
     try:
         permission(job.config,queued=True)
         try:membership(job.user,job.department,roles=['owner','clinician','manager'])
@@ -115,20 +121,33 @@ def run_one():
         raw,cost,units,rates,provider,request_id,resource_id,simulated=send(compiled,job.config)
         returned=True
         with transaction.atomic():
+            # Under the job's row lock, as core.jobs.run_one: a receipt that arrives after the job left 'running' is recorded
+            # and held for an administrator (core.jobs.hold_late_receipt); settle() below then refuses it.
+            from .jobs import hold_late_receipt
+            arrived_into=Job.objects.select_for_update().get(pk=job.pk).state
             ProviderReceipt.objects.create(job=job,provider=provider,provider_request_id=request_id,provider_resource_id=resource_id,
                 actual_cost=cost,units=units,rates=rates,simulated=simulated)
             job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id
             job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
+            if arrived_into!='running':hold_late_receipt(job,arrived_into)
         payload=json.dumps(raw if simulated else raw.model_dump(mode='json'),ensure_ascii=False).encode()
         relative=f'receipts/{secrets.token_hex(24)}.json';path=private_path(relative)
         path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
         with path.open('xb') as stream:path.chmod(0o600);stream.write(payload)
         job.result_path=relative;job.result_sha256=hashlib.sha256(payload).hexdigest()
         job.save(update_fields=['result_path','result_sha256'])
+        # The connection that will carry settlement's COMMIT, kept to tell afterwards whether it was lost (as core.jobs, RS-1).
+        connection.ensure_connection();carrier=connection.connection;settling=True
         settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)
-        proposal=mapping.validate_proposal(version,compiled,parse_response(raw,simulated))
+        settling=False
+        proposal=mapping.validate_proposal(version,compiled,parse_response(raw,simulated,job.config['model']))
         with transaction.atomic():
             template=Template.objects.select_for_update().get(pk=version.template_id)
+            # The template, then the job (the global lock order, core.retention): a job swept or resolved after its
+            # settlement committed adopts no mapping version and is never overwritten as succeeded (as core.jobs.run_one).
+            if Job.objects.select_for_update().get(pk=job.pk).state!='running':
+                from .jobs import JobNoLongerRunning
+                raise JobNoLongerRunning('The request left processing before its output could be adopted.')
             try:membership(job.user,template.department,roles=['owner','clinician','manager'])
             except PermissionDenied as exc:raise NotAdoptedByUser('Access revoked before mapping adoption.') from exc
             if template.versions.order_by('-number').first().pk!=version.pk:
@@ -140,22 +159,63 @@ def run_one():
             audit(job.user,'mapping.review_ready',job.pk,department=template.department,version=str(new.pk),
                   unresolved=len(proposal['review']['unresolved']),simulated=simulated)
     except Exception as exc:
-        known=Usage.objects.filter(job=job).exists()
-        declined=known and isinstance(exc,NotAdoptedByUser)
-        unsent=not returned and (not sent or isinstance(exc,NoProviderRequest))
-        job.state='failed' if known or unsent else 'reconciliation'
-        job.error=('not_adopted: Source or permission changed; output was not adopted.' if declined else
-                   'platform_failure: Mapping output could not be adopted.' if known else
-                   'not_processed: Mapping refused before submission; held funds released.' if unsent else
-                   'Provider outcome or settlement is uncertain; reconcile before retrying.')
-        job.finished_at=timezone.now()
-        if job.state=='failed':job.request_key=ended_key(job,'failed')
-        with transaction.atomic():
-            job.save(update_fields=['state','error','finished_at','request_key'])
-            if unsent:release(job)
-        if known and not declined:
-            try:absorb_failed_job(job)
-            except Exception as absorb_error:
-                audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
-        audit(job.user,'mapping.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__)
+        # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
+        from .jobs import (OUTCOME_UNRECORDED, PROVIDER_NOT_CONNECTED, ProviderRefusedRequest, commit_in_doubt,
+                           hold_for_reconciliation, never_transmitted, provider_refused, usable_connection)
+        if not returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
+        # A request the provider definitely refused without processing it is not an unknown outcome (as core.jobs).
+        elif not returned and (refusal:=provider_refused(exc)): exc=ProviderRefusedRequest(refusal)
+        # Read before anything reconnects: whether settle()'s COMMIT went out and its answer was lost (as core.jobs, RS-1).
+        in_doubt=settling and commit_in_doubt(exc,carrier)
+        usable_connection()
+        try:end_failed_job(job,exc,returned,sent,in_doubt)
+        except DatabaseError:
+            # The handler's own read or write failed (as core.jobs, RS-2): hold the job for an administrator, asserting nothing.
+            usable_connection()
+            hold_for_reconciliation(job,exc,OUTCOME_UNRECORDED,action='mapping.reconciliation')
     return True
+
+def end_failed_job(job,exc,returned,sent,in_doubt):
+    """Record how a running mapping job that raised ended, from what is committed, under its row lock.
+
+    ⚠️ THE SAME GUARD AS core.jobs.end_failed_job (RR2-M1, docs/rebuild/v1/residuals-assessment-20260929.md). This handler
+    used to read Usage.exists() without the job's lock and write afterwards: when the ADOPTION's COMMIT answer was lost
+    after it committed (the new mapping version on the template, the job 'succeeded', the charge standing), it decided
+    'known and not declined' and overwrote the committed success as a platform failure, reversing the charge. Now the
+    decision and the write happen under the job's row lock, where the committed record is final (a transaction whose COMMIT
+    answer was lost holds that lock until it ends), and an outcome a committed transaction recorded is never overwritten.
+    An in-doubt settlement COMMIT asserts nothing and holds the job with its request key."""
+    from .jobs import (ABSORPTION_FAILED, SETTLEMENT_UNKNOWN, NoProviderRequest, NotAdoptedByUser, ProviderRefusedRequest,
+                       ended_key, failure_reason, hold_for_reconciliation, outcome_already_recorded, record_refusal)
+    if in_doubt:return hold_for_reconciliation(job,exc,SETTLEMENT_UNKNOWN,action='mapping.reconciliation')
+    absorbing=False
+    try:
+        with transaction.atomic():
+            state=Job.objects.select_for_update().get(pk=job.pk).state
+            if state!='running':return outcome_already_recorded(job,exc,state)
+            known=Usage.objects.filter(job=job).exists()
+            declined=known and isinstance(exc,NotAdoptedByUser)
+            unsent=not returned and (not sent or isinstance(exc,NoProviderRequest))
+            # The provider answered with a definite refusal (core.jobs.provider_refused): nothing processed or billed.
+            refused=not known and not unsent and not returned and sent and isinstance(exc,ProviderRefusedRequest)
+            job.state='failed' if known or unsent or refused else 'reconciliation'
+            job.error=('not_adopted: Source or permission changed; output was not adopted.' if declined else
+                       'platform_failure: Mapping output could not be adopted.' if known else
+                       'not_processed: Mapping refused before submission; held funds released.' if unsent else
+                       ('not_processed: '+failure_reason(exc))[:250] if refused else
+                       'Provider outcome or settlement is uncertain; reconcile before retrying.')
+            job.finished_at=timezone.now()
+            if job.state=='failed':job.request_key=ended_key(job,'failed')
+            fields=['state','error','finished_at','request_key']
+            if refused:fields+=record_refusal(job,exc,'mapping.failed')
+            job.save(update_fields=fields)
+            if unsent or refused:release(job)
+            # ⚠️ In the same transaction as the failed state (RS-3, as core.jobs): a reversal that fails never leaves a
+            # 'failed' job charged with its request key freed, which let the same mapping be bought again.
+            if known and not declined:absorbing=True;absorb_failed_job(job);absorbing=False
+            audit(job.user,'mapping.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
+                  **({'billing':'provider_refused'} if refused else {}))
+    except Exception as absorb_error:
+        if not absorbing:raise
+        hold_for_reconciliation(job,exc,ABSORPTION_FAILED,billing='platform_failure',absorb_error=absorb_error,
+                                action='mapping.reconciliation')
