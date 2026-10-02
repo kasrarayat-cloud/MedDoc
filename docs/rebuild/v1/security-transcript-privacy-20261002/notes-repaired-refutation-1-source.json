@@ -1,0 +1,21 @@
+{
+  "claim": "read-only frozen clinical refutation; no provider/DB calls",
+  "unqualified_candidate_commit": "1144e47cf806f85eb698335e27fd1c7c5898c808",
+  "files": [
+    {
+      "source": "1144e47cf806f85eb698335e27fd1c7c5898c808:rebuild/core/generation.py",
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-1-source/generation.py",
+      "sha256": "b56cbb919128daf119ce2c470112d42ba38759980a556b8e4d39b53229baeb24"
+    },
+    {
+      "source": "1144e47cf806f85eb698335e27fd1c7c5898c808:rebuild/core/source_scope.py",
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-1-source/source_scope.py",
+      "sha256": "8627634ab1fe5f3db66f6493691eef514ac4057389eb28401e915c978f5b6f06"
+    },
+    {
+      "source": "1144e47cf806f85eb698335e27fd1c7c5898c808:rebuild/core/transcript_context.py",
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-1-source/transcript_context.py",
+      "sha256": "3b925017fb157d864e9a4941c8c01d3e9086c19107c43a22b59fa96d9da40454"
+    }
+  ]
+}

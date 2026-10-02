@@ -10,6 +10,8 @@ from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, connection, transaction
 from django.db.migrations.exceptions import IrreversibleError
+from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.recorder import MigrationRecorder
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -18,6 +20,7 @@ from core.tests.test_redaction import RedactionFixture, REASON
 from core.tests.test_retention_flow_locks import in_thread, wait_for_blocked_backend
 from core.tests.test_retention_preservation import ISOLATED
 from core.tests.test_word_v3_workflow import V3, V3Fixture, build_questionnaire
+from core.tests.test_security import SyntheticFixture
 
 
 class TranscriptFixture(RedactionFixture):
@@ -168,3 +171,58 @@ class ImportedEvidenceRollback(V3Fixture,TestCase):
             cursor.execute(integrity_contract.CATALOG);rows=cursor.fetchall()
             cursor.execute(integrity_contract.CONTEXT);context=cursor.fetchall()
         self.assertTrue(integrity_contract.assess(rows,context,len(integrity_contract.GUARDS))['passed'])
+
+
+class CodingEvidenceAtTranscriptLeaf(SyntheticFixture,TransactionTestCase):
+    """A real multi-migration reverse must refuse at the leaf, preserving every newer guard, or finish cleanly."""
+    def setUp(self):
+        self.scope=self.make_scope('transcript-rollback')
+        today=timezone.localdate()
+        self.release=m.CodeSet.objects.create(system='ICD-10-CM',version='synthetic-transcript-rollback',
+            effective_from=today,effective_until=today,source_url='https://example.invalid/synthetic',sha256='d'*64)
+        self.code=m.Code.objects.create(release=self.release,code='R00.0',description='Synthetic rollback evidence')
+
+    def tearDown(self):
+        executor=MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+        super().tearDown()
+
+    def contract(self):
+        from ops import integrity_contract
+        with connection.cursor() as cursor:
+            cursor.execute(integrity_contract.CATALOG);rows=cursor.fetchall()
+            cursor.execute(integrity_contract.CONTEXT);context=cursor.fetchall()
+        return integrity_contract.assess(rows,context,len(integrity_contract.GUARDS))
+
+    def refusal_keeps_exact_schema(self,**columns):
+        suggestion=m.CodeSuggestion.objects.create(encounter=self.scope[5],terminology=self.code,
+            explanation='Synthetic evidence',evidence='Synthetic source',**columns)
+        before=set(MigrationRecorder(connection).applied_migrations())
+        rows=list(m.CodeSuggestion.objects.values())
+        self.assertFalse(m.TranscriptReview.objects.exists())
+        self.assertFalse(m.TemplateVersion.objects.exclude(import_manifest={}).exists())
+        with self.assertRaisesMessage(IrreversibleError,'Coding ledger evidence requires a forward migration'):
+            MigrationExecutor(connection).migrate([('core','0033_redaction_tombstone')])
+        self.assertEqual(set(MigrationRecorder(connection).applied_migrations()),before)
+        self.assertEqual(list(m.CodeSuggestion.objects.values()),rows)
+        self.assertTrue(self.contract()['passed'])
+        self.assertEqual(m.CodeSuggestion.objects.get(pk=suggestion.pk).evidence,'Synthetic source')
+
+    def test_release_identity_refuses_before_any_newer_guard_is_removed(self):
+        self.refusal_keeps_exact_schema(release_sha256=self.release.sha256)
+
+    def test_review_mark_alone_refuses_before_any_newer_guard_is_removed(self):
+        self.refusal_keeps_exact_schema(review_required=True)
+
+    def test_without_protected_columns_reverse_and_forward_keep_legacy_rows(self):
+        suggestion=m.CodeSuggestion.objects.create(encounter=self.scope[5],terminology=self.code,
+            explanation='Synthetic legacy evidence',evidence='Synthetic legacy source')
+        MigrationExecutor(connection).migrate([('core','0033_redaction_tombstone')])
+        self.assertNotIn(('core','0037_transcript_redaction_boundary'),MigrationRecorder(connection).applied_migrations())
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT evidence FROM core_codesuggestion WHERE id=%s',[suggestion.pk])
+            self.assertEqual(cursor.fetchone()[0],'Synthetic legacy source')
+        executor=MigrationExecutor(connection);executor.migrate(executor.loader.graph.leaf_nodes())
+        kept=m.CodeSuggestion.objects.get(pk=suggestion.pk)
+        self.assertEqual((kept.release_sha256,kept.review_required,kept.evidence),('',False,'Synthetic legacy source'))
+        self.assertTrue(self.contract()['passed'])

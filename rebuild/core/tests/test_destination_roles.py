@@ -23,7 +23,7 @@ from core.jobs import enqueue, run_one
 from core.models import Encounter, MappingConfirmation, Template, TemplateVersion
 from core.security import private_path
 from core.tests.test_mapping_assistance import SETTINGS as MAPPING_SETTINGS
-from core.tests.test_word_v3_workflow import V3, V3Fixture, part_text
+from core.tests.test_word_v3_workflow import V3, V3Fixture, part_text, import_metadata
 from core.tests.test_workflow import TEST_SETTINGS
 from documents import DocumentError, fill_template, word_v3
 
@@ -100,7 +100,7 @@ class V3Gates(V3Fixture, TestCase):
         """A stored mapping version (and its confirmation) as a release before this change could have left it."""
         latest = self.latest(template)
         version = TemplateVersion.objects.create(template=template, number=latest.number + 1, fields=fields,
-                                                 contract='v3', created_by=self.user)
+                                                 contract='v3', created_by=self.user, **import_metadata(latest, fields))
         MappingConfirmation.objects.create(version=version, confirmed_by=self.user)
         return version
 
@@ -143,7 +143,8 @@ class V3Gates(V3Fixture, TestCase):
         bad = forged(data, 'b/p[1]', label='Signature')
         fields = [plan, bad]
         # confirmation of such a mapping is refused (a fresh version, unconfirmed)
-        latest = TemplateVersion.objects.create(template=template, number=2, fields=fields, contract='v3', created_by=self.user)
+        latest = TemplateVersion.objects.create(template=template, number=2, fields=fields, contract='v3', created_by=self.user,
+                                                **import_metadata(version, fields))
         response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': latest.pk,
                                                                    'checked_every_field': 'on'})
         self.assertEqual(response.status_code, 400)
@@ -336,7 +337,7 @@ class ModelProposals(V3Fixture, TestCase):
             fields = [f for f in version.fields if f['label'] not in drop]
             self.assertEqual(len(fields), len(version.fields) - len(drop))
             version = TemplateVersion.objects.create(template=template, number=2, fields=fields, contract='v3',
-                                                     created_by=self.user)
+                                                     created_by=self.user, **import_metadata(version, fields))
         return template, version
 
     def compiled(self, version):
@@ -518,7 +519,7 @@ class ModelProposals(V3Fixture, TestCase):
         for n, (name, fields, prior, label, kind, reason) in enumerate(cases):
             with self.subTest(case=name):
                 stored = TemplateVersion.objects.create(template=template, number=n + 2, fields=fields, contract='v3',
-                                                        created_by=self.user)
+                                                        created_by=self.user, **import_metadata(version, fields))
                 prior = prior or fields[1]
                 compiled, payload = self.compiled(stored)
                 fid = next(i for i, f in enumerate(payload['fields']) if f['key'] == prior['key'])
@@ -535,6 +536,7 @@ class ModelProposals(V3Fixture, TestCase):
         allergies = next(f for f in version.fields if f['label'] == 'Allergies')
         slot = BODY + allergies['locator']['slot']
         assisted = TemplateVersion.objects.create(template=template, number=2, fields=version.fields, contract='v3',
+            **import_metadata(version, version.fields),
             created_by=self.user, assistance={'unresolved': [
                 {'slot': slot, 'reason': 'Proposed addition', 'key': '', 'text': ''},
                 {'slot': slot, 'reason': 'Existing field requires clinician review', 'key': allergies['key'], 'text': ''}]})
@@ -819,8 +821,9 @@ class ModelProposalsRound1(V3Fixture, TestCase):
         """L3:F2: 'Signature/Date' (identity) relabelled to 'Date' was adopted; generation then filled it."""
         template, version = self.uploaded(data=lines('Signature/Date: ______', 'Plan: ______'), name='Synthetic L3F2')
         signed = self.by_label(version)['Signature/Date']
+        fields = [{**f, 'kind': 'date'} if f['key'] == signed['key'] else f for f in version.fields]
         stored = TemplateVersion.objects.create(template=template, number=2, contract='v3', created_by=self.user,
-            fields=[{**f, 'kind': 'date'} if f['key'] == signed['key'] else f for f in version.fields])  # before this repair
+            fields=fields, **import_metadata(version, fields))  # before this role repair; the signing kind stays wrong
         at = 'Signature/Date: ______'.index('Date')
         result = self.proposal(stored, replaced=[signed['key']],
                                changes=[self.relabel(signed['key'], 'b/p[1]', 'date', at, at + 4)])
@@ -832,8 +835,9 @@ class ModelProposalsRound1(V3Fixture, TestCase):
         finalizer's signature on the 'Pulse findings' line is never relabelled away from it by a model."""
         template, version = self.uploaded(data=lines('Pulse findings: ______', 'Plan: ______'), name='Synthetic L3F2b')
         pulse = self.by_label(version)['Pulse findings']
+        fields = [{**f, 'label': 'Signed by'} if f['key'] == pulse['key'] else f for f in version.fields]
         stored = TemplateVersion.objects.create(template=template, number=2, contract='v3', created_by=self.user,
-            fields=[{**f, 'label': 'Signed by'} if f['key'] == pulse['key'] else f for f in version.fields])
+            fields=fields, **import_metadata(version, fields))
         result = self.proposal(stored, replaced=[pulse['key']],
                                changes=[self.relabel(pulse['key'], 'b/p[1]', pulse['kind'], 0, 14)])
         self.assertEqual(result['review']['changes'], [])
@@ -1013,6 +1017,7 @@ class SalvageResolveOverlap(V3Fixture, TestCase):
         body['x'] = [ModelProposals.change(payload, replace['locator']['slot'], text, kind=replace['kind'], fid=fid)]
         proposal = mapping.validate_proposal(version, compiled, body)
         new = TemplateVersion.objects.create(template=template, number=version.number + 1, fields=proposal['fields'],
+            **import_metadata(version, proposal['fields']),
             contract='v3', review_requirements=version.review_requirements, created_by=self.user,
             assistance={**proposal['review'], 'job_id': 'synthetic', 'base_version': str(version.pk), 'simulated': True})
         return proposal, new
@@ -1049,6 +1054,7 @@ class SalvageResolveOverlap(V3Fixture, TestCase):
         moved = {**weight, 'locator': copy.deepcopy(height['locator']), 'origin': 'model_assisted'}
         fields = [moved if f['key'] == weight['key'] else f for f in version.fields]
         new = TemplateVersion.objects.create(template=template, number=2, fields=fields, contract='v3',
+            **import_metadata(version, fields),
             created_by=self.user, assistance={'unresolved': [{'slot': BODY + weight['locator']['slot'], 'key': '',
                                                              'reason': 'Unresolved source area', 'text': ''}],
                                               'base_version': str(version.pk)})

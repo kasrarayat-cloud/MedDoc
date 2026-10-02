@@ -8,6 +8,7 @@ import importlib
 
 from django.db import migrations
 from django.db.migrations.exceptions import IrreversibleError
+from django.db.models import Q
 
 SQL='''CREATE FUNCTION quillmd_transcript_redaction_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -29,6 +30,10 @@ DROP FUNCTION quillmd_transcript_redaction_guard();'''
 def refuse_evidence(apps,schema_editor):
     if apps.get_model('core','TranscriptReview').objects.exists():
         raise IrreversibleError('Immutable transcript review evidence requires its redaction boundary; use code rollback.')
+    # 0034's SQL reverse also refuses its own retained columns. Check them at this leaf before a migration
+    # executor can commit removal of 0037/0036/0035 and only then discover that older refusal.
+    if apps.get_model('core','CodeSuggestion').objects.filter(~Q(release_sha256='') | Q(review_required=True)).exists():
+        raise IrreversibleError('Coding ledger evidence requires a forward migration; preserve newer guards and use code rollback.')
     # Refuse first at the leaf, preserving every guard if an older protected mapping would stop rollback later.
     importlib.import_module('core.migrations.0035_import_manifest').preserve(apps,schema_editor)
     importlib.import_module('core.migrations.0034_coding_ledger').refuse_a_rollback_0031_refuses(apps,schema_editor)

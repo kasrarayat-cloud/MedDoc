@@ -1,0 +1,133 @@
+{
+  "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/ci-313c-core2.log",
+  "original_48_errors_2_app_failures_preserved": true,
+  "selected_fixture_errors": [
+    {
+      "first_ci_error": "test_l3f2_an_identity_label_on_a_place_with_no_role_is_never_relabelled (core.tests.test_destination_roles.ModelProposalsRound1.test_l3f2_an_identity_label_on_a_place_with_no_role_is_never_relabelled)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 835, in test_l3f2_an_identity_label_on_a_place_with_no_role_is_never_relabelled",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_l3f2_the_finalizers_signature_label_is_never_relabelled (core.tests.test_destination_roles.ModelProposalsRound1.test_l3f2_the_finalizers_signature_label_is_never_relabelled)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 822, in test_l3f2_the_finalizers_signature_label_is_never_relabelled",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_rf19_a_stored_mapping_on_a_signature_place_is_held_everywhere (core.tests.test_destination_roles.V3Gates.test_rf19_a_stored_mapping_on_a_signature_place_is_held_everywhere)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 146, in test_rf19_a_stored_mapping_on_a_signature_place_is_held_everywhere",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_a_batch_admission_without_the_verifier_is_refused_whole_before_any_hold (core.tests.test_layout_generation_gate.LayoutGateOnTheCompleteFormBatch.test_a_batch_admission_without_the_verifier_is_refused_whole_before_any_hold)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_layout_generation_gate.py\", line 357, in setUp",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_a_replayed_admission_during_an_outage_is_answered_as_the_admitted_batch (core.tests.test_layout_generation_gate.LayoutGateOnTheCompleteFormBatch.test_a_replayed_admission_during_an_outage_is_answered_as_the_admitted_batch)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_layout_generation_gate.py\", line 357, in setUp",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_an_outage_at_adoption_keeps_the_complete_paid_draft_and_export_asks_the_verifier_itself (core.tests.test_layout_generation_gate.LayoutGateOnTheCompleteFormBatch.test_an_outage_at_adoption_keeps_the_complete_paid_draft_and_export_asks_the_verifier_itself)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_layout_generation_gate.py\", line 357, in setUp",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_an_outage_before_the_second_part_neither_refuses_nor_discards_the_paid_first_part (core.tests.test_layout_generation_gate.LayoutGateOnTheCompleteFormBatch.test_an_outage_before_the_second_part_neither_refuses_nor_discards_the_paid_first_part)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_layout_generation_gate.py\", line 357, in setUp",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_all_actual_request_holds_precede_send_then_complete_union_adopts_once (core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_all_actual_request_holds_precede_send_then_complete_union_adopts_once)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_v3_field_relations_batch.py\", line 177, in setUp",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_generation_batch.py\", line 184, in setUp",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_flag_withdrawal_and_cancel_never_send_an_extra_request (core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_flag_withdrawal_and_cancel_never_send_an_extra_request)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_v3_field_relations_batch.py\", line 177, in setUp",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_generation_batch.py\", line 184, in setUp",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_unknown_second_response_remains_held_and_never_retried (core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_unknown_second_response_remains_held_and_never_retried)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_v3_field_relations_batch.py\", line 177, in setUp",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_generation_batch.py\", line 184, in setUp",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_a_stored_box_the_form_lacks_can_never_be_confirmed (core.tests.test_word_v3_workflow.V3BoxNumbers.test_a_stored_box_the_form_lacks_can_never_be_confirmed)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 915, in test_a_stored_box_the_form_lacks_can_never_be_confirmed",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_a_stored_checkbox_on_a_text_control_is_never_confirmed (core.tests.test_word_v3_workflow.V3CheckboxNeedsABox.test_a_stored_checkbox_on_a_text_control_is_never_confirmed)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 1119, in test_a_stored_checkbox_on_a_text_control_is_never_confirmed",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_a_stale_anchor_is_refused_with_the_engine_message (core.tests.test_word_v3_workflow.V3Export.test_a_stale_anchor_is_refused_with_the_engine_message)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 622, in test_a_stale_anchor_is_refused_with_the_engine_message",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_error": "test_a_confirmation_alone_refuses (core.tests.test_migration_rollback_safety.ReversingTheV3MappingReviewMigration.test_a_confirmation_alone_refuses)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 164, in test_a_confirmation_alone_refuses",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 96, in version",
+        "django.db.utils.ProgrammingError: column \"import_manifest\" of relation \"core_templateversion\" does not exist"
+      ]
+    },
+    {
+      "first_ci_error": "test_an_unconfirmed_v3_mapping_alone_refuses (core.tests.test_migration_rollback_safety.ReversingTheV3MappingReviewMigration.test_an_unconfirmed_v3_mapping_alone_refuses)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 152, in test_an_unconfirmed_v3_mapping_alone_refuses",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 96, in version",
+        "django.db.utils.ProgrammingError: column \"import_manifest\" of relation \"core_templateversion\" does not exist"
+      ]
+    },
+    {
+      "first_ci_error": "test_recorded_corrections_alone_refuse (core.tests.test_migration_rollback_safety.ReversingTheV3MappingReviewMigration.test_recorded_corrections_alone_refuse)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 158, in test_recorded_corrections_alone_refuse",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 96, in version",
+        "django.db.utils.ProgrammingError: column \"import_manifest\" of relation \"core_templateversion\" does not exist"
+      ]
+    },
+    {
+      "first_ci_error": "test_reproduce_MIG2_confirmed_and_unconfirmed_v3_mappings_refuse_the_reverse (core.tests.test_migration_rollback_safety.ReversingTheV3MappingReviewMigration.test_reproduce_MIG2_confirmed_and_unconfirmed_v3_mappings_refuse_the_reverse)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 123, in test_reproduce_MIG2_confirmed_and_unconfirmed_v3_mappings_refuse_the_reverse",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 96, in version",
+        "django.db.utils.ProgrammingError: column \"import_manifest\" of relation \"core_templateversion\" does not exist",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_question_box_workflow.py\", line 348, in test_a_check_all_title_over_one_response_rows_is_held_on_upload"
+      ]
+    }
+  ]
+}

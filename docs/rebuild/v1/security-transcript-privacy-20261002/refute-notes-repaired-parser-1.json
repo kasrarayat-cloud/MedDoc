@@ -1,0 +1,567 @@
+[
+  {
+    "notes": "Takes warfarin 5 mg daily. Not since Monday.",
+    "dependencies": {},
+    "units": [
+      {
+        "quote": "Takes warfarin 5 mg daily.",
+        "parsed": null,
+        "actor": {
+          "habitual": false,
+          "past_time": false,
+          "dependent": false,
+          "claim_keys": [
+            "warfarin"
+          ],
+          "named_keys": [
+            "warfarin"
+          ],
+          "predicates": [
+            [
+              [
+                "take"
+              ],
+              false,
+              "present",
+              [
+                "warfarin"
+              ],
+              false
+            ]
+          ],
+          "negated_keys": [],
+          "finite_past": false,
+          "present_tense": true,
+          "main_patient": false,
+          "other_floor": false,
+          "quantified_denial": false,
+          "reattribution": false,
+          "denial_nouns": [],
+          "denial_heads": [],
+          "ceased_keys": [],
+          "bare_cessation": false,
+          "topic_denial_keys": [],
+          "surface_keys": [],
+          "intention": false,
+          "sole": {
+            "nouns_ok": true,
+            "genders": [],
+            "bad_pronoun": false,
+            "fronted": false,
+            "classes": [
+              "medication"
+            ],
+            "reach": [],
+            "unknown": false,
+            "descriptive": false,
+            "doubt_only": false,
+            "negation_only": true,
+            "multi_topic": false,
+            "self_contained": false,
+            "keys": [
+              "warfarin"
+            ],
+            "sides": [],
+            "uncertain": false,
+            "anchor": null,
+            "anchor_gender": null,
+            "current": false,
+            "advcl": [],
+            "presenting": false
+          },
+          "readable": true,
+          "kind": "missing",
+          "other": false,
+          "mentions_other": false,
+          "content": [
+            "mg",
+            "take",
+            "warfarin"
+          ],
+          "core": [
+            "warfarin"
+          ],
+          "nominal": [
+            "mg",
+            "warfarin"
+          ],
+          "keys": [
+            "take",
+            "warfarin"
+          ],
+          "core_keys": [
+            "warfarin"
+          ],
+          "gender": null,
+          "pronoun_genders": [],
+          "embedded": [],
+          "cues": [],
+          "past": false,
+          "age": false,
+          "standalone": false,
+          "patient_past": false,
+          "bounded": []
+        },
+        "tokens": [
+          {
+            "text": "Takes",
+            "pos": "VERB",
+            "dep": "ROOT",
+            "lemma": "take"
+          },
+          {
+            "text": "warfarin",
+            "pos": "NOUN",
+            "dep": "dobj",
+            "lemma": "warfarin"
+          },
+          {
+            "text": "5",
+            "pos": "NUM",
+            "dep": "nummod",
+            "lemma": "5"
+          },
+          {
+            "text": "mg",
+            "pos": "PROPN",
+            "dep": "npadvmod",
+            "lemma": "mg"
+          },
+          {
+            "text": "daily",
+            "pos": "ADV",
+            "dep": "advmod",
+            "lemma": "daily"
+          },
+          {
+            "text": ".",
+            "pos": "PUNCT",
+            "dep": "punct",
+            "lemma": "."
+          }
+        ]
+      },
+      {
+        "quote": "Not since Monday.",
+        "parsed": null,
+        "actor": {
+          "habitual": false,
+          "past_time": false,
+          "dependent": false,
+          "claim_keys": [],
+          "named_keys": [
+            "monda",
+            "monday"
+          ],
+          "predicates": [
+            [
+              [
+                "sinc",
+                "since"
+              ],
+              true,
+              null,
+              [],
+              false
+            ]
+          ],
+          "negated_keys": [
+            "monda",
+            "monday"
+          ],
+          "finite_past": false,
+          "present_tense": false,
+          "main_patient": false,
+          "other_floor": false,
+          "quantified_denial": false,
+          "reattribution": false,
+          "denial_nouns": [],
+          "denial_heads": [],
+          "ceased_keys": [],
+          "bare_cessation": false,
+          "topic_denial_keys": [],
+          "surface_keys": [],
+          "intention": false,
+          "sole": {
+            "nouns_ok": false,
+            "genders": [],
+            "bad_pronoun": false,
+            "fronted": false,
+            "classes": [],
+            "reach": [
+              "class",
+              "global"
+            ],
+            "unknown": false,
+            "descriptive": false,
+            "doubt_only": false,
+            "negation_only": true,
+            "multi_topic": false,
+            "self_contained": false,
+            "keys": [
+              "monda",
+              "monday"
+            ],
+            "sides": [],
+            "uncertain": false,
+            "anchor": null,
+            "anchor_gender": null,
+            "current": false,
+            "advcl": [],
+            "presenting": false
+          },
+          "readable": true,
+          "kind": "missing",
+          "other": false,
+          "mentions_other": false,
+          "content": [
+            "monday"
+          ],
+          "core": [],
+          "nominal": [
+            "monday"
+          ],
+          "keys": [
+            "monda",
+            "monday"
+          ],
+          "core_keys": [],
+          "gender": null,
+          "pronoun_genders": [],
+          "embedded": [],
+          "cues": [],
+          "past": false,
+          "age": false,
+          "standalone": false,
+          "patient_past": false,
+          "bounded": []
+        },
+        "tokens": [
+          {
+            "text": "Not",
+            "pos": "PART",
+            "dep": "neg",
+            "lemma": "not"
+          },
+          {
+            "text": "since",
+            "pos": "SCONJ",
+            "dep": "ROOT",
+            "lemma": "since"
+          },
+          {
+            "text": "Monday",
+            "pos": "PROPN",
+            "dep": "pobj",
+            "lemma": "Monday"
+          },
+          {
+            "text": ".",
+            "pos": "PUNCT",
+            "dep": "punct",
+            "lemma": "."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "notes": "Takes warfarin 5 mg daily. Only her father takes warfarin.",
+    "dependencies": {},
+    "units": [
+      {
+        "quote": "Takes warfarin 5 mg daily.",
+        "parsed": null,
+        "actor": {
+          "habitual": false,
+          "past_time": false,
+          "dependent": false,
+          "claim_keys": [
+            "warfarin"
+          ],
+          "named_keys": [
+            "warfarin"
+          ],
+          "predicates": [
+            [
+              [
+                "take"
+              ],
+              false,
+              "present",
+              [
+                "warfarin"
+              ],
+              false
+            ]
+          ],
+          "negated_keys": [],
+          "finite_past": false,
+          "present_tense": true,
+          "main_patient": false,
+          "other_floor": false,
+          "quantified_denial": false,
+          "reattribution": false,
+          "denial_nouns": [],
+          "denial_heads": [],
+          "ceased_keys": [],
+          "bare_cessation": false,
+          "topic_denial_keys": [],
+          "surface_keys": [],
+          "intention": false,
+          "sole": {
+            "nouns_ok": true,
+            "genders": [],
+            "bad_pronoun": false,
+            "fronted": false,
+            "classes": [
+              "medication"
+            ],
+            "reach": [],
+            "unknown": false,
+            "descriptive": false,
+            "doubt_only": false,
+            "negation_only": true,
+            "multi_topic": false,
+            "self_contained": false,
+            "keys": [
+              "warfarin"
+            ],
+            "sides": [],
+            "uncertain": false,
+            "anchor": null,
+            "anchor_gender": null,
+            "current": false,
+            "advcl": [],
+            "presenting": false
+          },
+          "readable": true,
+          "kind": "missing",
+          "other": false,
+          "mentions_other": false,
+          "content": [
+            "mg",
+            "take",
+            "warfarin"
+          ],
+          "core": [
+            "warfarin"
+          ],
+          "nominal": [
+            "mg",
+            "warfarin"
+          ],
+          "keys": [
+            "take",
+            "warfarin"
+          ],
+          "core_keys": [
+            "warfarin"
+          ],
+          "gender": null,
+          "pronoun_genders": [],
+          "embedded": [],
+          "cues": [],
+          "past": false,
+          "age": false,
+          "standalone": false,
+          "patient_past": false,
+          "bounded": []
+        },
+        "tokens": [
+          {
+            "text": "Takes",
+            "pos": "VERB",
+            "dep": "ROOT",
+            "lemma": "take"
+          },
+          {
+            "text": "warfarin",
+            "pos": "NOUN",
+            "dep": "dobj",
+            "lemma": "warfarin"
+          },
+          {
+            "text": "5",
+            "pos": "NUM",
+            "dep": "nummod",
+            "lemma": "5"
+          },
+          {
+            "text": "mg",
+            "pos": "PROPN",
+            "dep": "npadvmod",
+            "lemma": "mg"
+          },
+          {
+            "text": "daily",
+            "pos": "ADV",
+            "dep": "advmod",
+            "lemma": "daily"
+          },
+          {
+            "text": ".",
+            "pos": "PUNCT",
+            "dep": "punct",
+            "lemma": "."
+          }
+        ]
+      },
+      {
+        "quote": "Only her father takes warfarin.",
+        "parsed": null,
+        "actor": {
+          "habitual": false,
+          "past_time": false,
+          "dependent": false,
+          "claim_keys": [
+            "fath",
+            "father",
+            "warfarin"
+          ],
+          "named_keys": [
+            "fath",
+            "father",
+            "warfarin"
+          ],
+          "predicates": [
+            [
+              [
+                "take"
+              ],
+              false,
+              "present",
+              [
+                "warfarin"
+              ],
+              false
+            ]
+          ],
+          "negated_keys": [],
+          "finite_past": false,
+          "present_tense": true,
+          "main_patient": false,
+          "other_floor": true,
+          "quantified_denial": false,
+          "reattribution": false,
+          "denial_nouns": [],
+          "denial_heads": [],
+          "ceased_keys": [],
+          "bare_cessation": false,
+          "topic_denial_keys": [],
+          "surface_keys": [],
+          "intention": false,
+          "sole": {
+            "nouns_ok": false,
+            "genders": [
+              "Fem"
+            ],
+            "bad_pronoun": false,
+            "fronted": true,
+            "classes": [
+              "medication"
+            ],
+            "reach": [
+              "class"
+            ],
+            "unknown": true,
+            "descriptive": false,
+            "doubt_only": false,
+            "negation_only": false,
+            "multi_topic": false,
+            "self_contained": false,
+            "keys": [
+              "fath",
+              "father",
+              "warfarin"
+            ],
+            "sides": [],
+            "uncertain": false,
+            "anchor": null,
+            "anchor_gender": null,
+            "current": true,
+            "advcl": [],
+            "presenting": false
+          },
+          "readable": true,
+          "kind": "other",
+          "other": true,
+          "mentions_other": true,
+          "content": [
+            "father",
+            "take",
+            "warfarin"
+          ],
+          "core": [
+            "father",
+            "warfarin"
+          ],
+          "nominal": [
+            "father",
+            "warfarin"
+          ],
+          "keys": [
+            "fath",
+            "father",
+            "take",
+            "warfarin"
+          ],
+          "core_keys": [
+            "fath",
+            "father",
+            "warfarin"
+          ],
+          "gender": null,
+          "pronoun_genders": [
+            "Fem"
+          ],
+          "embedded": [],
+          "cues": [],
+          "past": false,
+          "age": false,
+          "standalone": true,
+          "patient_past": false,
+          "bounded": []
+        },
+        "tokens": [
+          {
+            "text": "Only",
+            "pos": "ADV",
+            "dep": "advmod",
+            "lemma": "only"
+          },
+          {
+            "text": "her",
+            "pos": "PRON",
+            "dep": "poss",
+            "lemma": "her"
+          },
+          {
+            "text": "father",
+            "pos": "NOUN",
+            "dep": "nsubj",
+            "lemma": "father"
+          },
+          {
+            "text": "takes",
+            "pos": "VERB",
+            "dep": "ROOT",
+            "lemma": "take"
+          },
+          {
+            "text": "warfarin",
+            "pos": "NOUN",
+            "dep": "dobj",
+            "lemma": "warfarin"
+          },
+          {
+            "text": ".",
+            "pos": "PUNCT",
+            "dep": "punct",
+            "lemma": "."
+          }
+        ]
+      }
+    ]
+  }
+]

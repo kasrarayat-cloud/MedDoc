@@ -1,0 +1,72 @@
+{
+  "catalog_parity": true,
+  "guards": 111,
+  "reverse_leaf_models_queried": [
+    "TranscriptReview",
+    "TemplateVersion"
+  ],
+  "reverse_leaf_return": null,
+  "coding_reverse_own_refusal": true,
+  "review_columns": [
+    [
+      "context_token",
+      "TextField"
+    ],
+    [
+      "created_at",
+      "DateTimeField"
+    ],
+    [
+      "encounter",
+      "ForeignKey"
+    ],
+    [
+      "id",
+      "UUIDField"
+    ],
+    [
+      "job",
+      "ForeignKey"
+    ],
+    [
+      "patient_context",
+      "BooleanField"
+    ],
+    [
+      "raw_sha256",
+      "CharField"
+    ],
+    [
+      "result_sha256",
+      "CharField"
+    ],
+    [
+      "reviewed_by",
+      "ForeignKey"
+    ],
+    [
+      "reviewed_sha256",
+      "CharField"
+    ],
+    [
+      "reviewed_text",
+      "TextField"
+    ],
+    [
+      "source_revision",
+      "PositiveIntegerField"
+    ],
+    [
+      "source_sha256",
+      "CharField"
+    ],
+    [
+      "span_end",
+      "PositiveIntegerField"
+    ],
+    [
+      "span_start",
+      "PositiveIntegerField"
+    ]
+  ]
+}

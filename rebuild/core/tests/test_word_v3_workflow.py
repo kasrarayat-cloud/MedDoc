@@ -23,6 +23,15 @@ W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 V3 = dict(TEST_SETTINGS, QUILLMD_WORD_ENGINE="v3")
 
 
+def import_metadata(version, fields):
+    """Carry the uploaded original/engine identity while binding this fixture's exact mapping, including bad anchors.
+
+    This supplies provenance only. It never repairs destinations or bypasses the signing/placement checks under test.
+    """
+    from core.import_binding import for_mapping
+    return {'document_backend': version.document_backend, 'import_manifest': for_mapping(version.import_manifest, fields)}
+
+
 @override_settings(**V3)
 class V3RoundThreeIdentity(TestCase):
     def test_unsided_notes_cannot_fill_a_sided_question_but_qualified_notes_can(self):
@@ -620,7 +629,8 @@ class V3Export(V3EncounterFixture, TestCase):
             if f["label"] == "Referring physician":
                 f["locator"] = {**f["locator"], "fingerprint": "0" * 64}
         stale = TemplateVersion.objects.create(template=self.template, number=2, fields=fields, contract="v3",
-                                               corrections={"base_version": 1}, created_by=self.user)
+                                               corrections={"base_version": 1}, created_by=self.user,
+                                               **import_metadata(self.version, fields))
         MappingConfirmation.objects.create(version=stale, confirmed_by=self.user)
         # Clinical rows are never cleared to set up a case: the disposition trigger refuses deleting an encounter
         # without an approved instruction. The new encounter is the one on the stale mapping version.
@@ -913,7 +923,8 @@ class V3BoxNumbers(V3Fixture, TestCase):
                 f["locator"] = {**f["locator"], "target": {**f["locator"]["target"], "boxes": [
                     {**f["locator"]["target"]["boxes"][0], "glyph": 6}]}}
         stale = TemplateVersion.objects.create(template=self.template, number=latest.number + 1, fields=fields,
-                                               contract="v3", corrections={"base_version": latest.number}, created_by=self.user)
+                                               contract="v3", corrections={"base_version": latest.number}, created_by=self.user,
+                                               **import_metadata(latest, fields))
         response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
                                                                         "checked_every_field": "on"})
         self.assertEqual(response.status_code, 400)
@@ -976,7 +987,8 @@ class V3MixedBoxNumbers(V3Fixture, TestCase):
                 f["locator"] = {**f["locator"], "target": {**f["locator"]["target"], "boxes": [
                     {**f["locator"]["target"]["boxes"][0], "glyph": 2}]}}
         stale = TemplateVersion.objects.create(template=self.template, number=latest.number + 1, fields=fields,
-                                               contract="v3", corrections={"base_version": latest.number}, created_by=self.user)
+                                               contract="v3", corrections={"base_version": latest.number}, created_by=self.user,
+                                               **import_metadata(latest, fields))
         response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
                                                                         "checked_every_field": "on"})
         self.assertEqual(response.status_code, 400)
@@ -1117,7 +1129,8 @@ class V3CheckboxNeedsABox(V3Fixture, TestCase):
                                                            "label": "Consent obtained"}])["fields"][0]
         field = {**field, "kind": "checkbox", "options": ["Consent obtained"]}   # the shape locate stored before R7
         stale = TemplateVersion.objects.create(template=self.template, number=self.version.number + 1, fields=[field],
-                                               contract="v3", corrections={"base_version": self.version.number}, created_by=self.user)
+                                               contract="v3", corrections={"base_version": self.version.number}, created_by=self.user,
+                                               **import_metadata(self.version, [field]))
         response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
                                                                         "checked_every_field": "on"})
         self.assertEqual(response.status_code, 400)

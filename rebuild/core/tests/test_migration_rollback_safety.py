@@ -93,7 +93,11 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
         super().tearDown()
 
     def version(self, template, fields, **extra):
-        return TemplateVersion.objects.create(template=template, number=1, fields=fields, created_by=self.user, **extra)
+        # The four tests at0030 deliberately reversed later columns. Write with that actual historical model,
+        # rather than asking today's ORM to INSERT a column the test just proved does not exist there.
+        node = max(applied())
+        version = MigrationLoader(connection).project_state(node).apps.get_model('core', 'TemplateVersion')
+        return version.objects.create(template_id=template.pk, number=1, fields=fields, created_by_id=self.user.pk, **extra)
 
     @staticmethod
     def at_0030():
@@ -123,8 +127,9 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
         a = self.version(self.templates[0], v3_fields('pain', 'side'), contract='v3')
         b = self.version(self.templates[1], v3_fields('pain', 'side'), contract='v3')
         self.version(self.templates[2], LEGACY_FIELDS)
-        MappingConfirmation.objects.create(version=a, confirmed_by=self.user)
-        self.assertTrue(b.needs_confirmation)
+        MappingConfirmation.objects.create(version_id=a.pk, confirmed_by=self.user)
+        self.assertEqual(b.contract, 'v3')
+        self.assertFalse(MappingConfirmation.objects.filter(version_id=b.pk).exists())
         with self.assertRaisesRegex(IrreversibleError, r'1 mapping confirmation\(s\) and 2 mapping version\(s\)') as refused:
             MigrationExecutor(connection).migrate(BEFORE_0021)
         # Counts only: no identifier, name or account reaches the operator's terminal or log.
@@ -161,7 +166,7 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
 
     def test_a_confirmation_alone_refuses(self):
         self.at_0030()
-        MappingConfirmation.objects.create(version=self.version(self.templates[2], LEGACY_FIELDS), confirmed_by=self.user)
+        MappingConfirmation.objects.create(version_id=self.version(self.templates[2], LEGACY_FIELDS).pk, confirmed_by=self.user)
         self.refused(r'1 mapping confirmation\(s\) and 0 mapping version\(s\)')
 
     def test_a_database_without_v3_evidence_still_reverses_and_reapplies(self):
