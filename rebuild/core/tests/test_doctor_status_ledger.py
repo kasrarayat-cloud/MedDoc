@@ -10,7 +10,10 @@ from decimal import Decimal
 from django.test import TestCase, TransactionTestCase, override_settings
 
 from core.doctor_status import doctor_status
-from core.models import Encounter, Job, LedgerEntry, Usage, Wallet
+from django.utils import timezone
+
+from core.models import Encounter, Job, LedgerEntry, Reservation, Usage, Wallet
+from core.tests import test_workflow
 from core.tests import test_settlement_single_worker as ssw
 from core.tests.test_billing_boundary import LIVE
 from core.tests.test_billing_policy import STORAGES
@@ -73,3 +76,80 @@ class EverySentenceIsCheckedAgainstTheLedger(SyntheticFixture, TestCase):
                 status = doctor_status(job)
                 self.assertTrue(status.charged, state)
                 self.assertFalse(claims_not_charged(status.explanation), (state, status.explanation))
+
+
+from core.models import GenerationBatch  # noqa: E402
+from core.tests.test_generation_batch import BatchFixture, SETTINGS as BATCH_SETTINGS  # noqa: E402
+
+
+@override_settings(**BATCH_SETTINGS)
+class BatchStatusFollowsTheLedger(BatchFixture, TestCase):
+    """Refutation FG-1 and FG-5 (4cfa4301): the complete-form branch of doctor_status read the ledger over all its parts, and
+    no test pinned it (a mutant reading 0, or the viewed part only, survived every suite). Read through part 1, as the held
+    list and the charge page do."""
+
+    def charge(self, part, amount='-0.15'):
+        wallet = Reservation.objects.filter(job=part.job).first().wallet
+        LedgerEntry.objects.create(wallet=wallet, amount=Decimal(amount), kind='usage', key=f'usage:{part.job.pk}',
+                                   description='Synthetic', job=part.job, balance_after=wallet.balance)
+
+    def read(self, part):
+        return doctor_status(Job.objects.get(pk=part.job_id))
+
+    def test_FG1_a_held_batch_whose_other_part_is_charged_says_it_was_charged(self):
+        batch = self.admit()
+        first, second = batch.parts.select_related('job').order_by('ordinal')
+        GenerationBatch.objects.filter(pk=batch.pk).update(state='reconciliation')
+        status = self.read(first)
+        self.assertEqual((status.key, status.charged), ('held', False))
+        self.assertTrue(claims_not_charged(status.explanation))           # the control: nothing on the ledger yet
+        self.charge(second)
+        status = self.read(first)
+        self.assertTrue(status.charged)
+        self.assertFalse(claims_not_charged(status.explanation), status.explanation)
+        self.assertIn('was charged', status.explanation)
+
+    def test_FG5_a_batch_not_applied_says_it_remains_charged_only_with_a_charge(self):
+        batch = self.admit()
+        first, second = batch.parts.select_related('job').order_by('ordinal')
+        GenerationBatch.objects.filter(pk=batch.pk).update(state='not_adopted')
+        status = self.read(first)
+        self.assertEqual((status.key, status.charged), ('completed_not_applied', False))
+        self.assertIn('No charge is recorded for it.', status.explanation)
+        self.assertNotIn('remains charged', status.explanation)
+        self.charge(second)
+        status = self.read(first)
+        self.assertTrue(status.charged)
+        self.assertIn('remains charged', status.explanation)
+
+
+@override_settings(**test_workflow.TEST_SETTINGS)
+class OnePageOneAnswer(TestCase):
+    """Refutation M3 (4cfa4301): the encounter page said "Earlier generations remain charged" (job state) beside "No charge
+    is recorded for it." (ledger) for one request whose settled charge a reconciliation credited back in full. Both now
+    read the ledger."""
+    workflow = test_workflow.DocumentWorkflow
+    setUp, make_docx, upload, create_encounter = workflow.setUp, workflow.make_docx, workflow.upload, workflow.create_encounter
+
+    def test_a_request_credited_back_in_full_is_not_called_charged(self):
+        from core.billing import reconcile_usage, reserve, settle
+        from core.jobs import NOT_ADOPTED
+        from core.models import User
+        _t, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, 'Symptoms: no chest pain.\nExamination: Normal gait.')
+        job = Job.objects.create(encounter=encounter, user=self.user, request_key='m3:job', state='queued', kind='generation')
+        reserve(job, charge_limit=Decimal('0.30'))
+        Job.objects.filter(pk=job.pk).update(state='running')
+        usage = settle(job, Decimal('0.10'), {}, {}, 'synthetic-live', simulated=False)
+        Job.objects.filter(pk=job.pk).update(state='failed', error=NOT_ADOPTED + 'The notes changed while it ran.')
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertEqual(page.context['prior_generations'], 1)               # the control: charged, so disclosed
+        self.assertContains(page, 'Earlier generations remain charged')
+        admin = User.objects.create_user(username='m3-admin', email='m3-admin@synthetic.invalid', is_staff=True,
+                                         verified_at=timezone.now())
+        reconcile_usage(usage, Decimal('0'), 'SYNTHETIC-INVOICE-0', admin)
+        self.assertEqual(-sum(LedgerEntry.objects.filter(job=job).values_list('amount', flat=True)), 0)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertContains(page, 'No charge is recorded for it.')
+        self.assertNotContains(page, 'Earlier generations remain charged')    # 4cfa4301: both sentences
+        self.assertEqual(page.context['prior_generations'], 0)

@@ -122,36 +122,78 @@ class Pages(TestCase):
 
 @override_settings(**TEST_SETTINGS)
 class HeldListScope(TestCase):
-    """Refutation F11 (dc33e094): the list of requests holding funds was every held reservation on the viewer's wallets. A
-    clinician whose request held funds on the organization's wallet saw nothing, and the owner of ANOTHER department of the
-    same organization saw it. It is now the viewer's own requests and those of departments the viewer owns."""
+    """Refutation F11 (dc33e094): the list of requests holding funds was every held reservation on the viewer's wallets, and a
+    clinician whose request held funds on the organization's wallet saw nothing. Refutation M1 (4cfa4301): the repair scoped
+    the list to departments the viewer owns while the wallet strip and the charge page use organization ownership, so the
+    owner of another department of the PAYING organization saw that wallet's funds reserved, "No request is holding funds",
+    and still opened the charge page. ONE scope now (core.views.owned_organizations): the viewer's own requests, and those
+    an organization the viewer owns pays for (the Organization owner role, held in any of its departments) — what the
+    wallet strip shows and what the charge page opens."""
     workflow = test_workflow.DocumentWorkflow
     setUp, make_docx, upload, create_encounter = workflow.setUp, workflow.make_docx, workflow.upload, workflow.create_encounter
 
     def held(self, client):
-        return [(row['job'].pk, row['amount'], row['label']) for row in client.get('/billing/').context['held_requests']]
+        return sorted((str(row['job'].pk), row['amount'], row['label']) for row in client.get('/billing/').context['held_requests'])
 
-    def test_the_requester_and_the_departments_owner_see_it_and_nobody_else_does(self):
+    def member(self, name, department, role, active=True):
         from django.test import Client
-        from core.models import Department, Membership, Organization, User
-        _t, version = self.upload(self.make_docx(), 'docx')
+        from core.models import Membership, User
+        user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now())
+        Membership.objects.create(user=user, department=department, role=role, active=active)
+        client = Client(); client.force_login(user)
+        return user, client
+
+    def test_one_scope_for_the_wallet_strip_the_held_list_and_the_charge_page(self):
+        from core.models import Department, Organization
+        template, version = self.upload(self.make_docx(), 'docx')
         encounter = self.create_encounter(version, 'Symptoms: no chest pain.\nExamination: Normal gait.')
-        org_wallet = Wallet.objects.create(organization=self.organization, kind='paid', balance=Decimal('5'), reserved=Decimal('0.4'))
-        mine = Job.objects.create(encounter=encounter, user=self.user, request_key='f11:mine', state='queued',
-                                  payer=f'organization:{self.organization.pk}')
+        org = f'organization:{self.organization.pk}'
+        org_wallet = Wallet.objects.create(organization=self.organization, kind='paid', balance=Decimal('5'), reserved=Decimal('0.8'))
+        mine = Job.objects.create(encounter=encounter, user=self.user, request_key='m1:mine', state='queued', payer=org)
         Reservation.objects.create(job=mine, wallet=org_wallet, amount=Decimal('0.40'), state='held')
-        self.assertEqual(self.held(self.client), [(mine.pk, Decimal('0.40'), 'Generation')])  # dc33e094: []
-        def member(name, department, role):
-            user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now())
-            Membership.objects.create(user=user, department=department, role=role)
-            client = Client(); client.force_login(user)
-            return client
+        # FG-9: a form-mapping request the organization pays for, named in the doctor's words.
+        mapping = Job.objects.create(mapping_version=version, user=self.user, kind='mapping', request_key='m1:mapping',
+                                     state='queued', payer=org, config={'source_sha256': template.sha256,
+                                     'department_id': str(template.department_id), 'mapping_version_id': str(version.pk)})
+        Reservation.objects.create(job=mapping, wallet=org_wallet, amount=Decimal('0.40'), state='held')
+        colleague, colleague_client = self.member('m1-colleague', self.department, 'clinician')
+        from core.billing import welcome_credit
+        welcome_credit(colleague)
+        personal = Job.objects.create(encounter=encounter, user=colleague, request_key='m1:personal', state='queued',
+                                      payer=f'user:{colleague.pk}')
+        Reservation.objects.create(job=personal, wallet=Wallet.objects.get(user=colleague, kind='promo'),
+                                   amount=Decimal('0.40'), state='held')
+        paid_by_org = sorted([(str(mine.pk), Decimal('0.40'), 'Generation'), (str(mapping.pk), Decimal('0.40'), 'Form mapping')])
         other_department = Department.objects.create(organization=self.organization, name='Other department, same org')
-        self.assertEqual(self.held(member('f11-other-owner', other_department, 'owner')), [])  # dc33e094: saw it
-        self.assertEqual(self.held(member('f11-owner', self.department, 'owner')), [(mine.pk, Decimal('0.40'), 'Generation')])
-        self.assertEqual(self.held(member('f11-colleague', self.department, 'clinician')), [])  # not theirs, not owned
-        outsider_org = Organization.objects.create(name='Synthetic outsider')
-        self.assertEqual(self.held(member('f11-outsider', Department.objects.create(organization=outsider_org, name='X'), 'owner')), [])
+        outsider = Department.objects.create(organization=Organization.objects.create(name='Synthetic outsider'), name='X')
+        # viewer: (client, the requests listed, whether the viewer owns the paying organization)
+        viewers = {
+            'requester': (self.client, paid_by_org, False),                                # dc33e094: []
+            'owner of the requesting department': (self.member('m1-owner', self.department, 'owner')[1], paid_by_org, True),
+            'owner of another department of the paying organization':                      # 4cfa4301: [] beside $0.80 reserved
+                (self.member('m1-other-owner', other_department, 'owner')[1], paid_by_org, True),
+            'colleague, personally paid': (colleague_client, [(str(personal.pk), Decimal('0.40'), 'Generation')], False),
+            'former owner (membership inactive)':                                          # FG-3
+                (self.member('m1-former-owner', self.department, 'owner', active=False)[1], [], False),
+            'owner in another organization': (self.member('m1-outsider', outsider, 'owner')[1], [], False),
+        }
+        for viewer, (client, expected, owner) in viewers.items():
+            with self.subTest(viewer=viewer):
+                page = client.get('/billing/')
+                self.assertEqual(self.held(client), expected)
+                # The organization's wallet is on the strip exactly for its owners, and beside it the requests holding its
+                # funds are listed: never its funds reserved beside "No request is holding funds" (M1).
+                self.assertEqual(org_wallet.pk in [wallet.pk for wallet in page.context['wallets']], owner)
+                text = page.content.decode()
+                self.assertEqual('No request is holding funds' in text, not expected)
+                for row in page.context['held_requests']:                                 # FG-10: every row links, and opens
+                    self.assertIn(f'/billing/jobs/{row["job"].pk}/', text)
+                    self.assertEqual(client.get(f'/billing/jobs/{row["job"].pk}/').status_code, 200)
+                    if row['job'].user_id != page.context['user'].pk:
+                        self.assertIn(row['job'].user.email, text)                        # the requester is named
+                for job in (mine, mapping, personal):                                     # the charge page agrees
+                    opens = client.get(f'/billing/jobs/{job.pk}/').status_code == 200
+                    self.assertEqual(opens, str(job.pk) in [row[0] for row in expected], (viewer, job.request_key))
 
 
 from core.tests.test_generation_batch import BatchFixture, SETTINGS as BATCH_SETTINGS  # noqa: E402
@@ -168,3 +210,38 @@ class HeldListOneRowPerRequest(BatchFixture, TestCase):
                          [('Generation', sum(parts), 'waiting')])  # dc33e094: one row per part, 'Generation_Part'
         page = self.client.get('/billing/').content.decode()
         self.assertNotIn('Generation_Part', page); self.assertNotIn('generation_part', page)
+
+    def test_M2_the_rows_link_explains_the_whole_request_in_the_doctors_words(self):
+        """4cfa4301: the one row of a complete form linked to part 1's charge page, which said "Total reserved for this
+        request" with part 1's amount alone and was titled 'Generation_Part'."""
+        import html
+        from core.templatetags.console import usd
+        batch = self.admit()
+        rows = self.client.get('/billing/').context['held_requests']
+        total = sum(Reservation.objects.filter(job__generation_part__batch=batch, state='held').values_list('amount', flat=True))
+        self.assertEqual(rows[0]['amount'], total)
+        page = html.unescape(self.client.get(f'/billing/jobs/{rows[0]["job"].pk}/').content.decode())
+        self.assertNotIn('Generation_Part', page); self.assertNotIn('Generation_part', page)
+        self.assertIn(f'Total reserved for the whole request: {usd(total)}', page)
+        self.assertIn('part 1 of 2', page)
+
+    def test_M4_the_row_cap_never_splits_a_complete_form_request(self):
+        """4cfa4301 cut the reservations at 500 before grouping them, so 499 newer holds left the batch row with one part's
+        amount. The cap is on rows: the batch row carries its whole amount, or is not shown."""
+        batch = self.admit()
+        total = sum(Reservation.objects.filter(job__generation_part__batch=batch, state='held').values_list('amount', flat=True))
+        promo = Wallet.objects.get(user=self.user, kind='promo')
+        def newer(count, start):
+            jobs = Job.objects.bulk_create([Job(encounter=self.encounter, user=self.user, kind='transcription', state='queued',
+                                                request_key=f'm4:{start + i}', payer=f'user:{self.user.pk}')
+                                            for i in range(count)])
+            Reservation.objects.bulk_create([Reservation(job=job, wallet=promo, amount=Decimal('0.001'), state='held')
+                                             for job in jobs])
+        newer(499, 0)
+        rows = self.client.get('/billing/').context['held_requests']
+        self.assertEqual(len(rows), 500)
+        self.assertEqual([row['amount'] for row in rows if row['job'].kind == 'generation_part'], [total])  # 4cfa4301: one part
+        newer(1, 499)
+        rows = self.client.get('/billing/').context['held_requests']
+        self.assertEqual(len(rows), 500)
+        self.assertEqual([row for row in rows if row['job'].kind == 'generation_part'], [])  # older than the newest 500: absent

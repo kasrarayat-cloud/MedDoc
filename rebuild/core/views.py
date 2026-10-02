@@ -915,13 +915,17 @@ def encounter_detail(request,pk):
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
     # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only
     # where the server allows it, and receives provider output only for requests that stand charged.
-    prior_generations=sum(1 for job in jobs if job.kind=='generation' and billable_outcome(job))
-    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
     # The doctor reads one status vocabulary (core.doctor_status): never an internal state word or an administrator's note.
     for job in jobs:
         # A charged completion keeps the page's own next-step text (the transcript or the draft is ready below).
         job.doctor_status=doctor_status(job); job.display_error='' if job.doctor_status.key=='completed' else job.doctor_status.explanation
         job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+    # ⚠️ "Earlier requests remain charged" is read from the LEDGER, as the request list beside it is (doctor_status): the
+    # job state said so for a request whose charge a reconciliation had credited back in full, beside "No charge is
+    # recorded for it" (refutation M3 of 4cfa4301). An ended request with a net charge counts.
+    def charged_earlier(job):return job.doctor_status.charged and not job.doctor_status.pending
+    prior_generations=sum(1 for job in jobs if job.kind=='generation' and charged_earlier(job))
+    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and charged_earlier(job))
     # One visible outcome per complete form. Child receipts stay in the admin
     # record; a staged child is never shown as a ready answer draft.
     visible_jobs=[]
@@ -932,7 +936,7 @@ def encounter_detail(request,pk):
             batch=part.batch
             job.display_kind='Generation'
             job.state=batch.state
-            prior_generations+=int(batch.state in ('succeeded','not_adopted'))
+            prior_generations+=int(charged_earlier(job))  # part 1's status speaks for the whole batch's ledger
         visible_jobs.append(job)
     jobs=visible_jobs
     transcript_reviews=[]
@@ -1976,7 +1980,7 @@ def billing(request):
     from .billing import checkout_form
     from .admin_queries import page_for,searched
     query=request.GET.get('q','').strip()[:100]
-    owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
+    owned_orgs=owned_organizations(request.user)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
     usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
     held=held_requests(request.user)
@@ -1987,32 +1991,44 @@ def billing(request):
 
 #: What a request is called on the doctor's pages: a complete-form part is part of one generation (refutation F11).
 REQUEST_LABELS={'generation':'Generation','generation_part':'Generation','transcription':'Transcription','mapping':'Form mapping'}
+MAX_HELD_ROWS=500
+
+def owned_organizations(user):
+    """The organizations whose billing a viewer reads: those in which the viewer holds an active owner membership (the
+    Organization owner role, held through any of its departments). ONE answer for the wallet strip, the list of requests
+    holding funds and the charge page (refutation M1 of 4cfa4301: the list asked which DEPARTMENTS the viewer owns while
+    the other two asked this, so the owner of another department of the paying organization saw that wallet's funds
+    reserved beside "No request is holding funds", and still opened the request's charge page)."""
+    return set(Membership.objects.filter(user=user,active=True,role='owner').values_list('department__organization_id',flat=True))
+
+def billed_jobs(user):
+    """The requests whose charges a viewer reads: their own, and those an organization the viewer owns pays for."""
+    return models.Q(user=user)|models.Q(payer__in=[f'organization:{org}' for org in owned_organizations(user)])
 
 def held_requests(user):
-    """Requests holding funds, newest first: the viewer's own, and those of departments the viewer owns (refutation F11 of
-    dc33e094: every held reservation on the viewer's wallets showed another department's requests and hid the viewer's own
-    on an organization wallet). A complete-form generation is one row, its parts' holds summed. Read-only: the reservations
-    themselves decide every amount (core.billing)."""
-    owned=list(Membership.objects.filter(user=user,active=True,role='owner').values_list('department_id',flat=True))
-    owned_orgs=set(Membership.objects.filter(user=user,active=True,role='owner').values_list('department__organization_id',flat=True))
-    scope=(models.Q(job__user=user)|models.Q(job__encounter__department_id__in=owned)
-           |models.Q(job__mapping_version__template__department_id__in=owned))
-    rows={}
-    for reservation in Reservation.objects.filter(scope,state='held').select_related('job').order_by('-created_at','pk')[:500]:
-        job=reservation.job
-        if job.kind=='generation_part':
-            part=job.generation_part
-            key=('batch',part.batch_id)
-            first=part.batch.parts.order_by('ordinal').first().job
-        else:
-            key=('job',job.pk);first=job
-        if key not in rows:
-            # The charge page opens for the requester and for an owner of the paying organization (billing_job_detail).
-            linked=first.user_id==user.pk or first.payer in {f'organization:{org}' for org in owned_orgs}
-            rows[key]={'job':first,'label':REQUEST_LABELS.get(first.kind,'Request'),'amount':Decimal('0'),
-                       'status':doctor_status(first),'linked':linked}
-        rows[key]['amount']+=reservation.amount
-    return list(rows.values())
+    """Requests holding funds, newest first: exactly those whose charge page the viewer opens (billed_jobs; refutation F11
+    of dc33e094 and M1 of 4cfa4301), so every row links to its page. A complete-form generation is one row, its parts'
+    holds summed. At most MAX_HELD_ROWS rows: the cap counts requests, never reservations, so a row always carries its
+    request's whole held amount (refutation M4: cutting 500 reservations left a batch row with one part's). Read-only: the
+    reservations decide every amount (core.billing)."""
+    held=(Reservation.objects.filter(state='held',job__in=Job.objects.filter(billed_jobs(user))).order_by('-created_at','pk')
+          .values_list('job_id','amount','job__kind','job__generation_part__batch_id'))
+    amounts={}
+    for job_id,amount,kind,batch_id in held.iterator():
+        key=('batch',batch_id) if kind=='generation_part' else ('job',job_id)
+        if key not in amounts:
+            if len(amounts)>=MAX_HELD_ROWS:continue
+            amounts[key]=Decimal('0')
+        amounts[key]+=amount
+    firsts={part.batch_id:part.job for part in GenerationBatchPart.objects.filter(
+        batch_id__in=[ident for kind,ident in amounts if kind=='batch'],ordinal=1).select_related('job__user')}
+    singles=Job.objects.select_related('user').in_bulk([ident for kind,ident in amounts if kind=='job'])
+    rows=[]
+    for (kind,ident),amount in amounts.items():
+        job=firsts.get(ident) if kind=='batch' else singles.get(ident)
+        if job is not None:
+            rows.append({'job':job,'label':REQUEST_LABELS.get(job.kind,'Request'),'amount':amount,'status':doctor_status(job)})
+    return rows
 
 def usage_rows(usage):
     # Reconciled and absorbed evidence is read from the append-only ledger; the usage rows themselves are never edited.
@@ -2173,12 +2189,19 @@ def billing_job_detail(request,pk):
     from .admin_queries import financial_context
     # Personal billing history remains available after clinical membership revocation.
     # Organization owners can inspect organization-paid charges without clinical access.
-    owned=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
-    allowed=models.Q(user=request.user)|models.Q(payer__in=[f'organization:{pk}' for pk in owned])
-    job=get_object_or_404(Job.objects.filter(allowed).select_related('user','encounter__department'),pk=pk)
+    owned=owned_organizations(request.user)
+    job=get_object_or_404(Job.objects.filter(billed_jobs(request.user)).select_related('user','encounter__department'),pk=pk)
     visible=set(Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned)).values_list('pk',flat=True))
     context=financial_context(job,visible);context.pop('audit_targets')
     context['doctor_status']=doctor_status(job)
+    context['request_label']=REQUEST_LABELS.get(job.kind,'Request')
+    if job.kind=='generation_part':
+        # The held list's one row of a complete form links here (part 1): the page names the part and the whole request's
+        # reservations, in the doctor's words (refutation M2 of 4cfa4301: "Total reserved for this request" was one part's).
+        part=job.generation_part
+        jobs=list(part.batch.parts.values_list('job_id',flat=True))
+        context['batch_part']={'ordinal':part.ordinal,'parts':len(jobs),
+                               'reserved':Reservation.objects.filter(job_id__in=jobs).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')}
     audit(request.user,'billing.job_read',job.pk)
     return render(request,'financial_detail.html',context)
 
