@@ -19,6 +19,20 @@ The 60-vector result does not include these extra failures or qualify the featur
 `repair-affected-01.log`, `qualification-repair.py/.log`, `refutation-local-before.log`
 and `repeated-ellipsis-before.log` retain the first repair's exact measurements.
 
+The second repair is also retained as **unqualified**. Its 18 focused controls
+passed in 13.871 seconds; 68 exposed diagnostic vectors measured 66 correct,
+zero unsafe releases and two unnecessary parser holds, versus 61 correct,
+five unsafe and two holds under1144. This incorporates all **three** supported
+outputs in the first repair's raw refutation JSON (“Not on Fridays” was omitted
+from the initial two-finding message), plus cross-predicate cough and known
+nonexclusive activity controls. Fresh finished-source refutation then demonstrated
+“Takes warfarin 5 mg daily. Her father is the sole person taking warfarin.”
+still incorrectly supported the medication. This separate failure is retained in
+`root-confirm-notes-refutation-3.json/.py`; the 68 vectors did not include it.
+The source hashes at that measurement were source_scope23a285fa and
+generation77e123ba. Its exact source and first failures remain preserved; no
+live campaign or application activation was authorized by these partial results.
+
 Private, synthetic-only component work on `fix/v1-sol-notes-voice-20261002`, based on
 `d49ece788c058c9e733e895910a81c8aad94c6a3`. Sonnet 5.5 stays the application model;
 ordinary field relations stay contract v4. No provider requests were made by this worker.

@@ -62,8 +62,10 @@ def elliptical_dependencies(reading):
 
     A do/have/modal operator without its own predicate is verbal ellipsis:
     "Only her father does" cannot be independent of the omitted action. A
-    topicless, positively read fragment such as "Not today"/"Except today"
-    likewise supplies no standalone claim. No inferred replacement value is
+    topicless, positively read fragment such as "Not today"/"Except today",
+    or an adpositional fragment such as "Not since Monday", likewise supplies
+    no standalone predicate. An unknown date/object does not make its preceding
+    claim independent. No inferred replacement value is
     adopted. Complete other-person clauses remain separate. These dependencies
     attach to the preceding nonfragment (or the following one at source start),
     rather than every field or the whole note.
@@ -72,6 +74,7 @@ def elliptical_dependencies(reading):
     if key in reading:return reading[key]
     from . import v3_syntax,v3_actors as a
     units=reading['units'];docs=v3_syntax.docs(u['quote'] for u in units)
+    reading['_source_scope_docs']=docs
     causes={};previous=None;leading=[]
     for unit,doc in zip(units,docs or [None]*len(units)):
         uid=unit['id'];info=reading['actors'][uid];sole=info.get('sole') or {}
@@ -86,12 +89,78 @@ def elliptical_dependencies(reading):
                     and not any(t.dep_ in complements for t in root.children))
                 topicless=bool(not any(t.pos_ in ('VERB','AUX') for t in doc)
                     and not info.get('named_keys') and not sole.get('unknown'))
-                fragment=operator or topicless
+                adpositional=bool(root.pos_ in ('ADP','SCONJ')
+                    and not any(t.pos_ in ('VERB','AUX') for t in doc))
+                fragment=operator or topicless or adpositional
         if fragment:
             if previous is not None:causes.setdefault(previous,[]).append(unit)
             else:leading.append(unit)
         else:
             if leading:causes.setdefault(uid,[]).extend(leading);leading=[]
             previous=uid
+    reading[key]=causes
+    return causes
+
+
+def exclusive_reattributions(reading):
+    """An exclusive other actor can retract the same action/object claim.
+
+    A restriction on the other actor or its predicate ("Only her father takes
+    warfarin") differs from a restriction on its object ("Her father takes
+    only warfarin"). Compare the predicate and named clinical claim, rather
+    than holding every medication or every family statement. This only adds
+    holds; it establishes no replacement subject, answer or positive value.
+    """
+    key='_exclusive_reattributions'
+    if key in reading:return reading[key]
+    from . import v3_syntax,v3_actors as a
+    units=reading['units']
+    docs=reading.get('_source_scope_docs')
+    if docs is None:docs=v3_syntax.docs(u['quote'] for u in units)
+    def predicate_lemmas(root):
+        heads=[root]+[t for t in root.children if t.dep_ in ('xcomp','ccomp','conj','compound')]
+        # A nominal copular predicate can identify the actor of an action
+        # ("the only one to take ..."). An incidental advcl/prepositional
+        # clause ("is alone while taking ...") is not that predicate.
+        for noun in (t for t in root.children if t.dep_ in ('attr','oprd') and t.pos_ in ('NOUN','PROPN','PRON','NUM')):
+            heads.extend(t for t in noun.children if t.dep_ in ('acl','relcl','xcomp'))
+        return {a._lemma(t) for t in heads if t.pos_ in ('VERB','AUX')}
+    causes={}
+    for other,doc in zip(units,docs or [None]*len(units)):
+        info=reading['actors'][other['id']]
+        if doc is None or not info.get('other_floor'):continue
+        roots=[t for t in doc if t.dep_=='ROOT']
+        if len(roots)!=1:continue
+        root=roots[0]
+        # Focus on an actor or predicate, excluding clinical object modifiers.
+        # A restriction on a different action/object cannot retract this claim.
+        focused=any(a._fold(t.text) in ('only','alone','solely','just')
+            and (t.head.dep_ in ('nsubj','nsubjpass') or (t.head==root and a._fold(t.text)!='alone')
+                 or (t.head.dep_=='attr' and a._lemma(root)=='be'))
+            for t in doc)
+        if not focused:continue
+        predicates=predicate_lemmas(root)
+        heads=frozenset().union(frozenset(),*(p[0] for p in info.get('predicates',())))
+        topic=info.get('claim_keys',frozenset())|info.get('named_keys',frozenset())
+        for claim,claim_doc in zip(units,docs or [None]*len(units)):
+            if claim['id']==other['id'] or claim_doc is None:continue
+            mine=reading['actors'][claim['id']]
+            if mine.get('other_floor'):continue
+            my_roots=[t for t in claim_doc if t.dep_=='ROOT']
+            my_predicates=predicate_lemmas(my_roots[0]) if len(my_roots)==1 else set()
+            my_heads=frozenset().union(frozenset(),*(p[0] for p in mine.get('predicates',())))
+            mine_sole=mine.get('sole') or {};other_sole=info.get('sole') or {}
+            my_sides=mine_sole.get('sides',frozenset());other_sides=other_sole.get('sides',frozenset())
+            if my_sides and other_sides and not my_sides & other_sides:continue
+            # Existing light predicates can describe the same positively typed
+            # clinical claim (reports/has cough). A distinct action such as
+            # knows warfarin supplies no exclusive patient medication assertion.
+            same_assertion=bool(a._lemma(root) in a.LIGHT_VERBS and my_predicates
+                and my_predicates <= a.LIGHT_VERBS
+                and not (a._lemma(root)=='be' and any(t.dep_ in ('acomp','attr') for t in root.children))
+                and mine_sole.get('classes',frozenset()) & other_sole.get('classes',frozenset()))
+            if (predicates & my_predicates or heads & my_heads or same_assertion) and topic & (
+                    mine.get('claim_keys',frozenset())|mine.get('named_keys',frozenset())):
+                causes.setdefault(claim['id'],[]).append(other)
     reading[key]=causes
     return causes

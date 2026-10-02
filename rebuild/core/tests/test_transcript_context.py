@@ -139,6 +139,30 @@ class PatientDefault(SimpleTestCase):
         self.check(source+' Reports cough. Only her father does.','Medications',[source])
         self.check(source+' Reports cough. Only her father does.','Symptoms',['Reports cough.'],'conflict')
 
+    def test_proper_date_modifiers_cannot_be_declared_independent(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['Not since Monday.','Not on Fridays.','Only at night.','Not after surgery.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Current medications',[source],'conflict')
+        self.check(source+' Reports cough. Not since Monday.','Medications',[source])
+        self.check(source+' Reports cough. Not since Monday.','Symptoms',['Reports cough.'],'conflict')
+
+    def test_exclusive_other_actor_changes_only_the_same_predicate_and_claim(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['Only her father takes warfarin.','Her father alone takes warfarin.',
+                     'Her father only takes warfarin.','Her father is the only one to take warfarin.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source],'conflict')
+        for tail in ['Her father takes warfarin.','Her father takes only warfarin.',
+                     'Only her father takes apixaban.','Only her father has diabetes.',
+                     'Only her father reports cough.','Only her father knows warfarin.',
+                     'Her father takes warfarin alone.','Only her father is alone on warfarin.',
+                     'Her father only is alone while taking warfarin.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source])
+        self.check(source+' Reports cough. Only her father takes warfarin.','Medications',[source],'conflict')
+        self.check(source+' Reports cough. Only her father takes warfarin.','Symptoms',['Reports cough.'])
+        self.check('Reports cough. Only her father has cough.','Symptoms',['Reports cough.'],'conflict')
+        side='The patient reports right ankle pain.'
+        self.check(side+' Only her father reports left ankle pain.','Symptoms',[side])
+
     @override_settings(V3_GENERATION_BATCHES=True)
     def test_whole_form_plan_keeps_context_in_request_digest_and_field_records(self):
         from core import generation_batch as b
