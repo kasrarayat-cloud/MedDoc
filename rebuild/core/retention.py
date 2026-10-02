@@ -176,8 +176,38 @@ def _journal_release_after_commit(row,hold):
         except Exception:  # noqa: BLE001 - after the commit, a failure here must never read as "not recorded"
             # The release stands here. Until its copy is journaled a restore older than it keeps the hold active (the
             # conservative side); the custodian's exact retry journals it. A fixed message: no PHI, no row content.
-            logging.getLogger(__name__).error('Preservation release recorded; its independent journal copy is pending.')
+            logging.getLogger(__name__).error('Preservation release recorded; its independent journal copy is pending '
+                                              '(any active custodian journals it: retention.journal_committed_release).')
     transaction.on_commit(append)
+
+
+def journal_committed_release(actor,hold_id):
+    """Journal a release this database committed but the independent journal does not hold (its copy failed and is
+    pending, or the release predates the journal), from the release row's own evidence: its id, authority hash and
+    releasing custodian, exactly what _journal_release_after_commit would have appended (the hold first, if the journal
+    lacks it). Any active verified custodian may do it; the entry names the custodian who RELEASED, and this act is audited
+    under the custodian who journaled it, so nobody acts as anyone else (refutation R4F-A / R4S-3 of b3d8111d: only the
+    releasing custodian's exact retry could journal it, and once that custodian left, every redaction in the hold's scope
+    was refused for good). Idempotent: an already journaled release returns its entry and appends nothing."""
+    custodian(actor)
+    if not journal_configured():raise ValidationError('No independent journal is configured.')
+    from . import disposition_journal as journal
+    with transaction.atomic():
+        lock_preservation()
+        try:hold=RetentionHold.objects.get(pk=hold_id)
+        except (ValueError,ValidationError,RetentionHold.DoesNotExist):raise ValidationError('Unknown preservation instruction.')
+        row=RetentionHoldRelease.objects.filter(hold=hold).first()
+        if row is None:raise ValidationError('This preservation instruction has no committed release.')
+        release={'id':str(row.pk),'hold_id':str(hold.pk),'authority_sha256':row.authority_sha256,'created_by':str(row.created_by_id)}
+        # ⚠️ AUDITED ONLY WHEN THIS CALL JOURNALS IT (refutation R5F-13 of a0bc4fd8): a second call, or one after the releasing
+        # custodian's exact retry journaled it, appended nothing and still audited a journaling under the caller. The
+        # audit table is append-only, so the record must say who actually wrote the entry.
+        journaled=(journal.journaled_holds().get(str(hold.pk)) or {})
+        if journaled.get('release')==release:
+            return journaled['release_entry']
+        entry=journal.append_release(release,hold_record(hold))
+        audit(actor,'retention.release_journaled',hold.pk,release=str(row.pk))
+    return entry
 
 
 def journal_configured():
@@ -388,15 +418,27 @@ def hold_marker_consistent(marker,row,hold):
 
 
 def release_marker_consistent(marker,hold_outcome,row,release):
-    """What a release's replay marker states still holds in this database. ONE reader for replay and admission."""
+    """What a release's replay marker states still holds in this database. ONE reader for replay and admission.
+
+    'target_absent' is an absence only while its hold is absent too (NEW-1): once the target is back and carries the
+    hold (quillmd_restore_absent_hold), the release must be here as its row, or the hold stays active although the
+    source ended it."""
     exact=row is not None and (str(row.pk),row.authority_sha256)==(release['id'],release['authority_sha256'])
     if marker.outcome=='present':
         return exact and str(row.created_by_id)==release['created_by']
     if marker.outcome=='imported':
         return exact and attributed(row.created_by_id,release['created_by'],marker.created_by_id)
     if marker.outcome=='target_absent':
-        return hold_outcome=='target_absent' and (row is None or (
-            exact and attributed(row.created_by_id,release['created_by'],marker.created_by_id)))
+        if hold_outcome!='target_absent':return False
+        if row is None:return not RetentionHold.objects.filter(pk=release['hold_id']).exists()
+        # A row under the journal's OWN id is the journaled release (replay or quillmd_restore_absent_hold applied it):
+        # it must be exactly that release (refutation R2D-F8a of 4cfa4301: other evidence under the signed id was accepted
+        # and recorded nowhere).
+        if str(row.pk)==release['id']:
+            return exact and attributed(row.created_by_id,release['created_by'],marker.created_by_id)
+        # F8: a stale absence marker (ac43e379) with the hold since ended HERE by another release under its own id: the
+        # journal and this database have both ended the hold, so preservation agrees; replay records the differing evidence.
+        return True
     return False
 
 
@@ -435,11 +477,28 @@ def _replay_release(actor,hold,hold_outcome,release,entry):
     from . import disposition_policy as p
     digest=p.digest(entry);row=RetentionHoldRelease.objects.filter(hold_id=hold['id']).first()
     marker=RetentionHoldReplay.objects.filter(entry_sha256=digest).first()
+    # What this database holds NOW decides, never the hold marker's outcome alone (NEW-1): a hold recorded
+    # 'target_absent' is applied once its target is inserted again, and a release journaled after that must follow it.
+    held=RetentionHold.objects.filter(pk=hold['id']).first()
     if marker:
-        if not release_marker_consistent(marker,hold_outcome,row,release) or str(marker.record_id)!=release['id']:
-            raise ValidationError(REPLAY_CONFLICT)
+        if str(marker.record_id)!=release['id']:raise ValidationError(REPLAY_CONFLICT)
+        if marker.outcome=='target_absent' and row is None and held is not None:
+            # Recorded absent before this repair, after the target came back: apply it now from its verbatim marker,
+            # exactly as quillmd_restore_absent_hold applies a release recorded before the reinsertion.
+            row=RetentionHoldRelease.objects.create(id=release['id'],hold=held,authority_sha256=release['authority_sha256'],
+                                                    created_by_id=recorder(release['created_by'],marker.created_by_id))
+            audit(actor,'retention.release_replayed',hold['id'],authority_sha256=release['authority_sha256'])
+        elif marker.outcome=='target_absent' and row is not None and str(row.pk)!=release['id']:
+            # F8 (the refuter's P13): under the stale marker a local custodian ended the hold with other evidence (the
+            # journal refused its copy, holding the source's release). Both ended it; the release row is append-only and
+            # one per hold, so the divergence is recorded, once, not refused (a refusal quarantined the target for good).
+            if not AuditEvent.objects.filter(action='retention.release_evidence_differs',target=str(hold['id'])).exists():
+                audit(actor,'retention.release_evidence_differs',hold['id'],journaled_release=release['id'],
+                      local_release=str(row.pk),journaled_authority_sha256=release['authority_sha256'],
+                      local_authority_sha256=row.authority_sha256)
+        if not release_marker_consistent(marker,hold_outcome,row,release):raise ValidationError(REPLAY_CONFLICT)
         return marker.outcome
-    if hold_outcome=='target_absent':
+    if hold_outcome=='target_absent' and held is None:
         _replay_marker(actor,'release',release['id'],hold['id'],'target_absent',entry,digest)
         return 'target_absent'
     if row is not None:
@@ -451,7 +510,7 @@ def _replay_release(actor,hold,hold_outcome,release,entry):
     # restored database ends preservation exactly where the source did. The journal chain already proved the second
     # custodian (never the hold's journaled one); when the releaser's account is absent here the replaying custodian
     # records it, and its marker keeps the signed release verbatim.
-    held=RetentionHold.objects.get(pk=hold['id'])
+    if held is None:raise ValidationError(REPLAY_CONFLICT)
     _replay_marker(actor,'release',release['id'],hold['id'],'imported',entry,digest)
     RetentionHoldRelease.objects.create(id=release['id'],hold=held,authority_sha256=release['authority_sha256'],
                                         created_by_id=recorder(release['created_by'],actor.pk))
@@ -459,19 +518,34 @@ def _replay_release(actor,hold,hold_outcome,release,entry):
     return 'imported'
 
 
-def replay_journal_holds(actor,records):
+def replay_journal_holds(actor,records,*,entries=None,redact=None):
     """Import journaled holds, and each release only after its hold, into a quarantined restored database.
 
+    With `entries` (the verified chain) every hold, release and redaction is replayed in journal order, `redact`
+    applying each redaction (core.redaction.apply): the restored database then passes through the source's own sequence,
+    so a hold journaled after a redaction never captures the content it removed. Without them, holds in record order.
     The caller (disposition_execution.replay) has verified the complete journal against a fresh checkpoint, and holds
-    the scope rows and then the preservation lock. Nothing is deleted. Returns counts only."""
+    the scope rows and then the preservation lock. Nothing is deleted here. Returns counts only."""
     counts={'holds':0,'holds_imported':0,'holds_present':0,'holds_target_absent':0,
             'releases':0,'releases_imported':0,'releases_present':0,'releases_target_absent':0}
-    for record in records.values():
-        outcome=_replay_hold(actor,record['hold'],record['hold_entry'])
+    from . import disposition_journal as journal
+    outcomes={}
+    def hold(record):
+        outcomes[record['hold']['id']]=outcome=_replay_hold(actor,record['hold'],record['hold_entry'])
         counts['holds']+=1;counts['holds_'+outcome]+=1
-        if record['release'] is not None:
-            released=_replay_release(actor,record['hold'],outcome,record['release'],record['release_entry'])
-            counts['releases']+=1;counts['releases_'+released]+=1
+    def release(record):
+        released=_replay_release(actor,record['hold'],outcomes[record['hold']['id']],record['release'],record['release_entry'])
+        counts['releases']+=1;counts['releases_'+released]+=1
+    if entries is None:
+        for record in records.values():
+            hold(record)
+            if record['release'] is not None:release(record)
+        return counts
+    for entry in entries:
+        kind=journal.kind(entry)
+        if kind=='hold':hold(records[entry['body']['hold']['id']])
+        elif kind=='release':release(records[entry['body']['release']['hold_id']])
+        elif kind=='redaction':redact(entry)
     return counts
 
 
@@ -485,8 +559,14 @@ def unaccounted_journal_records():
     holds=set(records)
     releases={record['release']['id'] for record in records.values() if record['release'] is not None}
     if not holds:return set()
-    accounted={str(pk) for pk in RetentionHoldReplay.objects.filter(record_id__in=holds|releases,outcome='target_absent')
-               .values_list('record_id',flat=True)}
-    accounted|={str(pk) for pk in RetentionHold.objects.filter(pk__in=holds).values_list('pk',flat=True)}
+    present={str(pk) for pk in RetentionHold.objects.filter(pk__in=holds).values_list('pk',flat=True)}
+    released={str(pk) for pk in RetentionHoldRelease.objects.filter(hold_id__in=holds).values_list('hold_id',flat=True)}
+    # A release's 'target_absent' marker accounts for it only while its hold is absent here too (NEW-1): once the hold
+    # is back, only a release of it here does: its own row, or (F8) a local release with other evidence
+    # (release_marker_consistent).
+    accounted={str(pk) for pk,hold_id,event in RetentionHoldReplay.objects.filter(
+                   record_id__in=holds|releases,outcome='target_absent').values_list('record_id','hold_id','event')
+               if event=='hold' or str(hold_id) not in present or str(hold_id) in released}
+    accounted|=present
     accounted|={str(pk) for pk in RetentionHoldRelease.objects.filter(pk__in=releases).values_list('pk',flat=True)}
     return (holds|releases)-accounted

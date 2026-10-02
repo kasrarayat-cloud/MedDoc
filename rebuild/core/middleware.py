@@ -22,7 +22,7 @@ class AccessMiddleware:
             # redirect and before CommonMiddleware's slash redirect (which named the route: refutation R2), exactly as
             # production nginx answers it (inventory 7A, F1).
             if console_path(path): return self.secured(request,response_for_exception(request,Http404()))
-        public=path in ('/preview/sign-in/','/preview/sign-out/','/login/','/register/','/health/','/billing/webhook/','/verification/resend/') or path.startswith(('/verify/','/invite/','/static/','/recovery/'))
+        public=path in ('/preview/sign-in/','/preview/sign-out/','/login/','/register/','/health/','/health/ready/','/billing/webhook/','/verification/resend/') or path.startswith(('/verify/','/invite/','/static/','/recovery/'))
         if not public:
             if not request.user.is_authenticated:
                 # Restore only the page location. Never replay an expired form submission. (The location the browser

@@ -31,6 +31,7 @@ from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcil
 from .context import integration_status
 from . import batch_jobs, generation_batch
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full,LATE_RECEIPT_ACTION
+from .doctor_status import doctor_status,encounter_label,for_others,reuse_message
 from .billing import available_balance
 from .admin_authority import reenrolment_open
 from . import wm_review
@@ -244,6 +245,14 @@ def health_data_mode():
     if settings.SYNTHETIC_ONLY:return 'synthetic-only'
     return 'real' if getattr(settings,'QUILLMD_DATA_MODE','synthetic')=='real' else 'live'
 def health(request): return JsonResponse({'status':'ok','data_mode':health_data_mode(),'surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
+
+def health_ready(request):
+    """Readiness, separate from liveness (core.readiness): 200 ready, 503 not ready. On the host only: a request that came
+    through the host proxy, or from any non-loopback peer, is answered 404."""
+    from . import readiness
+    if not readiness.on_host(request):raise Http404
+    value=readiness.report()
+    return JsonResponse(value,status=200 if value['ready'] else 503)
 
 @require_http_methods(['GET','POST'])
 def login_view(request):
@@ -766,11 +775,12 @@ def encounter_detail(request,pk):
         # Retain historical suggestions, but do not display licensed descriptors
         # after entitlement expires or changes to a different licensed feed.
         cpt=models.Q(terminology__release__system='CPT')
-        if cpt_licensed():
-            visible_codes=visible_codes.exclude(cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID))
-        else:
-            visible_codes=visible_codes.exclude(cpt)
-        codes=list(visible_codes)
+        hidden=cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID) if cpt_licensed() else cpt
+        # An acceptance of a hidden code (CPT is locked, or another licence) can still be withdrawn, without showing the
+        # code or its descriptor: it would otherwise block finalizing once marked for re-review (refutation F7).
+        hidden_accepted=[{'pk':row.pk,'review_required':row.review_required,'acceptance':row.acceptance}
+                         for row in visible_codes.filter(hidden,accepted_by__isnull=False)]
+        codes=list(visible_codes.exclude(hidden))
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
     is_v3=v3_mapping.is_v3_version(e.template_version)
@@ -940,10 +950,20 @@ def encounter_detail(request,pk):
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
     # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only
     # where the server allows it, and receives provider output only for requests that stand charged.
-    prior_generations=sum(1 for job in jobs if job.kind=='generation' and billable_outcome(job))
-    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
+    # The doctor reads one status vocabulary (core.doctor_status): never an internal state word or an administrator's note.
     for job in jobs:
-        job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+        # A charged completion keeps the page's own next-step text (the transcript or the draft is ready below).
+        # Another person's request reads in the third person here too (refutation R4B-1 of b3d8111d): every member of the
+        # department sees every request on the document, with no requester named.
+        job.doctor_status=doctor_status(job) if job.user_id==request.user.pk else for_others(doctor_status(job))
+        job.display_error='' if job.doctor_status.key=='completed' else job.doctor_status.explanation
+        job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+    # ⚠️ "Earlier requests remain charged" is read from the LEDGER, as the request list beside it is (doctor_status): the
+    # job state said so for a request whose charge a reconciliation had credited back in full, beside "No charge is
+    # recorded for it" (refutation M3 of 4cfa4301). An ended request with a net charge counts.
+    def charged_earlier(job):return job.doctor_status.charged and not job.doctor_status.pending
+    prior_generations=sum(1 for job in jobs if job.kind=='generation' and charged_earlier(job))
+    prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and charged_earlier(job))
     # One visible outcome per complete form. Child receipts stay in the admin
     # record; a staged child is never shown as a ready answer draft.
     visible_jobs=[]
@@ -954,10 +974,7 @@ def encounter_detail(request,pk):
             batch=part.batch
             job.display_kind='Generation'
             job.state=batch.state
-            job.display_error=batch.error
-            if batch.state in ('queued','running','validating'):
-                job.display_error='The complete form is being prepared. Answers appear together after validation.'
-            prior_generations+=int(batch.state in ('succeeded','not_adopted'))
+            prior_generations+=int(charged_earlier(job))  # part 1's status speaks for the whole batch's ledger
         visible_jobs.append(job)
     jobs=visible_jobs
     transcript_reviews=[]
@@ -973,7 +990,7 @@ def encounter_detail(request,pk):
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
     from . import wm_narrative
-    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'hidden_accepted':hidden_accepted,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
@@ -1000,8 +1017,13 @@ def same_text(posted,stored):
 def notes_save_clears(e):
     """What a changed notes save would clear, as the page's warning names it ('' when nothing): the same parts, from the
     same counts, that the save audits and then states — so the warning names only what would be cleared (refutation round
-    4, R4-7), and it and the saved message cannot disagree."""
-    return listed(cleared_parts(review_state_counts(e)))
+    4, R4-7), and it and the saved message cannot disagree. Accepted codes are not cleared (notes_save_marks)."""
+    return listed(cleared_parts(review_state_counts(e,codes=False)))
+
+def notes_save_marks(e):
+    """The accepted codes a changed notes save would keep and mark for re-review, as the page names them ('' when none)."""
+    count=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count()
+    return f'{count} accepted code{"" if count==1 else "s"}' if count else ''
 
 ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edited_not_accepted','answers_reviewed_unedited',
                'answers_unreviewed_unedited')
@@ -1121,9 +1143,10 @@ def generate_view(request,pk):
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
             # Reached from a stale page (Back, or a second tab): a generation does not renumber the
-            # revision, so the succeeded job still holds this request key. Saying "queued" would
-            # promise a request that was not made and answers that will not change.
-            messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
+            # revision, so the earlier job still holds this request key. Saying "queued" would
+            # promise a request that was not made; saying "answer draft" while that job is still
+            # queued or running promises answers that do not exist yet (doctor_status.reuse_message).
+            messages.info(request,reuse_message(job))
         else:
             messages.success(request,'Generation queued. Refresh this page to view the result.')
     except ValidationError as exc:
@@ -1519,6 +1542,12 @@ def finalize(request,pk):
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
             if batch_jobs.pending(e):raise ValidationError('Resolve pending jobs before finalizing.')
+            # The coding ledger freezes at finalization (0034): an acceptance the notes have since changed under is
+            # confirmed or withdrawn first, never frozen as it stands.
+            if CodeSuggestion.objects.filter(encounter=e,review_required=True).exists():
+                raise ValidationError('An accepted code is marked for re-review because the notes changed after it was accepted. '
+                                      'Accept it again or withdraw it on the Coding tab (a hidden CPT code can only be '
+                                      'withdrawn). Nothing was finalized.')
             is_v3=v3_mapping.is_v3_version(e.template_version)
             # A v3 signature or initials area holds no answer (it is signed by hand on the printed form), so there is
             # nothing in it to review; every other field still needs the clinician's review.
@@ -1666,7 +1695,7 @@ def voice(request,pk):
         if getattr(job,'reused',False):
             # The identical recording already holds this request key; the redundant upload was just
             # removed above. Nothing was sent to the provider and nothing was charged again.
-            messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
+            messages.info(request,reuse_message(job,recording=True))
         else:
             messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
@@ -1899,6 +1928,23 @@ def coding(request,pk):
     from .coding import MAX_SUGGESTIONS
     over=(f' {result.omitted} further documented code{" was" if result.omitted==1 else "s were"} not suggested: a document holds '
           f'at most {MAX_SUGGESTIONS} code suggestions.' if result.omitted else '')
+    unmatched=(f' {result.unmatched} entr{"y" if result.unmatched==1 else "ies"} in the notes written like a diagnosis code '
+               f'{"is" if result.unmatched==1 else "are"} not a code in that release and {"was" if result.unmatched==1 else "were"} '
+               'not suggested; check the code and its dot.' if result.unmatched else '')
+    withheld=(f' {result.cpt_withheld} CPT code{"" if result.cpt_withheld==1 else "s"} named in the notes {"was" if result.cpt_withheld==1 else "were"} '
+              'not looked up: CPT content is not licensed for use in this product.' if result.cpt_withheld else '')
+    dotless=(f' {result.dotless} entr{"y" if result.dotless==1 else "ies"} in the notes {"looks" if result.dotless==1 else "look"} like a '
+             'code written without a dot; not looked up. Type a diagnosis code with its dot (R07.9, not R079) to have it '
+             'suggested.' if result.dotless else '')
+    one=result.unlabelled==1
+    unlabelled=(f' {result.unlabelled} three-character entr{"y" if one else "ies"} in the notes match{"es" if one else ""} a diagnosis '
+                f'code but {"is" if one else "are"} not labelled as one; not suggested (p53 or B12 can name a lab test or a gene). '
+                'Write the code after a code label, such as "ICD-10: I10", to have it suggested.' if result.unlabelled else '')
+    two=result.touching!=1
+    touching=(f' {result.touching} code{"s" if two else ""} from the release in effect {"are" if two else "is"} written touching '
+              f'other characters (as in "1.R07.9" or "R07.9.Plan") and {"were" if two else "was"} not suggested; leave a space '
+              'before and after a code to have it suggested.' if result.touching else '')
+    over+=unmatched+dotless+unlabelled+touching+withheld
     if result.covered:
         messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
@@ -1935,7 +1981,7 @@ def accept_code(request,pk,code_pk):
     if posted!=str(e.revision):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
                                           'was accepted. Reopen it to see the current notes and codes.',409)
-    if item.accepted_by_id:
+    if item.accepted_by_id and not item.review_required:
         # ⚠️ AN ACCEPTANCE BELONGS TO WHOEVER MADE IT. Accepting does not renumber the revision, so a page opened before
         # clinician A accepted still posts the current revision, and B's Accept from it re-stamped the code as B's, with a
         # second coding.accept (refutation round 4, R4-6). Refused, not answered as a no-op: B is told the acceptance is
@@ -1943,24 +1989,105 @@ def accept_code(request,pk,code_pk):
         when=timezone.localtime(item.accepted_at).strftime('%Y-%m-%d %H:%M %Z') if item.accepted_at else 'an unrecorded time'
         return document_refusal(request,e,f'This code was already accepted by {item.accepted_by.email}, at {when}. '
                                           'Nothing was accepted. Reopen the document to see its current codes.',409)
-    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
-    if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
+    withdraw=' Withdraw this acceptance instead.' if item.review_required else ''
+    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.'+withdraw)
+    if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.'+withdraw)
     if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
-    item.accepted_by=request.user;item.accepted_at=timezone.now();item.save(update_fields=['accepted_by','accepted_at'])
-    audit(request.user,'coding.accept',item.pk,department=e.department,code=item.code,release=item.terminology.release.version)
+    release=item.terminology.release
+    if item.release_sha256 not in ('',release.sha256):raise ValidationError('This code no longer names its release; generate new coding suggestions.')
+    previous=item.accepted_by_id
+    item.accepted_by=request.user;item.accepted_at=timezone.now();item.review_required=False
+    item.save(update_fields=['accepted_by','accepted_at','review_required'])
+    audit(request.user,'coding.reaccept' if previous else 'coding.accept',item.pk,department=e.department,code=item.code,
+          release=release.version,release_sha256=release.sha256,**({'previously_accepted_by':str(previous)} if previous else {}))
+    return redirect('/encounters/'+str(pk)+'/?tab=coding')
+
+@require_POST
+@transaction.atomic
+def withdraw_code(request,pk,code_pk):
+    """A clinician's explicit withdrawal of an accepted code on an unfinalized document: the acceptance is cleared, then
+    the suggestion removed (0034 never lets an accepted code be deleted directly). Audited; finalized codes are frozen."""
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was withdrawn.',409)
+    if request.POST.get('revision')!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
+                                          'was withdrawn. Reopen it to see the current notes and codes.',409)
+    item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e,accepted_by__isnull=False).first()
+    if item is None:return document_refusal(request,e,'This accepted code is unavailable. Nothing was withdrawn.',409)
+    # ⚠️ THE ACCEPTANCE THE PAGE SHOWED, not only its revision: accepting does not renumber the revision, so a withdraw from
+    # a page loaded before another clinician accepted again deleted that newer acceptance (refutation C5 of 4cfa4301).
+    if request.POST.get('accepted')!=item.acceptance:
+        return document_refusal(request,e,'This code was accepted again after you opened the page. Nothing was withdrawn. '
+                                          'Reopen the document to see who accepted it.',409)
+    previous,release=item.accepted_by_id,item.terminology.release
+    CodeSuggestion.objects.filter(pk=item.pk).update(accepted_by=None,accepted_at=None)
+    CodeSuggestion.objects.filter(pk=item.pk).delete()
+    # ⚠️ A CPT CODE IS NEVER DISPLAYED WHILE CPT IS LOCKED, and the audit console renders every detail: a hidden CPT
+    # acceptance's withdrawal records its system, never its code (refutation R3C-4 of 75d11c09: '99213' was rendered).
+    from .coding import cpt_licensed
+    shown=item.system!='CPT' or (cpt_licensed() and release.license_reference==settings.CPT_LICENSE_ID)
+    audit(request.user,'coding.withdraw',item.pk,department=e.department,**({'code':item.code} if shown else {'system':'CPT'}),
+          release=release.version,release_sha256=release.sha256,previously_accepted_by=str(previous),
+          review_required=item.review_required)
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 def billing(request):
     from .billing import checkout_form
     from .admin_queries import page_for,searched
     query=request.GET.get('q','').strip()[:100]
-    owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
+    owned_orgs=owned_organizations(request.user)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
     usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
+    held=held_requests(request.user)
     ledger=searched(LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
     payments=searched(Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at','pk'),query,['status','stripe_session','stripe_intent'])
     up=page_for(request,usage,'usage_page','usage');lp=page_for(request,ledger,'ledger_page','ledger');pp=page_for(request,payments,'payments_page','payments')
-    return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+    return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'held_requests':held,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+
+#: What a request is called on the doctor's pages: a complete-form part is part of one generation (refutation F11).
+REQUEST_LABELS={'generation':'Generation','generation_part':'Generation','transcription':'Transcription','mapping':'Form mapping'}
+MAX_HELD_ROWS=500
+
+def owned_organizations(user):
+    """The organizations whose billing a viewer reads: those in which the viewer holds an active owner membership (the
+    Organization owner role, held through any of its departments). ONE answer for the wallet strip, the list of requests
+    holding funds and the charge page (refutation M1 of 4cfa4301: the list asked which DEPARTMENTS the viewer owns while
+    the other two asked this, so the owner of another department of the paying organization saw that wallet's funds
+    reserved beside "No request is holding funds", and still opened the request's charge page)."""
+    return set(Membership.objects.filter(user=user,active=True,role='owner').values_list('department__organization_id',flat=True))
+
+def billed_jobs(user):
+    """The requests whose charges a viewer reads: their own, and those an organization the viewer owns pays for."""
+    return models.Q(user=user)|models.Q(payer__in=[f'organization:{org}' for org in owned_organizations(user)])
+
+def held_requests(user):
+    """Requests holding funds, newest first: exactly those whose charge page the viewer opens (billed_jobs; refutation F11
+    of dc33e094 and M1 of 4cfa4301), so every row links to its page. A complete-form generation is one row, its parts'
+    holds summed. At most MAX_HELD_ROWS rows: the cap counts requests, never reservations, so a row always carries its
+    request's whole held amount (refutation M4: cutting 500 reservations left a batch row with one part's). Read-only: the
+    reservations decide every amount (core.billing)."""
+    held=(Reservation.objects.filter(state='held',job__in=Job.objects.filter(billed_jobs(user))).order_by('-created_at','pk')
+          .values_list('job_id','amount','job__kind','job__generation_part__batch_id'))
+    amounts={}
+    for job_id,amount,kind,batch_id in held.iterator():
+        key=('batch',batch_id) if kind=='generation_part' else ('job',job_id)
+        if key not in amounts:
+            if len(amounts)>=MAX_HELD_ROWS:continue
+            amounts[key]=Decimal('0')
+        amounts[key]+=amount
+    firsts={part.batch_id:part.job for part in GenerationBatchPart.objects.filter(
+        batch_id__in=[ident for kind,ident in amounts if kind=='batch'],ordinal=1).select_related('job__user')}
+    singles=Job.objects.select_related('user').in_bulk([ident for kind,ident in amounts if kind=='job'])
+    rows=[]
+    for (kind,ident),amount in amounts.items():
+        job=firsts.get(ident) if kind=='batch' else singles.get(ident)
+        if job is not None:
+            # Another person's request is told in the third person: its requester approved its maximum, not this viewer
+            # (refutation R3B-2 of 75d11c09).
+            status=doctor_status(job) if job.user_id==user.pk else for_others(doctor_status(job))
+            rows.append({'job':job,'label':REQUEST_LABELS.get(job.kind,'Request'),'amount':amount,'status':status})
+    return rows
 
 def usage_rows(usage):
     # Reconciled and absorbed evidence is read from the append-only ledger; the usage rows themselves are never edited.
@@ -2121,11 +2248,19 @@ def billing_job_detail(request,pk):
     from .admin_queries import financial_context
     # Personal billing history remains available after clinical membership revocation.
     # Organization owners can inspect organization-paid charges without clinical access.
-    owned=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
-    allowed=models.Q(user=request.user)|models.Q(payer__in=[f'organization:{pk}' for pk in owned])
-    job=get_object_or_404(Job.objects.filter(allowed).select_related('user','encounter__department'),pk=pk)
+    owned=owned_organizations(request.user)
+    job=get_object_or_404(Job.objects.filter(billed_jobs(request.user)).select_related('user','encounter__department'),pk=pk)
     visible=set(Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned)).values_list('pk',flat=True))
     context=financial_context(job,visible);context.pop('audit_targets')
+    context['doctor_status']=doctor_status(job)
+    context['request_label']=REQUEST_LABELS.get(job.kind,'Request')
+    if job.kind=='generation_part':
+        # The held list's one row of a complete form links here (part 1): the page names the part and the whole request's
+        # reservations, in the doctor's words (refutation M2 of 4cfa4301: "Total reserved for this request" was one part's).
+        part=job.generation_part
+        jobs=list(part.batch.parts.values_list('job_id',flat=True))
+        context['batch_part']={'ordinal':part.ordinal,'parts':len(jobs),
+                               'reserved':Reservation.objects.filter(job_id__in=jobs).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')}
     audit(request.user,'billing.job_read',job.pk)
     return render(request,'financial_detail.html',context)
 
@@ -2297,20 +2432,31 @@ def encounter_notes(request,pk):
     # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
     if transcript_job is None and same_text(notes,e.notes):
         messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
-    cleared=review_state_counts(e)
+    # ⚠️ A CHANGED SAVE NEVER DELETES AN ACCEPTED CODE (0034 refuses it): the acceptance is kept and marked for the
+    # clinician to accept again or withdraw; finalizing waits for that. Suggestions nobody accepted are cleared as before.
+    cleared=review_state_counts(e,codes=False)
+    marked=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count()
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
-    CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
-    CodeSuggestion.objects.filter(encounter=e).delete()
-    audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)
-    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared)
+    invalidate_codes(e)
+    audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department,kept_for_review=marked)
+    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared,
+          codes_marked_for_review=marked)
     if transcript_job:
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
     # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
     # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
-    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+'Generate and review a new answer draft.')
+    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+marked_sentence(marked)+'Generate and review a new answer draft.')
     return redirect('encounter_detail',pk=pk)
+
+def invalidate_codes(e):
+    """After the notes changed: suggestions nobody accepted are removed; accepted codes are kept and marked for re-review."""
+    CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=True).delete()
+    return CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False,review_required=False).update(review_required=True)
+
+def marked_sentence(count):
+    return f'Kept and marked for re-review: {count} accepted code{"" if count==1 else "s"}. ' if count else ''
 
 def review_transcript(job):
     """Read only the bounded, hash-bound retained result for a reviewed transcript."""
@@ -2331,6 +2477,9 @@ def job_result(request,pk):
     job=get_object_or_404(Job.objects.filter(models.Q(encounter__department__in=visible)|models.Q(mapping_version__template__department__in=visible)),pk=pk)
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
+    # A redacted document's provider output was removed with its content; the financial receipt is retained.
+    if job.encounter_id and RedactionTombstone.objects.filter(target_id=job.encounter_id).exists():
+        raise Http404('Provider output was removed with the redacted document; the financial receipt is retained.')
     # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
     if not deliverable(job):raise Http404('Provider output is delivered only for charged requests and usable transcripts.')
     path=private_path(job.result_path)

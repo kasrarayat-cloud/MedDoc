@@ -45,7 +45,7 @@ async function generate(){
  stage='submit generation';
  await page.getByRole('button',{name:'Generate supported answers',exact:true}).click();
  stage='await terminal generation';
- for(let n=0;n<40;n++){await page.waitForTimeout(500);await page.reload();if(await page.locator('.source-panel .badge').filter({hasText:/^succeeded$/}).count())return;assert.equal(await page.locator('.source-panel .badge').filter({hasText:/^(failed|reconciliation)$/}).count(),0);}
+ for(let n=0;n<40;n++){await page.waitForTimeout(500);await page.reload();if(await page.locator('.source-panel [data-request-status="completed"]').count())return;assert.equal(await page.locator('.source-panel [data-request-status="held"], .source-panel [data-request-status="not_completed"], .source-panel [data-request-status="completed_not_applied"]').count(),0);}
  throw new Error('Fixture generation timeout');
 }
 async function review(scenario,reviewed=true){

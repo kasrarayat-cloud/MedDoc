@@ -174,3 +174,8 @@ DISPOSITION_JOURNAL_KEYS = json.loads(os.getenv('QUILLMD_DISPOSITION_JOURNAL_KEY
 DISPOSITION_JOURNAL_KEY_ID = os.getenv('QUILLMD_DISPOSITION_JOURNAL_KEY_ID', '')
 DISPOSITION_JOURNAL_PRIVATE_KEY = os.getenv('QUILLMD_DISPOSITION_JOURNAL_PRIVATE_KEY', '')
 DISPOSITION_JOURNAL_PATH = os.getenv('QUILLMD_DISPOSITION_JOURNAL_PATH', '')
+# Readiness thresholds (core.readiness, GET /health/ready/). The defaults and the alarm table they belong to are
+# ops/alarms.json; empty keeps the default, and an invalid value answers not ready rather than ready.
+READINESS_WORKER_HEARTBEAT_SECONDS = os.getenv('QUILLMD_READINESS_WORKER_HEARTBEAT_SECONDS', '')
+READINESS_OLDEST_QUEUED_SECONDS = os.getenv('QUILLMD_READINESS_OLDEST_QUEUED_SECONDS', '')
+READINESS_QUEUE_DEPTH = os.getenv('QUILLMD_READINESS_QUEUE_DEPTH', '')

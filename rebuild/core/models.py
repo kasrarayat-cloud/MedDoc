@@ -170,6 +170,31 @@ class RestoreAdmission(Entity):
     report_sha256=models.CharField(max_length=64)
     created_by=models.ForeignKey('User',on_delete=models.PROTECT)
 
+class RedactionRequest(Entity):
+    """A first custodian's request to remove one draft's clinical content, naming that exact content by its digest.
+
+    The reason is a SHA-256 of the authority document, never prose. Append-only; a second, distinct custodian executes
+    it (core.redaction.execute), and only while the content still has this digest."""
+    encounter=models.ForeignKey('Encounter',on_delete=models.PROTECT,related_name='+')
+    department=models.ForeignKey('Department',on_delete=models.PROTECT,related_name='+')
+    reason_sha256=models.CharField(max_length=64)
+    content_sha256=models.CharField(max_length=64)
+    request_key=models.UUIDField(unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT,related_name='+')
+
+class RedactionTombstone(Entity):
+    """A draft whose clinical content was removed while its work, money and audit rows stay (every reference to an
+    encounter is PROTECT). Scalar identities, like a disposition tombstone's, so the verified journal entry can be
+    replayed onto an older restored backup that lacks the request. Who, when and why are the signed entry kept verbatim;
+    `files` lists the storage keys and digests whose bytes were removed. Append-only."""
+    target_id=models.UUIDField(unique=True)
+    department_id=models.UUIDField()
+    request_id=models.UUIDField(unique=True)
+    content_sha256=models.CharField(max_length=64)
+    files=models.JSONField()
+    journal_entry=models.JSONField()
+    entry_sha256=models.CharField(max_length=64,unique=True)
+
 class ProviderIdentifiers:
     @property
     def legacy_resource_identifier(self):
@@ -535,12 +560,24 @@ class CodeSuggestion(Entity):
     evidence=models.TextField()
     accepted_by=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     accepted_at=models.DateTimeField(null=True)
+    # The identity of the release the code came from (its imported file's sha256), recorded with the suggestion and checked
+    # by the database against that release (0034); '' only on rows written before it. Releases and codes are append-only.
+    release_sha256=models.CharField(max_length=64,blank=True,default='',db_default='')
+    # A changed notes save never deletes an accepted code: it keeps the acceptance and marks it for the clinician to accept
+    # again or withdraw (0034's guard refuses deleting an accepted code). Finalization freezes every row (the same guard).
+    review_required=models.BooleanField(default=False,db_default=False)
     @property
     def system(self): return self.terminology.release.system
     @property
     def code(self): return self.terminology.code
     @property
     def description(self): return self.terminology.description
+    @property
+    def acceptance(self):
+        """The acceptance a page shows, posted back by its withdraw form: who accepted the code and when. Accepting does not
+        renumber the revision, so a withdraw from a page older than another clinician's acceptance is told apart only by
+        this (refutation C5 of 4cfa4301: it deleted that newer acceptance)."""
+        return f'{self.accepted_by_id}@{self.accepted_at.isoformat()}' if self.accepted_at else ''
     class Meta: constraints=[models.UniqueConstraint(fields=['encounter','terminology'],name='suggestion_once')]
 class AuditEvent(Entity):
     actor=models.ForeignKey(User,on_delete=models.PROTECT,null=True)

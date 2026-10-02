@@ -8,10 +8,17 @@ from django.utils import timezone
 from .models import Code,CodeSet,CodeSuggestion
 from .security import audit
 
-Suggestions=namedtuple('Suggestions','count covered versions omitted',defaults=(0,))
+Suggestions=namedtuple('Suggestions','count covered versions omitted unmatched cpt_withheld dotless unlabelled touching',
+                       defaults=(0,0,0,0,0,0))
 
-def cpt_licensed():
-    """A CPT release is usable only while the licence itself is current.
+#: ⚠️ THE CPT LOCK IS CODE, NOT CONFIGURATION. The right to use CPT content in THIS product (the licence holder, the
+#: agreement and its scope) is a reviewed release decision, recorded here by a code change. While it is None, CPT content
+#: and every CPT function stay disabled in every data, AI and payment mode, whatever CPT_LICENSE_ID/CPT_LICENSE_EXPIRY say:
+#: no CPT code is imported, suggested, displayed, accepted or exported. The environment licence stays a second, dated gate.
+CPT_PRODUCT_USE_RIGHTS=None
+
+def cpt_license_current():
+    """The environment's CPT licence is configured and current (the second gate; never sufficient on its own).
 
     Deliberately judged against TODAY, not against the encounter's date of service: the
     licence governs whether this product may display the content now, which is a different
@@ -21,6 +28,10 @@ def cpt_licensed():
     try:expiry=date.fromisoformat(settings.CPT_LICENSE_EXPIRY)
     except ValueError:return False
     return expiry>=timezone.localdate()
+
+def cpt_licensed():
+    """A CPT release is usable only with recorded product-use rights AND a current environment licence."""
+    return CPT_PRODUCT_USE_RIGHTS is not None and cpt_license_current()
 
 def applicable_releases(encounter):
     """The releases in effect on the encounter's date of service or discharge.
@@ -38,6 +49,63 @@ def applicable_releases(encounter):
 #: A code as the notes document it: an ICD-10-CM code (a letter, two characters, and up to four after a dot) or a CPT code
 #: (five digits, or four and F, T or U), read from the upper-cased notes.
 TOKEN=re.compile(r'\b(?:[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?|[0-9]{5}|[0-9]{4}[FTU])\b')
+#: ⚠️ A CODE WRITTEN WITHOUT ITS DOT IS NEVER READ AS A DIAGNOSIS (refutation F4 of dc33e094). 'R079' would be R07.9, but a
+#: letter followed by four digits is also a HCPCS Level II code: reading G0439 (annual wellness visit) as G04.39
+#: (encephalopathy) suggested a diagnosis the notes never documented. Such a token is counted and said, never looked up.
+#: Its shape is the ICD-10-CM one without the dot: a letter, a digit, a digit OR a letter (the categories C4A, C7A, C7B,
+#: D3A, I5A, M1A, O9A, Z3A: refutation C1 of 4cfa4301 found Z3A20, O9A211 and M1A0710 dropped silently by a shape that
+#: demanded two digits), then one to four letters or digits; 4 to 7 characters, which no code written with its dot can be.
+#: The categories whose SECOND character is a letter have a digit third (FY2026's QA0.*: refutation R3C-3 of 75d11c09).
+CATEGORY_SHAPE=r'[A-Z](?:[0-9][0-9A-Z]|[A-Z][0-9])'
+DOTLESS=re.compile(r'\b'+CATEGORY_SHAPE+r'[0-9A-Z]{1,4}\b')
+#: ⚠️ ...AND IT IS COUNTED ONLY WHEN ITS FIRST THREE CHARACTERS ARE A CATEGORY OF THE RELEASE IN EFFECT. Lab, gene and dose
+#: names have the shape too (G6PD, H1N1, C282Y, H63D, q12h): those whose first three characters name no category are not
+#: counted (refutation C3). A variant or dose whose first three characters happen to be a real category (V600E: V60;
+#: G12C: G12; q12h: Q12) is still counted, and the sentence says such an entry "looks like" a code written without its dot,
+#: which it does: telling the two apart needs knowledge of variants no release carries, and an undercount drops a mistyped
+#: code silently, which F4's rule forbids. Nothing of this shape is ever suggested.
+#: A diagnosis code written WITH its dot that no applicable release holds: counted and said. A category's second or third
+#: character is a digit (CATEGORY_SHAPE), so words joined by a dot (SOB.Has, Vit.D, CBC.BMP) are not counted (refutation C2
+#: of 4cfa4301), and a mistyped QA0.* code is (refutation R3C-3 of 75d11c09: 'a digit second' dropped it silently).
+DOTTED=re.compile(CATEGORY_SHAPE+r'\.[0-9A-Z]{1,4}')
+#: Separators of a list of CPT codes after one label: ', ' '; ' ' / ' '&' '+' ' and ' ' or ' and ', and ' (each needs a mark or
+#: a word, so a code followed by an unrelated number is not read into the list; '&' and '+': refutation R3C-5).
+LIST_SEPARATOR=r'(?:\s*[,;/&+]\s*(?:(?:AND|OR)\s+)?|\s+(?:AND|OR)\s+)'
+#: ...and of a list of diagnosis codes: the same without '+', which in a pathology line means stain-positive ('P53+'), never
+#: 'and another code' (refutation R4C-1 of b3d8111d).
+ICD_SEPARATOR=r'(?:\s*[,;/&]\s*(?:(?:AND|OR)\s+)?|\s+(?:AND|OR)\s+)'
+CPT_SHAPE=r'(?:[0-9]{5}|[0-9]{4}[FTU])\b'
+#: The CPT codes the notes NAME as such: after 'CPT', 'CPT®', 'CPT-4', 'CPT code(s)', with ':' '#' '-' or spaces, and every
+#: code of a list after one label ('CPT 99213, 99214 and 36415': refutation C4 of 4cfa4301 counted one, and nothing for
+#: 'CPT® 99213'). Any unlabelled five-digit number (10000 units, ZIP 90210) is not counted: only a named code is said to have
+#: been withheld while CPT content is locked.
+CPT_NAMED=re.compile(r'\bCPT(?:\u00ae|\(R\))?(?:[\s-]*4\b)?(?:\s*CODES?)?[\s:#-]*('+CPT_SHAPE+'(?:'+LIST_SEPARATOR+CPT_SHAPE+')*)')
+#: ⚠️ A THREE-CHARACTER CODE IS SUGGESTED ONLY WHERE A CODE LABEL NAMES IT (refutation C10 of 4cfa4301). An undotted
+#: three-character token was looked up in the case-folded notes, so 'p53 wild-type' (an immunostain) was suggested as P53,
+#: hemorrhagic disease of newborn, "explicitly documented", and accepted. Lab, gene and stain names have this shape (p53,
+#: B12, A1C, CO2), and telling them apart from a code by their surroundings fails open. So it fails CLOSED: a
+#: three-character code is suggested only when the line that FIRST documents it puts it after a code label ('ICD-10: I10',
+#: 'ICD-10-CM code I10', 'ICD10 I10', 'ICD: R51 and I10', 'Dx code I10', 'diagnosis codes R51; I10'); otherwise, when a
+#: release in effect holds it, it is counted and the doctor is told how to write it, never suggested. A code with its dot
+#: (R07.9) is unchanged: the dot already says it is a code.
+#: ⚠️ AND A LABEL NAMES THE CODE RIGHT AFTER IT, AND ONLY THE LATER ITEMS OF ITS LIST THAT ARE WRITTEN AS CODES (refutation
+#: R3C-1 of 75d11c09): a list that took every code-shaped word after a separator absorbed the stain or gene name next to a
+#: labelled code on a synoptic line ('ICD-10 C18.7, p53 wild-type' suggested P53; 'ICD-10: M51.26; L45 herniation'
+#: suggested L45, a spine level). A later item is read as a code only when it is written in capitals, as codes are printed,
+#: AND ends its item: a separator, a closing mark ('.', ')', ']') or the end of the line. The cost, said to the doctor: in
+#: 'ICD-10: R51, I10 hypertension' only R51 is labelled, and I10 is counted and said with how to write it. The residual: an
+#: upper-case non-code standing alone as an item of a labelled code list ('ICD-10: C18.7, P53, ...') is read as a code,
+#: because the label says it is one.
+#: A code inside a labelled list has TOKEN's shape (the label, not the shape, says it is a code; the lookup decides).
+CODE_SHAPE=r'[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?(?![0-9A-Z])'
+ICD_LABEL=re.compile(r'\b(?:ICD(?:[\s-]*10(?:[\s-]*CM)?)?|(?:DX|DIAGNOSIS)\s*CODES?)(?:\s*CODES?)?[\s:#-]*')
+#: ⚠️ ...AND ONLY WHEN THE WHOLE LIST IS CODES, TO ITS CLAUSE END (refutation R4C-1 of b3d8111d): an item that 'ended' at any
+#: separator let a stain or gene pair in ('C18.7 & P53/MLH1 loss', 'C18.7, P53 and MLH1 retained', 'C18.7, P53+'). A
+#: labelled list's later items are read only when every item after the label is a code written in capitals and the list
+#: then ends: a full stop, a closing bracket or the end of the line. Otherwise only the code right after the label is.
+FIRST_CODE=re.compile(CODE_SHAPE)
+LATER_CODE=re.compile(ICD_SEPARATOR+'('+CODE_SHAPE+')')
+CLAUSE_END=re.compile(r'\s*(?:[.)\]]|$)')
 RUN=re.compile(r'[\w.]+')
 SHORTEST_CODE,LONGEST_CODE=3,8      # 'R00' .. 'A00.0000'; every TOKEN match is 3 to 8 characters
 ASCII_UPPER='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -49,7 +117,73 @@ ASCII_ALNUM='0123456789'+ASCII_UPPER
 #: most 100 evidence lines of at most 50,000 characters.
 MAX_SUGGESTIONS=100
 
-Plan=namedtuple('Plan','notes releases found')
+Plan=namedtuple('Plan','notes releases found unmatched cpt_withheld dotless unlabelled touching',defaults=(0,0,0,0,0))
+
+def same_length_upper(line):
+    """The line in upper case, character for character (a character whose upper case is longer, as 'ß', is kept), so a
+    position in it is the same position in the line."""
+    return ''.join(character.upper() if len(character.upper())==1 else character for character in line)
+
+def labelled_codes(line):
+    """The codes a code label names on one line, upper-cased: every label (ICD_LABEL), the code right after it
+    (FIRST_CODE), and the later items of its list (LATER_CODE) only when all of them are written in capitals and the list
+    then reaches its clause end (CLAUSE_END). Each label is found on its own, so a list never swallows the next label ('ICD'
+    has a code's shape); a list stops at its first item that is not a code, so the lists overlap by at most one token and
+    the scan stays linear in the line."""
+    upper=same_length_upper(line);found=set()
+    for label in ICD_LABEL.finditer(upper):
+        first=FIRST_CODE.match(upper,label.end())
+        if not first:continue
+        found.add(first.group());position=first.end();later=[]
+        while item:=LATER_CODE.match(upper,position):
+            later.append(item);position=item.end(1)
+        if (later and CLAUSE_END.match(upper,position)
+                and all(line[item.start(1):item.end(1)]==item.group(1) for item in later)):
+            found.update(item.group(1) for item in later)
+    return found
+
+#: ⚠️ A DOTTED CODE WRITTEN AGAINST A LETTER OR DIGIT ('R07.9chest', 'painR07.9', '1R07.9') makes no TOKEN: TOKEN needs a word
+#: boundary on both sides, so the lookup never saw it and nothing was said (refutation R4C-3 of b3d8111d). Every dotted shape
+#: at every position is read, with each length its tail may have, and a code the release holds among them is counted as
+#: written touching. Linear: one zero-width match per position, at most four candidates.
+#: ⚠️ NOT WHERE THE SHAPE WRITTEN THERE IS A WORD OF ITS OWN (refutation R5C-3 of a0bc4fd8): 'M54.50' and 'R07.99' hold the
+#: codes M54.5 and R07.9 as prefixes; they are entries the release lacks (counted as not in the release, once), not a held
+#: code touching anything, and the advice to 'leave a space' would split them into another code. 'M25.532' is the same case
+#: with the whole entry held.
+#: ⚠️ AND NOT INSIDE A WORD (refutation R5C-2): 'WBC11.2', 'Temp37.2', 'BMI31.2', 'eGFR60.1' hold C11.2, P37.2, I31.2 and
+#: R60.1, and a value written against its name was said to be a code. After a letter, a code is read only where the
+#: notes' own case changes there ('painR07.9': a lower-case letter, then the code's capital); after a digit, a mark or the
+#: start of a word, always ('1R07.9', 'R07.9chest'). The residual: a code run into a word written all in capitals
+#: ('CHEST PAINR07.9') is not said.
+EMBEDDED=re.compile(r'(?=([A-Z][0-9A-Z]{2}\.[0-9A-Z]{1,4}))')
+
+def embedded_shapes(notes):
+    """(start, shape) for every dotted code shape at every position of the notes, read from the notes upper-cased character
+    for character (same_length_upper), so a position is the same position in the notes."""
+    aligned=same_length_upper(notes)
+    return aligned,[(match.start(1),match.group(1)) for match in EMBEDDED.finditer(aligned)]
+
+def run_into(notes,aligned,start,shape):
+    """Whether the dotted shape at `start` touches its neighbours and is not inside a word (R5C-2, R5C-3)."""
+    end=start+len(shape)
+    before=aligned[start-1] if start else ''
+    after=aligned[end] if end<len(aligned) else ''
+    if not before.isalnum() and not after.isalnum():return False         # a word of its own: never touching
+    if before.isalpha():return notes[start-1].islower() and notes[start].isupper()
+    return True
+
+def named_cpt(upper):
+    """The distinct CPT codes the upper-cased notes name as CPT codes (CPT_NAMED), every code of a labelled list."""
+    return {code for match in CPT_NAMED.finditer(upper) for code in re.findall(CPT_SHAPE,match.group(1))}
+
+def release_categories(releases,wanted):
+    """Which of `wanted` (three-character prefixes) is the category of a code in an applicable ICD-10-CM release. Read to
+    decide whether a dotless token is counted; never to suggest one."""
+    icd=[release.pk for release in releases if release.system=='ICD-10-CM']
+    if not icd or not wanted:return set()
+    from django.db.models.functions import Substr
+    return set(Code.objects.filter(release_id__in=icd).annotate(category=Substr('code',1,3)).filter(
+        category__in=wanted).values_list('category',flat=True).distinct())
 
 def evidence_lines(notes,wanted):
     """For each code in `wanted`, the first line of `notes` on which it stands whole, as (the order the codes were first
@@ -86,12 +220,69 @@ def evidence_lines(notes,wanted):
 def plan(encounter):
     """Which suggestions the notes support, read without writing: `suggest` records them under the encounter's lock."""
     releases=list(applicable_releases(encounter))
-    # No diagnosis inference: recommend only codes explicitly documented in notes.
-    tokens=set(TOKEN.findall(encounter.notes.upper()))
-    codes=list(Code.objects.filter(code__in=tokens,release__in=releases).select_related('release'))
+    upper=encounter.notes.upper()
+    # No diagnosis inference: recommend only codes explicitly documented in notes, exactly as written.
+    tokens=set(TOKEN.findall(upper))
+    locked=not cpt_licensed()
+    codes=[code for code in Code.objects.filter(code__in=tokens,release__in=releases).select_related('release')
+           if code.release.system=='ICD-10-CM' or not locked]
     evidence=evidence_lines(encounter.notes,{code.code for code in codes})
-    documented=sorted((code for code in codes if code.code in evidence),key=lambda code:evidence[code.code][0])
-    return Plan(encounter.notes,releases,[(code,evidence[code.code][1]) for code in documented])
+    # A three-character diagnosis code counts only where its evidence line (the first line documenting it) labels it.
+    labels={}                           # evidence line -> the codes labelled on it, read once per distinct line
+    def labelled(code):
+        line=evidence[code.code][1]
+        if line not in labels:labels[line]=labelled_codes(line)
+        return code.code in labels[line]
+    unlabelled={code.code for code in codes if code.code in evidence and len(code.code)==3
+                and code.release.system=='ICD-10-CM' and not labelled(code)}
+    documented=sorted((code for code in codes if code.code in evidence and code.code not in unlabelled),
+                      key=lambda code:evidence[code.code][0])
+    # Said, never looked up and never dropped silently: a code written with its dot that no applicable release holds, a
+    # code-shaped token written without a dot, an unlabelled three-character code, and (while CPT is locked) a CPT code the
+    # notes name as one.
+    known={code.code for code in codes}
+    dotted={token for token in tokens if DOTTED.fullmatch(token)}-known
+    shaped=set(DOTLESS.findall(upper))
+    # A dotted token whose SECOND character is a letter, like a dotless one, is counted only when its first three characters
+    # are a category of the release in effect: compact lab values ('Cr1.2', 'pH7.38', 'Mg2.0') have the letter-letter-digit
+    # shape QA0.* needed (refutation R4C-2 of b3d8111d). ⚠️ One whose second character is a digit is counted whatever its
+    # first three (refutation R5C-1 of a0bc4fd8): a transposed digit ('J54.909' for J45.909, 'G34.909' for G43.909) names no
+    # category, and the category check dropped the doctor's mistyped code silently, against the rule held since aa3eead4.
+    # The residual, recorded: a letter written for a digit ('RO7.9', 'EI1.65') has the lab-value shape and is not said, as
+    # before R3C-3 widened the shape.
+    categories=release_categories(releases,{token[:3] for token in shaped|dotted})
+    unmatched=sum(token[1].isdigit() or token[:3] in categories for token in dotted)
+    dotless=sum(token[:3] in categories for token in shaped)
+    cpt_withheld=len(named_cpt(upper)) if locked else 0
+    # ⚠️ A code the release holds that the evidence reading refuses ('1.R07.9', 'R07.9.Plan': it touches the characters
+    # around it) reached no counter: found, never suggested, never said (refutation R3C-2 of 75d11c09). Counted and said,
+    # with a dotted code written against a letter or digit (R4C-3). A THREE-CHARACTER entry touching its neighbour ('1.I10',
+    # '1.P53') is not presumed to be a code (C10): it is counted as unlabelled, never as a code (refutation R4C-4), unless a
+    # code label names it on a line that writes it: 'ICD-10: I10.Follow up' is a labelled code that touches the next word,
+    # and the doctor is told to leave a space, which is what gets it suggested (refutation R5C-4 of a0bc4fd8: it was said to
+    # be unlabelled, with a remedy the doctor had already followed).
+    refused=known-set(evidence)
+    lines=encounter.notes.splitlines()
+    def labelled_anywhere(code):
+        for line in lines:
+            if code in same_length_upper(line):
+                if line not in labels:labels[line]=labelled_codes(line)
+                if code in labels[line]:return True
+        return False
+    refused_labelled={code for code in refused if len(code)==3 and labelled_anywhere(code)}
+    unlabelled|={code for code in refused if len(code)==3}-refused_labelled
+    aligned,shapes=embedded_shapes(encounter.notes)
+    shapes=[(start,shape) for start,shape in shapes if run_into(encounter.notes,aligned,start,shape)]
+    wanted={shape[:index] for _start,shape in shapes for index in range(5,len(shape)+1)}
+    held=set(Code.objects.filter(code__in=wanted,release__in=[r for r in releases if r.system=='ICD-10-CM']).values_list(
+        'code',flat=True)) if wanted else set()
+    embedded=set()
+    for _start,shape in shapes:
+        longest=next((shape[:index] for index in range(len(shape),4,-1) if shape[:index] in held),None)
+        if longest and longest not in tokens:embedded.add(longest)     # a token is suggested or already counted (refused)
+    touching=len({code for code in refused if len(code)>3}|refused_labelled|embedded)
+    return Plan(encounter.notes,releases,[(code,evidence[code.code][1]) for code in documented],unmatched,cpt_withheld,dotless,
+                len(unlabelled),touching)
 
 def suggest(encounter,user,planned=None):
     """Records a plan's new suggestions and audits them. The caller holds the encounter's row lock and has checked that the
@@ -100,7 +291,8 @@ def suggest(encounter,user,planned=None):
     planned=planned or plan(encounter)
     recorded=set(CodeSuggestion.objects.filter(encounter=encounter).values_list('terminology_id',flat=True))
     candidates=[(code,evidence) for code,evidence in planned.found if code.pk not in recorded]
-    new=[CodeSuggestion(encounter=encounter,terminology=code,evidence=evidence,explanation=f'Code explicitly documented in source notes; validated against {code.release.system} {code.release.version}, the release in effect for the {encounter.service_date.isoformat()} date of service. Clinician must confirm context and billing suitability.')
+    # Each suggestion carries its release's identity (the imported file's sha256), checked by the database (0034).
+    new=[CodeSuggestion(encounter=encounter,terminology=code,evidence=evidence,release_sha256=code.release.sha256,explanation=f'Code explicitly documented in source notes; validated against {code.release.system} {code.release.version}, the release in effect for the {encounter.service_date.isoformat()} date of service. Clinician must confirm context and billing suitability.')
          for code,evidence in candidates[:max(0,MAX_SUGGESTIONS-len(recorded))]]
     CodeSuggestion.objects.bulk_create(new,batch_size=200)
     omitted=len(candidates)-len(new)
@@ -109,5 +301,9 @@ def suggest(encounter,user,planned=None):
     # 'did anything happen' — a licensed CPT release can answer while no ICD release does.
     covered=any(r.system=='ICD-10-CM' for r in planned.releases)
     audit(user,'coding.suggest',encounter.pk,department=encounter.department,count=len(new),
-          service_date=encounter.service_date.isoformat(),releases=versions,icd_covered=covered,not_suggested_over_limit=omitted)
-    return Suggestions(len(new),covered,versions,omitted)
+          service_date=encounter.service_date.isoformat(),releases=versions,icd_covered=covered,not_suggested_over_limit=omitted,
+          release_sha256=sorted(r.sha256 for r in planned.releases),not_in_release=planned.unmatched,
+          cpt_withheld=planned.cpt_withheld,written_without_dot=planned.dotless,three_character_unlabelled=planned.unlabelled,
+          written_touching=planned.touching)
+    return Suggestions(len(new),covered,versions,omitted,planned.unmatched,planned.cpt_withheld,planned.dotless,
+                       planned.unlabelled,planned.touching)

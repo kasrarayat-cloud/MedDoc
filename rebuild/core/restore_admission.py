@@ -6,6 +6,7 @@ the operator selected:
 - the complete independent journal verifies against a fresh (unexpired, trusted, exact-head) checkpoint;
 - every journaled disposition instruction has its exact tombstone here (disposition_execution.replay);
 - every journaled hold, and each release after its hold, has its replay marker and the row that marker states;
+- every journaled redaction has its exact tombstone here and its document holds no clinical content (core.redaction);
 - (after admission) quarantine lifts only while this database still accounts for every journaled hold and release
   (disposition.restore_admitted): a journal that grows past it quarantines the target again until replay imports it;
 - no journal target is visible: no document row for one lacks its tombstone, and the application filter shows none;
@@ -83,17 +84,21 @@ def assess(instance_id, checkpoint_envelope, expected_triggers):
     from ops import production_restore_check  # the release-bound drill check, run here on the target's own database
     check = production_restore_check.check(_query, None, expected_triggers, journal_holds=list(records),
                                            files_root=settings.MEDIA_ROOT)
-    unreplayed = tombstones_missing + unreplayed_holds + unreplayed_releases
+    from . import redaction
+    redactions_unapplied = redaction.unapplied(entries)
+    unreplayed = tombstones_missing + unreplayed_holds + unreplayed_releases + redactions_unapplied
     blockers = sorted(label for label, failed in (
         ('restore_check_failed', not check['passed']), ('tombstone_replay_incomplete', tombstones_missing),
         ('hold_replay_incomplete', unreplayed_holds or missing_holds), ('release_replay_incomplete', unreplayed_releases),
+        ('redaction_replay_incomplete', redactions_unapplied),
         ('journal_target_visible', untombstoned_rows or visible_rows)) if failed)
     return {'contract': CONTRACT, 'instance_id': instance,
             'journal': {'sequence': len(entries), 'head_sha256': head, 'instructions': len(instructions),
                         'holds': len(records), 'releases': sum(r['release'] is not None for r in records.values())},
             'checkpoint_sha256': p.digest(checkpoint_envelope),
             'tombstones_missing': tombstones_missing, 'unreplayed_holds': unreplayed_holds,
-            'unreplayed_releases': unreplayed_releases, 'unreplayed': unreplayed, 'missing_holds': missing_holds,
+            'unreplayed_releases': unreplayed_releases, 'redactions_unapplied': redactions_unapplied,
+            'unreplayed': unreplayed, 'missing_holds': missing_holds,
             'visible_targets': untombstoned_rows + visible_rows, 'restore_check': check,
             'blockers': blockers, 'admissible': not blockers}
 

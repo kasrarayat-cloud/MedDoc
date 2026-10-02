@@ -3,12 +3,15 @@
 Independent checkpoint signatures prove the admitted prefix. Filesystem location
 alone proves neither independence nor freshness. Restore never grants admission.
 
-One chain carries three signed entry kinds: disposition instructions, preservation
-holds and hold releases. A hold is appended and fsynced before its database row
+One chain carries four signed entry kinds: disposition instructions, preservation
+holds, hold releases and content redactions. A hold is appended and fsynced before its database row
 commits, so a restore older than it can be told what it lacks. A release is
 appended only after its database row committed, so a release the application
 reported as not recorded never ends preservation in a restore. A release is valid
-only after its own hold, never by the hold's own custodian.
+only after its own hold, never by the hold's own custodian. A redaction (core.redaction) is
+appended and fsynced against a current independent checkpoint BEFORE its database rows commit, as
+an instruction is: outside the clinical backup, it is what makes a restore of an older recovery
+point re-apply it, and what the offline exposure ledger reads.
 """
 import fcntl
 import os
@@ -64,7 +67,8 @@ class Entry(p.Strict):
 INSTRUCTION = 'disposition-journal-entry-v1'
 HOLD = 'retention-hold-entry-v1'
 RELEASE = 'retention-release-entry-v1'
-KINDS = {INSTRUCTION: 'instruction', HOLD: 'hold', RELEASE: 'release'}
+REDACTION = 'redaction-journal-entry-v1'
+KINDS = {INSTRUCTION: 'instruction', HOLD: 'hold', RELEASE: 'release', REDACTION: 'redaction'}
 
 
 class Hold(p.Strict):
@@ -100,6 +104,37 @@ class ReleaseEntry(p.Strict):
     previous_sha256: p.Hash
     written_at: str
     release: Release
+
+
+class RedactedFile(p.Strict):
+    """A private file whose bytes a redaction removed: its random storage key and digest, never its content."""
+    storage_key: Annotated[str, Field(pattern=r'^[a-z_]{1,32}/[0-9a-f]{16,64}(\.[a-z0-9]{1,8})?$')]
+    sha256: p.Hash
+    byte_count: Annotated[int, Field(ge=0)]
+
+
+class Redaction(p.Strict):
+    """Who (two custodians), when (requested_at; the entry's written_at) and why (a document hash) for one draft's
+    removed clinical content, named by its digest. Identities and hashes only, never clinical prose."""
+    id: str
+    request_id: str
+    target_id: str
+    department_id: str
+    content_sha256: p.Hash
+    reason_sha256: p.Hash
+    files: Annotated[list[RedactedFile], Field(max_length=500)]
+    requested_by: str
+    requested_at: str
+    approved_by: str
+
+
+class RedactionEntry(p.Strict):
+    contract: Literal['redaction-journal-entry-v1']
+    namespace: str
+    sequence: Annotated[int, Field(ge=1, le=MAX_ENTRIES)]
+    previous_sha256: p.Hash
+    written_at: str
+    redaction: Redaction
 
 
 def namespace():
@@ -152,8 +187,22 @@ def validate_retention_entry(envelope, number, previous):
     return body
 
 
+def validate_redaction_entry(envelope, number, previous):
+    """A signed redaction at this exact chain position: two distinct custodians, canonical identities."""
+    body = p.verify(envelope, RedactionEntry, getattr(settings, 'DISPOSITION_JOURNAL_KEYS', {}))
+    if body.namespace != namespace() or body.sequence != number or body.previous_sha256 != previous:
+        raise ValidationError('The disposition journal chain is incomplete or belongs to another namespace.')
+    r = body.redaction
+    for value in (r.id, r.request_id, r.target_id, r.department_id, r.requested_by, r.approved_by): p.identity(value)
+    if (r.requested_by == r.approved_by or p.timestamp(r.requested_at) > p.timestamp(body.written_at)
+            or len({f.storage_key for f in r.files}) != len(r.files)):
+        raise ValidationError('The journal redaction lacks distinct exact review.')
+    return body
+
+
 def validate_any(envelope, number, previous):
     if contract_of(envelope) == INSTRUCTION: return validate_entry(envelope, number, previous)
+    if contract_of(envelope) == REDACTION: return validate_redaction_entry(envelope, number, previous)
     return validate_retention_entry(envelope, number, previous)
 
 
@@ -162,7 +211,7 @@ def read_locked(file):
     if len(raw) > MAX_JOURNAL_BYTES or (raw and not raw.endswith(b'\n')):
         raise ValidationError('The complete disposition journal is unavailable.')
     entries = []; previous = p.ZERO; ids = set(); targets = set()
-    holds = {}; keys = set(); released = set(); releases = set()
+    holds = {}; keys = set(); released = set(); releases = set(); redacted = set()
     for line in raw.splitlines():
         if len(entries) >= MAX_ENTRIES: raise ValidationError('The complete disposition journal exceeds its bound.')
         envelope = p.decode(line); body = validate_any(envelope, len(entries) + 1, previous)
@@ -170,6 +219,11 @@ def read_locked(file):
             if body.instruction.id in ids or body.instruction.target_id in targets:
                 raise ValidationError('The disposition journal contains conflicting instructions.')
             ids.add(body.instruction.id); targets.add(body.instruction.target_id)
+        elif isinstance(body, RedactionEntry):
+            r = body.redaction
+            if {r.id, r.request_id, r.target_id} & redacted:
+                raise ValidationError('The disposition journal contains conflicting redactions.')
+            redacted.update((r.id, r.request_id, r.target_id))
         elif isinstance(body, HoldEntry):
             if body.hold.id in holds or body.hold.request_key in keys:
                 raise ValidationError('The disposition journal contains conflicting preservation holds.')
@@ -187,6 +241,10 @@ def read_locked(file):
 
 def instruction_entries(entries):
     return [e for e in entries if kind(e) == 'instruction']
+
+
+def redaction_entries(entries):
+    return [e for e in entries if kind(e) == 'redaction']
 
 
 def retention_records(entries):
@@ -378,6 +436,37 @@ def append_release(release, hold):
         if release['created_by'] == record['hold']['created_by']:
             raise ValidationError('A second administrator must record release authority.')
         return _append_retention(file, entries, head, RELEASE, 'release', release)
+
+
+def append_redaction(redaction, checkpoint_envelope):
+    """Journal a redaction and fsync it BEFORE its database rows commit (core.redaction.execute).
+
+    Like a new instruction, it needs the head's independently signed checkpoint, so no redaction is ever recorded on a
+    journal the custodians cannot prove complete. The exact retry of the last entry returns it (the preceding checkpoint
+    is accepted for that entry only); the same request or target with any other body refuses."""
+    proof = checkpoint(checkpoint_envelope)
+    with journal_file(write=True) as file:
+        entries, head = read_locked(file)
+        for old in redaction_entries(entries):
+            body = old['body']['redaction']
+            if redaction['request_id'] == body['request_id'] or redaction['target_id'] == body['target_id']:
+                if body != redaction:
+                    raise RequestConflict('This document already has a durable redaction with another body.')
+                last = entries[-1] is old
+                if (proof.sequence, proof.head_sha256) not in ((len(entries), head),) + (
+                        ((len(entries) - 1, old['body']['previous_sha256']),) if last else ()):
+                    raise ValidationError('The interrupted redaction checkpoint does not match.')
+                os.fsync(file.fileno())
+                return old
+        if (proof.sequence, proof.head_sha256) != (len(entries), head):
+            raise ValidationError('A current independent checkpoint is required before a redaction.')
+        within_bound(entries)
+        body = {'contract': REDACTION, 'namespace': namespace(), 'sequence': len(entries) + 1, 'previous_sha256': head,
+                'written_at': timezone.now().isoformat(), 'redaction': redaction}
+        envelope = _sign(body)
+        validate_redaction_entry(envelope, len(entries) + 1, head)
+        _write(file, envelope)
+        return envelope
 
 
 def pending_targets():

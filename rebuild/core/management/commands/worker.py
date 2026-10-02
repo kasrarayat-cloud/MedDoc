@@ -2,6 +2,8 @@ import signal
 import time
 from django.core.management.base import BaseCommand, CommandError
 from core.jobs import run_one,mark_stale,reap_abandoned_voice_uploads
+from core.readiness import beat
+from core.redaction import sweep_left
 class Command(BaseCommand):
     help=('Run private queue; graceful stop finishes the current provider request. Exactly one worker runs against a '
           'database: a second one refuses to start (core.worker_lock).')
@@ -37,8 +39,11 @@ class Command(BaseCommand):
                 lock.verify()
                 mark_stale()
                 if time.monotonic()-reaped_at>=60:
-                    reap_abandoned_voice_uploads(); reaped_at=time.monotonic()
+                    # A redacted document's bytes a failed unlink left here are swept again (refutation R3R-T5).
+                    reap_abandoned_voice_uploads(); sweep_left(); reaped_at=time.monotonic()
                 worked=run_one()
+                # A completed pass is the worker's heartbeat (core.readiness; written at most every 30 s).
+                beat()
                 if once:return
                 if not worked:time.sleep(2)
         finally:

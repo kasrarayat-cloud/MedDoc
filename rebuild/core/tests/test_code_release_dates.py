@@ -218,8 +218,11 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
         every following dot instead, as the code did before this pass, drops BOTH codes silently,
         because each ends its sentence.
         """
+        # The category code is written after a code label: a three-character code is suggested only where one names it
+        # (refutation C10 of 4cfa4301). The label is on ITS line only, so the lookahead below still decides which line
+        # quotes it: read from the wrist line, the code would be unlabelled and not suggested at all.
         notes = ('Assessment: synthetic right wrist finding documented as M25.532.\n'
-                 'Assessment: synthetic general joint finding documented as M25.')
+                 'Assessment: synthetic general joint finding documented as ICD-10 M25.')
         # THE INPUT THESE ASSERTIONS DEPEND ON, and the reason two earlier versions of this test were
         # empty: the evidence lookahead only ever runs on codes the TOKEN regex extracted. Neither
         # earlier version checked that, and in both the shorter code was never a token — so the
@@ -274,6 +277,8 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
         self.assertFalse(shipped, 'the shipped lookahead must not match M25 inside M25.532')
         self.assertTrue(broken, 'the broken lookahead does match it — this is the discriminating case')
 
+    # The product-use lock in code is lifted with synthetic rights: this tests the message for a licensed CPT release.
+    @patch('core.coding.CPT_PRODUCT_USE_RIGHTS', {'synthetic': 'product-use rights for tests only'})
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
     def test_a_date_only_a_licensed_cpt_release_covers_is_not_reported_as_nothing_recorded(self):
         """A message that denies a suggestion sitting on the same page is worse than no message."""

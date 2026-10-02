@@ -265,4 +265,6 @@ class AuthorizationAndPayerRefutation(TestCase):
             run_one()
         self.job.refresh_from_db()
         self.assertEqual(self.job.state, "succeeded")
-        self.assertFalse(CodeSuggestion.objects.filter(encounter=encounter, accepted_at__isnull=False).exists())
+        # 0034 (coding ledger): the appended transcript keeps the accepted code, marked for re-review, never deleting it.
+        self.assertEqual(list(CodeSuggestion.objects.filter(encounter=encounter, accepted_at__isnull=False)
+                              .values_list('review_required', flat=True)), [True])

@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import hashlib
 import json
+import logging
 import re
 import secrets
 import os
@@ -837,11 +838,31 @@ def run_one():
             # A synthetic narrative response (fixture mode): kept as the text the validator read, and named as such.
             saved={'provider_output_text':result['narrative_replay'],'synthetic_source':result['replay_source']}
         else:saved={'answers':result}
-        result_path=f'receipts/{secrets.token_hex(24)}.json'
-        path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-        payload=json.dumps(saved,ensure_ascii=False).encode()
-        with path.open('xb') as file:path.chmod(0o600);file.write(payload)
-        job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
+        # ⚠️ A REDACTED DOCUMENT'S PROVIDER OUTPUT IS NEVER STORED (refutation F2 of dc33e094): a result arriving after the
+        # redaction (a late receipt) wrote the quoted notes to a file no tombstone listed. Its accounting facts are the
+        # receipt above; the output itself is not kept. "Redacted" includes a redaction the independent journal holds whose
+        # database commit has not happened yet (refutation R2D-L1 of 4cfa4301). A redaction journaled while this file is
+        # written is covered by the check after it, which removes THIS file and its reference (never the document's other
+        # files: an uncommitted redaction's exact retry must still find the content it was requested from), or, once
+        # committed, by the redaction's own sweep of every file its rows reference.
+        from .redaction import withheld
+        if withheld(job.encounter_id):
+            audit(job.user,'provider.output_withheld',job.pk,department=e.department,reason='document_redacted')
+        else:
+            result_path=f'receipts/{secrets.token_hex(24)}.json'
+            path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            payload=json.dumps(saved,ensure_ascii=False).encode()
+            with path.open('xb') as file:path.chmod(0o600);file.write(payload)
+            job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
+            if withheld(job.encounter_id):
+                # Already gone is the outcome wanted: the redaction's own sweep may read the new reference and remove it first.
+                try:path.unlink(missing_ok=True)
+                except OSError:
+                    # Kept referenced, so the redaction's sweep (at its commit, retry or replay) still finds and removes it.
+                    logging.getLogger(__name__).error('A withheld provider result was not removed; the redaction sweep removes it.')
+                else:
+                    job.result_path='';job.result_sha256='';job.save(update_fields=['result_path','result_sha256'])
+                    audit(job.user,'provider.output_withheld',job.pk,department=e.department,reason='document_redacted')
         # Settling provider cost is independent of clinical acceptance: invalid answers are never adopted.
         # The connection that will carry settlement's COMMIT, kept to tell afterwards whether Django had to drop it (RS-1).
         connection.ensure_connection(); carrier=connection.connection; settling=True
@@ -874,8 +895,11 @@ def run_one():
                 text=result+note
                 if len(e.notes)+len(text)+2>NOTE_LIMIT: raise NotAdoptedByUser(OVERFLOW_ERROR)
                 e.notes+='\n\n'+text; e.answers={}; e.status='draft'; e.revision+=1
-                CodeSuggestion.objects.filter(encounter=e).delete()
-                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision)
+                # Accepted codes are kept and marked for re-review, never deleted (0034); the rest are cleared as before.
+                CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=True).delete()
+                marked=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).update(review_required=True)
+                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision,
+                      kept_for_review=marked)
             if not (job.kind=='transcription' and job.config.get('transcript_review_required')):
                 # A generation's statement proposals only pre-select the page; the first save replaces them with decisions.
                 e.template_review=review if job.kind=='generation' else {}

@@ -5,6 +5,7 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from unittest.mock import patch
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -45,6 +46,11 @@ class TerminologyParsingTests(SimpleTestCase):
 
 class TerminologyImportTests(TestCase):
     def setUp(self):
+        # These tests exercise the environment licence gate of a CPT import. The product-use lock in code
+        # (core.coding.CPT_PRODUCT_USE_RIGHTS, None in this release) is lifted here with synthetic rights so that gate is
+        # what refuses or admits; core.tests.test_coding_ledger proves the lock itself refuses every import.
+        rights = patch('core.coding.CPT_PRODUCT_USE_RIGHTS', {'synthetic': 'product-use rights for tests only'})
+        rights.start(); self.addCleanup(rights.stop)
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / 'licensed-synthetic.csv'

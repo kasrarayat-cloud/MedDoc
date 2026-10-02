@@ -59,7 +59,10 @@ class EncounterSnapshotTests(SyntheticFixture, TransactionTestCase):
         self.assertEqual(response.context['encounter'].answers, {})
         self.assertEqual(response.context['answer_rows'][0]['text'], '')
         self.assertEqual([row.state for row in response.context['jobs']], ['queued'])
-        self.assertNotContains(response, '<span class="badge succeeded">succeeded</span>')
+        # The request list now reads core.doctor_status (the badge carried the raw state word before): the snapshot
+        # shows the queued request, never the completion that happened while the page was being built.
+        self.assertNotContains(response, 'data-request-status="completed"')
+        self.assertContains(response, 'data-request-status="waiting">Waiting to start</span>')
         self.assertNotContains(response, 'Finalize document')
 
         following = self.get_without_document_processor()

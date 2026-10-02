@@ -188,8 +188,27 @@ class RestoreCheckTests(unittest.TestCase):
 
     def test_each_new_batch_guard_cannot_be_missing_disabled_or_replaced(self):
         database=FakeDatabase(self.files)
-        new=[row for row in database.triggers if row[0].startswith('core_generationbatch') or row[1]=='generation_batch_job_identity']
+        # 0027's thirteen batch guards; 0033's batch_redaction (quillmd_redaction_guard) sits on core_generationbatch too
+        # and is pinned with the other redaction guards below.
+        new=[row for row in database.triggers if (row[0].startswith('core_generationbatch') or row[1]=='generation_batch_job_identity')
+             and row[2]!='quillmd_redaction_guard']
         self.assertEqual(len(new),13)
+        for row in new:
+            index=database.triggers.index(row)
+            for column,value in ((None,None),(4,'D'),(7,'BEGIN RETURN NEW; END;')):
+                with self.subTest(trigger=row[1],column=column):
+                    rows=list(database.triggers)
+                    if column is None:rows.pop(index)
+                    else:
+                        changed=list(row);changed[column]=value;rows[index]=tuple(changed)
+                    self.assertFalse(restore_check.integrity_contract.assess(rows,[('public','origin')],RELEASE)['passed'])
+
+    def test_each_redaction_guard_cannot_be_missing_disabled_or_replaced(self):
+        database=FakeDatabase(self.files)
+        new=[row for row in database.triggers if row[0] in ('core_redactionrequest','core_redactiontombstone')
+             or row[2]=='quillmd_redaction_guard']
+        self.assertEqual(len(new),10)
+        self.assertTrue(restore_check.integrity_contract.assess(database.triggers,[('public','origin')],RELEASE)['passed'])
         for row in new:
             index=database.triggers.index(row)
             for column,value in ((None,None),(4,'D'),(7,'BEGIN RETURN NEW; END;')):

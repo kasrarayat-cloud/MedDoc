@@ -160,6 +160,10 @@ class Command(BaseCommand):
             if options['expected_count'] < MIN_ICD_CODES:
                 raise CommandError('A full ICD-10-CM codes file is required; an addendum or subset is refused.')
         else:
+            from core import coding
+            if coding.CPT_PRODUCT_USE_RIGHTS is None:
+                raise CommandError('CPT content is locked in this product: no product-use rights are recorded '
+                                   '(core.coding.CPT_PRODUCT_USE_RIGHTS). Nothing was imported.')
             license_reference = getattr(settings, 'CPT_LICENSE_ID', '').strip()
             license_expiry = getattr(settings, 'CPT_LICENSE_EXPIRY', '').strip()
             try:

@@ -72,6 +72,16 @@
       "anchor": null,
       "days": null
     },
+    "redaction_requests": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "redaction_tombstones": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "retention_holds": {
       "mode": "unresolved",
       "anchor": null,
