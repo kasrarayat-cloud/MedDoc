@@ -249,6 +249,38 @@ class Generation(Legacy, TestCase):
         self.assertTrue(self.offered(self.generated()))         # positive control: a job quoted now is offered
 
 
+    def test_a_role_row_renamed_to_a_signature_label_is_never_offered(self):
+        """Identity is the mapped label's OR the printed label's (FV-01): a role-only row renamed 'Signature' is the
+        finalizer's identity row and is never asked or offered."""
+        self.assertTrue(self.offered(self.generated()))          # positive control, before the rename
+        labels = {f['key']: f['label'] for f in self.version.fields}
+        labels[self.key('Troponin (initial)')] = 'Signature'
+        response = self.client.post(f'/templates/{self.template.pk}/', {'mapping_version': self.version.pk,
+                                                                       'labels': json.dumps(labels)})
+        self.assertEqual(response.status_code, 302)
+        self.version = self.latest(self.template)
+        self.assertEqual(self.version.number, 2)
+        fields = destination_roles.generation_fields(self.version, suggest=True)
+        self.assertFalse(any((f.get('destination_role') or {}).get('suggest') for f in fields))
+        e = self.generated('Signature: Dr Other\nTroponin (initial): 14 ng/L\nPlan: Rest.')
+        self.assertNotIn('role_suggestion', e.answers[self.key('Troponin (initial)')])
+
+    def test_a_job_without_the_contract_asks_nothing_even_for_a_marked_field(self):
+        """generate() itself reads the job's contract: a marked field reaching a job quoted without it is never asked."""
+        e = self.generated()
+        self.assertTrue(self.offered(e))
+        marked = destination_roles.generation_fields(self.version, suggest=True)
+        for flag in ('0', '1'):
+            sent = []
+            with override_settings(**dict(LIVE, QUILLMD_ROLE_SUGGESTIONS=flag)), labelled_provider(sent):
+                config = generation.configuration(self.version.fields)
+                answers = generation.validated(generation.generate(e.notes, marked, config)[0])
+            asked = [q['label'] for q in json.loads(sent[0]['messages'][0]['content'])['questions']]
+            with self.subTest(flag=flag):
+                self.assertEqual('Troponin (initial)' in asked, flag == '1')
+                self.assertEqual('role_suggestion' in answers[self.key('Troponin (initial)')], flag == '1')
+
+
 @override_settings(**V3)
 class V3RolePlaces(V3Fixture, TestCase):
     def test_v3_role_places_are_never_offered(self):
@@ -373,6 +405,58 @@ class Review(Legacy, TestCase):
         self.unchanged(typed, self.accept(typed), 400)
         self.assertEqual(self.accept(e).status_code, 302)        # positive control
 
+    def test_leave_blank_reviewed_ends_the_offer(self):
+        e = self.generated()
+        key = self.key('Troponin (initial)')
+        post = {'revision': e.revision, 'blank_' + key: 'on', 'blank_shown_' + key: '1'}
+        for f in self.version.fields:
+            post['answer_' + f['key']] = e.answers[f['key']]['text']
+        self.assertEqual(self.client.post(f'/encounters/{e.pk}/save/', post).status_code, 302)
+        e.refresh_from_db()
+        self.assertEqual((e.answers[key]['status'], e.answers[key]['text']), ('left_blank', ''))
+        self.assertTrue(e.answers[key]['role_suggestion'])
+        self.assertNotIn('data-role-suggestion', self.client.get(f'/encounters/{e.pk}/').content.decode())
+        self.unchanged(e, self.accept(e), 400)
+        self.assertEqual(self.accept(self.generated()).status_code, 302)   # positive control
+
+    def test_a_stored_suggestion_is_re_read_never_trusted(self):
+        """A stored suggestion whose lines are no longer at their offsets, whose line a heading now governs, or that sits
+        on a row outside the scope (another signer's line, an ordinary row) is neither shown nor accepted."""
+        e = self.generated()
+        key = self.key('Troponin (initial)')
+        offer = e.answers[key]['role_suggestion']
+        governed_notes = 'Negative for the following:\n' + NOTES
+        shift = len('Negative for the following:\n')
+        moved = {'text': offer['text'], 'evidence': [{**entry, 'start': entry['start'] + 1, 'end': entry['end'] + 1}
+                                                     for entry in offer['evidence']]}
+        shifted = {'text': offer['text'], 'evidence': [{**entry, 'start': entry['start'] + shift, 'end': entry['end'] + shift}
+                                                       for entry in offer['evidence']]}
+        other = self.key('Signature (patient)')
+        cases = (
+            ('stale offsets', e.notes, {key: {**e.answers[key], 'role_suggestion': moved}}, key, offer['text']),
+            ('governed line', governed_notes, {key: {**e.answers[key], 'role_suggestion': shifted}}, key, offer['text']),
+            ('untouched control', e.notes, {key: {**e.answers[key], 'role_suggestion': offer}}, key, None),
+            ('another signer', e.notes, {other: {**e.answers[other], 'role_suggestion': {
+                'text': 'John Example', 'evidence': [{'quote': 'John Example', 'start': NOTES.index('John Example'),
+                                                      'end': NOTES.index('John Example') + 12}]}}}, other, 'John Example'),
+            ('ordinary row', e.notes, {self.key('Plan'): {'text': '', 'status': 'missing', 'evidence': [], 'reviewed': False,
+                'reason': destination_roles.ROLE_NOT_GENERATED, 'role_suggestion': {'text': 'Rest.', 'evidence': [
+                    {'quote': 'Rest.', 'start': NOTES.index('Rest.'), 'end': NOTES.index('Rest.') + 5}]}}},
+             self.key('Plan'), 'Rest.'))
+        for name, notes, planted, target, value in cases:
+            with self.subTest(case=name):
+                fresh = self.generated(notes)
+                bare = {k: {kk: vv for kk, vv in v.items() if kk != 'role_suggestion'} for k, v in fresh.answers.items()}
+                Encounter.objects.filter(pk=fresh.pk).update(answers={**bare, **planted})
+                fresh.refresh_from_db()
+                body = self.client.get(f'/encounters/{fresh.pk}/').content.decode()
+                if value is None:                                  # the planting itself changes nothing
+                    self.assertEqual(body.count('data-role-suggestion'), 1)
+                    continue
+                self.assertNotIn('data-role-suggestion', body)
+                self.unchanged(fresh, self.accept(fresh, key=target, value=value), 400)
+        self.assertEqual(self.accept(e).status_code, 302)        # positive control: the untouched offer is accepted
+
     def test_another_tenant_an_employee_get_and_a_missing_csrf_token_are_refused(self):
         e = self.generated()
         organization = Organization.objects.create(name='Synthetic other clinic')
@@ -478,3 +562,22 @@ class Setting(TestCase):
         for value in ('true', 'on', '2'):
             with self.subTest(value=value), self.assertRaises(render.RenderError):
                 render.parse(json.dumps({**base, 'QUILLMD_ROLE_SUGGESTIONS': value}))
+
+
+class Scope(TestCase):
+    def test_the_scope_admits_only_a_text_field_held_for_its_printed_role(self):
+        row = {'printed_label': 'Troponin (initial)', 'role': 'initials'}
+        field = {'key': 'k', 'label': 'Troponin (initial)', 'kind': 'text'}
+        self.assertTrue(destination_roles.suggestion_scope(field, row))
+        self.assertTrue(destination_roles.suggestion_scope({**field, 'kind': 'long_text'}, row))
+        for name, changed, changed_row in (
+                ('no role', field, {**row, 'role': ''}), ('no reading', field, None),
+                ('checkbox', {**field, 'kind': 'checkbox'}, row), ('choice', {**field, 'kind': 'choice'}, row),
+                ('protected', {**field, 'write_protected': True}, row),
+                ('identity policy', {**field, 'answer_policy': 'clinician_identity'}, row),
+                ('mapped identity', {**field, 'label': 'Signature'}, row),
+                ('mapped other signer', {**field, 'label': 'Signature (patient)'}, row),
+                ('printed identity', field, {'printed_label': 'Electronically signed by', 'role': 'signature'}),
+                ('printed other signer', field, {'printed_label': 'Signature (patient)', 'role': 'signature'})):
+            with self.subTest(case=name):
+                self.assertFalse(destination_roles.suggestion_scope(changed, changed_row))
