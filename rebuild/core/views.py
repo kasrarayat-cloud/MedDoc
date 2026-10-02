@@ -1878,9 +1878,12 @@ def coding(request,pk):
     unmatched=(f' {result.unmatched} entr{"y" if result.unmatched==1 else "ies"} in the notes written like a diagnosis code '
                f'{"is" if result.unmatched==1 else "are"} not a code in that release and {"was" if result.unmatched==1 else "were"} '
                'not suggested; check the code and its dot.' if result.unmatched else '')
-    withheld=(f' {result.cpt_withheld} entr{"y" if result.cpt_withheld==1 else "ies"} written like a CPT code {"was" if result.cpt_withheld==1 else "were"} '
+    withheld=(f' {result.cpt_withheld} CPT code{"" if result.cpt_withheld==1 else "s"} named in the notes {"was" if result.cpt_withheld==1 else "were"} '
               'not looked up: CPT content is not licensed for use in this product.' if result.cpt_withheld else '')
-    over+=unmatched+withheld
+    dotless=(f' {result.dotless} entr{"y" if result.dotless==1 else "ies"} in the notes {"looks" if result.dotless==1 else "look"} like a '
+             'code written without a dot; not looked up. Type a diagnosis code with its dot (R07.9, not R079) to have it '
+             'suggested.' if result.dotless else '')
+    over+=unmatched+dotless+withheld
     if result.covered:
         messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:

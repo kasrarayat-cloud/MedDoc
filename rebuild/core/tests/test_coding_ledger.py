@@ -148,21 +148,58 @@ class CodingLedger(TestCase):
         stale = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/', {'revision': encounter.revision})
         self.assertEqual(stale.status_code, 409)
 
-    def test_a_dotless_code_is_read_as_its_code_and_an_unknown_one_is_said(self):
-        icd_release()
-        encounter = self.document('Symptoms: No chest pain.\nAssessment: documented as R079 and X9999.')
+    # Refutation F4 (dc33e094): reading a dotless token as the dotted diagnosis it would name turned HCPCS Level II codes
+    # into diagnoses (G0439 -> G04.39 encephalopathy, J1100 -> J11.00 influenza), suggested and accepted. A dotless token
+    # is never looked up; it is said, so it is never dropped silently either.
+    P4 = ('Visit: Medicare annual wellness visit, subsequent, billed as G0439.\n'
+          'Prior year: initial preventive physical examination G0402.\n'
+          'Medication administered: J1100 dexamethasone sodium phosphate 10 mg IM.\n'
+          'Assessment: Z00.00.')
+    DOTLESS_SAID = 'written without a dot; not looked up'
+
+    def test_dotless_and_hcpcs_tokens_are_never_read_as_diagnoses_and_are_said(self):
+        icd_release({'G04.39': 'Synthetic encephalopathy', 'G04.02': 'Synthetic encephalitis', 'J11.00': 'Synthetic influenza',
+                     'Z00.00': 'Synthetic general examination', 'R07.9': 'Synthetic chest pain code',
+                     'S72.001A': 'Synthetic fracture, initial encounter'})
+        encounter = self.document(self.P4)
         response = self.suggest(encounter)
-        codes = list(CodeSuggestion.objects.filter(encounter=encounter).values_list('terminology__code', 'evidence'))
-        self.assertEqual(codes, [('R07.9', 'Assessment: documented as R079 and X9999.')])  # ac43e379: [] and nothing said
-        self.assertIn('1 entry in the notes written like a diagnosis code is not a code in that release', self.text(response))
-        code = CodeSuggestion.objects.get(encounter=encounter)
-        self.assertEqual(self.accept(encounter, code).status_code, 302)  # its evidence is in the notes as written
+        self.assertEqual(list(CodeSuggestion.objects.filter(encounter=encounter).values_list('terminology__code', flat=True)),
+                         ['Z00.00'])  # dc33e094: G04.39, G04.02 and J11.00 too
+        self.assertIn('3 entries in the notes look like a code ' + self.DOTLESS_SAID, self.text(response))
+        self.assertIn('Type a diagnosis code with its dot', self.text(response))
+        # The 4-character and the 7-character dotless forms of real diagnosis codes are said and not looked up either.
+        for notes, said in (('Assessment: documented as R079.', '1 entry in the notes looks like a code '),
+                            ('Assessment: documented as S72001A.', '1 entry in the notes looks like a code ')):
+            with self.subTest(notes=notes):
+                CodeSuggestion.objects.filter(encounter=encounter).delete()
+                Encounter.objects.filter(pk=encounter.pk).update(notes='Symptoms: No chest pain.\n' + notes)
+                response = self.suggest(encounter)
+                self.assertFalse(CodeSuggestion.objects.filter(encounter=encounter).exists())
+                self.assertIn(said + self.DOTLESS_SAID, self.text(response))
+
+    def test_lab_names_units_and_zip_codes_are_not_counted_as_codes(self):
+        icd_release({'R07.9': 'Synthetic chest pain code'})
+        notes = ('Labs: A1C 7.2, B12 normal, CO2 24, G6PD normal, H1N1 negative.\n'
+                 'Plan: heparin 10000 units SC; follow up at clinic ZIP 90210.\nAssessment: R07.9.')
+        response = self.suggest(self.document(notes))
+        text = self.text(response)
+        self.assertIn('1 new suggestions', text)
+        for wrong in ('not a code in that release', 'written like a CPT code', 'not looked up: CPT content'):
+            self.assertNotIn(wrong, text)  # dc33e094: 5 lab names as diagnosis codes, 10000 and 90210 as CPT codes
+        self.assertNotIn(self.DOTLESS_SAID, text)
+
+    def test_a_dotted_code_missing_from_the_release_and_a_named_cpt_code_are_said(self):
+        icd_release({'R07.9': 'Synthetic chest pain code'})
+        response = self.suggest(self.document('Assessment: R07.99 and R07.9.\nPlan: office visit, CPT 99213.'))
+        text = self.text(response)
+        self.assertIn('1 entry in the notes written like a diagnosis code is not a code in that release', text)
+        self.assertIn('1 CPT code named in the notes was not looked up: CPT content is not licensed for use in this product', text)
 
     def test_no_cpt_code_is_imported_suggested_shown_accepted_or_exported_in_any_mode(self):
         icd_release(); cpt = cpt_release()
-        encounter = self.document('Symptoms: No chest pain.\nExamination: Normal gait.\nPlan: visit documented as 99213 and R07.9.')
+        encounter = self.document('Symptoms: No chest pain.\nExamination: Normal gait.\nPlan: visit documented as CPT 99213 and R07.9.')
         stored = CodeSuggestion.objects.create(encounter=encounter, terminology=Code.objects.get(release=cpt, code='99213'),
-                                               evidence='Plan: visit documented as 99213 and R07.9.', explanation='Synthetic stored CPT')
+                                               evidence='Plan: visit documented as CPT 99213 and R07.9.', explanation='Synthetic stored CPT')
         modes = [dict(QUILLMD_DATA_MODE=data, SYNTHETIC_ONLY=data == 'synthetic', AI_MODE=ai)
                  for data in ('synthetic', 'real') for ai in ('fixture', 'live')]
         for mode in modes:
@@ -185,7 +222,7 @@ class CodingLedger(TestCase):
                                  source_url='https://example.com/licensed-feed', expected_count=1, stdout=io.StringIO())
         with override_settings(**CURRENT):
             response = self.suggest(encounter)
-        self.assertIn('written like a CPT code was not looked up: CPT content is not licensed for use in this product',
+        self.assertIn('1 CPT code named in the notes was not looked up: CPT content is not licensed for use in this product',
                       self.text(response))
         self.assertEqual(sorted(CodeSuggestion.objects.filter(encounter=encounter).values_list('terminology__release__system',
                                                                                             'accepted_by')),

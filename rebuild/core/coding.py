@@ -8,7 +8,7 @@ from django.utils import timezone
 from .models import Code,CodeSet,CodeSuggestion
 from .security import audit
 
-Suggestions=namedtuple('Suggestions','count covered versions omitted unmatched cpt_withheld',defaults=(0,0,0))
+Suggestions=namedtuple('Suggestions','count covered versions omitted unmatched cpt_withheld dotless',defaults=(0,0,0,0))
 
 #: ⚠️ THE CPT LOCK IS CODE, NOT CONFIGURATION. The right to use CPT content in THIS product (the licence holder, the
 #: agreement and its scope) is a reviewed release decision, recorded here by a code change. While it is None, CPT content
@@ -48,10 +48,18 @@ def applicable_releases(encounter):
 #: A code as the notes document it: an ICD-10-CM code (a letter, two characters, and up to four after a dot) or a CPT code
 #: (five digits, or four and F, T or U), read from the upper-cased notes.
 TOKEN=re.compile(r'\b(?:[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?|[0-9]{5}|[0-9]{4}[FTU])\b')
-#: An ICD-10-CM code written without its dot ('R079' for R07.9, 'S72001A' for S72.001A): a letter, a digit, then two to
-#: five more characters. Read as the dotted code it names; never suggested unless that code is in the release in effect.
-DOTLESS=re.compile(r'\b[A-Z][0-9][0-9A-Z]{2,5}\b')
-ICD_SHAPE=re.compile(r'[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?')
+#: ⚠️ A CODE WRITTEN WITHOUT ITS DOT IS NEVER READ AS A DIAGNOSIS (refutation F4 of dc33e094). 'R079' would be R07.9, but a
+#: letter followed by four digits is also a HCPCS Level II code: reading G0439 (annual wellness visit) as G04.39
+#: (encephalopathy) suggested a diagnosis the notes never documented. Such a token (a letter, two digits, then one to four
+#: letters or digits; 4 to 7 characters, which no ICD-10-CM code written with its dot can be) is counted and said, never
+#: looked up. Lab names (A1C, B12, G6PD, H1N1) are not this shape.
+DOTLESS=re.compile(r'\b[A-Z][0-9]{2}[0-9A-Z]{1,4}\b')
+#: A diagnosis code written WITH its dot that no applicable release holds: counted and said. A three-character token
+#: without a dot is not counted (A1C, B12, CO2 are lab names, not mistyped codes).
+DOTTED=re.compile(r'[A-Z][0-9A-Z]{2}\.[0-9A-Z]{1,4}')
+#: A CPT code the notes NAME as one ('CPT 99213', 'CPT: 99213', 'CPT code 99213'). Any five-digit number (10000 units, ZIP
+#: 90210) is not counted: only a labelled code is said to have been withheld while CPT content is locked.
+CPT_NAMED=re.compile(r'\bCPT(?:\s*CODES?)?[\s:#-]*([0-9]{5}|[0-9]{4}[FTU])\b')
 RUN=re.compile(r'[\w.]+')
 SHORTEST_CODE,LONGEST_CODE=3,8      # 'R00' .. 'A00.0000'; every TOKEN match is 3 to 8 characters
 ASCII_UPPER='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -63,7 +71,7 @@ ASCII_ALNUM='0123456789'+ASCII_UPPER
 #: most 100 evidence lines of at most 50,000 characters.
 MAX_SUGGESTIONS=100
 
-Plan=namedtuple('Plan','notes releases found unmatched cpt_withheld',defaults=(0,0))
+Plan=namedtuple('Plan','notes releases found unmatched cpt_withheld dotless',defaults=(0,0,0))
 
 def evidence_lines(notes,wanted):
     """For each code in `wanted`, the first line of `notes` on which it stands whole, as (the order the codes were first
@@ -101,23 +109,20 @@ def plan(encounter):
     """Which suggestions the notes support, read without writing: `suggest` records them under the encounter's lock."""
     releases=list(applicable_releases(encounter))
     upper=encounter.notes.upper()
-    # No diagnosis inference: recommend only codes explicitly documented in notes.
+    # No diagnosis inference: recommend only codes explicitly documented in notes, exactly as written.
     tokens=set(TOKEN.findall(upper))
-    # A dotless ICD-10-CM code is read as the dotted code it names, never dropped silently (inventory 7A, coding).
-    dotless={token[:3]+'.'+token[3:]:token for token in DOTLESS.findall(upper)}
     locked=not cpt_licensed()
-    codes=[code for code in Code.objects.filter(code__in=tokens|set(dotless),release__in=releases).select_related('release')
+    codes=[code for code in Code.objects.filter(code__in=tokens,release__in=releases).select_related('release')
            if code.release.system=='ICD-10-CM' or not locked]
-    written={code.code:(code.code if code.code in tokens else dotless[code.code]) for code in codes}
-    evidence=evidence_lines(encounter.notes,set(written.values()))
-    documented=sorted((code for code in codes if written[code.code] in evidence),key=lambda code:evidence[written[code.code]][0])
-    # What the notes write as a code but no applicable release holds, counted and said rather than dropped silently.
+    evidence=evidence_lines(encounter.notes,{code.code for code in codes})
+    documented=sorted((code for code in codes if code.code in evidence),key=lambda code:evidence[code.code][0])
+    # Said, never looked up and never dropped silently: a code written with its dot that no applicable release holds, a
+    # code-shaped token written without a dot, and (while CPT is locked) a CPT code the notes name as one.
     known={code.code for code in codes}
-    shaped={token for token in tokens if ICD_SHAPE.fullmatch(token) and any(c.isdigit() for c in token)}|set(dotless)
-    unmatched=len({token for token in shaped if token not in known and token not in dotless.values()}
-                  |{dotted for dotted in dotless if dotted not in known and dotless[dotted] not in known})
-    cpt_withheld=len({token for token in tokens if token[0].isdigit()}) if locked else 0
-    return Plan(encounter.notes,releases,[(code,evidence[written[code.code]][1]) for code in documented],unmatched,cpt_withheld)
+    unmatched=len({token for token in tokens if DOTTED.fullmatch(token)}-known)
+    dotless=len(set(DOTLESS.findall(upper)))
+    cpt_withheld=len(set(CPT_NAMED.findall(upper))) if locked else 0
+    return Plan(encounter.notes,releases,[(code,evidence[code.code][1]) for code in documented],unmatched,cpt_withheld,dotless)
 
 def suggest(encounter,user,planned=None):
     """Records a plan's new suggestions and audits them. The caller holds the encounter's row lock and has checked that the
@@ -138,5 +143,5 @@ def suggest(encounter,user,planned=None):
     audit(user,'coding.suggest',encounter.pk,department=encounter.department,count=len(new),
           service_date=encounter.service_date.isoformat(),releases=versions,icd_covered=covered,not_suggested_over_limit=omitted,
           release_sha256=sorted(r.sha256 for r in planned.releases),not_in_release=planned.unmatched,
-          cpt_withheld=planned.cpt_withheld)
-    return Suggestions(len(new),covered,versions,omitted,planned.unmatched,planned.cpt_withheld)
+          cpt_withheld=planned.cpt_withheld,written_without_dot=planned.dotless)
+    return Suggestions(len(new),covered,versions,omitted,planned.unmatched,planned.cpt_withheld,planned.dotless)
