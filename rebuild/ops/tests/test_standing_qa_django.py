@@ -50,6 +50,7 @@ import unittest
 from contextlib import redirect_stderr
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from ops import provider_campaign as pc
@@ -703,6 +704,129 @@ else:
             self.assertEqual([a for a, _ in self.campaign.ledger.rows() if a['stage'] == 'transcription'], [])
             self.assertEqual(Job.objects.filter(kind='transcription').count(), 0)
             self.assertNotEqual(self.campaign.ledger.stage_state('transcription')['state'], 'passed')
+
+        # ── the application's per-user generation rate limit (campaign 4's colonoscopy stop, 2026-10-02) ────────────
+        def spend_generation_window(self, seconds_left):
+            """The synthetic doctor's Generate window as core.security.rate_limit leaves it after the application's
+            limit of requests, `seconds_left` before it resets. Returns (key, elapse): elapse(seconds) moves the window
+            that much into the past — time passing for the application, not for the test."""
+            from datetime import timedelta
+            from django.db.models import F
+            from django.utils import timezone
+            from core import security, views
+            from core.models import LoginAttempt, User
+            user = User.objects.get(username=sq.DOCTOR_EMAIL)
+            key = security.digest('generate:' + str(user.pk))
+            LoginAttempt.objects.update_or_create(key=key, defaults={
+                'count': views.GENERATION_RATE_LIMIT,
+                'window_start': timezone.now() - timedelta(seconds=views.GENERATION_RATE_WINDOW_SECONDS - seconds_left)})
+            slept = []
+
+            def elapse(seconds):
+                slept.append(seconds)
+                LoginAttempt.objects.filter(key=key).update(window_start=F('window_start') - timedelta(seconds=seconds))
+            return key, elapse, slept
+
+        def test_the_generation_headroom_is_the_application_s_own_window(self):
+            from datetime import timedelta
+            from django.utils import timezone
+            from core import views
+            from core.models import LoginAttempt, User
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            stages = sq.stages_module()
+            user = User.objects.get(username=sq.DOCTOR_EMAIL)
+            limit, window = views.GENERATION_RATE_LIMIT, views.GENERATION_RATE_WINDOW_SECONDS
+            state = stages.generation_headroom(user)
+            self.assertEqual((state['left'], state['limit'], state['window']), (limit - 1, limit, window))
+            self.assertTrue(window - 60 < state['resets_in'] <= window, state)        # (the model check's Generate)
+            LoginAttempt.objects.all().delete()
+            self.assertEqual(stages.generation_headroom(user), {'left': limit, 'resets_in': 0.0, 'limit': limit,
+                                                                'window': window})          # (no row: never limited)
+            key, _, _ = self.spend_generation_window(120)
+            state = stages.generation_headroom(user)
+            self.assertEqual(state['left'], 0)
+            self.assertTrue(119 <= state['resets_in'] <= 120, state)
+            LoginAttempt.objects.filter(key=key).update(count=limit - 3)
+            self.assertEqual(stages.generation_headroom(user)['left'], 3)
+            LoginAttempt.objects.filter(key=key).update(count=limit,
+                                                        window_start=timezone.now() - timedelta(seconds=window + 1))
+            self.assertEqual(stages.generation_headroom(user)['left'], limit)   # (an expired window resets on use)
+
+        def test_a_spent_generation_window_is_waited_out_before_the_next_notes_send(self):
+            from core.models import LoginAttempt
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            key, elapse, slept = self.spend_generation_window(120)
+            stages = sq.stages_module()
+            with patch.object(stages, 'time', SimpleNamespace(sleep=elapse)):
+                result = self.notes_run(max_sends=1)
+            self.assertEqual((result['verdict'], result['decision']), ('PASS', 'partial'), result['reasons'])
+            self.assertTrue(60 < sum(slept) <= 121 and all(0 < s <= 1 for s in slept), slept)
+            (attempt, outcome), = self.campaign.ledger.rows()[1:]
+            self.assertEqual(attempt['generation_paced_seconds'], round(sum(slept), 3))
+            self.assertEqual(outcome['class'], 'completed')
+            self.assertEqual(LoginAttempt.objects.get(key=key).count, 1)   # (this Generate opened a new window)
+            self.assertEqual(len(self.sent), 2)
+
+        def test_a_stop_file_while_waiting_for_the_generation_window_halts_with_nothing_created(self):
+            from core.models import Encounter, Job
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            _, elapse, slept = self.spend_generation_window(300)
+            stop = self.campaign.stop_file()
+            encounters, jobs = Encounter.objects.count(), Job.objects.count()
+
+            def operator_halts(seconds):
+                elapse(seconds)
+                stop.write_text('')
+            stages = sq.stages_module()
+            with patch.object(stages, 'time', SimpleNamespace(sleep=operator_halts)):
+                result = self.notes_run(max_sends=2)
+            self.assertEqual((result['verdict'], result['decision']), ('HALTED', 'halted'), result['reasons'])
+            self.assertEqual(len(slept), 1)                            # (the Stop file is read every second)
+            self.assertEqual((Encounter.objects.count(), Job.objects.count()), (encounters, jobs))
+            self.assertEqual(len(self.sent), 1)                        # (the model check only)
+            self.assertEqual(self.campaign.ledger.stage_state('notes_comparison')['state'], 'open')
+
+        def test_a_spent_window_is_waited_out_before_a_recording_is_sent(self):
+            audio = st.AUDIO_BY_ID['soap-ankle-speech']
+            if not os.path.exists(audio.path):
+                self.skipTest(f'{audio.path} is not on this host')
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            self.transcription_setup()
+            _, elapse, slept = self.spend_generation_window(120)
+            stages = sq.stages_module()
+            waited_before_deepgram = []
+            real = st.transcription_module().voice_quote
+
+            def voice_quote(client, encounter):
+                waited_before_deepgram.append(sum(slept))
+                return real(client, encounter)
+            with patch.object(stages, 'time', SimpleNamespace(sleep=elapse)), \
+                    patch.object(st.transcription_module(), 'voice_quote', voice_quote):
+                result = self.transcription_run(max_sends=2)
+            self.assertEqual(result['decision'], 'partial', result['reasons'])
+            self.assertEqual(waited_before_deepgram[:1], [sum(slept)])       # (all of the wait, before the recording)
+            self.assertTrue(sum(slept) > 60, slept)
+            rows = [a for a, _ in self.campaign.ledger.rows() if a['stage'] == 'transcription']
+            self.assertEqual([a['send']['id'] for a in rows],
+                             ['transcription:soap-ankle-speech', 'generation:soap-ankle-speech'])
+            self.assertEqual(rows[0]['generation_paced_seconds'], round(sum(slept), 3))
+            self.assertNotIn('generation_paced_seconds', rows[1])        # (its window was already open again)
+            self.assertEqual(len(self.deepgram_requests), 1)
+
+        def test_a_refused_generate_names_the_application_s_reason(self):
+            from core.models import Job
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            self.spend_generation_window(300)
+            stages = sq.stages_module()
+            jobs = Job.objects.count()
+            with patch.object(stages.Run, 'pace_generation', return_value=0):     # (the runner without its pacing)
+                result = self.notes_run(max_sends=1)
+            self.assertEqual(result['verdict'], 'FAIL')
+            said = ' '.join(result['reasons'])
+            self.assertIn('the page said: Generation rate limit reached.', said)
+            self.assertIn('nothing was sent', said)
+            self.assertEqual(Job.objects.count(), jobs)                           # (refused: nothing queued)
+            self.assertEqual(len(self.sent), 1)                                   # (the model check only)
 
         def test_the_stop_file_refuses_a_run_before_anything_is_written(self):
             self.campaign.stop_file().write_text('')

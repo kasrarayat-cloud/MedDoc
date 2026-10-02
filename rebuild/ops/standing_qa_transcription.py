@@ -395,6 +395,9 @@ class TranscriptionRun(stages.Run):
         from core.security import private_path
         terms = self.terms
         require(send.case in terms.inputs, f'{send.id}: the declaration does not name this recording.')
+        # (its transcript's generation follows in this run and the rate limit must admit it: a transcript whose
+        # generation is refused is stranded, never generated — so the wait is made before the recording is sent)
+        paced = self.pace_generation()
         entry = st.audio_entry(send.case)
         audio = st.read_audio(entry)
         run = self.campaign.runs.current()
@@ -474,7 +477,8 @@ class TranscriptionRun(stages.Run):
                 'transcription': {'provider': terms.provider, 'model': terms.model,
                                   'rate_per_minute': terms.rate_per_minute,
                                   'parameters': config['deepgram_parameters'], 'recording_seconds': str(seconds),
-                                  'charge_limit': str(shown)}})
+                                  'charge_limit': str(shown)},
+                **({'generation_paced_seconds': paced} if paced else {})})
         except Refused as refused:                         # (nothing written: the job never ran — release it)
             self.refuse_job(job, str(refused))
         try:
@@ -670,6 +674,9 @@ class TranscriptionRun(stages.Run):
         from core.jobs import cancel
         from core.models import Job, Reservation
         notes = encounter.notes
+        paced = self.pace_generation()                   # (normally 0: its transcription send waited already)
+        if paced:
+            extra = {**extra, 'generation_paced_seconds': paced}
         token, revision, shown, quoted = sq.page_quote(self.world.client, encounter)
         stages.require_price(self.declaration, quoted, send)
         jobs_before = set(Job.objects.values_list('pk', flat=True))
@@ -677,11 +684,13 @@ class TranscriptionRun(stages.Run):
         jobs = list(Job.objects.exclude(pk__in=jobs_before))
         if not (response.status_code == 302 and len(jobs) == 1 and jobs[0].kind == 'generation'
                 and jobs[0].state == 'queued' and jobs[0].encounter_id == encounter.pk):
+            said = stages.page_said(response)
             for other in jobs:
                 if other.state == 'queued':
                     cancel(other, self.world.user)
-            raise stages.StageStop('Generate did not queue exactly one generation job (a batch would make more than one '
-                                   'request); nothing was sent')
+            raise stages.StageStop('Generate did not queue exactly one generation job (status '
+                                   f'{response.status_code}, {len(jobs)} job(s); the page said: '
+                                   f'{" | ".join(said) or "nothing"}); nothing was sent')
         job = jobs[0]
         if list(Job.objects.filter(state='queued').values_list('pk', flat=True)) != [job.pk]:
             self.refuse_job(job, 'another queued job would run first')
