@@ -2362,3 +2362,22 @@ class RefutationRepairs(unittest.TestCase):
         fields = w.inspect(data)["fields"]
         kinds = {f["locator"]["slot"]: f["kind"] for f in fields}
         self.assertEqual(kinds.get("b/tbl[0]/tr[2]/tc[0]"), "initials", [(f["label"], f["kind"], f["locator"]["slot"]) for f in fields])
+
+    def test_ec5_a_section_by_outline_level_is_a_word_heading_as_on_legacy(self):
+        """documents.tab_form._heading also reads an outline level on the paragraph, or in its style's ancestry."""
+        from docx.enum.style import WD_STYLE_TYPE
+        for how in ("paragraph", "style"):
+            with self.subTest(how=how):
+                doc = Document()
+                section = doc.add_paragraph("FINDINGS")
+                level = OxmlElement("w:outlineLvl")
+                level.set(qn("w:val"), "1")
+                if how == "paragraph":
+                    section._p.get_or_add_pPr().append(level)
+                else:
+                    style = doc.styles.add_style("Section Title", WD_STYLE_TYPE.PARAGRAPH)
+                    style.element.get_or_add_pPr().append(level)
+                    section.style = style
+                for mark in ("1.", "2."):
+                    _tab_line(doc, mark)
+                self.assertEqual(self.labels(docx_bytes(doc)), ["FINDINGS — 1", "FINDINGS — 2"])
