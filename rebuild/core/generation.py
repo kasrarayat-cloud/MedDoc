@@ -492,6 +492,13 @@ def configuration(fields=None):
     if getattr(settings,'V3_GENERATION_BATCHES',False):
         from .generation_batch import CONTRACT
         config['generation_batch_contract']=CONTRACT
+    # Role suggestions (QUILLMD_ROLE_SUGGESTIONS='1'), for a form that is not contract v3 and not the qualified Word form:
+    # recorded in the configuration a job is quoted under, so a queued job asks exactly what it was quoted for. NOT part
+    # of pricing_version: the hold is maximum_cost over EVERY field of the mapping, held fields included, so asking a
+    # held field changes no bound, no rate and no request profile.
+    if (getattr(settings,'QUILLMD_ROLE_SUGGESTIONS','0')=='1'
+            and not (fields is not None and (natural_v3(fields) or qualified_word_form(fields)))):
+        config['role_suggestion_contract']=ROLE_SUGGESTION_CONTRACT
     # The contract is built for the native models only: with any other model (the installed claude-sonnet-4-6 path) the
     # flag leaves the default request, where it used to refuse every ordinary v3 generation before any request. Built is
     # not qualified: the flag stays off until its live qualification on the model actually configured.
@@ -524,6 +531,16 @@ def ordinary_pricing_version(previous,contract):
     return 'configured-v1:'+hashlib.sha256(json.dumps(
         {'previous':previous,'ordinary_field_contract':contract},
         sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
+#: Role suggestions on the legacy default path (core.destination_roles.suggestion_scope): a held role field is asked
+#: and its reading is offered, never adopted. Recorded in a job's configuration only when QUILLMD_ROLE_SUGGESTIONS='1'.
+ROLE_SUGGESTION_CONTRACT='legacy-role-suggestions-v1'
+
+
+def role_suggestions(config):
+    """Whether THIS job was quoted under the role-suggestion contract."""
+    return (config or {}).get('role_suggestion_contract')==ROLE_SUGGESTION_CONTRACT
 
 
 def narrative_contract(fields,config):
@@ -4458,17 +4475,20 @@ V3_CHECKBOX_REASON = ('Read from the notes but NOT used as an answer: this box i
                       '"Leave blank — reviewed". An empty box is never read as No.')
 
 
-def v3_generation_fields(fields, context_labels=()):
+def v3_generation_fields(fields, context_labels=(), suggested=()):
     """Contract v3: the fields the extractive generation is asked about, and the context labels it reads with.
 
     ⚠️ Any other form: a field core.destination_roles marked (`destination_role`: its PRINTED label reads as a
-    signature, initials or identity row) is never asked; its label stays a context label, exactly as a v3 held field's."""
+    signature, initials or identity row) is never asked; its label stays a context label, exactly as a v3 held field's.
+    A key in `suggested` (a role suggestion, `role_suggested`) is asked as an ordinary question instead - in form order,
+    without its marker - and is still answered only by its hold (`role_adopted`)."""
     from .v3_mapping import is_v3_fields
     if not is_v3_fields(fields):
-        held = [f for f in fields if f.get('destination_role')]
-        if not held:
+        held = [f for f in fields if f.get('destination_role') and f['key'] not in suggested]
+        if not held and not suggested:
             return fields, context_labels, None
-        return ([f for f in fields if not f.get('destination_role')],
+        return ([f if not f.get('destination_role') else {k: v for k, v in f.items() if k != 'destination_role'}
+                 for f in fields if not f.get('destination_role') or f['key'] in suggested],
                 list(context_labels) + [f['label'] for f in held], None)
     asked = [f for f in fields if f.get('kind') not in V3_NEVER_GENERATED and not f.get('write_protected')]
     held = [f['label'] for f in fields if f.get('kind') in V3_NEVER_GENERATED or f.get('write_protected')]
@@ -4698,7 +4718,10 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     # Every other form reaches the unchanged request below with its fields and context labels untouched - except a field
     # on a role place (core.destination_roles), which is never asked and is answered 'missing' with its reason.
     role_held=role_records(fields)
-    fields,context_labels,v3_fields=v3_generation_fields(fields,context_labels)
+    # A job quoted under the role-suggestion contract also ASKS the held fields core.destination_roles marked `suggest`;
+    # each is still answered by its hold (`role_adopted`). Any other job: nothing is asked that was not asked before.
+    suggested=role_suggested(fields,config)
+    fields,context_labels,v3_fields=v3_generation_fields(fields,context_labels,suggested)
     # ⚠️ CONTRACT v3: NOTHING BEFORE THE PROVIDER CALL MAY LEAVE A HOLD STRANDED (R8). A refusal raised here after enqueue
     # held funds (1,001 source units, a limit, rates) ended the job in 'reconciliation' with the hold never released. It
     # now ends 'not processed' and the hold is released; `maximum_cost` refuses the same notes at quote and enqueue first.
@@ -4710,7 +4733,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
             contract=None if config.get('prompt_version') in TAB_PROMPT_VERSIONS and (v3_fields is None or v3_natural) else 'legacy'
             answers=validate_selections(notes,fields,fixture(notes,fields,context_labels=context_labels,evidence_contract=contract),context_labels=context_labels,evidence_contract=contract)
             if v3_fields is not None:answers=v3_adopted(v3_fields,answers,notes,fields,context_labels)
-            answers.update(role_held)
+            answers.update(role_adopted(role_held,answers,suggested))
             return answers,Decimal('0'),{}, {},'synthetic-extractive-fixture','',True
         profile=job_request_profile(config)
         natural=(tab_evidence_contract(fields) or v3_natural) and config.get('prompt_version') in TAB_PROMPT_VERSIONS
@@ -4786,6 +4809,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
         if v3_fields is not None:raw['v3_fields']=v3_fields
         if role_held:raw['role_held']=role_held
+        if suggested:raw['role_suggested']=sorted(suggested)
         if history_targets:raw['history_context_contract']=history.CONTRACT
         # claude-sonnet-5-5: the answer is adopted only from the model the request named (`validated`). Set for that model
         # only, so the result of every earlier model's request — and what its validation reads — is exactly as before.
@@ -4804,6 +4828,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
          'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
     if v3_fields is not None:raw['v3_fields']=v3_fields
     if role_held:raw['role_held']=role_held
+    if suggested:raw['role_suggested']=sorted(suggested)
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
@@ -4846,7 +4871,7 @@ def validated(result):
 def v3_result(result,answers):
     """A live provider result for a v3 mapping gets the same option rule as the fixture; any other form is unchanged,
     except that a field held on a role place (never asked) is answered 'missing' with its reason."""
-    if result.get('role_held'):answers={**answers,**result['role_held']}
+    if result.get('role_held'):answers={**answers,**role_adopted(result['role_held'],answers,result.get('role_suggested') or ())}
     if not result.get('v3_fields'):return answers
     return v3_adopted(result['v3_fields'],answers,result['notes'],result['fields'],result.get('context_labels',()))
 
@@ -4856,3 +4881,33 @@ def role_records(fields):
     return {f['key']:{'text':'','status':'missing','evidence':[],'reviewed':False,
                       'reason':str(f['destination_role'].get('reason') or '')}
             for f in fields if isinstance(f,dict) and isinstance(f.get('destination_role'),dict)}
+
+
+def role_suggested(fields,config):
+    """The held fields this job ASKS for a role suggestion: quoted under ROLE_SUGGESTION_CONTRACT, held for a role
+    (`destination_role`) and marked `suggest` by core.destination_roles.generation_fields. Empty for every other job."""
+    if not role_suggestions(config):return frozenset()
+    return frozenset(f['key'] for f in fields if isinstance(f,dict) and isinstance(f.get('destination_role'),dict)
+                     and f['destination_role'].get('suggest') is True)
+
+
+def role_adopted(held,answers,suggested=()):
+    """The held records, answered exactly as the hold answers them - 'missing', no text, no evidence, the hold's reason -
+    NEVER the reading. A field in `suggested` whose reading the validator would have adopted (`supported`, with text and
+    its own source lines, nothing held, offered or set aside) carries that reading beside the hold as `role_suggestion`
+    (its text and the lines it was read from), for the clinician to enter by an explicit act. Any other reading - held,
+    in conflict, missing, a one-click offer, not the patient's - leaves the plain hold."""
+    out={}
+    for key,record in held.items():
+        answer=answers.get(key) if key in suggested else None
+        evidence=[] if not isinstance(answer,dict) else (answer.get('own_evidence') or answer.get('evidence') or [])
+        if (isinstance(answer,dict) and answer.get('status')=='supported' and str(answer.get('text') or '').strip()
+                and not any(answer.get(flag) for flag in ('held_candidate','suggestion','not_patient','governed_acceptance'))
+                and evidence and all(isinstance(entry,dict) and isinstance(entry.get('quote'),str)
+                                     and isinstance(entry.get('start'),int) and isinstance(entry.get('end'),int)
+                                     for entry in evidence)):
+            out[key]={**record,'role_suggestion':{'text':answer['text'],'evidence':[
+                {'quote':entry['quote'],'start':entry['start'],'end':entry['end']} for entry in evidence]}}
+        else:
+            out[key]=record
+    return out

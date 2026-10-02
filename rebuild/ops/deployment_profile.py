@@ -91,6 +91,8 @@ APPLICATION_FEATURE_FLAGS = frozenset({
     # 2026-10-01: the ordinary field-relations contract's explicit production switch ('0' or '1'; the application
     # refuses real mode with claude-sonnet-5-5 and no value, quillmd/application_profile.real_mode_problems).
     'QUILLMD_V3_FIELD_RELATIONS',
+    # Role suggestions on the legacy default path ('0' or '1'; quillmd/settings.py refuses any other value).
+    'QUILLMD_ROLE_SUGGESTIONS',
 })
 ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_DEPLOYMENT_PROFILE', 'QUILLMD_DATA_MODE', 'QUILLMD_STRIPE_MODE', 'QUILLMD_REGISTRATION',

@@ -807,7 +807,7 @@ def run_one():
             # mapping (core.destination_roles). An original that cannot be read refuses before anything is sent.
             from . import destination_roles
             from documents import DocumentError
-            try:asked_fields=destination_roles.generation_fields(e.template_version)
+            try:asked_fields=destination_roles.generation_fields(e.template_version,suggest=generation.role_suggestions(job.config))
             except (DocumentError,ValidationError,OSError):raise NoProviderRequest(v3_mapping.GENERATION_SOURCE_REFUSAL)
             if refusal:=destination_roles.generation_refusal(e.template_version,asked_fields,job.config):
                 raise NoProviderRequest(refusal)

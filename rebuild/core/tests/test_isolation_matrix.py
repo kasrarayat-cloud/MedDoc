@@ -52,7 +52,8 @@ OBJECT = {
     'finalize': ('encounter', P404), 'export': ('final', G404), 'voice': ('encounter', P404),
     'voice_approve': ('encounter', P404), 'coding': ('encounter', P404), 'accept_code': ('code', P404),
     'api_encounter': ('encounter', G404), 'encounter_notes': ('encounter', P404),
-    'clear_review': ('encounter', P404), 'job_cancel': ('queued_job', P404), 'job_result': ('result_job', G404),
+    'clear_review': ('encounter', P404), 'accept_role_suggestion': ('encounter', P404),
+    'job_cancel': ('queued_job', P404), 'job_result': ('result_job', G404),
     'billing_job_detail': ('result_job', G404), 'invitation_revoke': ('invitation', P404),
     # Looked up unscoped, then membership(..., roles=['owner']) raises PermissionDenied: 403, documented.
     'membership_update': ('membership', {'GET': 405, 'POST': 403}),
@@ -101,6 +102,7 @@ ROUTES = {
     'api_encounter': 'api/encounters/<uuid:pk>/',
     'encounter_notes': 'encounters/<uuid:pk>/notes/',
     'clear_review': 'encounters/<uuid:pk>/clear-review/',
+    'accept_role_suggestion': 'encounters/<uuid:pk>/role-suggestion/',
     'job_cancel': 'encounters/<uuid:pk>/jobs/<uuid:job_pk>/cancel/',
     'job_result': 'jobs/<uuid:pk>/result/',
     'invitation_revoke': 'team/invitations/<uuid:pk>/revoke/',
