@@ -458,3 +458,15 @@ COLUMNS.update({'RedactionRequest': [['content_sha256', 'CharField'], ['created_
 # CODING LEDGER CATALOG: exact additive 0034 shape. A code suggestion carries its release identity and a re-review mark;
 # no relationship changes.
 COLUMNS['CodeSuggestion'] = sorted(COLUMNS['CodeSuggestion'] + [['release_sha256', 'CharField'], ['review_required', 'BooleanField']])
+
+
+# TRANSCRIPT REVIEW CATALOG: reviewed clinical text is an immutable row; proposals include its identity/hash,
+# never its text. Redaction refuses this retained content until an explicitly qualified adapter exists.
+EDGES.update({'TranscriptReview': [['encounter', 'core.encounter'], ['job', 'core.job'], ['reviewed_by', 'core.user']]})
+COLUMNS.update({'TranscriptReview': sorted([
+    ['id','UUIDField'], ['created_at','DateTimeField'], ['encounter','ForeignKey'], ['job','ForeignKey'],
+    ['reviewed_by','ForeignKey'], ['source_revision','PositiveIntegerField'],
+    ['source_sha256','CharField'], ['raw_sha256','CharField'], ['result_sha256','CharField'],
+    ['reviewed_sha256','CharField'], ['reviewed_text','TextField'],
+    ['span_start','PositiveIntegerField'], ['span_end','PositiveIntegerField'],
+    ['patient_context','BooleanField'], ['context_token','TextField']])})

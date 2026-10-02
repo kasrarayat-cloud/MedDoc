@@ -1,0 +1,29 @@
+{
+  "base": "172a5a52867f3ddb5a8d4b80ca2a7fbc7977e3e5",
+  "files": [
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-sol-notes-voice/rebuild/core/source_scope.py",
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-refutation-source/source_scope.py",
+      "sha256": "4a8e444bb8ba7f5dd5b87f68318fb332eeb7eec4dccecbf280c76f3b43a6bed0"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-sol-notes-voice/rebuild/core/transcript_context.py",
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-refutation-source/transcript_context.py",
+      "sha256": "3b925017fb157d864e9a4941c8c01d3e9086c19107c43a22b59fa96d9da40454"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-sol-notes-voice/rebuild/core/v3_field_relations.py",
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-refutation-source/v3_field_relations.py",
+      "sha256": "ec07cd4a6a8768f74db6488ba19fc6c9b5f7173101b16623f334e456aadd09d3"
+    },
+    {
+      "path": "/opt/meddoc-pro/.worktrees/v1-sol-notes-voice/rebuild/core/generation.py",
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-refutation-source/generation.py",
+      "sha256": "c3422578be330972a841282191f2c31c8dcf9cf56230c162de655d4461283f5a"
+    }
+  ],
+  "provider_calls": 0,
+  "database_calls": 0,
+  "probe_source": "refute_notes_governance.py",
+  "evidence": "refute-notes-governance.json"
+}

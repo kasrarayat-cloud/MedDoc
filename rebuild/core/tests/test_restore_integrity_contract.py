@@ -15,8 +15,8 @@ class ReleaseIntegrityContract(TestCase):
         self.assertTrue(report['passed'],report)
         # 92 + 0033's ten redaction guards (quillmd_redaction_guard) + 0034's five coding-ledger guards (quillmd_coding_guard):
         # 0035 adds the immutable import-manifest insertion guard.
-        self.assertEqual(report['found'],108)
-        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),26)
+        self.assertEqual(report['found'],111)
+        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),28)
 
     def test_batch_guards_and_composed_preservation_body_fail_closed_when_changed(self):
         def read():

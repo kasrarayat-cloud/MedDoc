@@ -96,6 +96,9 @@ FUNCTION_SHA256 = {
     'quillmd_redaction_guard': '06511e5c9b0d09a54fca7316aa95bcc8bef54c81a567771b9f972410b5048b73',
     # 0034: the coding ledger: frozen finalized codes, immutable suggestion identity, accepted codes never deleted.
     'quillmd_coding_guard': '28d3e14e2b8f4e21f60c4674951625e62866c242948b0ce6fcaf8ba6d8e1db71',
+    # 0036/0037: append-only clinical transcript reviews and refusal of false redaction around them.
+    'quillmd_transcript_review_guard': '4e0d9b0e69eb9f678f0d5c95bd086cd4236442a3f1da8a4edf7e531f05f6dfcd',
+    'quillmd_transcript_redaction_guard': 'f27d1b0038852f1f8e3cb207151455eeb780f0a4fc08ccb82cc91d13f75bef81',
 }
 
 GUARDS = (
@@ -207,4 +210,7 @@ GUARDS = (
     ('core_code', 'terminology_code_append_only', 'quillmd_append_only', 27),
     ('core_code', 'terminology_code_no_truncate', 'quillmd_preservation_no_truncate', 34),
     ('core_codesuggestion', 'code_ledger', 'quillmd_coding_guard', 31),
+    ('core_transcriptreview', 'transcript_review_preservation', 'quillmd_transcript_review_guard', 31),
+    ('core_transcriptreview', 'transcript_review_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_redactiontombstone', 'redactiontombstone_transcript', 'quillmd_transcript_redaction_guard', 7),
 )

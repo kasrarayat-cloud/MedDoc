@@ -1,0 +1,32 @@
+[
+  {
+    "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/voice-final.log",
+    "retained": "docs/rebuild/v1/security-transcript-privacy-20261002/voice-final.log",
+    "bytes": 16263,
+    "sha256": "111fe87efbcb1a110ca63f45c9a627ad44acb9d8a5328d6b67f1ffb63f64f88c"
+  },
+  {
+    "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/privacy.log",
+    "retained": "docs/rebuild/v1/security-transcript-privacy-20261002/privacy.log",
+    "bytes": 3751,
+    "sha256": "214edf7ee94b027b4cc961a239598f7275ed7c0198ddcd15c58326af9ee6fb1a"
+  },
+  {
+    "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/privacy-tamper.log",
+    "retained": "docs/rebuild/v1/security-transcript-privacy-20261002/privacy-tamper.log",
+    "bytes": 375,
+    "sha256": "ce4e5f29149a306b6abf58616897b1398cfb24c82035aa2022697a673b9dd6bc"
+  },
+  {
+    "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-governance.json",
+    "retained": "docs/rebuild/v1/security-transcript-privacy-20261002/refute-notes-governance.json",
+    "bytes": 1286,
+    "sha256": "f71e75ba607916cc0156ee392361c1d695f168ad490077eca87dbbb2d5f00304"
+  },
+  {
+    "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-refutation-source.json",
+    "retained": "docs/rebuild/v1/security-transcript-privacy-20261002/notes-refutation-source.json",
+    "bytes": 1514,
+    "sha256": "69d85f0581a45719e1460ab07dc8ba09326351ac133c0b558d629d7b2c205f91"
+  }
+]

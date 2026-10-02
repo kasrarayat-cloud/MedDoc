@@ -80,6 +80,8 @@ def graph(request):
     jids=[v['id'] for v in js]
     if any(v['state'] in ('queued','running','staged','validating','reconciliation') for v in js):blockers.add('work_or_finance_unresolved')
     collect('CodeSuggestion',m.CodeSuggestion.objects.filter(encounter_id__in=eids))
+    if collect('TranscriptReview',m.TranscriptReview.objects.filter(encounter_id__in=eids)):
+        blockers.update(('transcript_review_content','immutable_evidence'))
     reservations=collect('Reservation',m.Reservation.objects.filter(job_id__in=jids))
     if any(v['state']=='held' for v in reservations):blockers.add('funds_held')
     usage=collect('Usage',m.Usage.objects.filter(job_id__in=jids))

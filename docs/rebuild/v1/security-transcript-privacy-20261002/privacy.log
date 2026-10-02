@@ -1,0 +1,48 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_privacy
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...E......../opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...
+======================================================================
+ERROR: test_release_contract_detects_review_guard_disable_and_redaction_guard_replacement (core.tests.test_transcript_privacy.TranscriptPrivacy.test_release_contract_detects_review_guard_disable_and_redaction_guard_replacement) (sql='ALTER TABLE core_transcriptreview DISABLE TRIGGER transcript_review_preservation')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ObjectInUse: cannot ALTER TABLE "core_transcriptreview" because it has pending trigger events
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_transcript_privacy.py", line 122, in test_release_contract_detects_review_guard_disable_and_redaction_guard_replacement
+    with connection.cursor() as cursor:cursor.execute(sql)
+                                       ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.OperationalError: cannot ALTER TABLE "core_transcriptreview" because it has pending trigger events
+
+----------------------------------------------------------------------
+Ran 15 tests in 27.737s
+
+FAILED (errors=1)
+Destroying test database for alias 'default'...
+Found 15 test(s).
+System check identified no issues (0 silenced).

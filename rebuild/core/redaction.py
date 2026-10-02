@@ -140,6 +140,10 @@ def refusals(encounter):
     # around; the database refuses the tombstone too (0033).
     if m.GenerationBatch.objects.filter(encounter=encounter).exists():
         found.add('generation_batch_content')
+    # An append-only transcript review retains clinical text independently of notes and provider result files.
+    # Never claim redaction while that text survives: it needs its own qualified disposal adapter.
+    if m.TranscriptReview.objects.filter(encounter=encounter).exists():
+        found.add('transcript_review_content')
     if m.Reservation.objects.filter(job__encounter=encounter, state='held').exists(): found.add('funds_held')
     for receipt in m.ProviderReceipt.objects.filter(job__encounter=encounter).values('job_id', 'actual_cost'):
         if not (m.Usage.objects.filter(job_id=receipt['job_id']).exists() or m.PlatformCost.objects.filter(

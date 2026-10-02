@@ -1,0 +1,10 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_privacy_tamper
+Creating test database for alias 'default'...
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.159s
+
+OK
+Destroying test database for alias 'default'...
+Found 1 test(s).
+System check identified no issues (0 silenced).
