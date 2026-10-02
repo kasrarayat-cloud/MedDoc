@@ -827,6 +827,16 @@ class Review(Legacy, TestCase):
              key, '14 ng/L\nDr Other'),
             ('one line repeated', NOTES, {key: {**e.answers[key], 'role_suggestion': {
                 'text': '14 ng/L\n14 ng/L', 'evidence': cited('14 ng/L')['evidence'] * 2}}}, key, '14 ng/L\n14 ng/L'),
+            # stored shapes the re-read could not even read: refused, never a failed page
+            ('evidence entry without a quote', NOTES, {key: {**e.answers[key], 'role_suggestion': {
+                'text': '14 ng/L', 'evidence': [{'start': 20, 'end': 27}]}}}, key, '14 ng/L'),
+            ('evidence not a list', NOTES, {key: {**e.answers[key], 'role_suggestion': {
+                'text': '14 ng/L', 'evidence': '14 ng/L'}}}, key, '14 ng/L'),
+            ('evidence entry not a dict', NOTES, {key: {**e.answers[key], 'role_suggestion': {
+                'text': '14 ng/L', 'evidence': ['14 ng/L']}}}, key, '14 ng/L'),
+            ('quote not text', NOTES, {key: {**e.answers[key], 'role_suggestion': {
+                'text': '14 ng/L', 'evidence': [{'quote': 14, 'start': 20, 'end': 27}]}}}, key, '14 ng/L'),
+            ('no text', NOTES, {key: {**e.answers[key], 'role_suggestion': {**offer, 'text': None}}}, key, ''),
             ('longer than an answer may be', long_notes, {key: {**e.answers[key], 'role_suggestion': long_offer}}, key,
              '7' * 20001),
             ('another signer', NOTES, {other: {**e.answers[other], 'role_suggestion': {
@@ -839,7 +849,9 @@ class Review(Legacy, TestCase):
         for name, notes, planted, target, value in cases:
             with self.subTest(case=name):
                 fresh = self.plant(notes, planted)
-                body = self.client.get(f'/encounters/{fresh.pk}/').content.decode()
+                page = self.client.get(f'/encounters/{fresh.pk}/')
+                self.assertEqual(page.status_code, 200)
+                body = page.content.decode()
                 if value is None:                                  # the planting itself changes nothing
                     self.assertEqual(body.count('data-role-suggestion'), 1)
                     continue

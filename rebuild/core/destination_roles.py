@@ -256,14 +256,15 @@ def suggestion_scope(field, row):
 
 
 def stored_suggestion(answer):
-    """The role suggestion a stored answer carries, in its one valid shape ({'text', 'evidence'}), or None."""
+    """The role suggestion a stored answer carries, or None: a dict whose evidence is a list of entries each citing a
+    quote - the shape the re-read (current_suggestions) can read without failing. Everything else about it, its text
+    included, is judged by that re-read, which it must equal exactly."""
     offer = answer.get('role_suggestion') if isinstance(answer, dict) else None
-    if not isinstance(offer, dict) or not isinstance(offer.get('text'), str) or not offer['text'].strip():
+    if not isinstance(offer, dict):
         return None
     evidence = offer.get('evidence')
-    if not isinstance(evidence, list) or not all(
-            isinstance(entry, dict) and isinstance(entry.get('quote'), str) and isinstance(entry.get('start'), int)
-            and isinstance(entry.get('end'), int) for entry in evidence):
+    if not isinstance(evidence, list) or not all(isinstance(entry, dict) and isinstance(entry.get('quote'), str)
+                                                 for entry in evidence):
         return None
     return offer
 
