@@ -3738,7 +3738,8 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             statins.', 'The patient will start warfarin.').
       DEPENDS: a later unit that depends on this one (`v3_actors` 'dependent': it points back, opens with a connective,
             has no content word, or has no complement and no subject but a personal pronoun: 'It was postponed.', 'Not
-            anymore.', 'But he quit only last month.'), reaching back through other questions' plain labelled values;
+            anymore.', 'But he quit only last month.'; 2026-10-02, or replaces something unnamed: 'The patient will
+            instead be admitted.'), reaching back through other questions' plain labelled values;
             and a cessation naming nothing, anywhere in the note ('The patient quit five years ago.', 'She stopped it.',
             `v3_actors` 'bare_cessation'), selected with it or not.
       OPPOSED SAME TOPIC: any other unit that is not another person's statement (a he/she standing for another person

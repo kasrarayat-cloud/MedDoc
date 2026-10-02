@@ -1560,8 +1560,15 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=froz
         past_time = any(txt[t.i] in PAST_TIME_WORDS or (t.pos_ == 'NUM' and _YEAR.fullmatch(t.text)) for t in words)
         root_subjects = [c for c in root.children if c.dep_ in ('nsubj', 'nsubjpass', 'expl', 'csubj', 'csubjpass')]
         complete_clause = any(c.dep_ in COMPLEMENT_DEPS for c in root.children)
+        # (2026-10-02) 'instead' on the clause's own head, wherever it stands ('The patient will instead be admitted.',
+        # '... will be admitted instead.'), points back exactly as the fronted connective does ('Instead, the patient
+        # will be admitted.'): the statement replaces something said before it. 'instead of X' names what it replaces
+        # and is not one. Read only for 'dependent' (the relation floors), never for 'standalone' (the default path).
+        replaces_unnamed = any(c.dep_ == 'advmod' and txt.get(c.i) == 'instead'
+                               and not any(g.dep_ in ('prep', 'pobj', 'pcomp') for g in c.children)
+                               for c in root.children)
         dependent = not colon.get(uid) and not age and bool(
-            connective or points_back
+            connective or points_back or replaces_unnamed
             or not any(t.pos_ in ('NOUN', 'PROPN', 'VERB', 'ADJ', 'NUM') for t in words)
             or (root.pos_ in ('VERB', 'AUX') and not complete_clause
                 and (not root_subjects or (main is not None and _personal(main)))))

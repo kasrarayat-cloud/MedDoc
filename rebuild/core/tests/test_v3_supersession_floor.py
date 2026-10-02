@@ -204,6 +204,35 @@ class ConjoinedCessation(Worst):
                                  'Clinic attendance', 'The patient attends the clinic every week.', shown=tail)
 
 
+class InsteadPointsBack(Worst):
+    """(examined with RV4H-2) 'The patient will instead be admitted for surgery.' after a Plan answer was ADOPTED with the
+    model calling it independent; the fronted 'Instead, ...' already held as a connective (DEPENDS). 'instead' on the
+    clause's own head now points back wherever it stands; DEPENDS reaches the line before it (and on through other
+    questions' plain labelled values), as for any connective."""
+    PLAN = 'The patient will be discharged home.'
+
+    def test_instead_holds_the_line_it_replaces(self):
+        for tail in ('The patient will instead be admitted for surgery.', 'The patient will be admitted instead.',
+                     'Instead, the patient will be admitted.'):
+            with self.subTest(tail=tail):
+                self.assert_held(self.PLAN + ' ' + tail, ('Plan', 'Assessment'), 'Plan', self.PLAN, shown=tail)
+
+    def test_instead_of_names_what_it_replaces_and_does_not_point_back(self):
+        self.assert_adopted('The patient attends the clinic every week. The patient takes apixaban instead of warfarin.',
+                            ('Clinic attendance', 'Plan'), 'Clinic attendance', 'The patient attends the clinic every week.')
+        self.assert_adopted(self.PLAN + ' The patient walks daily.', ('Plan', 'Assessment'), 'Plan', self.PLAN)
+
+
+@override_settings(**RELATIONS)
+class InsteadOnSonnet5(InsteadPointsBack, SimpleTestCase):
+    pass
+
+
+@override_settings(**SONNET_55_DEFAULT)
+class InsteadOnSonnet55Default(InsteadPointsBack, SimpleTestCase):
+    model = g.SONNET_5_5
+
+
 @override_settings(**RELATIONS)
 class SupersessionOnSonnet5(SupersessionFloor, SimpleTestCase):
     pass
