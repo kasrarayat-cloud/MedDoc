@@ -167,14 +167,75 @@ class DoctorSurfaceHasNoConsole(TestCase):
         self.assertEqual(reached, [])
         self.assertEqual([r for r in results if r[2] != 404], [])
 
-    def test_signed_out_a_console_route_answers_like_a_route_that_does_not_exist(self):
-        client = Client()
+    def clients(self):
+        """Every kind of caller: signed out, a clinician, an administrator mid-MFA, an MFA administrator."""
+        doctor, bare = Client(), Client()
+        doctor.force_login(self.doctor)
+        bare.force_login(self.admin)
+        return {'signed out': Client(), 'clinician': doctor, 'administrator without MFA': bare,
+                'MFA administrator': self.mfa_client()}
+
+    def test_every_console_path_answers_404_to_every_caller_with_no_redirect(self):
+        """Refutation R2: '/console' (no slash) and '/console/audit' answered 301 to the slash form — CommonMiddleware's
+        APPEND_SLASH found the route and said so — and an administrator mid-MFA was sent to /mfa/ first. Production
+        nginx answers 404 to every caller for these paths; the application now does too, with no redirect of any
+        kind (Location absent), before CommonMiddleware can add one."""
+        paths = ['/console', '/console/', '/console/audit', '/console/audit/', '/console/no-such-console-page',
+                 '/console/accounts/' + str(uuid.uuid4())] + [sample_path(route) for route, _ in console_routes()]
+        for who, client in self.clients().items():
+            for path in paths:
+                for method in ('get', 'post', 'head'):
+                    with self.subTest(caller=who, path=path, method=method), Spy() as spy:
+                        response = getattr(client, method)(path)
+                        self.assertEqual((response.status_code, response.get('Location')), (404, None))
+                        self.assertEqual(spy.reached, [])
+
+    def test_a_console_404_is_the_page_a_missing_route_renders(self):
+        """The refusal is the application's own 404 page with the application's own headers, not an empty body that
+        tells a console path from a missing one (the refuter's probe saw b'' beside a rendered 'Page unavailable')."""
+        client = self.clients()['clinician']
         missing = client.get('/no-such-route-anywhere/')
+        self.assertEqual(missing.status_code, 404)
+        for path in ('/console/', '/console', '/console/audit/'):
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.content, missing.content)
+                self.assertEqual(sorted(response.headers), sorted(missing.headers))
+
+    def test_a_script_name_does_not_move_the_console_onto_the_doctor_surface(self):
+        """Refutation R1: the surface rule read request.path (SCRIPT_NAME + PATH_INFO) while Django resolves
+        PATH_INFO, so a SCRIPT_NAME of '/x' — a client header gunicorn honours — made the path '/x/console/' and
+        served the console (200) on the doctor surface. The rule now decides on what is resolved."""
+        for who, client in self.clients().items():
+            for script in ('/x', '/console', '/app'):
+                for route, _ in console_routes():
+                    path = sample_path(route)
+                    with self.subTest(caller=who, script=script, route=route), Spy() as spy:
+                        response = client.get(path, SCRIPT_NAME=script)
+                        self.assertEqual((response.wsgi_request.path_info, response.wsgi_request.path),
+                                         (path, script + path))
+                        self.assertEqual(spy.reached, [])
+                        self.assertEqual(response.status_code, 404)
+
+    def test_positive_control_a_script_name_still_reaches_a_doctor_route(self):
+        client = self.clients()['clinician']
+        with Spy() as spy:
+            self.assertEqual(client.get('/patients/', SCRIPT_NAME='/x').status_code, 299)
+        self.assertEqual(spy.reached, ['patients/'])
+
+    def test_the_doctor_surface_resolves_against_a_urlconf_with_no_console_route(self):
+        """Defence in depth: whatever the path rule decides, the doctor surface's own URLconf mounts no console view,
+        so no path variant can resolve to one there."""
+        from django.urls import Resolver404, resolve
+        from quillmd import urls_doctor
+        self.assertFalse([p for p in urls_doctor.urlpatterns if str(p.pattern).startswith('console')])
+        self.assertEqual(len(urls_doctor.urlpatterns) + len(console_routes()), len(list(all_patterns())))
         for route, _ in console_routes():
-            with self.subTest(route=route):
-                response = client.get(sample_path(route))
-                self.assertEqual((response.status_code, response.url.split('?')[0]),
-                                 (missing.status_code, missing.url.split('?')[0]))
+            with self.subTest(route=route), self.assertRaises(Resolver404):
+                resolve(sample_path(route), urlconf='quillmd.urls_doctor')
+        client = self.clients()['clinician']
+        self.assertEqual(client.get('/patients/').wsgi_request.urlconf, 'quillmd.urls_doctor')
 
     def test_positive_control_the_doctor_routes_are_still_reached(self):
         """The surface rule must not swallow the doctor application: its dashboard still reaches its view."""
@@ -203,8 +264,12 @@ class AdminSurfaceStillServesTheConsole(DoctorSurfaceHasNoConsole):
         self.assertEqual(reached, [])
         self.assertEqual({(r[2]) for r in results}, {302})
 
-    test_signed_out_a_console_route_answers_like_a_route_that_does_not_exist = None
     test_positive_control_the_doctor_routes_are_still_reached = None
+    test_every_console_path_answers_404_to_every_caller_with_no_redirect = None
+    test_a_console_404_is_the_page_a_missing_route_renders = None
+    test_a_script_name_does_not_move_the_console_onto_the_doctor_surface = None
+    test_positive_control_a_script_name_still_reaches_a_doctor_route = None
+    test_the_doctor_surface_resolves_against_a_urlconf_with_no_console_route = None
 
 
 # ---------------------------------------------------------------------------------------------------
