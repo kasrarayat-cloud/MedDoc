@@ -3858,8 +3858,9 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
+    from .source_scope import bare_affects
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
-                  if other['id'] != uid and other['id'] not in selected)
+                  if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
     # OPPOSED SAME TOPIC (only the units an arm can meet by its own kind of key: `v3_opposed_candidates`)
     mine_claim, mine_negated = reading['claim_keys'][uid], reading['negated_keys'][uid]
     mine = reading['predicates'][uid]
@@ -4809,6 +4810,25 @@ def request_bytes(request,without=()):
                        'schema':request['schema'].__module__+'.'+request['schema'].__qualname__,'payload':payload},default=repr)
 
 
+def role_response_bound(request):
+    """Reserve the complete canonical response, including optional role rows.
+
+    One token per serialized byte is conservative. Every question can select all
+    offered source units once; quote mode can retain every original source line.
+    Thinking gets separate headroom under adaptive thinking. An optional row that
+    cannot fit is left unasked, so adding it never spends the ordinary response's
+    room. Incomplete provider output still fails the whole job without settlement
+    as a successful usable generation.
+    """
+    payload=request['payload']
+    if request['natural']:
+        member='unit_ids';values=[u['id'] for u in payload['source_units']]
+    else:
+        member='quotes';values=payload['notes'].splitlines()
+    body={'fields':[{'key':q['key'],member:values,'conflict':False} for q in payload['questions']]}
+    return len(json.dumps(body).encode())
+
+
 def role_request(notes,form,context_labels,config,v3_fields,plain,candidates):
     """(suggested, asked, request) of a job admitted under the role-suggestion contract: the role fields it asks, every
     field it asks, and the request it sends. `form`, `context_labels`: what generate() was given; `plain`: the request
@@ -4826,6 +4846,12 @@ def role_request(notes,form,context_labels,config,v3_fields,plain,candidates):
         asked=v3_generation_fields(form,context_labels,keys)[0]
         try:built=extractive_request(notes,asked,plain['payload']['context_labels'],config,v3_fields)
         except ValidationError:return None
+        if config.get('mode')=='live':
+            profile=job_request_profile(config)
+            # Native adaptive thinking and text share max_tokens. Reserving 20%
+            # keeps optional role output from consuming the entire capped budget.
+            reserve=profile['max_output_tokens']//5 if profile.get('thinking') else 0
+            if role_response_bound(built)+reserve>profile['max_output_tokens']:return None
         return (keys,asked,built) if request_bytes(built,keys)==expected else None
     order=[f['key'] for f in form if isinstance(f,dict) and f.get('key') in candidates]
     found=asking(frozenset(order))

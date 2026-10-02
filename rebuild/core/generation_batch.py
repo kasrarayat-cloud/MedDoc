@@ -321,7 +321,8 @@ def request(plan, ordinal):
         from . import v3_field_relations as ordinary
         if contract not in (CONTRACT, RELATIONS_PARTS_CONTRACT) or plan['history_targets']:
             refuse('Ordinary relations require the current single complete-form contract.')
-        compiled = ordinary.compile_request(plan['notes'], plan['fields'], config,
+        compiled = ordinary.compile_request(plan['notes'], plan['fields'],
+            {**config,**({'patient_default_context':plan['patient_default_context']} if plan.get('patient_default_context') else {})},
             context_labels=[r['label'] for r in plan['requirements']], requirements=plan['requirements'],
             requested_ids=ids, constraints=plan['constraints'])
         if compiled['units'] != plan['units'] or compiled['context'] != plan['context_labels']:
@@ -349,7 +350,7 @@ def request(plan, ordinal):
     return g.anthropic_request(config['model'], config['request_profile'], instructions, payload, schema)
 
 
-def plan_for(encounter, config):
+def plan_for(encounter, config,*,patient_context=''):
     require_config(config)
     version, fields = encounter.template_version, encounter.template_version.fields
     if not v3_mapping.is_v3_version(version) or not v3_mapping.is_v3_fields(fields):
@@ -378,6 +379,11 @@ def plan_for(encounter, config):
         'fields': fields, 'asked': asked, 'context_labels': context, 'requirements': version.review_requirements,
         'units': list(units), 'constraints': manifest, 'config': dict(config), 'history_targets': [],
         'parts': [{'field_ids': ids} for ids in groups]}
+    if patient_context:
+        from . import transcript_context
+        if not config.get('ordinary_field_contract') or not transcript_context.verified(encounter.notes,patient_context):
+            raise ValidationError('The reviewed transcript context changed; nothing was queued.')
+        plan['patient_default_context']=patient_context
     if config.get('history_context_contract'):
         from . import v3_history_context as history
         history.refuse_request(config)
@@ -453,7 +459,8 @@ def assemble(plan, responses, *, read_options=None):
         from . import v3_field_relations as ordinary
         combined = ordinary.FieldSelections(fields=selections)
         ordinary_records = ordinary.records(plan['notes'], plan['fields'], plan['context_labels'],
-                                             plan['units'], combined, plan['config']['model'])
+                                             plan['units'], combined, plan['config']['model'],
+                                             patient_context=plan.get('patient_default_context',''))
     records = {}
     if plan['history_targets']:
         from . import v3_history_context as history
