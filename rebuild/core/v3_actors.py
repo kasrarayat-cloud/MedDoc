@@ -317,6 +317,25 @@ SET_APART_WORDS = frozenset(('other', 'else', 'further', 'additional', 'more', '
 CESSATION_VERBS = frozenset(('stop', 'discontinue', 'cease', 'withdraw', 'quit', 'halt', 'suspend', 'resolve', 'subside',
                              'abate', 'disappear', 'wean'))
 CESSATION_PARTICLES = {'come': 'off', 'give': 'up'}
+#: (2026-10-02, RV4H-2) Verbs by which a statement SUPERSEDES what it names - switches, replaces, substitutes, swaps,
+#: changes to (or from), withholds or holds it ('Warfarin has been switched to apixaban.', 'Warfarin was replaced by
+#: apixaban.', 'The warfarin was changed to apixaban.', 'Warfarin was withheld today.') - and 'on hold' by its
+#: preposition ('The warfarin is on hold for surgery.'). A supersession ENDS what it supersedes for the relation floors
+#: exactly as a cessation does; WHAT it supersedes is read from the parse (`_superseded`), never from a phrase. A verb
+#: missing here leaves the model's relation to decide, as on ab58c98f. HOLD-ONLY.
+SUPERSESSION_VERBS = frozenset(('switch', 'replace', 'substitute', 'swap', 'change', 'withhold', 'hold'))
+#: Their participles, read by spelling whatever the tagger calls them ('Withheld today.' is tagged a proper noun).
+SUPERSESSION_FORMS = {'switched': 'switch', 'replaced': 'replace', 'substituted': 'substitute', 'swapped': 'swap',
+                      'changed': 'change', 'withheld': 'withhold', 'held': 'hold'}
+#: Their gerunds, for a gerund the tagger reads as a noun ('Withholding warfarin for 5 days.').
+SUPERSESSION_GERUNDS = {'switching': 'switch', 'replacing': 'replace', 'substituting': 'substitute',
+                        'swapping': 'swap', 'changing': 'change', 'withholding': 'withhold', 'holding': 'hold'}
+#: The prepositions that name what a supersession ENDS ('switched from warfarin', 'substituted for warfarin'), by verb;
+#: every other one ('to', 'with', 'by', 'for' after swap) names what replaced it, which is not ended.
+SUPERSEDED_PREPOSITIONS = {'switch': ('from',), 'change': ('from',), 'swap': ('from',), 'substitute': ('for',)}
+#: The prepositions by which a supersession names its replacement or its old value: never part of what it supersedes,
+#: wherever the parser hangs them ('replaces warfarin with apixaban' may hang 'with apixaban' on warfarin).
+SUPERSESSION_PREPOSITIONS = frozenset(('to', 'from', 'with', 'by', 'for', 'into', 'onto'))
 #: What makes a statement an intention, plan, need, request or refusal rather than what is so now (the PLAN/intention
 #: floor, for a question that is not a Plan): a future modal, 'going to', one of these words ('needs', 'declines', 'is
 #: due', 'is a candidate for', 'is planned', 'is booked'), or a phrase of pending status ('on hold', 'on the waiting list',
@@ -456,6 +475,129 @@ def _denied(words, root):
     return keys(found - {'patient'})
 
 
+def _subjects(token, inside):
+    """A predicate's OWN subjects inside the read words: [(subject, passive)]. A conjunct shares nothing (withdrawn
+    2026-10-02, refutation RS-1 to RS-5: 'Haematology reviewed and stopped.', 'Her INR was checked and stopped.' read the
+    head's subject as what was stopped and released a stopped medication; who or what a statement ends is never read from
+    a subject it omits)."""
+    return [(c, c.dep_ == 'nsubjpass') for c in token.children if c.dep_ in ('nsubj', 'nsubjpass') and c.i in inside]
+
+
+def _phrase_lemmas(tokens, inside, skip=frozenset()):
+    return {_lemma(x) for token in tokens for x in token.subtree
+            if x.pos_ in CONTENT and x.i in inside and x.i not in skip}
+
+
+#: Word endings and nouns of a clinician, a specialty or a service that can act ('The endoscopist ...', 'Haematology
+#: ...', 'Paediatrics ...', 'The pharmacy ...'). Used only to read an active subject as an AGENT rather than what a
+#: supersession ended, which can only make it name nothing (bare) and HOLD more.
+AGENT_ENDINGS = ('ist', 'ists', 'ian', 'ians', 'ology', 'iatrics', 'aedics', 'edics')
+AGENT_NOUNS = frozenset(('pharmacy', 'service', 'department', 'unit', 'ward', 'practice', 'hospital', 'surgery', 'clinic',
+                         'trust', 'gp', 'mdt', 'outreach'))
+
+
+def _agent(token):
+    """A subject that may be the AGENT of a supersession rather than what it ended: a person, a clinician, a specialty
+    or a service, the patient, or a pronoun ('The cardiologist switched to apixaban.', 'Haematology switched to
+    apixaban.', 'We switched to apixaban.')."""
+    lemma = _lemma(token)
+    return (token.pos_ == 'PRON' or names_person(token) or names_carer(token) or this_patient(token)
+            or lemma in AGENT_NOUNS or lemma.endswith(AGENT_ENDINGS))
+
+
+def _superseded(t, lem, txt, inside):
+    """(2026-10-02, RV4H-2; repaired after refutation RSL-1 to RSL-4, O2, O3) What a supersession verb
+    (`SUPERSESSION_VERBS`) ends, read from the parse: (ended lemmas, whether it may hold as a bare cessation), or None
+    when `t` is not one. It ends
+      - what its OLD-value preposition names (`SUPERSEDED_PREPOSITIONS`: 'The patient was switched from warfarin to
+        apixaban.', 'Apixaban was substituted for warfarin.'), also where the parser hangs it under the replacement
+        ('switched to apixaban from warfarin', with 'to' read as an infinitive marker), when that names something;
+      - otherwise its THEME: a passive subject or an object ('Warfarin has been switched to apixaban.', 'Switch warfarin
+        to apixaban.', 'Apixaban replaced warfarin.', 'Apixaban replaces warfarin.' with the drug tagged an adjective);
+        the noun it hangs on or is fronted before ('Held warfarin.', 'Switch gliclazide to insulin.', 'Warfarin
+        (held).'), or one compounded under it ('WARFARIN HELD.'); or a THING that is the subject of a past form with no
+        object (a reduced passive: 'Warfarin switched to apixaban.', 'Warfarin withheld.', 'Warfarin held for
+        surgery.'). A person, a clinician or a pronoun as subject is the AGENT, never the theme ('The cardiologist
+        switched to apixaban.' names nothing it ended), and so is the subject of a present form ('Apixaban replaces
+        warfarin.': the replacer).
+    What a replacement preposition names ('to apixaban', 'by apixaban', 'with apixaban') is never ended, wherever it
+    hangs: 'Warfarin was switched from aspirin.' ends aspirin, not warfarin. 'change' is one only with 'to' or 'from'
+    ('The warfarin was changed to apixaban.', never 'Dressing changed daily.'); switching, swapping or changing
+    'between' alternates and ends nothing; 'switch' with the particle 'on' starts something. A verb the tagger reads as a
+    noun is read only where the parse uses it as a verb - fronted before the noun it supersedes ('Withhold metformin.',
+    'HOLD WARFARIN.'), with an object ('Withholding warfarin for 5 days.'), or by a participle's spelling ('Withheld
+    today.'); never a noun of its own ('no change in symptoms', 'Change in bowel habit'). One naming nothing but the
+    patient or a pronoun holds as a bare cessation ('She was switched to apixaban.', 'Withheld today.'); 'hold' only
+    when nothing at all fills its theme ('Held today.', 'Warfarin: held.'), never for a person held ('The patient was
+    held overnight.'). Only HOLDS."""
+    verb = (lem[t.i] if lem[t.i] in SUPERSESSION_VERBS else
+            SUPERSESSION_FORMS.get(txt[t.i]) or SUPERSESSION_GERUNDS.get(txt[t.i]) or
+            (txt[t.i] if txt[t.i] in SUPERSESSION_VERBS else None))
+    if verb is None:
+        return None
+    host = t.head if (t.head.i != t.i and t.head.pos_ in ('NOUN', 'PROPN')
+                      and t.dep_ in ('compound', 'amod', 'acl', 'parataxis', 'appos')) else None
+    fronted = host is not None and t.dep_ in ('compound', 'amod') and host.i in inside
+    objects = [c for c in t.children if c.i in inside and (c.dep_ in ('dobj', 'obj') or (
+        c.dep_ in ('xcomp', 'oprd', 'attr') and c.pos_ in CONTENT and not c.is_stop))]
+    if t.pos_ not in ('VERB', 'ADJ') and txt[t.i] not in SUPERSESSION_FORMS and not fronted and not objects:
+        return None
+    subjects = _subjects(t, inside)
+    compounds = [c for c in t.children if c.dep_ == 'compound' and c.pos_ in ('NOUN', 'PROPN') and c.i in inside]
+    passive = [s for s, is_passive in subjects if is_passive]
+    reduced = t.tag_ in ('VBD', 'VBN') or t.pos_ != 'VERB'
+    things = [s for s, is_passive in subjects if not is_passive and reduced and not _agent(s)]
+    theme = (passive + objects if passive or objects else things or compounds
+             or ([host] if host is not None and host.i in inside else []))
+    # the verb's prepositions: its own, those hung on what it supersedes ('Switch gliclazide to insulin.'), and those
+    # under its replacement ('to apixaban from warfarin'); none of them is part of what it supersedes
+    preps, skip = {}, ({x.i for x in t.subtree} if host is not None and host in theme else set())
+
+    def add(prep):
+        preps.setdefault(_fold(prep.text), []).extend(g for g in prep.children if g.dep_ in ('pobj', 'pcomp'))
+    for child in t.children:
+        if child.dep_ in ('prep', 'agent'):
+            add(child)
+    for token in theme:
+        for prep in token.children:
+            if prep.dep_ in ('prep', 'agent') and _fold(prep.text) in SUPERSESSION_PREPOSITIONS:
+                add(prep)
+                skip |= {x.i for x in prep.subtree}
+    replacements = [c for c in t.children if c.dep_ in ('advcl', 'xcomp') and c not in objects
+                    and any(a.dep_ == 'aux' and _fold(a.text) == 'to' for a in c.children)]
+    if replacements:
+        preps.setdefault('to', []).extend(replacements)
+    for new in list(preps.get('to', ())):
+        for prep in new.children:
+            if prep.dep_ == 'prep' and _fold(prep.text) == 'from':
+                add(prep)
+    if (verb == 'change' and not {'to', 'from'} & set(preps)) or (verb in ('switch', 'swap', 'change')
+                                                                   and 'between' in preps):
+        return None
+    if verb == 'switch' and any(c.dep_ == 'prt' and _fold(c.text) == 'on' for c in t.children):
+        return None
+    old = _phrase_lemmas([o for word in SUPERSEDED_PREPOSITIONS.get(verb, ()) for o in preps.get(word, ())], inside)
+    ended = old if keys(old - {'patient'}) else _phrase_lemmas(theme, inside, skip)
+    filled = subjects or objects or compounds or (host is not None and host.i in inside)
+    return ended, verb != 'hold' or not filled
+
+
+def _on_hold(prep, inside):
+    """(2026-10-02, RV4H-2) What an 'on hold' preposition ends: the noun it modifies ('Warfarin on hold.'), or the theme
+    of the verb it completes - a passive subject, an object, else a subject ('The warfarin is on hold for surgery.',
+    'Put warfarin on hold.', 'Warfarin was put on hold.'). Empty when it names nothing (a bare cessation). Only HOLDS."""
+    head = prep.head
+    if head.i == prep.i:
+        return set()
+    if head.pos_ in ('NOUN', 'PROPN'):
+        return _phrase_lemmas([head], inside, skip={x.i for x in prep.subtree})
+    subjects = _subjects(head, inside)
+    objects = [c for c in head.children if c.dep_ in ('dobj', 'obj') and c.i in inside]
+    theme = [s for s, is_passive in subjects if is_passive] + objects + (
+        [] if objects else [s for s, is_passive in subjects if not is_passive])
+    return _phrase_lemmas(theme, inside)
+
+
 def _floor_reading(words, root, lem=None, txt=None):
     """The rest of what the relation floors read of one parsed unit (`generation.v3_relation_causes`); each only HOLDS.
 
@@ -465,7 +607,11 @@ def _floor_reading(words, root, lem=None, txt=None):
       'ceased_keys': what a cessation ends ('Methadone was stopped.', 'She stopped the methadone.', 'The pain resolved
           yesterday.', 'The patient came off warfarin.'); 'bare_cessation': a cessation naming nothing but the patient or
           a pronoun ('The patient quit five years ago.', 'Stopped last month.', 'It was stopped.'), which leans on another
-          line for what it ends (DEPENDS);
+          line for what it ends (DEPENDS); a conjoined cessation with no subject of its own names nothing too ('The
+          scope was advanced to the terminal ileum and withdrawn slowly.', 'Haematology reviewed and stopped.'). And
+          (2026-10-02) a SUPERSESSION ends what it supersedes exactly as a cessation does ('Warfarin has been switched
+          to apixaban.', 'The warfarin is on hold for surgery.': `_superseded`, `_on_hold`); one naming nothing is bare
+          only where the whole statement ends nothing, so it never makes a bare cessation less bare;
       'topic_denial_keys': the modifiers of what a negated clause denies having when nothing more specific follows
           ('She has never had an allergic reaction.': allergic), read against a labelled answer's label;
       'surface_keys': every word of the value by its spelling and lemma but light verbs and 'patient' (which printed
@@ -479,8 +625,20 @@ def _floor_reading(words, root, lem=None, txt=None):
     # each word's lemma and folded spelling, read once (`lem`, `txt`: the caller's, by token index)
     lem = lem if lem is not None else {t.i: _lemma(t) for t in words}
     txt = txt if txt is not None else {t.i: _fold(t.text) for t in words}
+    inside = {t.i for t in words}
     cessation, ended = False, set()
+    # (2026-10-02, RV4H-2) what a SUPERSESSION ends, and whether one of them names nothing it ended
+    superseded, supersession_bare = set(), False
     for t in words:
+        found = _superseded(t, lem, txt, inside)
+        if found is not None:
+            superseded |= found[0]
+            supersession_bare = supersession_bare or (found[1] and not keys(found[0] - {'patient'}))
+        if t.dep_ == 'prep' and txt[t.i] == 'on' and any(g.dep_ == 'pobj' and _fold(g.text) == 'hold'
+                                                          for g in t.children):
+            held = _on_hold(t, inside)
+            superseded |= held
+            supersession_bare = supersession_bare or not keys(held - {'patient'})
         phrasal = CESSATION_PARTICLES.get(lem[t.i]) if t.pos_ in ('VERB', 'AUX') else None
         particle = [c for c in t.children if c.dep_ in ('prt', 'prep') and _fold(c.text) == phrasal] if phrasal else []
         if not ((t.pos_ in ('VERB', 'ADJ', 'AUX') and lem[t.i] in CESSATION_VERBS) or particle):
@@ -493,6 +651,7 @@ def _floor_reading(words, root, lem=None, txt=None):
             ended |= {_lemma(x) for grand in child.children if grand.dep_ == 'pobj' for x in grand.subtree
                       if x.pos_ in CONTENT}
     ended -= {'patient'}
+    superseded -= {'patient'}
     # A CLASS denial denies by a quantifier ('takes no anticoagulants', 'has had no pain', 'has never smoked', 'none',
     # 'nothing'), unless the quantified thing is set apart from what was already said ('no other medication', 'nothing
     # else', 'no further pain'); a plain 'not' denies its own predicate, which OPPOSED reads with its object, time and
@@ -551,7 +710,8 @@ def _floor_reading(words, root, lem=None, txt=None):
     intention = any(intended(h) for h in clauses)
     return {'quantified_denial': quantified, 'reattribution': reattribution,
             'denial_nouns': keys(denial_nouns), 'denial_heads': keys(denial_heads) | frozenset(denial_heads),
-            'ceased_keys': keys(ended), 'bare_cessation': cessation and not keys(ended),
+            'ceased_keys': keys(ended | superseded),
+            'bare_cessation': (cessation and not keys(ended)) or (supersession_bare and not keys(ended | superseded)),
             'topic_denial_keys': (keys({_lemma(m) for c in root.children if c.dep_ in ('dobj', 'attr')
                                         and not any(g.dep_ == 'prep' for g in c.children)
                                         for m in c.children if m.dep_ in ('amod', 'compound')})
@@ -1251,7 +1411,7 @@ def _unread(note_unread=True, quote=''):
             'habitual': True, 'past_time': True, 'finite_past': True, 'present_tense': False, 'dependent': False,
             'main_patient': False,
             'other_floor': person,
-            'claim_keys': frozenset(), 'negated_keys': frozenset(), 'predicates': (),
+            'claim_keys': frozenset(), 'named_keys': frozenset(), 'negated_keys': frozenset(), 'predicates': (),
             'quantified_denial': True, 'reattribution': True, 'denial_nouns': frozenset(), 'denial_heads': frozenset(),
             'bare_cessation': True, 'ceased_keys': frozenset(),
             'topic_denial_keys': frozenset(), 'surface_keys': frozenset(), 'intention': True, 'sole': None}
@@ -1426,8 +1586,15 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=froz
         past_time = any(txt[t.i] in PAST_TIME_WORDS or (t.pos_ == 'NUM' and _YEAR.fullmatch(t.text)) for t in words)
         root_subjects = [c for c in root.children if c.dep_ in ('nsubj', 'nsubjpass', 'expl', 'csubj', 'csubjpass')]
         complete_clause = any(c.dep_ in COMPLEMENT_DEPS for c in root.children)
+        # (2026-10-02) 'instead' on the clause's own head, wherever it stands ('The patient will instead be admitted.',
+        # '... will be admitted instead.'), points back exactly as the fronted connective does ('Instead, the patient
+        # will be admitted.'): the statement replaces something said before it. 'instead of X' names what it replaces
+        # and is not one. Read only for 'dependent' (the relation floors), never for 'standalone' (the default path).
+        replaces_unnamed = any(c.dep_ == 'advmod' and txt.get(c.i) == 'instead'
+                               and not any(g.dep_ in ('prep', 'pobj', 'pcomp') for g in c.children)
+                               for c in root.children)
         dependent = not colon.get(uid) and not age and bool(
-            connective or points_back
+            connective or points_back or replaces_unnamed
             or not any(t.pos_ in ('NOUN', 'PROPN', 'VERB', 'ADJ', 'NUM') for t in words)
             or (root.pos_ in ('VERB', 'AUX') and not complete_clause
                 and (not root_subjects or (main is not None and _personal(main)))))
@@ -1435,6 +1602,15 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=froz
                  {_lemma(t) for t in words if t.pos_ in CONTENT or (t.pos_ == 'VERB' and _lemma(t) not in LIGHT_VERBS)})
         floors = {'habitual': habitual, 'past_time': past_time, 'dependent': dependent,
                   'claim_keys': keys(claim - {'patient'}),
+                  # (2026-10-02, refutation RSL-4) every thing the statement NAMES - each noun, each adjective that
+                  # modifies nothing and each 'verb' coordinated with a noun (the tagger's readings of a drug name: 'takes
+                  # apixaban 5 mg', '..., ramipril 10 mg daily and warfarin 5 mg daily') - read ONLY by the cessation arm
+                  # of OPPOSED (`generation.v3_relation_causes`), where it only HOLDS: 'claim_keys' misses a drug tagged
+                  # an adverb, a compound or a third list item ('takes metformin, ramipril and warfarin')
+                  'named_keys': keys({_lemma(t) for t in words if t.pos_ in ('NOUN', 'PROPN')
+                                      or (t.pos_ == 'ADJ' and t.dep_ != 'amod')
+                                      or (t.pos_ == 'VERB' and t.dep_ in ('conj', 'appos')
+                                          and t.head.pos_ in ('NOUN', 'PROPN'))} - {'patient'}),
                   'predicates': () if colon.get(uid) else _predicates(root),
                   'negated_keys': frozenset() if colon.get(uid) else _denied(words, root),
                   'finite_past': not colon.get(uid) and _tense(root) == 'past',
