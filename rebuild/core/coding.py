@@ -68,9 +68,12 @@ DOTLESS=re.compile(r'\b'+CATEGORY_SHAPE+r'[0-9A-Z]{1,4}\b')
 #: character is a digit (CATEGORY_SHAPE), so words joined by a dot (SOB.Has, Vit.D, CBC.BMP) are not counted (refutation C2
 #: of 4cfa4301), and a mistyped QA0.* code is (refutation R3C-3 of 75d11c09: 'a digit second' dropped it silently).
 DOTTED=re.compile(CATEGORY_SHAPE+r'\.[0-9A-Z]{1,4}')
-#: Separators of a list of codes after one label: ', ' '; ' ' / ' '&' '+' ' and ' ' or ' and ', and ' (each needs a mark or a
-#: word, so a code followed by an unrelated number is not read into the list; '&' and '+': refutation R3C-5).
+#: Separators of a list of CPT codes after one label: ', ' '; ' ' / ' '&' '+' ' and ' ' or ' and ', and ' (each needs a mark or
+#: a word, so a code followed by an unrelated number is not read into the list; '&' and '+': refutation R3C-5).
 LIST_SEPARATOR=r'(?:\s*[,;/&+]\s*(?:(?:AND|OR)\s+)?|\s+(?:AND|OR)\s+)'
+#: ...and of a list of diagnosis codes: the same without '+', which in a pathology line means stain-positive ('P53+'), never
+#: 'and another code' (refutation R4C-1 of b3d8111d).
+ICD_SEPARATOR=r'(?:\s*[,;/&]\s*(?:(?:AND|OR)\s+)?|\s+(?:AND|OR)\s+)'
 CPT_SHAPE=r'(?:[0-9]{5}|[0-9]{4}[FTU])\b'
 #: The CPT codes the notes NAME as such: after 'CPT', 'CPT®', 'CPT-4', 'CPT code(s)', with ':' '#' '-' or spaces, and every
 #: code of a list after one label ('CPT 99213, 99214 and 36415': refutation C4 of 4cfa4301 counted one, and nothing for
@@ -96,8 +99,13 @@ CPT_NAMED=re.compile(r'\bCPT(?:\u00ae|\(R\))?(?:[\s-]*4\b)?(?:\s*CODES?)?[\s:#-]
 #: A code inside a labelled list has TOKEN's shape (the label, not the shape, says it is a code; the lookup decides).
 CODE_SHAPE=r'[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?(?![0-9A-Z])'
 ICD_LABEL=re.compile(r'\b(?:ICD(?:[\s-]*10(?:[\s-]*CM)?)?|(?:DX|DIAGNOSIS)\s*CODES?)(?:\s*CODES?)?[\s:#-]*')
+#: ⚠️ ...AND ONLY WHEN THE WHOLE LIST IS CODES, TO ITS CLAUSE END (refutation R4C-1 of b3d8111d): an item that 'ended' at any
+#: separator let a stain or gene pair in ('C18.7 & P53/MLH1 loss', 'C18.7, P53 and MLH1 retained', 'C18.7, P53+'). A
+#: labelled list's later items are read only when every item after the label is a code written in capitals and the list
+#: then ends: a full stop, a closing bracket or the end of the line. Otherwise only the code right after the label is.
 FIRST_CODE=re.compile(CODE_SHAPE)
-LATER_CODE=re.compile(LIST_SEPARATOR+'('+CODE_SHAPE+r')(?=\s*(?:[,;/&+.)\]]|(?:AND|OR)\b|$))')
+LATER_CODE=re.compile(ICD_SEPARATOR+'('+CODE_SHAPE+')')
+CLAUSE_END=re.compile(r'\s*(?:[.)\]]|$)')
 RUN=re.compile(r'[\w.]+')
 SHORTEST_CODE,LONGEST_CODE=3,8      # 'R00' .. 'A00.0000'; every TOKEN match is 3 to 8 characters
 ASCII_UPPER='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -118,17 +126,32 @@ def same_length_upper(line):
 
 def labelled_codes(line):
     """The codes a code label names on one line, upper-cased: every label (ICD_LABEL), the code right after it
-    (FIRST_CODE), then each later item of its list that is written in capitals and ends its item (LATER_CODE). Each label is
-    found on its own, so a list never swallows the next label ('ICD' has a code's shape); a list stops at its first item
-    that is not written as a code, so the lists overlap by at most one token and the scan stays linear in the line."""
+    (FIRST_CODE), and the later items of its list (LATER_CODE) only when all of them are written in capitals and the list
+    then reaches its clause end (CLAUSE_END). Each label is found on its own, so a list never swallows the next label ('ICD'
+    has a code's shape); a list stops at its first item that is not a code, so the lists overlap by at most one token and
+    the scan stays linear in the line."""
     upper=same_length_upper(line);found=set()
     for label in ICD_LABEL.finditer(upper):
         first=FIRST_CODE.match(upper,label.end())
         if not first:continue
-        found.add(first.group());position=first.end()
-        while (later:=LATER_CODE.match(upper,position)) and line[later.start(1):later.end(1)]==later.group(1):
-            found.add(later.group(1));position=later.end(1)
+        found.add(first.group());position=first.end();later=[]
+        while item:=LATER_CODE.match(upper,position):
+            later.append(item);position=item.end(1)
+        if (later and CLAUSE_END.match(upper,position)
+                and all(line[item.start(1):item.end(1)]==item.group(1) for item in later)):
+            found.update(item.group(1) for item in later)
     return found
+
+#: ⚠️ A DOTTED CODE WRITTEN AGAINST A LETTER OR DIGIT ('R07.9chest', 'painR07.9', '1R07.9') makes no TOKEN: TOKEN needs a word
+#: boundary on both sides, so the lookup never saw it and nothing was said (refutation R4C-3 of b3d8111d). Every dotted shape
+#: at every position is read, with each length its tail may have, and a code the release holds among them is counted as
+#: written touching unless the longest such code at that position is itself written as a whole token ('M25.532' holds the
+#: code M25.53 as a prefix and is not touching anything). Linear: one zero-width match per position, at most four candidates.
+EMBEDDED=re.compile(r'(?=([A-Z][0-9A-Z]{2}\.[0-9A-Z]{1,4}))')
+
+def embedded_candidates(upper):
+    """For every dotted code shape in the upper-cased notes, at every position, its candidate codes, shortest first."""
+    return [[shape[:index] for index in range(5,len(shape)+1)] for shape in (match.group(1) for match in EMBEDDED.finditer(upper))]
 
 def named_cpt(upper):
     """The distinct CPT codes the upper-cased notes name as CPT codes (CPT_NAMED), every code of a labelled list."""
@@ -199,14 +222,30 @@ def plan(encounter):
     # code-shaped token written without a dot, an unlabelled three-character code, and (while CPT is locked) a CPT code the
     # notes name as one.
     known={code.code for code in codes}
-    unmatched=len({token for token in tokens if DOTTED.fullmatch(token)}-known)
+    dotted={token for token in tokens if DOTTED.fullmatch(token)}-known
     shaped=set(DOTLESS.findall(upper))
-    categories=release_categories(releases,{token[:3] for token in shaped})
+    # A dotted token, like a dotless one, is counted only when its first three characters are a category of the release in
+    # effect: compact lab values ('Cr1.2', 'pH7.38', 'Mg2.0') have the letter-letter-digit shape QA0.* needed (refutation
+    # R4C-2 of b3d8111d).
+    categories=release_categories(releases,{token[:3] for token in shaped|dotted})
+    unmatched=sum(token[:3] in categories for token in dotted)
     dotless=sum(token[:3] in categories for token in shaped)
     cpt_withheld=len(named_cpt(upper)) if locked else 0
     # ⚠️ A code the release holds that the evidence reading refuses ('1.R07.9', 'R07.9.Plan': it touches the characters
-    # around it) reached no counter: found, never suggested, never said (refutation R3C-2 of 75d11c09). Counted and said.
-    touching=len(known-set(evidence))
+    # around it) reached no counter: found, never suggested, never said (refutation R3C-2 of 75d11c09). Counted and said,
+    # with a dotted code written against a letter or digit (R4C-3). A THREE-CHARACTER entry touching its neighbour ('1.I10',
+    # '1.P53') is not presumed to be a code (C10): it is counted as unlabelled, never as a code (refutation R4C-4).
+    refused=known-set(evidence)
+    unlabelled|={code for code in refused if len(code)==3}
+    positions=embedded_candidates(upper)
+    wanted={candidate for candidates in positions for candidate in candidates}
+    held=set(Code.objects.filter(code__in=wanted,release__in=[r for r in releases if r.system=='ICD-10-CM']).values_list(
+        'code',flat=True)) if wanted else set()
+    embedded=set()
+    for candidates in positions:
+        longest=next((candidate for candidate in reversed(candidates) if candidate in held),None)
+        if longest and longest not in tokens:embedded.add(longest)
+    touching=len({code for code in refused if len(code)>3}|embedded)
     return Plan(encounter.notes,releases,[(code,evidence[code.code][1]) for code in documented],unmatched,cpt_withheld,dotless,
                 len(unlabelled),touching)
 
