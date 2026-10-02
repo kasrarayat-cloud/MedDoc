@@ -13,6 +13,7 @@ Each test asserts the gate holds for a SCRIPT_NAME-shifted request, with the uns
 (the same gate, the same caller, the same resolved path).
 """
 import uuid
+from pathlib import Path
 
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
@@ -85,30 +86,113 @@ class PreviewGateHoldsWhateverTheScriptName(TestCase):
         self.assertTrue(response['Location'].startswith('/preview/sign-in/?flow='))
 
 
-class NoGateReadsRequestPath(TestCase):
-    """A static census, so the next gate written against request.path is caught: the only remaining reads of
-    request.path in application code are the places that build a location to RETURN to, never a decision."""
+#: Attributes only an HTTP request carries: a parameter (or a name assigned from one) that is used with any of them, or
+#: is named `request`, is treated as a request.
+REQUEST_ATTRIBUTES = {'META', 'method', 'user', 'GET', 'POST', 'COOKIES', 'FILES', 'session', 'headers', 'path_info',
+                      'get_host', 'is_secure', 'resolver_match', 'urlconf', 'body', 'content_type'}
+#: What carries SCRIPT_NAME: the attribute and the calls built on it.
+FULL_PATH = {'path'}
+FULL_PATH_CALLS = {'get_full_path', 'build_absolute_uri'}
 
-    ALLOWED = {('core/middleware.py', 'return redirect_to_login(request.path if request.method'),
-               ('core/middleware.py', 'request.path is SCRIPT_NAME + PATH_INFO'),
-               ('core/middleware.py', 'asked for, request.path, as before'),
-               ('core/preview_logging.py', 'capability-bearing request.path')}
 
-    def test_request_path_is_read_only_to_build_a_return_location(self):
-        import re
-        from pathlib import Path
+def full_path_reads(source):
+    """[(function qualname, line, what)] for every read of a request's full path (request.path, get_full_path(),
+    build_absolute_uri()) in `source`, whatever the request variable is called: a function's parameters and the names
+    assigned from them are requests when the function uses them as one (REQUEST_ATTRIBUTES) or names them `request`."""
+    import ast
+    found = []
+
+    def visit(node, scope):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                name = getattr(child, 'name', '<lambda>')
+                examine(child, scope + [name])
+                visit(child, scope + [name])
+            elif isinstance(child, ast.ClassDef):
+                visit(child, scope + [child.name])
+            else:
+                visit(child, scope)
+
+    def examine(function, scope):
+        # (never `self`: a handler object is not a Django request, e.g. ops/preview_browser_tls.py's
+        # BaseHTTPRequestHandler, whose .path is the raw request target)
+        names = {arg.arg for arg in function.args.args + function.args.kwonlyargs + function.args.posonlyargs} - {'self', 'cls'}
+        body = list(ast.walk(function))
+        requests = {name for name in names if name == 'request'}
+        for node in body:
+            if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                    and node.attr in REQUEST_ATTRIBUTES and node.value.id in names):
+                requests.add(node.value.id)
+        changed = True
+        while changed:   # aliases, both ways: `request = rq` makes rq a request, and `rq = request` the same
+            changed = False
+            for node in body:
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name):
+                    targets = {target.id for target in node.targets if isinstance(target, ast.Name)}
+                    group = targets | {node.value.id}
+                    if (group & requests or 'request' in targets) and not group <= requests:
+                        requests |= group
+                        changed = True
+        for node in body:
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in requests:
+                if node.attr in FULL_PATH:
+                    found.append(('.'.join(scope), node.lineno, node.value.id + '.' + node.attr))
+                elif node.attr in FULL_PATH_CALLS:
+                    found.append(('.'.join(scope), node.lineno, node.value.id + '.' + node.attr + '()'))
+    visit(ast.parse(source), [])
+    return found
+
+
+class NoGateReadsTheFullPath(TestCase):
+    """A census of every application module in rebuild/ (round-3 R3-5: the line census caught only the literal text
+    `request.path` in three folders; get_full_path() and a request variable called `rq` reopened the SCRIPT_NAME bypass
+    and passed it). Parsed, not grepped: every read of a request's full path, under any name, is listed, and only the
+    reads that build a location to RETURN to are allowed. The behaviour tests above are the gates' own proof; this
+    catches the next gate written against the full path.
+
+    Templates read request.path only for a sign-in link's `next` (register.html, clinic_invite.html)."""
+
+    #: Each allowed read and HOW MANY times it occurs: a second read in an allowed function is a new read (the
+    #: preview gate's own sign-in check spelled get_full_path() passed a set-based census beside the allowed one).
+    ALLOWED = {
+        # where the sign-in redirect returns the browser to
+        ('core/middleware.py', 'AccessMiddleware.__call__', 'request.path'): 1,
+        # the page the private-preview sign-in resumes after the gate (a destination, checked by safe_destination)
+        ('core/preview_access.py', 'PreviewAccessMiddleware.__call__', 'request.get_full_path()'): 1,
+    }
+
+    def census(self):
+        from collections import Counter
         root = Path(__file__).resolve().parents[2]
-        found = set()
-        for folder in ('core', 'quillmd', 'documents'):
-            for path in sorted((root / folder).rglob('*.py')):
-                if 'tests' in path.relative_to(root).parts or path.name.startswith('test_'):
-                    continue
-                for line in path.read_text().splitlines():
-                    if re.search(r'request\.path\b(?!_info)', line):
-                        relative = str(path.relative_to(root))
-                        match = next((allowed for name, allowed in self.ALLOWED if name == relative and allowed in line),
-                                     None)
-                        found.add((relative, match or line.strip()))
-        unexpected = sorted(item for item in found if item not in self.ALLOWED)
-        self.assertEqual(unexpected, [])
-        self.assertEqual(len(found), len(self.ALLOWED), 'a recorded exception no longer exists: update ALLOWED')
+        skip = {'.venv', 'node_modules', '.runtime', 'staticfiles', 'tests', '__pycache__'}
+        found = Counter()
+        scanned = 0
+        for path in sorted(root.rglob('*.py')):
+            relative = path.relative_to(root)
+            if skip & set(relative.parts) or path.name.startswith('test_'):
+                continue
+            scanned += 1
+            for scope, _, what in full_path_reads(path.read_text()):
+                found[(str(relative), scope, what)] += 1
+        return found, scanned
+
+    def test_only_return_locations_read_the_full_path(self):
+        found, scanned = self.census()
+        self.assertGreater(scanned, 100, 'the census scanned almost nothing')
+        self.assertEqual(dict(found), self.ALLOWED)
+
+    def test_positive_control_the_census_sees_the_shapes_round_3_used(self):
+        """m9 and m10 of round 3, and two more spellings, each found in a synthetic middleware."""
+        shapes = {
+            'm9': "class M:\n    def __call__(self, request):\n        path = request.get_full_path().split('?')[0]\n"
+                  "        return path in SAFE and request.user\n",
+            'm10': "class M:\n    def __call__(self, rq):\n        request = rq\n        path = rq.path\n"
+                   "        return self.get_response(request)\n",
+            'another name': "def gate(r):\n    if r.method == 'GET' and r.path.startswith('/static/'):\n        return 1\n",
+            'absolute uri': "def gate(request):\n    return request.build_absolute_uri()\n",
+        }
+        for label, source in shapes.items():
+            with self.subTest(shape=label):
+                self.assertTrue(full_path_reads(source), f'the census missed {label}')
+        self.assertEqual(full_path_reads("def gate(request):\n    return request.path_info\n"), [])
+        self.assertEqual(full_path_reads("def run(declaration):\n    return declaration.path\n"), [])
