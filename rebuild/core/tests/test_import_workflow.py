@@ -1,0 +1,174 @@
+"""Auto imports through authenticated upload, review, worker, finalization and genuine download.
+
+Synthetic blank documents only; fixture provider, retained first mapping and immutable original.
+"""
+import copy
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+from unittest.mock import patch
+from django.core.exceptions import ValidationError
+from django.test import TestCase, override_settings
+from django.db import DatabaseError, transaction
+from docx import Document
+from core import import_binding
+from core.jobs import enqueue, run_one
+from core.models import Encounter, TemplateVersion
+from core.security import private_path
+from .test_word_v3_workflow import V3Fixture, part_text
+from .test_workflow import TEST_SETTINGS
+
+
+def raw(document):
+    stream=io.BytesIO();document.save(stream);return stream.getvalue()
+
+
+def ordinary_form():
+    doc=Document();table=doc.add_table(rows=2,cols=2)
+    table.cell(0,0).text='Reason for visit';table.cell(1,0).text='Plan'
+    doc.add_paragraph('Initial assessment: ____________')
+    doc.add_paragraph('Consent form signed: ____________')
+    doc.add_paragraph('Nurse initials: ____________')
+    doc.add_paragraph('Witness signature: ____________')
+    return raw(doc)
+
+
+@override_settings(**dict(TEST_SETTINGS,QUILLMD_WORD_ENGINE='auto',QUILLMD_ROLE_SUGGESTIONS=False))
+class AutoImportWorkflow(V3Fixture,TestCase):
+    def setUp(self):
+        super().setUp()
+        self.template,self.version=self.uploaded(data=ordinary_form())
+
+    def correct_roles(self):
+        by=self.by_label(self.version)
+        response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
+            'kind_'+by['Initial assessment']['key']:'text','kind_'+by['Consent form signed']['key']:'text',
+            'ordinary_'+by['Initial assessment']['key']:'on','ordinary_'+by['Consent form signed']['key']:'on'})
+        self.assertEqual(response.status_code,302,response.content.decode())
+        self.version=self.latest(self.template)
+
+    def test_original_binding_is_immutable_and_copied_to_explicit_review_version(self):
+        first=self.version;manifest=copy.deepcopy(first.import_manifest)
+        self.assertEqual(first.contract,'v3')
+        self.assertEqual(manifest['engine'],'v3')
+        self.assertEqual(manifest['source_sha256'],self.template.sha256)
+        import_binding.verify(first)
+        self.correct_roles()
+        self.assertEqual(self.version.import_manifest['initial_mapping_sha256'],manifest['initial_mapping_sha256'])
+        self.assertEqual(self.version.import_manifest['engine_version'],manifest['engine_version'])
+        self.assertNotEqual(self.version.import_manifest['mapping_sha256'],manifest['mapping_sha256'])
+        self.assertEqual(set(self.version.corrections['ordinary_information_classified']),
+                         {self.by_label(self.version)[label]['key'] for label in ('Initial assessment','Consent form signed')})
+        first.refresh_from_db();self.assertEqual(first.import_manifest,manifest)
+        import_binding.verify(self.version)
+        with self.assertRaises(DatabaseError),transaction.atomic():
+            TemplateVersion.objects.filter(pk=first.pk).update(import_manifest={})
+        # A rollback writer omitting the column cannot create an unbound copy
+        # of an imported mapping, even though historical templates keep{}default.
+        with self.assertRaises(DatabaseError),transaction.atomic():
+            TemplateVersion.objects.create(template=self.template,number=3,fields=self.version.fields,
+                                           contract='v3',created_by=self.user)
+
+    def test_ordinary_kinds_require_explicit_review_but_signer_roles_are_not_offered(self):
+        by=self.by_label(self.version);eligible=import_binding.ordinary_role_fields(self.version)
+        self.assertEqual(eligible,{by['Initial assessment']['key'],by['Consent form signed']['key']})
+        page=self.client.get(f'/templates/{self.template.pk}/')
+        rows={r['label']:r for r in page.context['v3_rows']}
+        self.assertTrue(rows['Initial assessment']['kind_editable'])
+        self.assertEqual(rows['Initial assessment']['chosen_kind'],'initials')
+        self.assertFalse(rows['Nurse initials']['kind_editable'])
+        self.assertFalse(rows['Witness signature']['kind_editable'])
+        # Saving an unrelated label must not silently turn the initial metadata into text.
+        response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
+            'label_'+by['Plan']['key']:'Treatment plan'})
+        self.assertEqual(response.status_code,302)
+        self.assertEqual(self.by_label(self.latest(self.template))['Initial assessment']['kind'],'initials')
+
+    def test_forged_signer_kind_change_is_refused_without_a_new_mapping(self):
+        by=self.by_label(self.version)
+        for label in ('Nurse initials','Witness signature'):
+            response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
+                                                                      'kind_'+by[label]['key']:'text'})
+            self.assertEqual(response.status_code,400)
+        self.assertEqual(self.template.versions.count(),1)
+
+    def test_ambiguous_kind_change_requires_explicit_ordinary_information_classification(self):
+        by=self.by_label(self.version)
+        response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
+            'kind_'+by['Initial assessment']['key']:'text'})
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(self.template.versions.count(),1)
+
+    def test_typed_fixture_runs_worker_review_finalization_and_download_with_bound_engine(self):
+        self.correct_roles();self.confirm(self.template,self.version)
+        notes='Reason for visit: Knee pain\n\nPlan: Physiotherapy\n\nInitial assessment: Stable\n\nConsent form signed: Yes'
+        self.assertEqual(self.new_encounter(self.version,notes).status_code,302)
+        encounter=Encounter.objects.get(template_version=self.version)
+        job=enqueue(encounter,self.user);self.assertTrue(run_one());job.refresh_from_db()
+        self.assertEqual(job.state,'succeeded',job.error)
+        encounter.refresh_from_db();by=self.by_label(self.version)
+        for label in ('Nurse initials','Witness signature'):
+            self.assertFalse(encounter.answers.get(by[label]['key'],{}).get('text'))
+        # Keep first provider/fixture adoption distinct from explicit clinician corrections.
+        first_output=copy.deepcopy(encounter.answers)
+        payload={'revision':encounter.revision}
+        desired={'Reason for visit':'Knee pain','Plan':'Physiotherapy','Initial assessment':'Stable','Consent form signed':'Yes'}
+        for label,value in desired.items():
+            key=by[label]['key'];payload['answer_'+key]=value;payload['reviewed_'+key]='on'
+        response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
+        self.assertEqual(response.status_code,302,response.content.decode())
+        encounter.refresh_from_db()
+        with override_settings(QUILLMD_WORD_ENGINE='legacy'):
+            response=self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'},follow=True)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status,'finalized',[str(m) for m in response.context['messages']])
+        exported=private_path(encounter.export_path).read_bytes();body=part_text(exported)
+        for value in desired.values():self.assertIn(value,body)
+        self.assertIn('Nurse initials: ____________',body);self.assertIn('Witness signature: ____________',body)
+        self.assertEqual(hashlib.sha256(private_path(self.template.original_path).read_bytes()).hexdigest(),self.template.sha256)
+        self.assertEqual(hashlib.sha256(exported).hexdigest(),encounter.export_sha256)
+        download=self.client.get(f'/encounters/{encounter.pk}/export/')
+        self.assertEqual(download.status_code,200)
+        self.assertEqual(b''.join(download.streaming_content),exported)
+        self.assertTrue(first_output,'the worker actually returned an independently retained answer result')
+        # Explicit opt-in from the protected VPS runner. This preserves the
+        # FIRST worker result separately from the clinician-corrected document.
+        state=Path(os.environ.get('QUILLMD_STATE_DIR','/unavailable'))
+        allowed=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word')
+        if state.is_relative_to(allowed):
+            capture=state.parent/'captures'/'typed-import';capture.mkdir(mode=0o700,parents=True)
+            original=private_path(self.template.original_path).read_bytes()
+            (capture/'original.docx').write_bytes(original);(capture/'export.docx').write_bytes(exported)
+            record={'scope':'synthetic fixture worker HTTP workflow, not live model or native Word acceptance',
+                    'source_sha256':self.template.sha256,'export_sha256':encounter.export_sha256,
+                    'notes':notes,'first_answers':first_output,'reviewed_answers':encounter.answers,
+                    'expected':desired,'mapping':self.version.fields,'import_manifest':self.version.import_manifest,
+                    'review_actions':payload,'job_id':str(job.pk),'job_state':job.state}
+            (capture/'workflow.json').write_text(json.dumps(record,indent=2,default=str))
+
+    def test_binding_mismatch_refuses_even_a_cached_role_read(self):
+        from core import destination_roles
+        destination_roles.report(self.version)
+        bad=copy.deepcopy(self.version.import_manifest);bad['engine']='legacy';self.version.import_manifest=bad
+        with self.assertRaises(ValidationError):destination_roles.report(self.version)
+
+    def test_changed_processor_cannot_generate_or_finalize_under_same_engine_name(self):
+        from core import destination_roles
+        original=copy.deepcopy(self.version.import_manifest)
+        self.version.import_manifest['engine_code_sha256']='0'*64
+        with self.assertRaises(ValidationError):destination_roles.generation_fields(self.version)
+        self.version.import_manifest=original
+        # Same selected engine/version and mapping, different installed implementation.
+        with patch('documents.service.engine_fingerprint',return_value='1'*64):
+            with self.assertRaises(ValidationError):import_binding.verify(self.version)
+
+    def test_incomplete_legacy_route_refuses_before_provider_or_export(self):
+        manifest=copy.deepcopy(self.version.import_manifest);manifest['coverage']['block_generation']=True
+        self.version.import_manifest=manifest
+        with self.assertRaisesMessage(ValidationError,'No generation or charge'):
+            import_binding.verify(self.version)
+        from core import destination_roles
+        with self.assertRaisesMessage(ValidationError,'No generation or charge'):
+            destination_roles.generation_fields(self.version)

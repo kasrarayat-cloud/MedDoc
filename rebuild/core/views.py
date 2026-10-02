@@ -437,7 +437,7 @@ def template_upload(request):
             elif len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
                 t=Template.objects.create(department=department,name=form.cleaned_data['name'],format=info['format'],original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=info['sha256'],warnings=info.get('warnings',[]),created_by=request.user)
-                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),contract=contract,created_by=request.user)
+                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),contract=contract,import_manifest=info.get('import_manifest',{}),created_by=request.user)
                 audit(request.user,'template.upload',t.pk,department=department,sha256=t.sha256,field_count=len(info['fields']),**({'contract':contract} if contract else {}))
             if contract:messages.info(request,f'QuillMD found {len(info["fields"])} answer areas automatically. Check every one against your form, correct the mapping, and confirm it before creating a document.')
             return redirect('template_detail',pk=t.pk)
@@ -538,7 +538,8 @@ def template_detail(request,pk):
                       if signature_label(f['label']) and not signature_label(labels[f['key']])]
                 if lost:raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+', '.join(sorted(lost))+'. Rename the other questions and leave this one as the form words it.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
-                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,created_by=request.user)
+                from .import_binding import for_mapping
+                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,import_manifest=for_mapping(latest.import_manifest,fields),created_by=request.user)
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
@@ -561,6 +562,9 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
     """The contract v3 mapping review: every field in document order, the places a field could still be added to,
     the corrections that made this version, and the clinician's confirmation."""
     from documents import DocumentError
+    from .import_binding import ordinary_role_fields
+    try:ordinary_roles=ordinary_role_fields(version)
+    except (ValidationError,DocumentError,OSError):ordinary_roles=set()
     query=' '.join(request.GET.get('find','').split())[:120]
     outline_error=''
     if outline is None:
@@ -578,7 +582,11 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
     rows=[{'number':n,'key':f['key'],'field':f,'label':posted.get('label_'+f['key'],f['label']),
            'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
-           'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
+           'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS or f['key'] in ordinary_roles,
+           'ordinary_role_review':f['key'] in ordinary_roles,
+           'ordinary_role_ack':posted.get('ordinary_'+f['key'])=='on',
+           'kind_choices':([(f.get('kind'),v3_mapping.KIND_NAMES[f['kind']])] if f['key'] in ordinary_roles else [])+[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
+           'options':f.get('options') or [],
            'location':field_location.describe(f,box_keys=box_keys),'context':f.get('context') or '',
            'origin':{'manual':'Manual','model_assisted':'Model proposal'}.get(f.get('origin'),'Automatic'),'max_chars':f.get('max_chars'),
            'remove':posted.get('remove_'+f['key'])=='on',
@@ -607,16 +615,18 @@ def template_detail_v3(request,t,version):
         latest=t.versions.order_by('-number').first()
         return v3_page(request,t,latest,status=400,error=error_message(exc),posted=request.POST)
 
-def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=()):
+def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=(),ordinary_information=()):
     """A new immutable mapping version, with the corrections that made it recorded beside the fields. Added fields
     keep origin 'manual'; the new version needs its own confirmation."""
     kind_changed=kind_changed or {}
     corrections={'base_version':latest.number,'removed':list(removed),'added':list(added),'kind_changed':kind_changed,'renamed':list(renamed)}
+    if ordinary_information:corrections['ordinary_information_classified']=list(ordinary_information)
+    from .import_binding import for_mapping
     version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,
-                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,created_by=request.user,
+                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,import_manifest=for_mapping(latest.import_manifest,fields),created_by=request.user,
                                            assistance={**latest.assistance,'assisted':True} if latest.assistance else {})
     audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number,contract=version.contract,
-          removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed])
+          removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed],ordinary_information_classified=list(ordinary_information))
     return version
 
 def v3_save_corrections(request,t):
@@ -628,6 +638,8 @@ def v3_save_corrections(request,t):
         latest=t.versions.order_by('-number').first()
         if request.POST.get('mapping_version')!=str(latest.pk):
             return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+        from .import_binding import ordinary_role_fields
+        ordinary_roles=ordinary_role_fields(latest)
         fields=[];removed=[];renamed=[];kind_changed={}
         for number,f in enumerate(latest.fields,1):
             key=f['key']
@@ -638,8 +650,10 @@ def v3_save_corrections(request,t):
             if not label or len(supplied_label)>MAX_MAPPING_LABEL or '\n' in label:raise ValidationError(f'Give question {number} a one-line label of 1 to {MAX_MAPPING_LABEL} characters.')
             kind=request.POST.get('kind_'+key,f.get('kind'))
             if kind!=f.get('kind'):
-                if f.get('kind') not in v3_mapping.TEXT_KINDS or kind not in v3_mapping.TEXT_KINDS:
+                if (f.get('kind') not in v3_mapping.TEXT_KINDS and key not in ordinary_roles) or kind not in v3_mapping.TEXT_KINDS:
                     raise ValidationError(f'"{f["label"]}" keeps its kind ({v3_mapping.KIND_NAMES.get(f.get("kind"),f.get("kind"))}): only text, long text, date and time can be changed into one another. Nothing was saved.')
+                if key in ordinary_roles and request.POST.get('ordinary_'+key)!='on':
+                    raise ValidationError(f'Classify "{f["label"]}" before changing its kind: confirm that it records ordinary clinical information, not a signature, witness statement or attestation. Nothing was saved.')
                 kind_changed[key]=[f.get('kind'),kind]
             if label!=f['label']:
                 # ⚠️ The same protection as every other mapping: the identity check reads this label.
@@ -650,7 +664,8 @@ def v3_save_corrections(request,t):
         if not (removed or renamed or kind_changed):
             messages.info(request,'Nothing changed, so no new mapping version was saved.')
             return redirect('template_detail',pk=t.pk)
-        version=v3_new_version(request,t,latest,fields,removed=removed,kind_changed=kind_changed,renamed=renamed)
+        version=v3_new_version(request,t,latest,fields,removed=removed,kind_changed=kind_changed,renamed=renamed,
+                               ordinary_information=[key for key in kind_changed if key in ordinary_roles])
     messages.success(request,f'Mapping version {version.number} saved with your corrections. Confirm it before creating documents; existing documents keep their original version.')
     return redirect('template_detail',pk=t.pk)
 
@@ -1637,6 +1652,8 @@ def finalize(request,pk):
                                         [row['label'] for row in e.template_version.review_requirements])
             if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
             generation_batch.check_answers(e.template_version,e.answers)
+            from .import_binding import verify as verify_import
+            verify_import(e.template_version)
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'

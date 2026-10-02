@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -24,14 +25,44 @@ class DocumentError(ValueError):
 
 
 def word_engine():
-    """The Word contract used for NEW inspections: 'v3' or 'legacy'. Stored mappings always fill under the
+    """The Word contract used for NEW inspections: 'v3', 'legacy' or deterministic 'auto'. Stored mappings always fill under the
     contract they were made with."""
     try:
         from django.conf import settings
         value = getattr(settings, "QUILLMD_WORD_ENGINE", "legacy")
     except Exception:
         value = "legacy"
-    return value if value in ("v3", "legacy") else "legacy"
+    return value if value in ("v3", "legacy", "auto") else "legacy"
+
+
+def engine_fingerprint(engine, *, source_sha256=''):
+    """Identity of the code/dependencies that can read or write the bound DOCX.
+
+    A later release cannot silently execute a different writer under a stored
+    engine name. It must retain this processor or use an explicit new revision.
+    """
+    if engine not in ('legacy', 'v3'):
+        raise DocumentError('Unknown stored Word engine.', 'stale_mapping')
+    modules = ('service.py', 'engine.py', 'worker.py', 'sandbox.py', 'word_v3.py',
+               'source_policy.py', 'mapping_limits.py', 'tab_form.py', 'layout.py',
+               'layout_source.py', 'layout_transport.py', 'layout_server.py', 'layout_pdf_worker.py',
+               'import_selection.py', 'sdk_service.py', 'sdk_sandbox.py')
+    processor = hashlib.sha256(engine.encode())
+    try:
+        for name in modules:
+            processor.update(name.encode()); processor.update(Path(__file__).with_name(name).read_bytes())
+        for package in ('python-docx', 'lxml', 'pypdf', 'reportlab'):
+            processor.update(package.encode()); processor.update(importlib.metadata.version(package).encode())
+        from .sdk_service import WM_IOV_SHA256, configuration
+        if source_sha256 == WM_IOV_SHA256:
+            _, manifest, expected = configuration()
+            actual = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            if actual != expected:
+                raise DocumentError('The qualified Word processor identity changed.', 'stale_mapping')
+            processor.update(actual.encode())
+    except (OSError, importlib.metadata.PackageNotFoundError) as exc:
+        raise DocumentError('The stored Word processor identity is unavailable.', 'stale_mapping') from exc
+    return processor.hexdigest()
 
 
 def _run(path, operation, mapping=None, answers=None, output_path=None, *,
@@ -112,6 +143,7 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
             except (ValueError, UnicodeError) as exc:
                 raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed") from exc
         needs_layout = response.get("code") == "layout_verification_required"
+        imported = response.get('import_manifest')
         if (operation == "inspect" and response.get("layout_pending")) or needs_layout:
             from .layout_transport import verify_document
             try:
@@ -125,6 +157,10 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                 response = {"format": "docx", "contract": "v3", "adapter": "word-v3",
                     "sandbox": "landlock+seccomp", "fields": mapping if needs_layout else verified["fields"],
                     "warnings": verified["warnings"], "layout_receipt": verified["receipt"]}
+                if imported:
+                    from .import_selection import digest as mapping_digest
+                    response['import_manifest'] = {**imported, 'mapping_sha256': mapping_digest(response['fields']),
+                                                   'initial_mapping_sha256': mapping_digest(response['fields'])}
                 if needs_layout:
                     if operation in ("effective_options", "effective_values"):
                         response["states"] = verified["states"]
@@ -135,6 +171,16 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         if "error" in response:
             raise DocumentError(response["error"], response.get("code", "invalid_document"))
         response["sha256"] = digest
+        if operation == 'inspect' and suffix == '.docx':
+            if not response.get('import_manifest'):
+                # The independently qualified native WM adapter bypasses the
+                # generic detector and retains its established backend contract.
+                from .import_selection import manifest
+                response['import_manifest'] = manifest('legacy', response['fields'],
+                    {'automatic_complete': False, 'review_required': True, 'qualified_backend': response.get('adapter')})
+            response['import_manifest']['source_sha256'] = digest
+            selected = response['import_manifest']['engine']
+            response['import_manifest']['engine_code_sha256'] = engine_fingerprint(selected, source_sha256=digest)
         if target is not None:
             export = workspace / ("output" + suffix)
             if not export.is_file() or export.is_symlink() or not 0 < export.stat().st_size <= MAX_OUTPUT:

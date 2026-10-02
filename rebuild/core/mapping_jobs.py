@@ -152,7 +152,9 @@ def run_one():
             except PermissionDenied as exc:raise NotAdoptedByUser('Access revoked before mapping adoption.') from exc
             if template.versions.order_by('-number').first().pk!=version.pk:
                 raise NotAdoptedByUser('Mapping was edited while the request ran.')
+            from .import_binding import for_mapping
             new=TemplateVersion.objects.create(template=template,number=version.number+1,fields=proposal['fields'],
+                import_manifest=for_mapping(version.import_manifest,proposal['fields']),
                 contract='v3',review_requirements=version.review_requirements,created_by=job.user,
                 assistance={**proposal['review'],'job_id':str(job.pk),'base_version':str(version.pk),'simulated':simulated})
             job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])

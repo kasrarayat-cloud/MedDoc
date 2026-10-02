@@ -46,6 +46,8 @@ def report(version, fields=None):
     import hashlib
     import json
     from documents.service import destination_roles
+    from .import_binding import verify
+    verify(version)
     if not applies(version):
         return None
     fields = list(version.fields if fields is None else fields)
@@ -178,6 +180,8 @@ def legacy_reason(field, row):
 def held(version, *, fresh=False):
     """{key: reason} for every field of this version that sits on a role place (v3, always read fresh) or reads as a
     signature, initials or identity row by its printed label (legacy). The qualified WM form: empty."""
+    from .import_binding import verify
+    verify(version)
     if not applies(version):
         return {}
     if v3_mapping.is_v3_version(version):

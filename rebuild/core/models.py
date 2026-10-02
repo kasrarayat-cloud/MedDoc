@@ -302,6 +302,9 @@ class TemplateVersion(Entity):
     # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
     corrections=models.JSONField(default=dict,blank=True,db_default={})
     assistance=models.JSONField(default=dict,blank=True,db_default={})
+    # Import choice and physical coverage are evidence of the original inspection,
+    # preserved through every immutable correction version; never a compatibility score.
+    import_manifest=models.JSONField(default=dict,blank=True,db_default={})
     # Unknown on all historical mappings; absence is never proof of independent
     # fields. This immutable version can carry a separately qualified rule manifest.
     generation_constraints=models.JSONField(null=True,blank=True,default=None)

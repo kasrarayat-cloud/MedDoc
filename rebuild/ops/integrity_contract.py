@@ -62,6 +62,7 @@ def assess(rows, context, declared_count):
                       and context_valid and declaration_valid}
 
 FUNCTION_SHA256 = {
+    'quillmd_import_manifest_guard': '12e845b63bcda1eea6e7beb04ccbfd43cae4a8d0be741f2be144c3781416f2a1',
     'quillmd_disposition_instruction': '0f5cb4e0ba4702422b07a889f9fd3e2f7c6b60b0c6e7e5bc2e324994e8d0e5bf',
     'quillmd_append_only': '8d5ec86a531621ac1de53c85109dfb5122f9142b1cb66dcfc377e0945d869764',
     'quillmd_batch_event_guard': 'b3ab717bf72d0b4f67ac36fb487ca491ae07b6846d78b0d216ab4b7864e7d29a',
@@ -98,6 +99,7 @@ FUNCTION_SHA256 = {
 }
 
 GUARDS = (
+    ('core_templateversion', 'quillmd_import_manifest_guard', 'quillmd_import_manifest_guard', 7),
     ('core_auditevent', 'audit_append_only', 'quillmd_append_only', 27),
     ('core_codesuggestion', 'code_no_truncate', 'quillmd_preservation_no_truncate', 34),
     ('core_codesuggestion', 'code_preservation', 'quillmd_preserve_clinical_row', 27),

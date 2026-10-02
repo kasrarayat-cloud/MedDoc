@@ -168,6 +168,8 @@ def open_package(data: bytes) -> Package:
     for info in infos:
         name = info.filename
         lower = name.lower()
+        if lower.startswith('_xmlsignatures/'):
+            fail('Digitally signed Word files are not editable templates. Upload an unsigned blank original.', 'signed_document')
         mode = info.external_attr >> 16
         if name.startswith("/") or "\\" in name or ".." in name.split("/") or ":" in name or (mode & 0o170000) == 0o120000 \
                 or info.flag_bits & 1:
@@ -185,6 +187,9 @@ def open_package(data: bytes) -> Package:
             tree = etree.fromstring(raw, PARSER)
             if tree.getroottree().docinfo.doctype:
                 fail("XML entities and document types are not supported.", "unsafe_upload")
+            if any(node.tag == q('w:documentProtection') and node.get(q('w:enforcement'), '0') not in ('0', 'false', 'off')
+                   for node in tree.iter()):
+                fail('Protected Word files are not editable templates. Upload an unprotected blank original.', 'protected_document')
             if lower.endswith(".rels"):
                 for rel in tree:
                     kind = (rel.get("Type") or "").lower()
