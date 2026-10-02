@@ -6,6 +6,8 @@ from django.contrib.auth.views import redirect_to_login
 from .security import audit
 #: The doctor surface resolves against a URLconf that mounts no console route (quillmd/urls_doctor.py).
 DOCTOR_URLCONF='quillmd.urls_doctor'
+#: ... and, only while QUILLMD_ROLE_SUGGESTIONS is on, against the same routes plus the role-suggestion act.
+ROLE_SUGGESTIONS_URLCONF='quillmd.urls_doctor_role_suggestions'
 def console_path(path_info):
     return path_info=='/console' or path_info.startswith('/console/')
 class AccessMiddleware:
@@ -16,7 +18,7 @@ class AccessMiddleware:
         # surface served the console (refutation R1).
         path=request.path_info
         if not settings.ADMIN_SITE:
-            request.urlconf=DOCTOR_URLCONF
+            request.urlconf=ROLE_SUGGESTIONS_URLCONF if getattr(settings,'QUILLMD_ROLE_SUGGESTIONS','0')=='1' else DOCTOR_URLCONF
             # The console exists on the administration surface only. On the doctor host every /console path answers the
             # application's own 404 page to every caller — signed out, clinician or administrator, before the MFA
             # redirect and before CommonMiddleware's slash redirect (which named the route: refutation R2), exactly as

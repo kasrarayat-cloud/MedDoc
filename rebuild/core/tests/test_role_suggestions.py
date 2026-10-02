@@ -50,8 +50,8 @@ def response(fields):
 
 def labelled_provider(sent, rewrite=None):
     """A mocked Anthropic client answering each asked question with the values its own label introduces in the notes
-    (the legacy contract's `Label: value` selection), recording every request. `rewrite(fields, keys)` may change the
-    answer before it is returned (keys: {label: key} of the asked questions)."""
+    (the legacy contract's `Label: value` selection), recording every request. `rewrite(fields, keys, payload)` may
+    change the answer before it is returned (keys: {label: key} of the asked questions; payload: what was sent)."""
     def create(**request):
         sent.append(request)
         payload = json.loads(request['messages'][0]['content'])
@@ -62,7 +62,7 @@ def labelled_provider(sent, rewrite=None):
             quotes = [line.split(':', 1)[1].strip() for line in payload['notes'].splitlines()
                       if ':' in line and generation.question_key(line.split(':', 1)[0]) == label]
             fields.append({'key': question['key'], 'quotes': [q for q in quotes if q], 'conflict': False})
-        return response(rewrite(fields, keys) if rewrite else fields)
+        return response(rewrite(fields, keys, payload) if rewrite else fields)
     return patch('anthropic.Anthropic', return_value=SimpleNamespace(messages=SimpleNamespace(create=create)))
 
 
@@ -78,7 +78,7 @@ def unit_provider(sent, rewrite=None):
             ids = [unit['id'] for unit in payload['source_units'] if ':' in unit['quote']
                    and generation.question_key(unit['quote'].split(':', 1)[0]) == wanted]
             fields.append({'key': question['key'], 'unit_ids': ids, 'conflict': False})
-        return response(rewrite(fields, keys) if rewrite else fields)
+        return response(rewrite(fields, keys, payload) if rewrite else fields)
     return patch('anthropic.Anthropic', return_value=SimpleNamespace(messages=SimpleNamespace(create=create)))
 
 
@@ -293,9 +293,9 @@ class Generation(Legacy, TestCase):
         self.assertEqual([q['label'] for q in payload['questions']], ['Troponin (initial)', 'Plan'])
         self.assertTrue(self.offered(e))
 
-    def test_a_malformed_selection_for_a_suggested_row_never_refuses_or_changes_the_ordinary_answers(self):
-        """The suggested row is read apart from the ordinary ones: its invalid, missing or repeated selection offers
-        nothing, and the ordinary answers are exactly those of the request without it."""
+    def test_a_missing_or_unreadable_suggested_item_loses_only_the_suggestion(self):
+        """The suggested row is read apart from the ordinary ones: its unreadable or missing item offers nothing, and
+        the ordinary answers are exactly those of the request without it."""
         plain, job, _ = self.live(flag='0')
         self.assertEqual(job.state, 'succeeded')
         on, job, _ = self.live(flag='1')
@@ -303,61 +303,114 @@ class Generation(Legacy, TestCase):
         self.assertEqual(self.ordinary(on.answers), plain.answers)
         key = self.key('Troponin (initial)')
 
-        def invalid(fields, keys):
+        def invalid(fields, keys, payload):
             return [dict(f, quotes=['not a line of the notes']) if f['key'] == key else f for f in fields]
 
-        def omitted(fields, keys):
+        def omitted(fields, keys, payload):
             return [f for f in fields if f['key'] != key]
-
-        def repeated(fields, keys):
-            return fields + [f for f in fields if f['key'] == key]
-        for name, rewrite in (('invalid', invalid), ('omitted', omitted), ('repeated', repeated)):
+        for name, rewrite in (('unreadable', invalid), ('missing', omitted)):
             with self.subTest(case=name):
                 e, job, _ = self.live(flag='1', rewrite=rewrite)
                 self.assertEqual(job.state, 'succeeded')
                 self.assertIsNone(self.offered(e))
                 self.assertEqual(self.ordinary(e.answers), plain.answers)
 
-    def test_a_mis_keyed_suggested_answer_loses_the_suggestion_never_the_generation(self):
-        """G2: the suggested row's answer under an ordinary key, a held row's key or an invented key costs the
-        suggestion only; an ordinary key answered twice keeps the one answer its own field accepts."""
-        plain, _, _ = self.live(flag='0')
+    def test_any_other_irregularity_refuses_the_whole_output_as_the_request_without_suggestions_does(self):
+        """Round 2 decision: the items under the suggested keys are taken out (one per key, by that exact key) and the
+        rest must be exactly a valid '0' response. A suggested answer under another key - an ordinary one, a held row's,
+        an invented one - or a suggested key answered twice refuses the whole output (the cost of G2, accepted: it fails
+        closed). Nothing is re-homed."""
         control, job, _ = self.live(flag='1')                          # positive control: asked and offered
         self.assertEqual((job.state, self.offered(control)['text']), ('succeeded', '14 ng/L'))
         key, plan, held = self.key('Troponin (initial)'), self.key('Plan'), self.key('Electronically signed by')
 
         def under(target):
-            def rewrite(fields, keys):
+            def rewrite(fields, keys, payload):
                 return [dict(f, key=target) if f['key'] == key else f for f in fields]
             return rewrite
-        for name, target in (('an ordinary key', plan), ("a held row's key", held), ('an invented key', 'troponin-1')):
-            with self.subTest(case=name):
-                e, job, _ = self.live(flag='1', rewrite=under(target))
-                self.assertEqual(job.state, 'succeeded', job.error)
-                self.assertIsNone(self.offered(e))
-                self.assertEqual(self.ordinary(e.answers), plain.answers)
-        # more surplus than the suggested questions explain, or an ordinary key missing: refused as it always was
-        for name, rewrite in (('two invented keys', lambda fields, keys: fields + [dict(fields[0], key='x1'),
-                                                                                    dict(fields[0], key='x2')]),
-                              ('an ordinary key missing', lambda fields, keys: [f for f in fields if f['key'] != plan])):
+        cases = [('under an ordinary key', under(plan)), ("under a held row's key", under(held)),
+                 ('under an invented key', under('troponin-1')),
+                 ('a suggested key twice', lambda fields, keys, payload: fields + [f for f in fields if f['key'] == key]),
+                 ('an ordinary key missing', lambda fields, keys, payload: [f for f in fields if f['key'] != plan])]
+        for name, rewrite in cases:
             with self.subTest(case=name):
                 e, job, _ = self.live(flag='1', rewrite=rewrite)
                 self.assertNotEqual(job.state, 'succeeded')
                 self.assertIn('ValidationError', job.error)      # the validator's own refusal, not a crash
                 self.assertEqual(e.answers, {})
 
-    def test_an_ordinary_key_answered_twice_by_two_fitting_answers_is_held_not_guessed(self):
-        """G2: when both answers under the ordinary key fit it, neither is used; the field is held with its reason."""
-        notes = 'Troponin (initial): 14 ng/L\nPlan: Rest.\nPatient comfortable.'
-        key, plan = self.key('Troponin (initial)'), self.key('Plan')
+    def test_one_unreadable_suggestion_loses_only_itself(self):
+        """With two suggested rows, an unreadable item for one costs only that suggestion; the other is offered."""
+        self.version = self.uploaded(data=legacy_rows('Troponin (initial)', 'Lactate (initial)', 'Plan'),
+                                     name='Synthetic two role rows')[1]
+        self.by = self.by_label(self.version)
+        notes = 'Troponin (initial): 14 ng/L\nLactate (initial): 2.1 mmol/L\nPlan: Rest.'
+        lactate = self.key('Lactate (initial)')
+        e, job, _ = self.live(notes, flag='1')                         # positive control: both offered
+        self.assertEqual((self.offered(e)['text'], e.answers[lactate]['role_suggestion']['text']), ('14 ng/L', '2.1 mmol/L'))
 
-        def both_fit(fields, keys):
-            return [dict(f, key=plan, quotes=['Patient comfortable.']) if f['key'] == key else f for f in fields]
-        e, job, _ = self.live(notes=notes, flag='1', rewrite=both_fit)
-        self.assertEqual(job.state, 'succeeded', job.error)
-        answer = e.answers[plan]
-        self.assertEqual((answer['status'], answer['text'], answer['reason']), ('conflict', '', generation.ROLE_TWICE_REASON))
-        self.assertIsNone(self.offered(e))
+        def broken(fields, keys, payload):
+            return [dict(f, quotes=['2.1']) if f['key'] == lactate else f for f in fields]
+        e, job, _ = self.live(notes, flag='1', rewrite=broken)
+        self.assertEqual(job.state, 'succeeded')
+        self.assertEqual(self.offered(e)['text'], '14 ng/L')
+        self.assertNotIn('role_suggestion', e.answers[lactate])
+        self.assertEqual(e.answers[self.key('Plan')]['text'], 'Rest.')
+
+    def test_a_malformed_response_refused_under_0_is_refused_under_1(self):
+        """Property (round 2): for crafted malformed responses, '1' refuses whenever '0' refuses the same ordinary items;
+        and when the suggested item is correct, missing or unreadable, '1' adopts exactly what '0' adopts."""
+        self.version = self.uploaded(data=legacy_rows('Troponin (initial)', 'Plan', 'Medications', 'Electronically signed by'),
+                                     name='Synthetic property form')[1]
+        self.by = self.by_label(self.version)
+        notes = ('Troponin (initial): 14 ng/L\nPlan: Rest.\nMedications: Aspirin 81 mg daily.\n'
+                 'Electronically signed by: Dr Other')
+        key, plan, meds = self.key('Troponin (initial)'), self.key('Plan'), self.key('Medications')
+        held = self.key('Electronically signed by')
+        e = self.encounter(notes)
+        ordinary = {
+            'clean': lambda items: items,
+            'a key nobody was asked': lambda items: items + [{'key': 'x-unasked', 'quotes': ['Rest.'], 'conflict': False}],
+            "a held row's key": lambda items: items + [{'key': held, 'quotes': ['Dr Other'], 'conflict': False}],
+            'an ordinary key twice': lambda items: items + [dict(items[0])],
+            'an ordinary key missing': lambda items: items[:1],
+            'a fragment': lambda items: [dict(items[0], quotes=['Res'])] + items[1:],
+            "another row's value": lambda items: [dict(items[0], quotes=['Aspirin 81 mg daily.'])] + items[1:],
+            'two keys swapped': lambda items: [dict(items[0], key=meds), dict(items[1], key=plan)],
+            'a conflict flag': lambda items: [dict(items[0], conflict=True)] + items[1:]}
+        suggested = {
+            'correct': [{'key': key, 'quotes': ['14 ng/L'], 'conflict': False}], 'missing': [],
+            'unreadable': [{'key': key, 'quotes': ['not in the notes'], 'conflict': False}],
+            'twice': [{'key': key, 'quotes': ['14 ng/L'], 'conflict': False}] * 2,
+            'under an unasked key': [{'key': 'x2', 'quotes': ['14 ng/L'], 'conflict': False}],
+            'under an ordinary key': [{'key': plan, 'quotes': ['14 ng/L'], 'conflict': False}]}
+        base = [{'key': plan, 'quotes': ['Rest.'], 'conflict': False},
+                {'key': meds, 'quotes': ['Aspirin 81 mg daily.'], 'conflict': False}]
+
+        def outcome(flag, items):
+            sent = []
+            with override_settings(**dict(LIVE, QUILLMD_ROLE_SUGGESTIONS=flag)), labelled_provider(
+                    sent, lambda fields, keys, payload: [dict(item) for item in items]):
+                config = generation.admitted_with_role_suggestions(generation.configuration(self.version.fields), self.version)
+                fields = destination_roles.generation_fields(self.version, suggest=generation.role_suggestions(config))
+                raw = generation.generate(e.notes, fields, config)[0]
+                try:
+                    return generation.validated(raw)
+                except generation.ValidationError:
+                    return None
+        for oname, change in ordinary.items():
+            off = outcome('0', change(base))
+            for sname, extra in suggested.items():
+                with self.subTest(ordinary=oname, suggested=sname):
+                    on = outcome('1', change(base) + extra)
+                    if off is None:
+                        self.assertIsNone(on)
+                    if sname in ('correct', 'missing', 'unreadable'):
+                        self.assertEqual(on is None, off is None)
+                        if on is not None:
+                            self.assertEqual(self.ordinary(on), off)
+                            self.assertEqual(bool(on[key].get('role_suggestion')), sname == 'correct')
+        self.assertIsNotNone(outcome('1', base + suggested['correct']))      # positive control
 
     def test_the_hold_is_the_shown_maximum_and_covers_the_extra_question(self):
         """maximum_cost bounds every field of the mapping, held ones included: asking a held field moves neither the
@@ -450,7 +503,7 @@ class TabForms(Legacy, TestCase):
     def test_a_repeated_unit_is_refused_under_both_settings(self):
         plan = self.key('Plan')
 
-        def repeated(fields, keys):
+        def repeated(fields, keys, payload):
             return [dict(f, unit_ids=f['unit_ids'] * 2) if f['key'] == plan else f for f in fields]
         for flag in ('0', '1'):
             with self.subTest(flag=flag):
@@ -460,6 +513,83 @@ class TabForms(Legacy, TestCase):
         e, job, _ = self.live(self.notes, flag='1', provider=unit_provider)   # positive control
         self.assertEqual(job.state, 'succeeded')
         self.assertEqual(self.offered(e)['text'], '14 ng/L')
+
+
+@override_settings(**ON)
+class RoundTwoTolerance(Legacy, TestCase):
+    """T-1, T-2, T-3 (refutation round 2): each response is refused under '1' exactly as under '0'."""
+    labels = ('Troponin (initial)', 'Troponin (repeat)', 'Plan')
+
+    def refused_under_both(self, notes, rewrite_on, rewrite_off, provider):
+        for flag, rewrite in (('0', rewrite_off), ('1', rewrite_on)):
+            with self.subTest(flag=flag):
+                e, job, _ = self.live(notes, flag=flag, rewrite=rewrite, provider=provider)
+                self.assertNotEqual(job.state, 'succeeded')
+                self.assertIn('ValidationError', job.error)
+                self.assertEqual(e.answers, {})
+        e, job, _ = self.live(notes, flag='1', provider=provider)              # positive control: the honest response
+        self.assertEqual(job.state, 'succeeded')
+        return e
+
+    def units(self, payload, *quotes):
+        by_quote = {unit['quote']: unit['id'] for unit in payload['source_units']}
+        return [by_quote[quote] for quote in quotes]
+
+    def test_t1_every_answer_one_key_late_on_a_tab_form_is_refused(self):
+        self.version = self.uploaded(data=tab_sheet(*self.labels), name='Synthetic T-1 tab sheet')[1]
+        self.by = self.by_label(self.version)
+        notes = 'Troponin was 14 ng/L on arrival.\nRepeat troponin was 40 ng/L.\nPatient was admitted to cardiology.'
+        lines = notes.split('\n')
+        repeat, plan = self.key('Troponin (repeat)'), self.key('Plan')
+
+        def shifted(fields, keys, payload):
+            u = self.units(payload, *lines)
+            return [{'key': repeat, 'unit_ids': [u[0]], 'conflict': False}, {'key': plan, 'unit_ids': [u[1]], 'conflict': False},
+                    {'key': plan[:-1] + 'x', 'unit_ids': [u[2]], 'conflict': False}]
+
+        def honest(fields, keys, payload):
+            u = self.units(payload, *lines)
+            want = {self.key('Troponin (initial)'): [u[0]], repeat: [u[1]], plan: [u[2]]}
+            return [dict(f, unit_ids=want[f['key']]) for f in fields]
+        sent = []
+        self.refused_under_both(notes, shifted, shifted, lambda sent_, rewrite: unit_provider(sent_, rewrite or honest))
+
+    def test_t2_a_malformed_own_item_beside_a_misfiled_reading_is_refused(self):
+        self.version = self.uploaded(data=tab_sheet(*self.labels), name='Synthetic T-2 tab sheet')[1]
+        self.by = self.by_label(self.version)
+        notes = 'Troponin (repeat): 40 ng/L\nPlan: Rest and fluids.\nTroponin was 14 ng/L on arrival.'
+        lines = notes.split('\n')
+        repeat, plan = self.key('Troponin (repeat)'), self.key('Plan')
+
+        def malformed(misfiled):
+            def rewrite(fields, keys, payload):
+                u = self.units(payload, *lines)
+                items = [{'key': repeat, 'unit_ids': [u[0], u[0]], 'conflict': False}]
+                if misfiled:
+                    items.append({'key': repeat, 'unit_ids': [u[2]], 'conflict': False})
+                return items + [{'key': plan, 'unit_ids': [u[1]], 'conflict': False}]
+            return rewrite
+
+        def honest(fields, keys, payload):
+            u = self.units(payload, *lines)
+            want = {self.key('Troponin (initial)'): [u[2]], repeat: [u[0]], plan: [u[1]]}
+            return [dict(f, unit_ids=want[f['key']]) for f in fields]
+        self.refused_under_both(notes, malformed(True), malformed(False),
+                                lambda sent_, rewrite: unit_provider(sent_, rewrite or honest))
+
+    def test_t3_a_malformed_own_item_beside_a_misfiled_empty_answer_is_refused(self):
+        notes = 'Troponin (initial): 14 ng/L\nTroponin (repeat): 40 ng/L\nPlan: Rest and fluids.'
+        repeat, plan = self.key('Troponin (repeat)'), self.key('Plan')
+
+        def malformed(misfiled):
+            def rewrite(fields, keys, payload):
+                items = [{'key': repeat, 'quotes': ['40 ng'], 'conflict': False}]
+                if misfiled:
+                    items.append({'key': repeat, 'quotes': [], 'conflict': False})
+                return items + [{'key': plan, 'quotes': ['Rest and fluids.'], 'conflict': False}]
+            return rewrite
+        e = self.refused_under_both(notes, malformed(True), malformed(False), labelled_provider)
+        self.assertEqual(e.answers[repeat]['text'], '40 ng/L')
 
 
 @override_settings(**V3)
@@ -506,6 +636,16 @@ class Review(Legacy, TestCase):
         key = self.key('Troponin (initial)')
         self.assertIn(f'<textarea id="answer-{key}" name="answer_{key}" rows="4" maxlength="20000"></textarea>', body)
 
+    def test_a_value_exactly_as_long_as_an_answer_may_be_is_shown_and_accepted(self):
+        """PIN-MA6: 20,000 characters is a value save_answers keeps, so the page offers it and the act enters it."""
+        value = '7' * 20000
+        e = self.generated('Troponin (initial): ' + value + '\nPlan: Rest.')
+        self.assertEqual(self.offered(e)['text'], value)
+        self.assertEqual(self.client.get(f'/encounters/{e.pk}/').content.decode().count('data-role-suggestion'), 1)
+        self.assertEqual(self.accept(e, value=value).status_code, 302)
+        e.refresh_from_db()
+        self.assertEqual(e.answers[self.key('Troponin (initial)')]['text'], value)
+
     def test_an_employee_sees_the_suggestion_but_not_the_act(self):
         """F07: only an owner or clinician is given the button and its form."""
         e = self.generated()
@@ -518,19 +658,30 @@ class Review(Legacy, TestCase):
         self.assertIn('Use this value', owner)
         self.assertIn('data-role-accept', owner)
 
-    def test_with_the_setting_off_the_route_answers_404_like_a_deployment_without_it(self):
-        """I-2: every method, role and CSRF state gets 404 with the setting off; the page offers nothing."""
+    def test_with_the_setting_off_the_route_is_not_routed_at_all(self):
+        """I-2, I2-1/A2: with the setting off every request to the act - any method, role, CSRF state, with or without
+        the trailing slash - is answered exactly as a path that was never mounted (no slash redirect naming it)."""
         e = self.generated()
         staff = Client(); staff.force_login(self.employee)
         guarded = Client(enforce_csrf_checks=True); guarded.force_login(self.user)
+        never = f'/encounters/{e.pk}/no-such-route'
         with override_settings(QUILLMD_ROLE_SUGGESTIONS='0'):
             self.assertNotIn('data-role-suggestion', self.client.get(f'/encounters/{e.pk}/').content.decode())
+            expected = {method: getattr(self.client, method)(never) for method in ('get', 'post')}
+            self.assertEqual(expected['get'].status_code, 404)
             for name, response in (('clinician POST', self.accept(e)), ('employee POST', self.accept(e, client=staff)),
                                    ('no CSRF token', self.accept(e, client=guarded)),
                                    ('GET', self.client.get(f'/encounters/{e.pk}/role-suggestion/'))):
                 with self.subTest(request=name):
                     self.unchanged(e, response, 404)
-        self.assertEqual(self.accept(e).status_code, 302)       # positive control
+            for method in ('get', 'post'):
+                with self.subTest(request='no trailing slash ' + method):
+                    response = getattr(self.client, method)(f'/encounters/{e.pk}/role-suggestion')
+                    self.unchanged(e, response, expected[method].status_code)
+                    self.assertNotIn('Location', response)
+        response = self.client.get(f'/encounters/{e.pk}/role-suggestion')     # positive control: on, it is routed
+        self.assertEqual((response.status_code, response['Location']), (301, f'/encounters/{e.pk}/role-suggestion/'))
+        self.assertEqual(self.accept(e).status_code, 302)
 
     def test_using_the_value_enters_it_as_the_clinicians_own_answer_and_audits_identifiers_only(self):
         """L-1: the audit row names the field and the revision; nothing derived from the value."""
@@ -646,6 +797,10 @@ class Review(Legacy, TestCase):
         long_notes = 'Troponin (initial): ' + '7' * 20001 + '\nPlan: Rest.'
         long_offer = {'text': '7' * 20001, 'evidence': [{'quote': '7' * 20001, 'start': 20, 'end': 20021}]}
         other = self.key('Signature (patient)')
+
+        def cited(text, quote=None):
+            quote = quote or text
+            return {'text': text, 'evidence': [{'quote': quote, 'start': NOTES.index(quote), 'end': NOTES.index(quote) + len(quote)}]}
         cases = (
             ('stale offsets', NOTES, {key: {**e.answers[key], 'role_suggestion': moved}}, key, offer['text']),
             ('governed line', governed_notes, {key: {**e.answers[key], 'role_suggestion': shifted}}, key, offer['text']),
@@ -656,6 +811,22 @@ class Review(Legacy, TestCase):
              key, 'Dr Other'),
             ('value a fragment of its line', NOTES, {key: {**e.answers[key], 'role_suggestion': {**offer, 'text': '14'}}},
              key, '14'),
+            # A1 (round 2): a planted value WITH matching planted evidence - only a re-read of the notes refuses these
+            ('identity value cited as its own quote', NOTES, {key: {**e.answers[key], 'role_suggestion': cited('Dr Other')}},
+             key, 'Dr Other'),
+            ('identity value via its labelled line', NOTES, {key: {**e.answers[key], 'role_suggestion': cited(
+                'Dr Other', 'Electronically signed by: Dr Other')}}, key, 'Dr Other'),
+            ('identity whole line', NOTES, {key: {**e.answers[key], 'role_suggestion': cited(
+                'Electronically signed by: Dr Other')}}, key, 'Electronically signed by: Dr Other'),
+            ("another signer's value", NOTES, {key: {**e.answers[key], 'role_suggestion': cited('John Example')}},
+             key, 'John Example'),
+            ("another row's value via its line", NOTES, {key: {**e.answers[key], 'role_suggestion': cited(
+                'Rest.', 'Plan: Rest.')}}, key, 'Rest.'),
+            ('two lines, two rows', NOTES, {key: {**e.answers[key], 'role_suggestion': {
+                'text': '14 ng/L\nDr Other', 'evidence': cited('14 ng/L')['evidence'] + cited('Dr Other')['evidence']}}},
+             key, '14 ng/L\nDr Other'),
+            ('one line repeated', NOTES, {key: {**e.answers[key], 'role_suggestion': {
+                'text': '14 ng/L\n14 ng/L', 'evidence': cited('14 ng/L')['evidence'] * 2}}}, key, '14 ng/L\n14 ng/L'),
             ('longer than an answer may be', long_notes, {key: {**e.answers[key], 'role_suggestion': long_offer}}, key,
              '7' * 20001),
             ('another signer', NOTES, {other: {**e.answers[other], 'role_suggestion': {
@@ -837,15 +1008,3 @@ class Scope(TestCase):
                 ('printed other signer', field, {'printed_label': 'Signature (patient)', 'role': 'signature'})):
             with self.subTest(case=name):
                 self.assertFalse(destination_roles.suggestion_scope(changed, changed_row))
-
-    def test_an_offered_value_is_what_its_lines_say(self):
-        """X1: each line of the value is a cited quote or the value its label introduces - never a fragment."""
-        labels = generation.recognized_labels([{'label': 'Troponin (initial)'}, {'label': 'Plan'}])
-        line = [{'quote': 'Troponin (initial): 14 ng/L', 'start': 0, 'end': 27}]
-        value = [{'quote': '14 ng/L', 'start': 20, 'end': 27}]
-        self.assertTrue(destination_roles.derived_from('14 ng/L', line, labels))
-        self.assertTrue(destination_roles.derived_from('14 ng/L', value, labels))
-        self.assertTrue(destination_roles.derived_from('Troponin (initial): 14 ng/L', line, labels))
-        for text in ('14', 'ng/L', 'Dr Other', '14 ng/L\nDr Other', ''):
-            with self.subTest(text=text):
-                self.assertFalse(destination_roles.derived_from(text, line, labels))

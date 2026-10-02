@@ -120,10 +120,25 @@ def all_patterns(resolver=None, prefix=''):
             yield prefix + str(entry.pattern), entry
 
 
+#: Doctor-surface URLconfs a setting selects in place of the root's doctor routes (core.middleware.AccessMiddleware).
+#: Their routes are mounted too, so each must carry an isolation decision here (QUILLMD_ROLE_SUGGESTIONS).
+SWITCHED_URLCONFS = ('quillmd.urls_doctor_role_suggestions',)
+
+
+def switched_patterns():
+    """(route, pattern, urlconf) of every route a switched doctor URLconf mounts beyond the root's."""
+    root = {(route, pattern.name) for route, pattern in all_patterns()}
+    for urlconf in SWITCHED_URLCONFS:
+        for route, pattern in all_patterns(get_resolver(urlconf)):
+            if (route, pattern.name) not in root:
+                yield route, pattern, urlconf
+
+
 def classification_problems():
     """Every way the mounted routes and the classification disagree, by route PATTERN and name; [] when they agree."""
     problems = []
     mounted = [(route, pattern.name) for route, pattern in all_patterns() if not route.startswith('console/')]
+    mounted += [(route, pattern.name) for route, pattern, _ in switched_patterns()]
     if len(mounted) <= 30 or not any(route.startswith('console/') for route, _ in all_patterns()):
         problems.append(('the resolver walk found almost nothing', len(mounted)))
     problems += [('mounted twice', pair) for pair in sorted(set(mounted)) if mounted.count(pair) > 1]
@@ -150,7 +165,7 @@ def changed(before, after):
     return sorted(name for name in before if before[name] != after[name])
 
 
-# QUILLMD_ROLE_SUGGESTIONS='1': with it off, accept_role_suggestion answers 404 to everyone (refutation I-2), which
+# QUILLMD_ROLE_SUGGESTIONS='1': with it off, accept_role_suggestion is not routed at all (refutation round 2, I2-1), which
 # would pass the intruder rows vacuously and fail the owner's positive control.
 @override_settings(AI_MODE='fixture', ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False,
                    QUILLMD_MAPPING_ASSISTANCE=True, QUILLMD_ROLE_SUGGESTIONS='1', STORAGES=STORAGES)
@@ -225,6 +240,9 @@ class IsolationMatrix(SyntheticFixture, TestCase):
 
     def url(self, name):
         thing = self.objects[OBJECT[name][0]]
+        switched = {pattern.name: urlconf for _, pattern, urlconf in switched_patterns()}
+        if name in switched:
+            return reverse(name, kwargs={'pk': thing.pk}, urlconf=switched[name])
         if name == 'accept_code':
             return reverse(name, kwargs={'pk': thing.encounter_id, 'code_pk': thing.pk})
         if name == 'job_cancel':

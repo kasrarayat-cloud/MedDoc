@@ -273,46 +273,37 @@ def stored_suggestion(answer):
 SUGGESTION_LIMIT = 20000
 
 
-def derived_from(text, evidence, labels):
-    """Whether every line of an offered value IS what generation derives from one of its cited quotes: the quote itself,
-    or the value its label introduces (core.generation.tab_source_value - the legacy and tab validators' own reading).
-    A value that is merely inside a quote ('1' of '14 ng/L') or not in it at all is not (refutation X1). A corrected
-    quantity is not re-derived here, so it is never offered: this can only withhold."""
-    from .generation import tab_source_value
-    allowed = set()
-    for entry in evidence:
-        allowed.add(entry['quote'])
-        parsed = tab_source_value(entry['quote'], labels)
-        if parsed and parsed[1]:
-            allowed.add(parsed[1])
-    return all(line in allowed for line in text.split('\n'))
-
-
-def current_suggestion(field, answer, row, notes, governance, labels):
-    """The suggestion still offered for this field NOW, or None. Read the same way by the page and by the act that
-    accepts it, and never trusted from the draft:
+def current_suggestions(fields, answers, roles, notes, governance, statement_labels=(), keys=None):
+    """{key: offer} for every suggestion still offered NOW (or only `keys`). Read the same way by the page and by the act
+    that accepts one, and never trusted from the draft (refutation A1: a stored value and its stored evidence come from
+    the same object, so checking one against the other proves nothing):
 
     - the field is in `suggestion_scope` of the ORIGINAL's roles, read now;
     - the stored answer is still the untouched hold: 'missing', no text, ROLE_NOT_GENERATED (a typed answer, an accepted
       suggestion or "Leave blank - reviewed" ends the offer);
-    - every quote it was read from is still in the notes at its offsets, and the value is what those quotes say
-      (`derived_from`, with the form's recognized `labels`), no longer than an answer may be;
-    - the reading is not governed by a heading or a sentence of the notes, by the reader finalization applies to a
-      `supported` answer (core.generation.governed_supported)."""
-    from .generation import governed_supported
-    offer = stored_suggestion(answer)
-    if offer is None or not suggestion_scope(field, row):
-        return None
-    if answer.get('status') != 'missing' or str(answer.get('text') or '') or answer.get('reason') != ROLE_NOT_GENERATED:
-        return None
-    if any(notes[entry['start']:entry['end']] != entry['quote'] for entry in offer['evidence']):
-        return None
-    if len(offer['text']) > SUGGESTION_LIMIT or not derived_from(offer['text'], offer['evidence'], labels):
-        return None
-    reading = {'status': 'supported', 'text': offer['text'], 'evidence': offer['evidence']}
-    if governed_supported(governance, notes, reading, field.get('label'), field_key=field.get('key')) is not None:
-        return None
-    return offer
+    - the offer is EXACTLY what generation's own validator reads again from the CURRENT notes for this field, given the
+      offer's cited quotes (core.generation.reread_role_suggestions): the same text and the same lines at the same
+      offsets, a line this field may cite (never one labelled for another row), no longer than an answer may be;
+    - the reading is not governed by a heading or a sentence of the notes, by the reader the page and finalization apply
+      to a `supported` answer (core.generation.governed_supported)."""
+    from .generation import governed_supported, reread_role_suggestions
+    candidates = {}
+    for field in fields:
+        if keys is not None and field['key'] not in keys:
+            continue
+        answer = answers.get(field['key'])
+        offer = stored_suggestion(answer)
+        if offer is None or not suggestion_scope(field, roles.get(field['key'])):
+            continue
+        if answer.get('status') != 'missing' or str(answer.get('text') or '') or answer.get('reason') != ROLE_NOT_GENERATED:
+            continue
+        candidates[field['key']] = offer
+    if not candidates:
+        return {}
+    readings = reread_role_suggestions(notes, fields, candidates, statement_labels)
+    by_key = {field['key']: field for field in fields}
+    return {key: offer for key, offer in candidates.items() if readings.get(key) == offer and governed_supported(
+        governance, notes, {'status': 'supported', **offer}, by_key[key].get('label'), field_key=key) is None}
 
 
 def generation_refusal(version, fields, config):

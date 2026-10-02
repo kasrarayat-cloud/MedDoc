@@ -19,7 +19,7 @@ from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.csrf import csrf_exempt,csrf_protect
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST,require_http_methods
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -814,9 +814,9 @@ def encounter_detail(request,pk):
     # Role suggestions are offered on a legacy draft only (never the qualified Word form, contract v3 or a finalized record).
     role_offers=(not is_wm and not is_v3 and e.status!='finalized' and bool(e.answers) and bool(printed_roles)
                  and destination_roles.suggestions_enabled())
-    if role_offers:
-        from .generation import recognized_labels
-        role_labels=recognized_labels(e.template_version.fields,statement_labels)
+    # Every offer read again from the current notes at once (core.destination_roles.current_suggestions).
+    role_current=(destination_roles.current_suggestions(e.template_version.fields,e.answers,printed_roles,e.notes,governance,
+                                                        statement_labels) if role_offers else {})
     if is_v3:
         # ⚠️ A QUESTION LABEL THE FORM REPEATS IS SHOWN WITH ITS CONTEXT (counted with generation's own normalizer):
         # two questions reading "Effusion" are told apart only by where they sit on the form.
@@ -854,12 +854,8 @@ def encounter_detail(request,pk):
         row['destination_reason']=(answer.get('reason') if answer.get('status')=='missing'
                                    and answer.get('reason')==role_not_generated else '')
         # A role suggestion (QUILLMD_ROLE_SUGGESTIONS): shown only while it is still offered, by the same reader the
-        # accepting act applies (core.destination_roles.current_suggestion). It is never the answer: the box stays empty.
-        row['role_offer']=None
-        if role_offers and answer.get('role_suggestion'):
-            field=next(f for f in e.template_version.fields if f['key']==row['key'])
-            row['role_offer']=destination_roles.current_suggestion(field,answer,printed_roles.get(row['key']),e.notes,governance,
-                                                                   role_labels)
+        # accepting act applies (core.destination_roles.current_suggestions). It is never the answer: the box stays empty.
+        row['role_offer']=role_current.get(row['key'])
         if is_v3:
             # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
             kind=row.get('kind')
@@ -1107,29 +1103,20 @@ def clear_review(request,pk):
     messages.success(request,'Answers and review cleared. The notes and accepted codes are kept. Generate a new draft when ready.')
     return redirect('encounter_detail',pk=pk)
 
-@csrf_exempt
-def accept_role_suggestion(request,pk):
-    """"Use this value" (core.destination_roles role suggestions). With QUILLMD_ROLE_SUGGESTIONS off the route answers
-    404 to every request, exactly as a deployment without it (refutation I-2) - before the method and CSRF checks, which
-    `accept_role_suggestion_act` then applies itself (csrf_protect: the middleware's own check, not a weaker one)."""
-    from . import destination_roles
-    if not destination_roles.suggestions_enabled():raise Http404()
-    return accept_role_suggestion_act(request,pk)
-
-@csrf_protect
 @require_POST
 @transaction.atomic
-def accept_role_suggestion_act(request,pk):
+def accept_role_suggestion(request,pk):
     """"Use this value": a clinician's explicit act that enters a role suggestion (core.destination_roles) as their OWN
     answer - exactly what typing it into the box and saving would store (save_answers: 'edited', by this clinician, not
     reviewed, not an accepted suggestion), so the legacy rule that a role row keeps the clinician's own typed value and
     never generated or accepted text applies to it unchanged. Refused, with nothing written, unless the document is an
     unfinalized draft at the posted revision, the actor may make clinical decisions, the suggestion is still offered
-    NOW (current_suggestion, the page's own reader) and the posted value is that suggestion. Audited with the field key
-    and the new revision only - nothing derived from the value."""
+    NOW (current_suggestions, the page's own reader) and the posted value is that suggestion. Audited with the field key
+    and the new revision only - nothing derived from the value. Routed only while QUILLMD_ROLE_SUGGESTIONS is on
+    (quillmd/urls_doctor_role_suggestions.py): with it off no request reaches this view."""
     from documents import DocumentError
     from . import destination_roles
-    from .generation import governance_for,recognized_labels
+    from .generation import governance_for
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
@@ -1146,8 +1133,8 @@ def accept_role_suggestion_act(request,pk):
         roles=destination_roles.legacy_roles(e.template_version)
         statement_labels=[row['label'] for row in e.template_version.review_requirements]
         governance=governance_for(e.notes,e.template_version.fields,statement_labels)
-        offer=destination_roles.current_suggestion(field,previous,roles.get(key),e.notes,governance,
-                                                   recognized_labels(e.template_version.fields,statement_labels))
+        offer=destination_roles.current_suggestions(e.template_version.fields,e.answers,roles,e.notes,governance,
+                                                    statement_labels,keys={key}).get(key)
     except (ValidationError,DocumentError) as exc:
         return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
     if offer is None:return document_refusal(request,e,refusal,400)

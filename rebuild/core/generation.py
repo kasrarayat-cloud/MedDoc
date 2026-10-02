@@ -4914,84 +4914,89 @@ def role_suggested(fields,config):
                      and f['destination_role'].get('suggest') is True)
 
 
-#: An ordinary question the provider answered twice when it was also asked the suggested rows: neither answer is used.
-ROLE_TWICE_REASON=('Two answers came back for this question when the form\'s signing and initials rows were also asked, '
-                   'and they could not be told apart, so neither was used. Enter the answer yourself if the notes support '
-                   'one.')
-
-
 def role_validated(notes,fields,selections,suggested,plain_context,*,context_labels=(),evidence_contract=None,units=False):
-    """The validated answers of a job that ASKED role suggestions (`suggested`), in two readings:
+    """The validated answers of a job that ASKED role suggestions (`suggested`).
 
-    - every ORDINARY field as a job without suggestions validates it: one selection per ordinary key, against the
-      context labels that request would carry (`plain_context`, the held labels included);
-    - each SUGGESTED field as an ordinary field among all the others (the joint reading, with every governance rule,
-      which itself requires exactly one selection per asked key). When that reading cannot be validated, no suggestion
-      is offered.
+    ⚠️ THE ORDINARY ANSWERS ARE THE REQUEST-WITHOUT-SUGGESTIONS' ANSWERS, OR NOTHING (refutation round 2, T-1..T-3: a
+    tolerance that re-homed or set aside items across keys adopted one row's value into another and finalized it). So:
+    the items under the suggested keys are taken out - at most one per suggested key, by that exact key - and the
+    REMAINDER is validated exactly as the request without suggestions validates its response: the ordinary keys once
+    each, the same validator, against the context labels that request carries (`plain_context`). Any irregularity in
+    the remainder - a key nobody was asked, an ordinary key twice or missing, a second item under a suggested key, a
+    malformed selection - refuses the whole output, as it always did. Nothing is resolved, chosen between or re-homed.
 
-    ⚠️ A SUGGESTION IS LOST, NEVER THE GENERATION (refutation G2). The extra questions can make the provider return items
-    the request without them never could: a suggested row's answer under another asked key, under a key nobody was asked
-    (a held row's, an invented one), or a suggested key twice. Up to one surplus item per suggested question is set
-    aside: an item under a key not asked is dropped; an ordinary key answered twice keeps the ONE of its items that its
-    own field's validation accepts alone - and if none or both do, that field is held as a conflict with ROLE_TWICE_REASON
-    rather than guessed. A response with more surplus than that, or with an ordinary key missing, is refused exactly as
-    the request without suggestions refuses it. `units`: the tab contract's unit selections, checked per reading. The
-    suggested readings are never answers: `role_adopted` keeps each field's hold."""
+    Each suggested item taken out is then read as an ordinary field among all the others (the joint reading, every
+    governance rule); if that cannot be validated, each is read on its own beside the ordinary fields, so a missing or
+    unreadable suggested item loses only its own suggestion. `units`: the tab contract's unit selections, checked per
+    reading. The readings are never answers: `role_adopted` keeps each field's hold."""
     def read(asked,chosen,labels):
         if units:chosen=unit_selections(notes,asked,chosen,context_labels=labels)
         return validate_selections(notes,asked,chosen,context_labels=labels,evidence_contract=evidence_contract)
-    items=list(selections.fields)
+    taken,remainder={},[]
+    for item in selections.fields:
+        if item.key in suggested and item.key not in taken:taken[item.key]=item
+        else:remainder.append(item)
     ordinary=[f for f in fields if f['key'] not in suggested]
-    count=collections.Counter(item.key for item in items)
-    present=sum(1 for key in suggested if count[key])
-    surplus=len(items)-len(ordinary)-present
-    if any(count[f['key']]==0 for f in ordinary) or surplus>len(suggested):
-        raise ValidationError('Provider returned missing, duplicated or unknown fields.')
-    chosen,twice={},set()
-    for f in ordinary:
-        candidates=[item for item in items if item.key==f['key']]
-        if len(candidates)>1:
-            labels=list(plain_context)+[o['label'] for o in ordinary if o['key']!=f['key']]
-            fitting=[]
-            for item in candidates:
-                try:read([f],type(selections)(fields=[item]),labels)
-                except ValidationError:continue
-                fitting.append(item)
-            if len(fitting)!=1:
-                twice.add(f['key'])
-                blank={'unit_ids':[]} if hasattr(candidates[0],'unit_ids') else {'quotes':[]}
-                chosen[f['key']]=candidates[0].model_copy(update={**blank,'conflict':True})
-                continue
-            candidates=fitting
-        chosen[f['key']]=candidates[0]
-    answers=read(ordinary,type(selections)(fields=[chosen[f['key']] for f in ordinary]),plain_context)
-    for key in twice:answers[key]={**answers[key],'reason':ROLE_TWICE_REASON}
-    # (a response with any surplus, or a suggested key missing, fails the joint reading's own one-per-key check)
-    try:joint=read(fields,selections,context_labels)
-    except ValidationError:joint={}
-    answers.update({key:joint[key] for key in suggested if key in joint})
+    answers=read(ordinary,type(selections)(fields=remainder),plain_context)
+    def reading(keys):
+        asked=[f for f in fields if f['key'] not in suggested or f['key'] in keys]
+        labels=list(context_labels)+[f['label'] for f in fields if f['key'] in suggested and f['key'] not in keys]
+        found=read(asked,type(selections)(fields=remainder+[taken[key] for key in keys]),labels)
+        return {key:found[key] for key in keys}
+    if taken:
+        try:answers.update(reading(list(taken)))
+        except ValidationError:
+            for key in taken:
+                try:answers.update(reading([key]))
+                except ValidationError:pass
     return answers
+
+
+def role_reading(answer):
+    """The suggestion a validated answer yields - its text and the lines it was read from - when the validator would
+    have ADOPTED it (`supported`, with text no longer than an answer may be, its own source lines, nothing held, offered
+    or set aside), else None. One reader for generation (`role_adopted`) and for the page and the act, which read a
+    stored offer again from the current notes (core.destination_roles.current_suggestions)."""
+    from . import destination_roles
+    if not isinstance(answer,dict) or answer.get('status')!='supported':return None
+    text=answer.get('text')
+    if not isinstance(text,str) or not text.strip() or len(text)>destination_roles.SUGGESTION_LIMIT:return None
+    if any(answer.get(flag) for flag in ('held_candidate','suggestion','not_patient','governed_acceptance')):return None
+    evidence=answer.get('own_evidence') or answer.get('evidence') or []
+    if not evidence or not all(isinstance(entry,dict) and isinstance(entry.get('quote'),str) and isinstance(entry.get('start'),int)
+                               and isinstance(entry.get('end'),int) for entry in evidence):
+        return None
+    return {'text':text,'evidence':[{'quote':entry['quote'],'start':entry['start'],'end':entry['end']} for entry in evidence]}
 
 
 def role_adopted(held,answers,suggested=()):
     """The held records, answered exactly as the hold answers them - 'missing', no text, no evidence, the hold's reason -
-    NEVER the reading. A field in `suggested` whose reading the validator would have adopted (`supported`, with text and
-    its own source lines, nothing held, offered or set aside) carries that reading beside the hold as `role_suggestion`
-    (its text and the lines it was read from), for the clinician to enter by an explicit act. Any other reading - held,
-    in conflict, missing, a one-click offer, not the patient's, longer than an answer may be - leaves the plain hold."""
-    from . import destination_roles
+    NEVER the reading. A field in `suggested` whose reading the validator would have adopted (`role_reading`) carries
+    it beside the hold as `role_suggestion`, for the clinician to enter by an explicit act. Any other reading leaves the
+    plain hold."""
     out={}
     for key,record in held.items():
-        answer=answers.get(key) if key in suggested else None
-        evidence=[] if not isinstance(answer,dict) else (answer.get('own_evidence') or answer.get('evidence') or [])
-        if (isinstance(answer,dict) and answer.get('status')=='supported' and str(answer.get('text') or '').strip()
-                and len(answer['text'])<=destination_roles.SUGGESTION_LIMIT
-                and not any(answer.get(flag) for flag in ('held_candidate','suggestion','not_patient','governed_acceptance'))
-                and evidence and all(isinstance(entry,dict) and isinstance(entry.get('quote'),str)
-                                     and isinstance(entry.get('start'),int) and isinstance(entry.get('end'),int)
-                                     for entry in evidence)):
-            out[key]={**record,'role_suggestion':{'text':answer['text'],'evidence':[
-                {'quote':entry['quote'],'start':entry['start'],'end':entry['end']} for entry in evidence]}}
-        else:
-            out[key]=record
+        reading=role_reading(answers.get(key)) if key in suggested else None
+        out[key]={**record,'role_suggestion':reading} if reading else record
+    return out
+
+
+def reread_role_suggestions(notes,fields,offers,context_labels=()):
+    """{key: reading or None}: each stored offer's selection - its cited quotes - read AGAIN, now, by generation's own
+    validator over the current notes, as that field's answer beside every other label of the form (`role_reading`).
+    Read together; if that cannot be validated, each on its own, so one bad offer withholds only itself."""
+    order=[f['key'] for f in fields if f['key'] in offers]
+    def read(keys):
+        asked=[{k:v for k,v in f.items() if k!='destination_role'} for f in fields if f['key'] in keys]
+        labels=[f['label'] for f in fields if f['key'] not in keys]+list(context_labels)
+        chosen=Selections(fields=[Selection(key=key,quotes=[entry['quote'] for entry in offers[key]['evidence']],conflict=False)
+                                  for key in keys])
+        found=validate_selections(notes,asked,chosen,context_labels=labels)
+        return {key:role_reading(found.get(key)) for key in keys}
+    try:return read(order)
+    except ValidationError:pass
+    out={}
+    for key in order:
+        try:out.update(read([key]))
+        except ValidationError:out[key]=None
     return out
