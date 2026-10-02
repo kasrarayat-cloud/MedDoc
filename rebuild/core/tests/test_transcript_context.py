@@ -149,7 +149,8 @@ class PatientDefault(SimpleTestCase):
     def test_exclusive_other_actor_changes_only_the_same_predicate_and_claim(self):
         source='Takes warfarin 5 mg daily.'
         for tail in ['Only her father takes warfarin.','Her father alone takes warfarin.',
-                     'Her father only takes warfarin.','Her father is the only one to take warfarin.']:
+                     'Her father only takes warfarin.','Her father is the only one to take warfarin.',
+                     'Her father is the sole person taking warfarin.']:
             with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source],'conflict')
         for tail in ['Her father takes warfarin.','Her father takes only warfarin.',
                      'Only her father takes apixaban.','Only her father has diabetes.',
@@ -162,6 +163,18 @@ class PatientDefault(SimpleTestCase):
         self.check('Reports cough. Only her father has cough.','Symptoms',['Reports cough.'],'conflict')
         side='The patient reports right ankle pain.'
         self.check(side+' Only her father reports left ankle pain.','Symptoms',[side])
+
+    def test_ambiguous_restriction_is_reviewed_without_inventing_drug_status(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['No longer routine.','No longer daily.','Not regularly.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Current medications',[source],'conflict')
+        self.check(source+' No diabetes.','Medications',[source])
+        self.check(source+' Reports cough. No longer routine.','Medications',[source])
+        self.check(source+' Reports cough. No longer routine.','Symptoms',['Reports cough.'],'conflict')
+        on='The patient is on warfarin.'
+        self.check(on+' Only her father is alone on warfarin.','Medications',[on])
+        self.check(on+' Her father is single with warfarin.','Medications',[on])
+        self.check(on+' Her father is the sole person taking warfarin.','Medications',[on],'conflict')
 
     @override_settings(V3_GENERATION_BATCHES=True)
     def test_whole_form_plan_keeps_context_in_request_digest_and_field_records(self):

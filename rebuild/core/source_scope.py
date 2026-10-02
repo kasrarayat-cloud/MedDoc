@@ -91,7 +91,16 @@ def elliptical_dependencies(reading):
                     and not info.get('named_keys') and not sole.get('unknown'))
                 adpositional=bool(root.pos_ in ('ADP','SCONJ')
                     and not any(t.pos_ in ('VERB','AUX') for t in doc))
-                fragment=operator or topicless or adpositional
+                # A restriction without an established clinical noun may
+                # qualify the preceding predicate even when an unknown word
+                # was tagged as a noun ("No longer routine"). It does not
+                # establish stopped/current/PRN status. Known clinical negatives
+                # such as "No diabetes" remain their own claims.
+                restriction=bool(not any(t.pos_ in ('VERB','AUX') for t in doc)
+                    and not sole.get('classes') and not info.get('other_floor')
+                    and ('class' in sole.get('reach',()) or any(t.dep_=='neg'
+                        or (t.dep_=='det' and a._fold(t.text)=='no') for t in doc)))
+                fragment=operator or topicless or adpositional or restriction
         if fragment:
             if previous is not None:causes.setdefault(previous,[]).append(unit)
             else:leading.append(unit)
@@ -134,7 +143,8 @@ def exclusive_reattributions(reading):
         root=roots[0]
         # Focus on an actor or predicate, excluding clinical object modifiers.
         # A restriction on a different action/object cannot retract this claim.
-        focused=any(a._fold(t.text) in ('only','alone','solely','just')
+        focused=any((a._fold(t.text) in ('only','alone','solely','just')
+                     or (a._fold(t.text)=='sole' and t.pos_=='ADJ' and t.dep_=='amod'))
             and (t.head.dep_ in ('nsubj','nsubjpass') or (t.head==root and a._fold(t.text)!='alone')
                  or (t.head.dep_=='attr' and a._lemma(root)=='be'))
             for t in doc)
@@ -155,11 +165,14 @@ def exclusive_reattributions(reading):
             # Existing light predicates can describe the same positively typed
             # clinical claim (reports/has cough). A distinct action such as
             # knows warfarin supplies no exclusive patient medication assertion.
+            core_clauses=predicates-{'be'}
+            nominal_action=bool(core_clauses and core_clauses<=a.LIGHT_VERBS)
             same_assertion=bool(a._lemma(root) in a.LIGHT_VERBS and my_predicates
                 and my_predicates <= a.LIGHT_VERBS
-                and not (a._lemma(root)=='be' and any(t.dep_ in ('acomp','attr') for t in root.children))
+                and (nominal_action or not (a._lemma(root)=='be'
+                    and any(t.dep_ in ('acomp','attr') for t in root.children)))
                 and mine_sole.get('classes',frozenset()) & other_sole.get('classes',frozenset()))
-            if (predicates & my_predicates or heads & my_heads or same_assertion) and topic & (
+            if ((predicates-{'be'}) & (my_predicates-{'be'}) or heads & my_heads or same_assertion) and topic & (
                     mine.get('claim_keys',frozenset())|mine.get('named_keys',frozenset())):
                 causes.setdefault(claim['id'],[]).append(other)
     reading[key]=causes

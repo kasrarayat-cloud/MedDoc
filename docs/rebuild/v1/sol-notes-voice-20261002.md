@@ -33,6 +33,20 @@ The source hashes at that measurement were source_scope23a285fa and
 generation77e123ba. Its exact source and first failures remain preserved; no
 live campaign or application activation was authorized by these partial results.
 
+The third repair is likewise **unqualified**, preserved after 19 focused tests
+passed in14.261 seconds. The expanded **76 exposed diagnostic selections**
+(separate from the original76 live field outcomes) measured74 correct, zero
+demonstrated unsafe releases, zero unresolved dependency releases and two parser
+holds; its exact21f2853f baseline measured69 correct, two unsafe, two unresolved
+dependency releases and three unnecessary holds. “No longer routine” is an
+ambiguous restriction requiring review, not evidence that medication stopped.
+Fresh independent refutation then demonstrated three more unsafe full-governance
+releases outside that set: “No longer a daily medication”, “Her father is the sole
+warfarin user”, and “Her father is the only patient on warfarin”. Those original
+failures remain in security/refute-notes-repaired-governance-4.* and
+root-confirm-notes-refutation-5.json. Source_scope3f3d3695 is preserved exactly;
+the diagnostic denominator was not expanded retrospectively to erase the failures.
+
 Private, synthetic-only component work on `fix/v1-sol-notes-voice-20261002`, based on
 `d49ece788c058c9e733e895910a81c8aad94c6a3`. Sonnet 5.5 stays the application model;
 ordinary field relations stay contract v4. No provider requests were made by this worker.
