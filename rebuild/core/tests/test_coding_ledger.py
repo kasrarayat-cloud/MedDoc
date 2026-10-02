@@ -568,6 +568,85 @@ class CodingLedger(TestCase):
                 self.assertNotIn('written touching', text)                      # b3d8111d: said
                 self.assertIn('1 three-character entry in the notes matches a diagnosis code but is not labelled', text)
 
+    def test_R5C1_a_transposed_digit_in_a_dotted_code_is_said(self):
+        """a0bc4fd8: R4C-2's category check also dropped a code whose typo is inside its category ('J54.909' for J45.909):
+        neither suggested nor said, against the rule held since aa3eead4. A dotted entry whose second character is a digit
+        is counted whatever its category; the lab-value shape (a letter second) still needs a held category."""
+        icd_release({'R07.9': 'Synthetic chest pain code', 'J45.909': 'Synthetic asthma', 'G43.909': 'Synthetic migraine'})
+        for notes in ('Assessment: J54.909 asthma exacerbation.', 'Assessment: G34.909 migraine without aura.'):
+            with self.subTest(notes=notes):
+                encounter = self.another(notes)
+                self.assertIn('1 entry in the notes written like a diagnosis code is not a code in that release',
+                              self.text(self.suggest(encounter)))           # a0bc4fd8: nothing said
+                self.assertEqual(self.suggested(encounter), [])
+        self.assertNotIn('not a code in that release',                       # the R4C-2 lab shapes stay quiet
+                         self.text(self.suggest(self.another('Assessment: R07.9.\nLabs: Cr1.2, Ca9.5, Mg2.0, pH7.38.'))))
+
+    def test_R5C2_a_value_written_against_its_name_is_not_called_a_code(self):
+        """a0bc4fd8: the touching scan read a dotted shape inside a word, so 'WBC11.2' was C11.2, 'Temp37.2' P37.2 and
+        'BMI31.2' I31.2: 'a code from the release in effect ... written touching other characters'."""
+        icd_release({'R07.9': 'Synthetic chest pain code', 'C11.2': 'Synthetic nasopharynx', 'P37.2': 'Synthetic listeriosis',
+                     'I31.2': 'Synthetic hemopericardium', 'R60.1': 'Synthetic edema', 'F60.5': 'Synthetic personality'})
+        for notes in ('Labs: WBC11.2, Hgb9.8, Plt210.\nAssessment: R07.9 chest pain.',
+                      'Vitals: Temp37.2, HR 80, BMI31.2.\nAssessment: R07.9 chest pain.',
+                      'eGFR60.1, LVEF60.5%.\nAssessment: R07.9 chest pain.'):
+            with self.subTest(notes=notes):
+                encounter = self.another(notes)
+                self.assertNotIn('written touching', self.text(self.suggest(encounter)))     # a0bc4fd8: 1, 2 and 2
+                self.assertEqual(self.suggested(encounter), ['R07.9'])
+        for notes in ('Assessment: chest painR07.9 noted.', 'Assessment: 1R07.9 chest pain.',        # still said
+                      'Seen by Dr Strauß: chest painR07.9 noted.'):      # positions read character for character
+            with self.subTest(notes=notes):
+                self.assertIn('1 code from the release in effect is written touching',
+                              self.text(self.suggest(self.another(notes))))
+
+    def test_R5C3_an_entry_the_release_lacks_is_said_once_not_as_touching(self):
+        """a0bc4fd8: 'M54.50' (a code the release lacks, holding M54.5 as a prefix) was said twice, the second time as a held
+        code 'written touching' with advice to leave a space, which then suggested M54.5 instead."""
+        icd_release({'M54.5': 'Synthetic low back pain (FY2021)', 'R07.9': 'Synthetic chest pain code'})
+        for notes in ('Assessment: M54.50 low back pain.', 'Assessment: R07.99 chest pain.'):
+            with self.subTest(notes=notes):
+                text = self.text(self.suggest(self.another(notes)))
+                self.assertIn('1 entry in the notes written like a diagnosis code is not a code in that release', text)
+                self.assertNotIn('written touching', text)                                  # a0bc4fd8: said as well
+
+    def test_R5C4_a_labelled_three_character_code_touching_the_next_word_is_said_as_touching(self):
+        """a0bc4fd8: every refused three-character code was 'not labelled as one', so 'ICD-10: I10.Follow up' was told to
+        write a code label it already has; the remedy that works is a space."""
+        icd_release({'I10': 'Synthetic hypertension'})
+        for notes in ('Assessment: ICD-10: I10.Follow up in 2 weeks.', 'Assessment: stable.\nICD-10 code I10.Recheck BP.'):
+            with self.subTest(notes=notes):
+                encounter = self.another(notes)
+                text = self.text(self.suggest(encounter))
+                self.assertIn('1 code from the release in effect is written touching', text)
+                self.assertNotIn('not labelled', text)                                      # a0bc4fd8: said
+                self.assertEqual(self.suggested(encounter), [])
+        spaced = self.another('Assessment: ICD-10: I10. Follow up in 2 weeks.')            # the advice followed
+        self.suggest(spaced)
+        self.assertEqual(self.suggested(spaced), ['I10'])
+
+    def test_R5F4_a_semicolon_or_comma_after_a_listed_stain_is_no_clause_end(self):
+        """R4C-1's list ends at a full stop, a closing bracket or the end of the line; nothing pinned that ';' and ',' are
+        not ends, and either one widened into CLAUSE_END suggested P53 again."""
+        icd_release({'C18.7': 'Synthetic sigmoid colon', 'P53': 'Synthetic hemorrhagic disease of newborn'})
+        for notes in ('Pathology: ICD-10: C18.7, P53; MLH1 retained.', 'Pathology: ICD-10: C18.7, P53, MLH1 retained.'):
+            with self.subTest(notes=notes):
+                encounter = self.another(notes)
+                self.suggest(encounter)
+                self.assertEqual(self.suggested(encounter), ['C18.7'])
+
+    def test_R5F10_a_touching_code_only_another_release_holds_is_not_said(self):
+        """The touching scan looks codes up in the ICD-10-CM releases in effect only: a retired release's code is not 'a
+        code from the release in effect', and leaving a space would not get it suggested."""
+        icd_release({'R07.9': 'Synthetic chest pain code'})
+        today = timezone.localdate()
+        save_release({'X99.9': 'Synthetic code of a retired release'},
+                     dict(system='ICD-10-CM', version='synthetic-retired', effective_from=today - timedelta(days=400),
+                          effective_until=today - timedelta(days=370), source_url='https://www.cms.gov/files/retired.txt',
+                          sha256='e' * 64, license_reference=''))
+        self.assertNotIn('written touching', self.text(self.suggest(self.another('Assessment: chest painX99.9 noted.'))))
+        self.assertIn('written touching', self.text(self.suggest(self.another('Assessment: chest painR07.9 noted.'))))
+
     def cpt_release_under(self, reference, version, sha, days_ago):
         today = timezone.localdate()        # an earlier, closed period: a stored acceptance's release need not be in effect
         return save_release({'99213': 'SYNTHETIC CPT DESCRIPTOR NOT CPT CONTENT'},

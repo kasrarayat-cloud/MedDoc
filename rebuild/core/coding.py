@@ -145,13 +145,32 @@ def labelled_codes(line):
 #: ⚠️ A DOTTED CODE WRITTEN AGAINST A LETTER OR DIGIT ('R07.9chest', 'painR07.9', '1R07.9') makes no TOKEN: TOKEN needs a word
 #: boundary on both sides, so the lookup never saw it and nothing was said (refutation R4C-3 of b3d8111d). Every dotted shape
 #: at every position is read, with each length its tail may have, and a code the release holds among them is counted as
-#: written touching unless the longest such code at that position is itself written as a whole token ('M25.532' holds the
-#: code M25.53 as a prefix and is not touching anything). Linear: one zero-width match per position, at most four candidates.
+#: written touching. Linear: one zero-width match per position, at most four candidates.
+#: ⚠️ NOT WHERE THE SHAPE WRITTEN THERE IS A WORD OF ITS OWN (refutation R5C-3 of a0bc4fd8): 'M54.50' and 'R07.99' hold the
+#: codes M54.5 and R07.9 as prefixes; they are entries the release lacks (counted as not in the release, once), not a held
+#: code touching anything, and the advice to 'leave a space' would split them into another code. 'M25.532' is the same case
+#: with the whole entry held.
+#: ⚠️ AND NOT INSIDE A WORD (refutation R5C-2): 'WBC11.2', 'Temp37.2', 'BMI31.2', 'eGFR60.1' hold C11.2, P37.2, I31.2 and
+#: R60.1, and a value written against its name was said to be a code. After a letter, a code is read only where the
+#: notes' own case changes there ('painR07.9': a lower-case letter, then the code's capital); after a digit, a mark or the
+#: start of a word, always ('1R07.9', 'R07.9chest'). The residual: a code run into a word written all in capitals
+#: ('CHEST PAINR07.9') is not said.
 EMBEDDED=re.compile(r'(?=([A-Z][0-9A-Z]{2}\.[0-9A-Z]{1,4}))')
 
-def embedded_candidates(upper):
-    """For every dotted code shape in the upper-cased notes, at every position, its candidate codes, shortest first."""
-    return [[shape[:index] for index in range(5,len(shape)+1)] for shape in (match.group(1) for match in EMBEDDED.finditer(upper))]
+def embedded_shapes(notes):
+    """(start, shape) for every dotted code shape at every position of the notes, read from the notes upper-cased character
+    for character (same_length_upper), so a position is the same position in the notes."""
+    aligned=same_length_upper(notes)
+    return aligned,[(match.start(1),match.group(1)) for match in EMBEDDED.finditer(aligned)]
+
+def run_into(notes,aligned,start,shape):
+    """Whether the dotted shape at `start` touches its neighbours and is not inside a word (R5C-2, R5C-3)."""
+    end=start+len(shape)
+    before=aligned[start-1] if start else ''
+    after=aligned[end] if end<len(aligned) else ''
+    if not before.isalnum() and not after.isalnum():return False         # a word of its own: never touching
+    if before.isalpha():return notes[start-1].islower() and notes[start].isupper()
+    return True
 
 def named_cpt(upper):
     """The distinct CPT codes the upper-cased notes name as CPT codes (CPT_NAMED), every code of a labelled list."""
@@ -224,28 +243,44 @@ def plan(encounter):
     known={code.code for code in codes}
     dotted={token for token in tokens if DOTTED.fullmatch(token)}-known
     shaped=set(DOTLESS.findall(upper))
-    # A dotted token, like a dotless one, is counted only when its first three characters are a category of the release in
-    # effect: compact lab values ('Cr1.2', 'pH7.38', 'Mg2.0') have the letter-letter-digit shape QA0.* needed (refutation
-    # R4C-2 of b3d8111d).
+    # A dotted token whose SECOND character is a letter, like a dotless one, is counted only when its first three characters
+    # are a category of the release in effect: compact lab values ('Cr1.2', 'pH7.38', 'Mg2.0') have the letter-letter-digit
+    # shape QA0.* needed (refutation R4C-2 of b3d8111d). ⚠️ One whose second character is a digit is counted whatever its
+    # first three (refutation R5C-1 of a0bc4fd8): a transposed digit ('J54.909' for J45.909, 'G34.909' for G43.909) names no
+    # category, and the category check dropped the doctor's mistyped code silently, against the rule held since aa3eead4.
+    # The residual, recorded: a letter written for a digit ('RO7.9', 'EI1.65') has the lab-value shape and is not said, as
+    # before R3C-3 widened the shape.
     categories=release_categories(releases,{token[:3] for token in shaped|dotted})
-    unmatched=sum(token[:3] in categories for token in dotted)
+    unmatched=sum(token[1].isdigit() or token[:3] in categories for token in dotted)
     dotless=sum(token[:3] in categories for token in shaped)
     cpt_withheld=len(named_cpt(upper)) if locked else 0
     # ⚠️ A code the release holds that the evidence reading refuses ('1.R07.9', 'R07.9.Plan': it touches the characters
     # around it) reached no counter: found, never suggested, never said (refutation R3C-2 of 75d11c09). Counted and said,
     # with a dotted code written against a letter or digit (R4C-3). A THREE-CHARACTER entry touching its neighbour ('1.I10',
-    # '1.P53') is not presumed to be a code (C10): it is counted as unlabelled, never as a code (refutation R4C-4).
+    # '1.P53') is not presumed to be a code (C10): it is counted as unlabelled, never as a code (refutation R4C-4), unless a
+    # code label names it on a line that writes it: 'ICD-10: I10.Follow up' is a labelled code that touches the next word,
+    # and the doctor is told to leave a space, which is what gets it suggested (refutation R5C-4 of a0bc4fd8: it was said to
+    # be unlabelled, with a remedy the doctor had already followed).
     refused=known-set(evidence)
-    unlabelled|={code for code in refused if len(code)==3}
-    positions=embedded_candidates(upper)
-    wanted={candidate for candidates in positions for candidate in candidates}
+    lines=encounter.notes.splitlines()
+    def labelled_anywhere(code):
+        for line in lines:
+            if code in same_length_upper(line):
+                if line not in labels:labels[line]=labelled_codes(line)
+                if code in labels[line]:return True
+        return False
+    refused_labelled={code for code in refused if len(code)==3 and labelled_anywhere(code)}
+    unlabelled|={code for code in refused if len(code)==3}-refused_labelled
+    aligned,shapes=embedded_shapes(encounter.notes)
+    shapes=[(start,shape) for start,shape in shapes if run_into(encounter.notes,aligned,start,shape)]
+    wanted={shape[:index] for _start,shape in shapes for index in range(5,len(shape)+1)}
     held=set(Code.objects.filter(code__in=wanted,release__in=[r for r in releases if r.system=='ICD-10-CM']).values_list(
         'code',flat=True)) if wanted else set()
     embedded=set()
-    for candidates in positions:
-        longest=next((candidate for candidate in reversed(candidates) if candidate in held),None)
-        if longest and longest not in tokens:embedded.add(longest)
-    touching=len({code for code in refused if len(code)>3}|embedded)
+    for _start,shape in shapes:
+        longest=next((shape[:index] for index in range(len(shape),4,-1) if shape[:index] in held),None)
+        if longest and longest not in tokens:embedded.add(longest)     # a token is suggested or already counted (refused)
+    touching=len({code for code in refused if len(code)>3}|refused_labelled|embedded)
     return Plan(encounter.notes,releases,[(code,evidence[code.code][1]) for code in documented],unmatched,cpt_withheld,dotless,
                 len(unlabelled),touching)
 
