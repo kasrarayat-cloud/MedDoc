@@ -118,6 +118,32 @@ class LayoutSource(unittest.TestCase):
         cell = w.SlotIndex(w.open_package(exported)).by_id['word/document.xml#b/tbl[1]/tr[0]/tc[1]'].el
         self.assertEqual([w.text_of(p) for p in cell.findall(w.q('w:p'))], [instruction, answer])
 
+    def test_only_complete_measured_coded_routes_resolve_their_exact_tab_withdrawal(self):
+        from .test_structural_columns import coded_form, LYMPH
+        raw=data(coded_form(LYMPH));prepared,_,_=source.prepare(raw)
+        issues=prepared['coverage_issues'];self.assertEqual(len(issues),1)
+        self.assertEqual(issues[0]['code'],'tab_column_withdrawal')
+        fields=copy.deepcopy(prepared['fields']);qualified={}
+        for field in fields:
+            if field.get('layout_candidate'):
+                receipt={'source_sha256':source.digest(raw),'candidate':field['layout_candidate'],
+                         'profile_sha256':'0'*64}
+                field['layout_verified']=receipt;qualified[field['layout_candidate']]=receipt
+        resolved=w.reconcile_layout_coverage(raw,fields,issues,qualified)
+        self.assertEqual(resolved['coverage_issues'],[])
+        self.assertEqual(resolved['resolved_tab_routes'],issues)
+        missing=next(f for f in fields if f.get('layout_candidate'))
+        partial=w.reconcile_layout_coverage(raw,[f for f in fields if f is not missing],issues,qualified)
+        self.assertTrue(partial['coverage_issues'])
+        self.assertTrue(all(i['code']=='unmapped_tab_extent' for i in partial['coverage_issues']))
+        self.assertEqual(partial['resolved_tab_routes'],[])
+        self.assertEqual(w.reconcile_layout_coverage(raw,fields,issues,{})['coverage_issues'],issues)
+        # A full physical box set never resolves a shared-cell, cardinality,
+        # signing, polarity or other source-policy withdrawal by coincidence.
+        for code in ('shared_merged_answer','unmapped_answer','nested_options','source_limit'):
+            conflict=[dict(issues[0],code=code)]
+            self.assertEqual(w.reconcile_layout_coverage(raw,fields,conflict,qualified)['coverage_issues'],conflict)
+
 
 class LayoutPdf(unittest.TestCase):
     def setUp(self):

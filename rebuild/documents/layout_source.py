@@ -391,4 +391,5 @@ def prepare(data, *, mapping=None, answers=None):
         states = w.effective_values(data, constrained, {k: v for k, v in answers.items() if k in keys},
                                    _written=actual) if constrained else {}
     return {"manifest": manifest, "fields": fields, "warnings": notes, "states": states,
+            "coverage_issues": detector.coverage_issues,
             "manifest_sha256": digest(canonical(manifest))}, actual, instrumented

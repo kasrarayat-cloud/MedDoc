@@ -26,6 +26,20 @@ def data(document):
     out = io.BytesIO(); document.save(out); return out.getvalue()
 
 
+class FixedReferenceCoverage(unittest.TestCase):
+    def test_literal_mailto_reference_is_preserved_without_inventing_an_answer(self):
+        doc=Document();p=doc.add_paragraph('Submit the completed report by email to: ')
+        link(p,'forms@example.invalid');doc.add_paragraph('Reason for visit: ______')
+        result=w.inspect(data(doc))
+        self.assertEqual([f['label'] for f in result['fields']],['Reason for visit'])
+        self.assertEqual(result['coverage_issues'],[])
+        self.assertTrue(any('hyperlink' in n.lower() for n in result['notes']))
+        # The target alone cannot make an actual linked placeholder a reference.
+        doc=Document();p=doc.add_paragraph('Answer: ');link(p,'Enter answer')
+        doc.add_paragraph('Reason for visit: ______');held=w.inspect(data(doc))
+        self.assertTrue(any(i['code']=='fixed_link_answer' for i in held['coverage_issues']))
+
+
 def linked_control(document, kind, block=False):
     paragraph = document.add_paragraph('Answer: ')
     control = _sdt(kind, options=('Yes', 'No'), placeholder='Enter answer')

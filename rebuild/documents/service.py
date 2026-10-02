@@ -45,7 +45,7 @@ def engine_fingerprint(engine, *, source_sha256=''):
         raise DocumentError('Unknown stored Word engine.', 'stale_mapping')
     modules = ('service.py', 'engine.py', 'worker.py', 'sandbox.py', 'word_v3.py',
                'source_policy.py', 'mapping_limits.py', 'tab_form.py', 'layout.py',
-               'layout_source.py', 'layout_transport.py', 'layout_server.py', 'layout_pdf_worker.py',
+               'layout_source.py', 'layout_transport.py', 'layout_server.py', 'layout_pdf_worker.py', 'layout_geometry.py',
                'import_selection.py', 'sdk_service.py', 'sdk_sandbox.py')
     processor = hashlib.sha256(engine.encode())
     try:
@@ -161,6 +161,13 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                     from .import_selection import digest as mapping_digest
                     response['import_manifest'] = {**imported, 'mapping_sha256': mapping_digest(response['fields']),
                                                    'initial_mapping_sha256': mapping_digest(response['fields'])}
+                    if operation == 'inspect' and 'coverage_issues' in verified:
+                        coverage = dict(imported.get('coverage', {}))
+                        coverage['inspection_issues'] = coverage.get('selected_engine_issues', [])
+                        coverage['selected_engine_issues'] = verified['coverage_issues']
+                        coverage['resolved_tab_routes'] = verified.get('resolved_tab_routes', [])
+                        coverage['block_generation'] = bool(verified['coverage_issues'])
+                        response['import_manifest']['coverage'] = coverage
                 if needs_layout:
                     if operation in ("effective_options", "effective_values"):
                         response["states"] = verified["states"]

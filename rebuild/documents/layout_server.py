@@ -149,7 +149,23 @@ def qualify(request, evidence_root):
             'word_engine_sha256': digest((ROOT / 'word_v3.py').read_bytes())}
         fields, warnings = retain_verified(prepared['fields'], prepared['warnings'], manifest, proof,
             lambda identity: {'source_sha256': digest(data), 'candidate': identity, 'profile_sha256': profile_sha})
+        qualified = {field['layout_candidate']: field['layout_verified'] for field in fields
+                     if field.get('layout_candidate') and field.get('layout_verified')}
+        (workspace / 'request-layout_prepare.json').write_bytes((workspace / 'request.json').read_bytes())
+        (workspace / 'request.json').write_bytes(canonical({'operation': 'layout_coverage', 'format': 'docx',
+            'engine': 'v3', 'mapping': fields, 'coverage_issues': prepared.get('coverage_issues', []),
+            'qualified': qualified}))
+        coverage = worker(workspace, 'worker.py')
+        for held in proof.get('held', []):
+            candidate = next(c for c in manifest['candidates'] if c['id'] == held['candidate'])
+            source = candidate['source']; row = source['row']
+            detail = 'Measured layout leaves this exact answer row unchanged: ' + held['reason'] + '. Printed question: ' + source['label'] + '. Section: ' + source['context']
+            coverage['coverage_issues'].append({'id': digest(canonical(held)), 'part': row['part'],
+                'slot': row['slot'], 'code': 'layout_held', 'detail': detail})
+        (workspace / 'coverage.json').write_bytes(canonical(coverage))
         response = {'verified': True, 'receipt': receipt, 'fields': fields, 'warnings': warnings,
+                    'coverage_issues': coverage['coverage_issues'],
+                    'resolved_tab_routes': coverage['resolved_tab_routes'],
                     'states': prepared['states'],
                     'document': base64.b64encode(document).decode()}
         (workspace / 'receipt.json').write_bytes(canonical(receipt))

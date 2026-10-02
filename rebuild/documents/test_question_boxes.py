@@ -651,6 +651,29 @@ class NestedCheckboxOwnership(unittest.TestCase):
                     if slot.kind == 'p' and '/tbl[0]/tr[0]/tc[0]/tbl[0]/' not in slot.path:
                         self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
 
+    def test_one_complete_colon_label_owns_its_nested_grid_without_relaxing_boundaries(self):
+        source='20. What relieves your symptoms:'
+        doc=self.form(write_in=True);doc.tables[0].cell(0,0).paragraphs[0].text=source
+        result=w.inspect(data(doc));group=next(f for f in result['fields'] if f['locator']['target']['type']=='checkboxes')
+        self.assertEqual(group['label'],source)
+        self.assertEqual(group['options'],['Tightness','Other'])
+        self.assertTrue(any(f['label']=='Other:' and f['locator']['target']['type']=='span' for f in result['fields']))
+        for case in ('competing_colons','marked_boundary','subordinate','signing'):
+            with self.subTest(case=case):
+                adverse=self.form(mixed=case=='subordinate',spacer='underline' if case=='marked_boundary' else 'plain')
+                owner=adverse.tables[0].cell(0,0);owner.paragraphs[0].text=source
+                if case=='competing_colons':owner.paragraphs[1].text='Which symptoms occurred last year:'
+                if case=='signing':owner.paragraphs[0].text='Witness attestation:'
+                inspected=w.inspect(data(adverse))
+                self.assertFalse([f for f in inspected['fields'] if f['locator']['target']['type']=='checkboxes'])
+                self.assertTrue(any('Nested option' in n for n in inspected['notes']))
+                if case=='signing':
+                    # A later manual field cannot turn this real witness area
+                    # into the finalizer's attestation through ordinary review.
+                    forged=dict(group,key='forged_witness')
+                    self.assertIn('forged_witness',w.destination_roles(data(adverse),[forged])['violations'])
+                    with self.assertRaises(w.V3Failure):w.fill(data(adverse),[forged],{'forged_witness':'Tightness'})
+
     def test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed(self):
         for spacer in ('underline', 'other_question'):
             with self.subTest(spacer=spacer):

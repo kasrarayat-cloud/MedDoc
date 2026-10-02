@@ -83,6 +83,9 @@ def process_v3(workspace, request):
         if operation == 'places':
             return {'format': 'docx', 'contract': word_v3.CONTRACT,
                     'places': word_v3.writing_places(data, request.get('mapping') or [])}
+        if operation == 'layout_coverage':
+            return {'format': 'docx', **word_v3.reconcile_layout_coverage(data, request['mapping'],
+                       request['coverage_issues'], request['qualified'])}
         if operation == "fill":
             mapping, answers = request["mapping"], request["answers"]
             if not is_v3_mapping(mapping):
@@ -702,7 +705,7 @@ def process(workspace, request):
     warnings = []
     if fmt == 'docx' and request.get('operation') == 'inspect':
         return inspect_auto(workspace, preferred=request.get('engine', 'legacy'))
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles", "places")
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles", "places", "layout_coverage")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):

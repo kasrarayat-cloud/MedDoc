@@ -2889,7 +2889,7 @@ class Detector:
                         complete = False;problem = "A marked spacer or unresolved layout boundary separates the source."
             if not complete or len(pending) != len(candidates):
                 self.notes.append("Tab-column options at " + cell.id + ": " + problem + " Printed source: " + source)
-                self.coverage_issue(cell, 'unmapped_answer', self.notes[-1])
+                self.coverage_issue(cell, 'tab_column_withdrawal', self.notes[-1])
                 # ⚠️ A REFUSED SOURCE'S TEXT LINES ARE HELD WITH ITS ROWS (CI 36479289351): claiming only the rows left
                 # the literal header to the text-option rule, which offered the header's words as options and would have
                 # ticked the header line while the row's own boxes stayed empty. A line with its own box or blank is
@@ -3213,7 +3213,7 @@ class Detector:
                 self.notes.append("Coded checkbox options at " + s.id +
                                   " need their complete printed header and layout; response codes are not option labels. "
                                   "Printed source: " + txt)
-                self.coverage_issue(s, 'unmapped_answer', self.notes[-1])
+                self.coverage_issue(s, 'coded_checkbox_withdrawal', self.notes[-1])
                 self.claimed.add(id(s.el))
                 continue
             if (any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(s.el))
@@ -3335,6 +3335,8 @@ class Detector:
         problem = ""
         explicit = [slot for slot in paragraphs if "?" in self.text(slot.el)
                     or CHECK_ALL.search(self.text(slot.el)) or CHECK_ONE.search(self.text(slot.el))]
+        if not explicit and len(paragraphs) == 1 and sources[0].endswith(':'):
+            explicit = paragraphs  # one complete printed label; all structural/source guards below still apply
         if len(explicit) != 1:
             problem = "There is not one complete printed parent question."
         question = explicit[0] if len(explicit) == 1 else paragraphs[-1]
@@ -3387,6 +3389,7 @@ class Detector:
             problem = "The complete question or context exceeds limits."
         if any(self.question_box_signing(value) for value in sources + [context]):
             problem = "The complete source contains signing/consent instructions. Governing context: " + context
+            self.protected_regions.add(table.id)
         if problem:
             return {"problem": "Nested option grid at " + table.id + ": " + problem
                     + " Printed source: " + source + " Options: " + self.text(table.el, own=False),
@@ -5064,7 +5067,9 @@ class Detector:
         if reading != text and re.search(
                 r"\b(?:(?:counter|under|co|re)[ -]?)?sign(?:s|ed|ing|off|offs)?\b", reading, re.I):
             return True
-        return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
+        return (SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
+                or re.fullmatch(r'(?:(?:patient|clinician|doctor|nurse|witness|manager|supervisor)\s+)?'
+                                r'(?:attestation|declaration|sign[ -]?off)\s*:', reading.strip(), re.I))
 
     def question_box_role_source(self, table):
         """(printed question, section) over a one-cell box, read for the box's DESTINATION ROLE only (destination_roles).
@@ -5539,6 +5544,27 @@ class Detector:
                     self.claimed.add(id(b.el))
 
     # 7. blanks and 'Label:' answers inside paragraphs ---------------------------------------------------------------
+    def literal_reference_link(self, text, pieces, start, end):
+        """A printed address equal to its hyperlink target is fixed reference ink."""
+        links = {ancestor for piece in pieces if piece.run is not None
+                 and piece.start < end and piece.end > start
+                 for ancestor in piece.run.iterancestors() if ancestor.tag == q('w:hyperlink')}
+        if len(links) != 1:return False
+        link = next(iter(links)); shown = ''.join(link.itertext()).strip()
+        if shown != text[start:end].strip():return False
+        paragraph = next((a for a in link.iterancestors() if a.tag == q('w:p')), None)
+        slot = self.index.by_el.get(id(paragraph)) if paragraph is not None else None
+        if slot is None:return False
+        parent, name = slot.part.rsplit('/', 1)
+        rels = parent + '/_rels/' + name + '.rels'
+        if rels not in self.package.names:return False
+        target = next((r.get('Target') for r in self.package.tree(rels)
+                       if r.get('Id') == link.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+                       and r.get('TargetMode') == 'External'
+                       and (r.get('Type') or '').endswith('/hyperlink')), None)
+        return ((target == 'mailto:' + shown and re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', shown) is not None)
+                or (target == shown and shown.startswith(('https://', 'http://'))))
+
     def blank_spans(self, text, pieces):
         spans = []
         for rx, kind in ((SEGMENTED, "segmented"), (DIGIT_RUN, "segmented"), (UNDERSCORES, "blank"), (DOTS, "blank"), (TOKEN, "token"), (BRACKET, "bracket"), (ANGLE, "angle")):
@@ -5590,7 +5616,7 @@ class Detector:
                     note += " Location: " + slot.id
                 if note not in self.notes:
                     self.notes.append(note)
-                if slot is not None:
+                if slot is not None and not (kind == 'hint' and self.literal_reference_link(text, pieces, start, end)):
                     self.coverage_issue(slot, 'fixed_link_answer', note, start=start, end=end)
             else:
                 kept.append((start, end, kind))
@@ -6494,6 +6520,58 @@ def writing_places(data, fields):
     """The stored v3 writer's exact destinations, including glyph offsets and copies."""
     reader = _PlaceReader(SlotIndex(open_package(data)))
     return {field['key']: reader.of(field) for field in fields}
+
+
+def reconcile_layout_coverage(data, fields, issues, qualified):
+    """Resolve only first-route tab withdrawals through measured coded sources.
+
+    The renderer supplies the exact receipt for each proof-backed candidate.
+    Other withdrawal causes never clear merely because a writer overlaps them.
+    Uncovered visible boxes/blanks retain exact extents and the full source note.
+    """
+    detector = Detector(open_package(data))
+    reader = _PlaceReader(detector.index)
+    proven = [field for field in fields
+              if field.get('layout_candidate') in qualified
+              and field.get('layout_verified') == qualified[field['layout_candidate']]
+              and field.get('locator', {}).get('target', {}).get('column_sequence')]
+    box_writes = {place for field in proven for place in reader.of(field)}
+    blank_writes = {place for field in fields
+                    if field.get('locator', {}).get('target', {}).get('type') == 'span'
+                    and not field.get('write_protected') and field.get('kind') not in SIGNING_KINDS
+                    for place in reader.of(field)}
+    remaining, resolved = [], []
+    for issue in issues:
+        root = _place_id(issue['part'], issue['slot'])
+        if issue['code'] not in ('tab_column_withdrawal', 'coded_checkbox_withdrawal') or not any(
+                field['locator']['part'] == issue['part']
+                and (field['locator']['slot'] == issue['slot']
+                     or field['locator']['slot'].startswith(issue['slot'] + '/')) for field in proven):
+            remaining.append(issue);continue
+        expected = []
+        for slot in detector.index.slots:
+            if slot.kind != 'p' or not (slot.id == root or slot.id.startswith(root + '/')):
+                continue
+            for ref, _, _ in detector.box_units(slot):
+                location = {'part': slot.part, 'slot': slot.path, 'target': {'type': 'checkboxes', 'boxes': [ref]}}
+                for place in reader.of({'locator': location}):
+                    expected.append((place, box_writes))
+            for start, end, _ in detector.blank_spans(*detector.ptext(slot.el)):
+                expected.append(((slot.id, start, end), blank_writes))
+        if not expected:
+            remaining.append(issue);continue
+        missing = [place for place, actual in expected if place not in actual]
+        if not missing:
+            resolved.append(issue);continue
+        for place, start, end in missing:
+            part, path = place.split('#', 1)
+            detail = 'An answer extent remains unresolved after measured coded-column mapping. ' + issue['detail']
+            item = {'part': part, 'slot': path, 'code': 'unmapped_tab_extent', 'detail': detail,
+                    'parent_issue': issue['id']}
+            if start is not None:item.update(start=start,end=end)
+            item['id'] = hashlib.sha256(repr((part,path,start,end,issue['id'])).encode()).hexdigest()
+            remaining.append(item)
+    return {'coverage_issues': remaining, 'resolved_tab_routes': resolved}
 
 
 #: ⚠️ THE ONE READER OF WHETHER A PRINTED LABEL NAMES A SIGNING PLACE (a signature or initials area): the legacy default
