@@ -45,7 +45,8 @@ class Command(BaseCommand):
                 points += exposure.local_backups(options['backup_root'])
             if len({point['id'] for point in points}) != len(points):
                 raise ValidationError('A recovery point is listed twice.')
-            value = exposure.ledger(entries, points, timezone.now())
+            # Commit evidence is this database's tombstones: run it against the live database, never a restored one.
+            value = exposure.ledger(entries, points, timezone.now(), exposure.commit_evidence())
             digest = exposure.write_private(options['output'], value)
         except OSError:
             raise CommandError('An input file could not be read.') from None

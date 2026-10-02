@@ -3,11 +3,13 @@ document, read from the verified journal and the backup system's own inventory. 
 period exists here: a recovery point's expiry comes from its inventory, and an absent expiry means kept.
 """
 import io
+import uuid
 import json
 import os
 import stat
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -49,7 +51,7 @@ class BackupExposureLedger(RedactionFixture, TestCase):
             self.point('after-both', timedelta(hours=2)),
             self.point('expired-before-both', timedelta(seconds=5), expires=timedelta(hours=1, minutes=30)),
             self.point('expiring-later', timedelta(seconds=20), expires=timedelta(days=30))]})
-        value = exposure.ledger(j.verified(self.fresh()), points, self.base + timedelta(hours=3))
+        value = exposure.ledger(j.verified(self.fresh()), points, self.base + timedelta(hours=3), exposure.commit_evidence())
         rows = {row['id']: row for row in value['acts']}
         self.assertEqual([row['kind'] for row in value['acts']], ['instruction', 'redaction'])
         self.assertEqual(rows[disposed]['exposed_recovery_points'], ['before-both', 'expiring-later'])
@@ -64,6 +66,33 @@ class BackupExposureLedger(RedactionFixture, TestCase):
         text = json.dumps(value)
         for private in ('SYNTHETIC', self.scope[3].display_name, 'audio/', 'receipts/'):
             self.assertNotIn(private, text)
+
+    def test_F3_a_redaction_whose_commit_was_retried_later_counts_every_point_until_that_commit(self):
+        """Refutation F3 (dc33e094): the journal entry's time plus a five-minute tolerance missed a recovery point taken
+        while a journaled redaction waited for its retried commit: the content was still in the database."""
+        from django.db import DatabaseError
+        from core import redaction
+        from core.tests.test_redaction import REASON
+        row, _, _ = self.worked_draft()
+        requested = redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+        with patch('core.redaction.apply', side_effect=DatabaseError('SYNTHETIC lost connection')):
+            with self.assertRaises(DatabaseError): redaction.execute(self.second, requested.pk, self.fresh())
+        acted = exposure.acts(j.verified())[0]['acted_at']
+        point = {'id': 'db-backup-T+30min', 'created_at': acted + timedelta(minutes=30), 'expires_at': None, 'location': 'x'}
+        later = {'id': 'db-backup-T+3h', 'created_at': acted + timedelta(hours=3), 'expires_at': None, 'location': 'x'}
+        # Before the retry commits, the database holds no tombstone: every later point may hold the content.
+        value = exposure.ledger(j.verified(), [point, later], self.base + timedelta(hours=4), exposure.commit_evidence())
+        self.assertEqual(value['acts'][0]['possibly_exposed_recovery_points'], ['db-backup-T+30min', 'db-backup-T+3h'])
+        self.assertIsNone(value['acts'][0]['committed_at'])
+        self.clock.return_value = self.base + timedelta(hours=1)
+        with self.captureOnCommitCallbacks(execute=True):
+            redaction.execute(self.second, requested.pk, self.fresh())
+        value = exposure.ledger(j.verified(), [point, later], self.base + timedelta(hours=4), exposure.commit_evidence())
+        act = value['acts'][0]
+        self.assertEqual(act['possibly_exposed_recovery_points'], ['db-backup-T+30min'])  # dc33e094: []
+        self.assertEqual({row['id']: row['contains'] for row in value['recovery_points']},
+                         {'db-backup-T+30min': [act['id']], 'db-backup-T+3h': []})
+        self.assertIsNotNone(act['committed_at'])
 
     def test_local_backup_runs_count_only_when_complete(self):
         root = self.out / 'backups'; root.mkdir()

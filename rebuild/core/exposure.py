@@ -32,11 +32,21 @@ from . import disposition_journal as journal, disposition_policy as p
 CONTRACT = 'backup-exposure-ledger-v1'
 RUN_ID = re.compile(r'^(\d{8}T\d{6}Z)-[0-9a-f]{8}$')
 MAX_POINTS = 100000
-# An act's time is its journal signature, which PRECEDES its database commit by that one request's duration. A recovery
-# point taken in that gap can still hold the content, so points up to this long after the signature are listed as
-# possibly exposed. A technical tolerance for one transaction, not a retention period; restoring any point re-applies
-# every journaled act whichever side of it the point falls.
+# An act's time is its journal signature, which PRECEDES its database commit, and the commit can come much later (a
+# failed commit retried an hour on keeps the first signature: refutation F3 of dc33e094). Until the database's own
+# tombstone shows the commit, every later recovery point may still hold the content. The tombstone's creation time is
+# inside its transaction, so points up to this long after it are still listed as possibly exposed. A technical tolerance
+# for one transaction, not a retention period; restoring any point re-applies every journaled act either way.
 COMMIT_TOLERANCE = timedelta(minutes=5)
+
+
+def commit_evidence():
+    """{act id: when its tombstone was written in THIS database}: a disposition's by its instruction id, a redaction's by
+    its tombstone id (the journal entry's id). An act missing here has no commit evidence and counts as uncommitted."""
+    from .models import DispositionTombstone, RedactionTombstone
+    found = {str(ident): moment for ident, moment in DispositionTombstone.objects.values_list('instruction_id', 'created_at')}
+    found.update({str(ident): moment for ident, moment in RedactionTombstone.objects.values_list('id', 'created_at')})
+    return {ident: moment.astimezone(dt_timezone.utc) for ident, moment in found.items()}
 
 
 def _instant(value, label):
@@ -110,24 +120,31 @@ def acts(entries):
     return found
 
 
-def ledger(entries, points, now):
-    """Every act with the unexpired recovery points taken before it (and, separately, within COMMIT_TOLERANCE after
-    it), and every recovery point with the acts a restore of it re-applies. A recovery point taken at the very instant
-    of an act counts as exposed (the conservative side)."""
+def ledger(entries, points, now, committed):
+    """Every act with the unexpired recovery points taken at or before its journal signature (exposed), and those taken
+    after it but before its database commit plus COMMIT_TOLERANCE (possibly exposed; every later point when `committed`,
+    from commit_evidence(), has no tombstone for it), and every recovery point with the acts a restore of it re-applies."""
     listed = acts(entries)
     live = [point for point in points if point['expires_at'] is None or point['expires_at'] > now]
+    def until(act):
+        moment = committed.get(act['id'])
+        return None if moment is None else max(moment, act['acted_at']) + COMMIT_TOLERANCE
+    def may_hold(point, act):
+        bound = until(act)
+        return bound is None or point['created_at'] <= bound
     rows = []
     for act in listed:
         exposed = sorted(point['id'] for point in live if point['created_at'] <= act['acted_at'])
-        possibly = sorted(point['id'] for point in live
-                          if act['acted_at'] < point['created_at'] <= act['acted_at'] + COMMIT_TOLERANCE)
+        possibly = sorted(point['id'] for point in live if act['acted_at'] < point['created_at'] and may_hold(point, act))
+        moment = committed.get(act['id'])
         rows.append({'kind': act['kind'], 'id': act['id'], 'target_id': act['target_id'],
                      'acted_at': act['acted_at'].isoformat(), 'entry_sha256': act['entry_sha256'],
+                     'committed_at': moment.isoformat() if moment else None,
                      'exposed_recovery_points': exposed, 'possibly_exposed_recovery_points': possibly,
                      'reapplied_by': 'journal_replay_then_restore_admission'})
     recovery = []
     for point in sorted(live, key=lambda point: (point['created_at'], point['id'])):
-        contains = [act['id'] for act in listed if point['created_at'] <= act['acted_at'] + COMMIT_TOLERANCE]
+        contains = [act['id'] for act in listed if point['created_at'] <= act['acted_at'] or may_hold(point, act)]
         recovery.append({'id': point['id'], 'location': point['location'], 'created_at': point['created_at'].isoformat(),
                          'expires_at': point['expires_at'].isoformat() if point['expires_at'] else None,
                          'contains': contains})
