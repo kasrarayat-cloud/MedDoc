@@ -1,0 +1,20 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_race_red
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F.
+======================================================================
+FAIL: test_pending_quote_is_committed_before_redaction_journals_its_file_manifest (core.tests.test_voice_redaction_serialization.VoiceRedactionSerialization.test_pending_quote_is_committed_before_redaction_journals_its_file_manifest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_voice_redaction_serialization.py", line 67, in test_pending_quote_is_committed_before_redaction_journals_its_file_manifest
+    self.assertTrue(blocked, 'redaction journaled before the pending quote was committed')
+AssertionError: False is not true : redaction journaled before the pending quote was committed
+
+----------------------------------------------------------------------
+Ran 2 tests in 4.951s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 2 test(s).
+System check identified no issues (0 silenced).

@@ -1,0 +1,27 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_voice_affected
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......................................................................................................................................................./opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....E................................
+======================================================================
+ERROR: test_a_recording_uploaded_while_the_draft_is_disposed_is_refused_and_removed (core.tests.test_retention_flow_locks.DispositionAgainstClinicianRequests.test_a_recording_uploaded_while_the_draft_is_disposed_is_refused_and_removed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_retention_flow_locks.py", line 549, in test_a_recording_uploaded_while_the_draft_is_disposed_is_refused_and_removed
+    self.assert_disposed(executed, row)
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_retention_flow_locks.py", line 533, in assert_disposed
+    self.assertEqual(executed['value'].outcome, 'empty_draft_deleted')
+                     ~~~~~~~~^^^^^^^^^
+KeyError: 'value'
+
+----------------------------------------------------------------------
+Ran 188 tests in 132.608s
+
+FAILED (errors=1)
+Destroying test database for alias 'default'...
+Found 188 test(s).
+System check identified no issues (0 silenced).

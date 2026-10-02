@@ -57,6 +57,36 @@ inside its child process; no credential was in argv or logs. No paid API call or
 ## Remaining limits
 
 The current V1 register's hosting/accounts/legal/native Word/independent security/human microphone gates remain. Existing
-retention policy remains unset; code neither invents a schedule nor deletes historical financial rows. Redaction quote
-race R6R-1 and integration coverage for the newly added transcript-review evidence are a separate affected change, not
-closed by this report. Final served candidate verification and exact integrated CI remain the lead's closeout gates.
+retention policy remains unset; code neither invents a schedule nor deletes historical financial rows. Integration
+coverage for the newly added transcript-review evidence is a separate affected change. Final served candidate
+verification and exact integrated CI remain the lead's closeout gates.
+
+## Recording and redaction race R6R-1
+
+The actual upload-to-over-limit route formerly wrote a recording, rolled back the nested admission on an over-limit
+exception, and recorded its only durable ownership reference afterward. Redaction could journal its file manifest in
+that gap and leave unreferenced recording bytes. The new PostgreSQL two-connection regression reproduces this before
+the repair: redaction completed while the over-limit audit was paused, before that reference was committed.
+
+Voice admission now locks the exact available encounter before storing bytes, rechecks membership/finalization, and
+holds that row until either a job or the over-limit quote commits. The outer transaction survives the nested admission
+rollback. Redaction/disposition take the same row first. A failed outer commit is caught after rollback, and the
+unowned recording is removed through the existing preservation-aware cleanup. No pricing, customer settlement,
+provider usage, retention schedule or legal authority changes.
+
+Both redaction race orders are exercised: upload-first makes redaction wait and include/sweep the quoted recording;
+redaction-first admits no recording, quote, job or hold. A commit failure admits nothing and removes unowned bytes.
+Empty-draft disposition is also exercised in both orders: disposition-first refuses a stale upload; upload-first makes
+disposition wait, then refuse the now nonempty draft and preserve its job/recording. No provider sends in these controls.
+
+- Initial race:2tests/4.951s,1failure, retained.
+- Final admission/commit controls:3tests/4.628s,OK.
+- Affected recording/retention/redaction run:188tests/132.608s,187pass and1RF3 test scheduling error. Its old harness
+  synchronously joined disposition from inside `store_upload`, which now correctly holds the row, so the harness
+  waited on itself and had no completed result. The original failure is retained. The regression now disposes in the
+  remaining pre-admission window, after the scoped read and before the row lock, preserving its prior refusal checks.
+- Final focused run including both genuine disposition orders:5tests/6.444s,OK. Source frozen during each run.
+
+The full affected suite still needs its final rerun after the revised race schedule. Independent finished-diff refutation
+and exact integrated CI remain required. All first failures and green runs are retained under the report's evidence
+directory with SHA-256 verification.

@@ -1735,40 +1735,48 @@ def voice(request,pk):
     form=VoiceForm(request.POST,request.FILES)
     relative=None
     try:
-        if not form.is_valid():raise ValidationError('Choose a supported recording and confirm provider processing.')
-        if Path(form.cleaned_data['audio'].name).suffix.lower() not in ['.wav','.webm','.mp3','.m4a']:raise ValidationError(AUDIO_FORMATS_HINT)
-        relative=store_upload(form.cleaned_data['audio'],'audio')
-        raw=private_path(relative).read_bytes()[:16]
-        # The same frame-sync rule as core/audio.py, which measures the recording: the narrower
-        # three-prefix list refused MPEG audio that the measuring reader accepts.
-        if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3')) or mpeg_frame_sync(raw) or raw[4:8]==b'ftyp'):raise ValidationError('This file is not a recording QuillMD can read. '+AUDIO_FORMATS_HINT)
-        # ⚠️ A RECORDING EXISTS ONLY IN THE PAGE UNTIL IT IS SENT, so a quote that expires while the
-        # doctor dictates discards it. The voice quote therefore lives as long as the over-limit
-        # approval and the session (30 min). The limit it shows still binds, the signed pricing
-        # configuration is unchanged, and length is re-measured at enqueue.
-        quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_DOCUMENT_CHANGED),'transcript_review_required':True}
-        try:
-            job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
-        except RecordingOverLimit as over:
-            # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
-            approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
-                                    'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
-                                    'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
-            # The path lets the worker remove the upload if nobody approves it within the approval window.
-            audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
-                  charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
-            # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
-            return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
-                'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
-                'standard_limit':Decimal(over.quote['standard_limit']),
-                'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
-        if job.input_path!=relative:cleanup_file(private_path(relative),encounter_id=e.pk)
-        if getattr(job,'reused',False):
-            # The identical recording already holds this request key; the redundant upload was just
-            # removed above. Nothing was sent to the provider and nothing was charged again.
-            messages.info(request,reuse_message(job,recording=True))
-        else:
-            messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
+        with transaction.atomic():
+            if not form.is_valid():raise ValidationError('Choose a supported recording and confirm provider processing.')
+            # R6R-1: the recording must acquire a durable document reference before redaction can journal its keys.
+            # Keep this encounter lock from BEFORE bytes are stored through either job admission or the over-limit quote.
+            # enqueue's nested rollback on RecordingOverLimit must not release this outer lock.
+            from .disposition_execution import lock_available
+            e=lock_available(e.pk)
+            membership(request.user,e.department)
+            if e.status=='finalized':raise ValidationError('Finalized documents are immutable.')
+            if Path(form.cleaned_data['audio'].name).suffix.lower() not in ['.wav','.webm','.mp3','.m4a']:raise ValidationError(AUDIO_FORMATS_HINT)
+            relative=store_upload(form.cleaned_data['audio'],'audio')
+            raw=private_path(relative).read_bytes()[:16]
+            # The same frame-sync rule as core/audio.py, which measures the recording: the narrower
+            # three-prefix list refused MPEG audio that the measuring reader accepts.
+            if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3')) or mpeg_frame_sync(raw) or raw[4:8]==b'ftyp'):raise ValidationError('This file is not a recording QuillMD can read. '+AUDIO_FORMATS_HINT)
+            # ⚠️ A RECORDING EXISTS ONLY IN THE PAGE UNTIL IT IS SENT, so a quote that expires while the
+            # doctor dictates discards it. The voice quote therefore lives as long as the over-limit
+            # approval and the session (30 min). The limit it shows still binds, the signed pricing
+            # configuration is unchanged, and length is re-measured at enqueue.
+            quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_DOCUMENT_CHANGED),'transcript_review_required':True}
+            try:
+                job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
+            except RecordingOverLimit as over:
+                # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
+                approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
+                                        'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
+                                        'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
+                # The path lets the worker remove the upload if nobody approves it within the approval window.
+                audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
+                      charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
+                # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
+                return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
+                    'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
+                    'standard_limit':Decimal(over.quote['standard_limit']),
+                    'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
+            if job.input_path!=relative:cleanup_file(private_path(relative),encounter_id=e.pk)
+            if getattr(job,'reused',False):
+                # The identical recording already holds this request key; the redundant upload was just
+                # removed above. Nothing was sent to the provider and nothing was charged again.
+                messages.info(request,reuse_message(job,recording=True))
+            else:
+                messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
         if relative:cleanup_file(private_path(relative))
         messages.error(request,error_message(exc))
