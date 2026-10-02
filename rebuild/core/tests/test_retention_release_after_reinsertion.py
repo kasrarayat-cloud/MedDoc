@@ -131,3 +131,44 @@ class ReleaseJournaledAfterReinsertion(RepairFixture, TestCase):
             self.assertTrue(m.RetentionHoldRelease.objects.filter(hold=hold).exists())
             self.assertFalse(self.held(hold.pk, saved['id']))
             self.assertFalse(d.quarantined())
+
+    def test_F8_a_stale_marker_and_a_local_release_with_other_evidence_replay_without_conflict(self):
+        """Refutation F8 (dc33e094, the refuter's P13): ac43e379 left the stale 'target_absent' release marker, served the
+        target with the hold active, and a local custodian then released the hold with other evidence (its journal copy
+        refused: the journal already held the source's release). The next replay refused (conflict) and the target stayed
+        quarantined. Both the journal and this database have ended the hold, so preservation agrees; only the release
+        evidence differs, and that is recorded rather than refused."""
+        target, hold = self.reinserted()
+        release, entry = self.journal_release(hold)
+        m.RetentionHoldReplay.objects.create(record_id=release['id'], hold_id=hold.pk, event='release',
+                                             outcome='target_absent', journal_entry=entry, entry_sha256=p.digest(entry),
+                                             created_by=self.admin)
+        third = self.custodian('custodian3')
+        with self.assertLogs('core.retention', 'ERROR'):
+            self.committed(lambda: retention.release_hold(third, hold.pk, 'c'*64))
+        local = m.RetentionHoldRelease.objects.get(hold=hold)
+        self.assertNotEqual(str(local.pk), release['id'])
+        self.assertEqual(retention.unaccounted_journal_records(), set())  # dc33e094: {the source's release}
+        with self.quarantine():
+            report = x.replay(self.admin, self.fresh())  # dc33e094: ValidationError (conflicts with the journal)
+            self.assertEqual(report['releases_target_absent'], 1)
+            assessed = restore_admission.assess(self.instance, self.fresh(), RELEASE)
+        self.assertEqual((assessed['missing_holds'], assessed['blockers']), (0, []))
+        self.assertFalse(self.held(hold.pk, target))
+        self.assertEqual(list(m.RetentionHoldRelease.objects.filter(hold=hold).values_list('pk', flat=True)), [local.pk])
+        differs = m.AuditEvent.objects.get(action='retention.release_evidence_differs', target=str(hold.pk))
+        self.assertEqual((differs.details['journaled_release'], differs.details['local_release']), (release['id'], str(local.pk)))
+        with self.lifted():
+            self.assertFalse(d.quarantined())
+
+    def test_F8_control_a_mismatched_release_without_the_stale_marker_still_conflicts(self):
+        """The acceptance is narrow: a hold the replay found present (no stale absence marker) whose release here differs
+        from the journal's is still a conflict, as before."""
+        hold = self.patient_hold()
+        local = self.committed(lambda: retention.release_hold(self.second, hold.pk, 'b'*64))
+        entries = j.verified()
+        forged = dict(entries[1]['body']['release'], id=str(uuid.uuid4()))
+        self.write(entries[0], self.entry(2, p.digest(entries[0]), j.RELEASE, 'release', forged))
+        with self.quarantine(), self.assertRaisesMessage(ValidationError, 'conflicts with the independent journal'):
+            x.replay(self.admin, self.fresh())
+        self.assertEqual(m.RetentionHoldRelease.objects.get(hold=hold).pk, local.pk)

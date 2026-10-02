@@ -401,7 +401,9 @@ def release_marker_consistent(marker,hold_outcome,row,release):
     if marker.outcome=='target_absent':
         if hold_outcome!='target_absent':return False
         if row is None:return not RetentionHold.objects.filter(pk=release['hold_id']).exists()
-        return exact and attributed(row.created_by_id,release['created_by'],marker.created_by_id)
+        # F8: a stale absence marker (ac43e379) with the hold since ended HERE by another release: the journal and this
+        # database have both ended the hold, so preservation agrees; replay records the differing evidence.
+        return True
     return False
 
 
@@ -451,6 +453,14 @@ def _replay_release(actor,hold,hold_outcome,release,entry):
             row=RetentionHoldRelease.objects.create(id=release['id'],hold=held,authority_sha256=release['authority_sha256'],
                                                     created_by_id=recorder(release['created_by'],marker.created_by_id))
             audit(actor,'retention.release_replayed',hold['id'],authority_sha256=release['authority_sha256'])
+        elif marker.outcome=='target_absent' and row is not None and str(row.pk)!=release['id']:
+            # F8 (the refuter's P13): under the stale marker a local custodian ended the hold with other evidence (the
+            # journal refused its copy, holding the source's release). Both ended it; the release row is append-only and
+            # one per hold, so the divergence is recorded, once, not refused (a refusal quarantined the target for good).
+            if not AuditEvent.objects.filter(action='retention.release_evidence_differs',target=str(hold['id'])).exists():
+                audit(actor,'retention.release_evidence_differs',hold['id'],journaled_release=release['id'],
+                      local_release=str(row.pk),journaled_authority_sha256=release['authority_sha256'],
+                      local_authority_sha256=row.authority_sha256)
         if not release_marker_consistent(marker,hold_outcome,row,release):raise ValidationError(REPLAY_CONFLICT)
         return marker.outcome
     if hold_outcome=='target_absent' and held is None:
@@ -515,11 +525,13 @@ def unaccounted_journal_records():
     releases={record['release']['id'] for record in records.values() if record['release'] is not None}
     if not holds:return set()
     present={str(pk) for pk in RetentionHold.objects.filter(pk__in=holds).values_list('pk',flat=True)}
+    released={str(pk) for pk in RetentionHoldRelease.objects.filter(hold_id__in=holds).values_list('hold_id',flat=True)}
     # A release's 'target_absent' marker accounts for it only while its hold is absent here too (NEW-1): once the hold
-    # is back, only the release row does (release_marker_consistent).
+    # is back, only a release of it here does: its own row, or (F8) a local release with other evidence
+    # (release_marker_consistent).
     accounted={str(pk) for pk,hold_id,event in RetentionHoldReplay.objects.filter(
                    record_id__in=holds|releases,outcome='target_absent').values_list('record_id','hold_id','event')
-               if event=='hold' or str(hold_id) not in present}
+               if event=='hold' or str(hold_id) not in present or str(hold_id) in released}
     accounted|=present
     accounted|={str(pk) for pk in RetentionHoldRelease.objects.filter(pk__in=releases).values_list('pk',flat=True)}
     return (holds|releases)-accounted
