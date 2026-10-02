@@ -1,9 +1,9 @@
-"""The ordinary-relations contract (v3: positional, self-naming) at its request/response boundary, offline: the
-per-request schema reaches the provider unchanged and holds a fixed number of named properties whatever the request,
-the strict parser proves the coverage the grammar cannot state and refuses every malformed answer whole, a good one
-converts into the unchanged internal selections, v1 and v2 artifacts refuse at their own gates (a stored v2 record stays
-readable), and the veto controls run through the whole reader with synthetic model outputs. No provider, no network, no
-database."""
+"""The ordinary-relations contract (v4: each field's relations a partition of the offered units) at its request/response
+boundary, offline: the per-request schema reaches the provider unchanged and holds a fixed number of named properties
+whatever the request, the strict parser proves the partition the grammar cannot state and refuses every malformed answer
+whole, a good one converts into the unchanged internal selections, v1-v3 artifacts refuse at their own gates (stored v2
+and v3 records stay readable), and the veto controls run through the whole reader with synthetic model outputs. No
+provider, no network, no database."""
 import copy
 import json
 from types import SimpleNamespace
@@ -15,7 +15,8 @@ from django.test import SimpleTestCase, override_settings
 
 from core import generation as g, v3_field_relations as r
 from core.jobs import NoProviderRequest
-from .test_v3_field_relations import answer_of, from_keyed, keyed, relate, relation_body, relation_wire, wired
+from .test_v3_field_relations import (answer_of, from_keyed, from_positional, keyed, partitioned, relate,
+                                      relation_body, relation_wire, wired)
 from .test_v3_ordinary_notes import LIVE, field
 
 RELATIONS = dict(LIVE, V3_FIELD_RELATIONS=True, V3_HISTORY_CONTEXT=False, V3_GENERATION_BATCHES=False)
@@ -48,8 +49,9 @@ def adopted(notes, fields, body):
     return {k: (v['status'], v['text']) for k, v in answers.items()}
 
 
-#: Every named property the v3 schema may carry, whatever the request (the bounded vocabulary).
-V3_NAMES = {'fields', 'key', 'unit_ids', 'conflict', 'option_ids', 'context', 'unit', 'relation'}
+#: Every named property the v4 schema may carry, whatever the request (the bounded vocabulary).
+V4_NAMES = {'fields', 'key', 'unit_ids', 'conflict', 'option_ids', 'context',
+            'answer', 'qualifier', 'contrary', 'unresolved', 'independent'}
 
 
 def named_properties(node):
@@ -70,14 +72,14 @@ def named_properties(node):
 
 
 @override_settings(**RELATIONS)
-class PositionalSchema(SimpleTestCase):
+class PartitionSchema(SimpleTestCase):
     def shapes(self):
         choice = field('smoking', 'Smoker', 'choice', ['Yes', 'No'])
         yield 'N02', N02_NOTES, n02_fields()
         yield 'choice and text', 'The patient does not smoke. The patient walks daily.', [choice, field('f', 'Activity')]
-        # (10 x 14: v2's schema for it was refused live as too complex; 10 x 30 and 1 x 400 fit one bounded v3 answer,
-        # 10 x 60 no longer does - its positional body exceeds 20,000 bytes and goes to the relations field batches)
-        for n_fields, n_units in ((1, 1), (3, 2), (10, 14), (10, 30), (1, 400)):
+        # (10 x 14: v2's schema for it was refused live as too complex; 10 x 60 and 30 x 25 fit one bounded v4 answer,
+        # 1 x 400 too)
+        for n_fields, n_units in ((1, 1), (3, 2), (10, 14), (10, 60), (30, 25), (1, 400)):
             notes = ' '.join(f'The patient reports symptom {i}.' for i in range(n_units))
             yield f'{n_fields}x{n_units}', notes, [field(f'q{i}', f'Question {i}') for i in range(n_fields)]
 
@@ -92,32 +94,34 @@ class PositionalSchema(SimpleTestCase):
                 ids = [u['id'] for u in units]
                 defs = schema['$defs']
                 own = [o['id'] for f in asked for o in r.options(f)]
-                self.assertEqual(defs['Relation'], {'type': 'string', 'enum': list(r.RELATIONS)})
+                unit_list = {'type': 'array', 'items': {'$ref': '#/$defs/UnitId'}}
                 self.assertEqual(defs['UnitId'], {'type': 'integer', 'enum': ids})
                 self.assertEqual(defs['FieldKey'], {'type': 'string', 'enum': [f['key'] for f in asked]})
-                self.assertEqual(defs['Relates'], {'type': 'object', 'properties': {
-                    'unit': {'$ref': '#/$defs/UnitId'}, 'relation': {'$ref': '#/$defs/Relation'}},
-                    'required': ['unit', 'relation'], 'additionalProperties': False})
+                self.assertEqual(defs['Partition'], {'type': 'object', 'properties': {
+                    name: unit_list for name in ('answer', 'qualifier', 'contrary', 'unresolved', 'independent')},
+                    'required': ['answer', 'qualifier', 'contrary', 'unresolved', 'independent'],
+                    'additionalProperties': False})
                 answer = defs['Answer']
                 members = ['key', 'unit_ids', 'conflict'] + (['option_ids'] if own else []) + ['context']
                 self.assertEqual((list(answer['properties']), answer['required'], answer['additionalProperties']),
                                  (members, members, False))
-                self.assertEqual(answer['properties']['context'], {'type': 'array', 'items': {'$ref': '#/$defs/Relates'}})
-                self.assertEqual(answer['properties']['unit_ids'], {'type': 'array', 'items': {'$ref': '#/$defs/UnitId'}})
+                self.assertEqual(answer['properties']['context'], {'$ref': '#/$defs/Partition'})
+                self.assertEqual(answer['properties']['unit_ids'], unit_list)
                 if own:
                     self.assertEqual(defs['OptionId'], {'type': 'string', 'enum': own})
                 else:
                     self.assertNotIn('OptionId', defs)
+                self.assertNotIn('Relation', defs)
                 self.assertEqual((schema['required'], schema['additionalProperties']), (['fields'], False))
                 self.assertEqual(schema['properties']['fields'], {'type': 'array', 'items': {'$ref': '#/$defs/Answer'}})
                 # (no length or bound keyword anywhere: the grammar cannot carry one, the parser proves it)
                 text = json.dumps(schema)
-                for keyword in ('minItems', 'maxItems', 'minimum', 'maximum', 'description', 'pattern'):
+                for keyword in ('minItems', 'maxItems', 'minimum', 'maximum', 'description', 'pattern', 'uniqueItems'):
                     self.assertNotIn(f'"{keyword}"', text)
 
     def test_the_named_properties_are_bounded_whatever_the_fields_and_units(self):
         # (live 2026-10-02: v2's 14 units x 10 fields was refused as too complex to compile; v2 wrote one named member
-        # per unit per field. v3 writes the same few names whatever the request; only enum VALUES grow, once each.)
+        # per unit per field. v4 writes the same few names whatever the request; only enum VALUES grow, once each.)
         seen = set()
         for n_fields, n_units in ((1, 1), (10, 10), (10, 14), (100, 80)):
             fields = [field(f'q{i}', f'Question {i}', 'choice', ['A', 'B']) if i % 5 == 0 else field(f'q{i}', f'Question {i}')
@@ -125,34 +129,55 @@ class PositionalSchema(SimpleTestCase):
             units = [{'id': i} for i in range(1, n_units + 1)]
             schema = r.response_schema(fields, units)
             names = named_properties(schema)
-            self.assertLessEqual(len(names), 8, (n_fields, n_units))
-            self.assertLessEqual(set(names), V3_NAMES)
-            self.assertEqual(sum(1 for name in names if name == 'relation'), 1)
+            self.assertLessEqual(len(names), 12, (n_fields, n_units))
+            self.assertLessEqual(set(names), V4_NAMES)
+            self.assertEqual(sum(1 for name in names if name == 'independent'), 1)
             seen.add(len(names))
-            # (and v2's shape for the refused live case wrote 140 per-unit members: this is what moved)
             self.assertLessEqual(max(len(d.get('properties', {})) for d in schema['$defs'].values()), 5)
         self.assertEqual(len(seen), 1)
 
-    def test_the_response_bound_is_the_positional_worst_case_body(self):
+    def test_the_response_bound_is_the_partition_worst_case_body(self):
         notes = 'The patient does not smoke. The patient walks daily.'
         fields = [field('smoking', 'Smoker', 'choice', ['Yes', 'No']), field('f', 'Activity')]
         asked, context, _ = g.v3_generation_fields(fields)
         units = g.source_units(notes, asked, context_labels=context)[0]
-        entries = [{'unit': 1, 'relation': 'independent'}, {'unit': 2, 'relation': 'independent'}]
+        one_list = {'answer': [1, 2], 'qualifier': [], 'contrary': [], 'unresolved': [], 'independent': []}
         worst = {'fields': [{'key': 'smoking', 'unit_ids': [1, 2], 'conflict': False,
-                             'option_ids': ['smoking:0', 'smoking:1'], 'context': entries},
-                            {'key': 'f', 'unit_ids': [1, 2], 'conflict': False, 'option_ids': [], 'context': entries}]}
+                             'option_ids': ['smoking:0', 'smoking:1'], 'context': one_list},
+                            {'key': 'f', 'unit_ids': [1, 2], 'conflict': False, 'option_ids': [], 'context': one_list}]}
         self.assertEqual(r.response_bound(asked, units), len(json.dumps(worst).encode()))
-        self.assertTrue(all(len(json.dumps(rel)) <= len(json.dumps('independent')) for rel in r.RELATIONS))
         # (no option field: no option_ids member at all)
         text = [field('f', 'Activity')]
-        asked, context, _ = g.v3_generation_fields(text)
-        self.assertEqual(r.response_bound(asked, units), len(json.dumps(
-            {'fields': [{'key': 'f', 'unit_ids': [1, 2], 'conflict': False, 'context': entries}]}).encode()))
-        # (the bound covers a real answer: the longest valid answer to this request is never above it)
+        asked_text, context_text, _ = g.v3_generation_fields(text)
+        self.assertEqual(r.response_bound(asked_text, units), len(json.dumps(
+            {'fields': [{'key': 'f', 'unit_ids': [1, 2], 'conflict': False, 'context': one_list}]}).encode()))
+        # (the TRUE worst case: every split of the units across the five lists, in every list, is never above it -
+        # each ID is written once whichever list holds it, and splitting only removes separators)
+        import itertools
+        many = [{'id': i} for i in range(1, 7)]
+        bound = r.response_bound(text, many)
+        for assignment in itertools.product(r.PARTITION, repeat=len(many)):
+            body = {'fields': [{'key': 'f', 'unit_ids': [u['id'] for u in many], 'conflict': True,
+                                'context': partitioned((u['id'], rel) for u, rel in zip(many, assignment))}]}
+            self.assertLessEqual(len(json.dumps(body).encode()), bound)
+        self.assertEqual(max(len(json.dumps({'fields': [{'key': 'f', 'unit_ids': [u['id'] for u in many],
+            'conflict': False, 'context': partitioned((u['id'], rel) for u, rel in zip(many, assignment))}]}).encode())
+            for assignment in itertools.product(r.PARTITION, repeat=len(many))), bound)
+        # (and a real answer to the option request is never above its bound)
         good = relation_wire(notes, fields, {'smoking': [notes.split('. ')[0] + '.'], 'f': ['The patient walks daily.']},
                              choices={'smoking': ['smoking:0', 'smoking:1']})
-        self.assertLessEqual(len(json.dumps(good).encode()), r.response_bound(g.v3_generation_fields(fields)[0], units))
+        self.assertLessEqual(len(json.dumps(good).encode()), r.response_bound(asked, units))
+
+    def test_a_25_sentence_note_and_an_11_field_form_fit_one_bounded_response(self):
+        # (the 2026-10-02 r1-11 shape: 10 requested text/choice/checkbox fields over a 25-sentence dictation; v3's body
+        # was 11,000+ bytes for 23 units, v4's a third of it)
+        fields = [field(f'v3_{i}', f'Question {i}', 'long_text') for i in range(1, 9)]
+        fields += [field('v3_9', 'Smoker', 'choice', ['Yes', 'No']), field('v3_10', 'Consent obtained', 'checkbox',
+                                                                            ['Consent obtained'])]
+        notes = ' '.join(f'The patient reports symptom {i}.' for i in range(25))
+        compiled = r.compile_request(notes, fields, g.configuration(fields))
+        self.assertEqual(len(compiled['units']), 25)
+        self.assertLess(compiled['response_byte_bound'], 5000)
 
     def test_a_schema_the_sdk_would_change_refuses_before_any_request(self):
         # (were transform_schema ever to move a constraint into a description, the closed schema would not be what the
@@ -173,17 +198,19 @@ class PositionalSchema(SimpleTestCase):
 
 
 class InstructionsDescribeTheWire(SimpleTestCase):
-    """Refutation of cf8cbe6a, T2: the instructions tell the model the v3 shape the schema and parser require, and none
-    of v2's (an object keyed by field, a context object keyed by unit ID). A model told the old shape would be refused
-    whole on every request."""
-    def test_the_instructions_name_the_list_shapes_and_not_the_object_shapes(self):
+    """Refutation of cf8cbe6a, T2 (kept for v4): the instructions tell the model the shape the schema and parser require,
+    and none of v2's (an object keyed by field, a context keyed by unit ID) or v3's (one {unit, relation} entry per unit).
+    A model told an old shape would be refused whole on every request."""
+    def test_the_instructions_name_the_partition_and_not_the_old_shapes(self):
         from core import v3_field_relations as r
         text = r.INSTRUCTIONS
-        for phrase in ('fields as a list', 'context as a list', 'exactly one entry per source unit',
-                       'naming that unit ID as unit', 'each naming its key once'):
+        for phrase in ('fields as a list', 'each naming its key once', 'context as an object with the five lists',
+                       'answer, qualifier, contrary, unresolved and independent', 'every source unit ID of context_order '
+                       'exactly once', 'the one list that states its relation'):
             self.assertIn(phrase, text)
-        for v2 in ('as an object', 'one member per requested field key', 'named by its unit ID'):
-            self.assertNotIn(v2, text)
+        for old in ('one member per requested field key', 'named by its unit ID', 'context as a list',
+                    'naming that unit ID as unit', 'exactly one entry per source unit'):
+            self.assertNotIn(old, text)
 
 
 @override_settings(**RELATIONS)
@@ -203,57 +230,66 @@ class StrictParser(SimpleTestCase):
         edit(body)
         return json.dumps(body)
 
-    def test_a_correct_positional_answer_is_adopted_through_the_whole_reader(self):
+    def test_a_correct_partition_answer_is_adopted_through_the_whole_reader(self):
         self.assertEqual(adopted(N02_NOTES, self.fields, self.text),
                          {'v3_1': ('supported', 'The patient describes the pain as a tight band around her head.'),
                           'v3_2': ('conflict', ''), 'v3_3': ('missing', '')})
 
-    def test_fields_in_any_order_convert_to_the_requested_order(self):
+    def test_fields_in_any_order_and_ids_in_any_order_convert_to_the_requested_and_offered_order(self):
         asked, units = self.units()
         body = copy.deepcopy(self.good)
         relate(body, 'v3_1', 2, 'contrary')
         body['fields'] = list(reversed(body['fields']))
+        answer_of(body, 'v3_3')['context']['independent'].reverse()               # [2, 1]: a set, any order
         parsed = r.parse(json.dumps(body), asked, units)
         self.assertIsInstance(parsed, r.FieldSelections)
         self.assertEqual([f.key for f in parsed.fields], ['v3_1', 'v3_2', 'v3_3'])
         self.assertEqual(parsed.fields[0].context, ['answer', 'contrary'])
+        self.assertEqual(parsed.fields[2].context, ['independent', 'independent'])
         self.assertEqual(parsed.fields[0].option_ids, [])
+        # every relation is carried to the internal list by its name, whatever list holds it
+        for relation in r.RELATIONS:
+            body = copy.deepcopy(self.good)
+            relate(body, 'v3_3', 2, relation)
+            self.assertEqual(r.parse(json.dumps(body), asked, units).fields[2].context, ['independent', relation])
 
     def malformed(self):
-        def pop_entry(index):
-            return lambda b: answer_of(b, 'v3_3')['context'].pop(index)
+        def move(key, unit, to, keep=False):
+            """Put `unit` into list `to` of `key`'s partition; with keep, without taking it out of where it was."""
+            def edit(b):
+                context = answer_of(b, key)['context']
+                if not keep:
+                    for name in r.PARTITION:
+                        if unit in context[name]:
+                            context[name].remove(unit)
+                context[to].append(unit)
+            return edit
 
-        def shift(b):
-            # the context names units 2 and 1 in that order: complete, but not the offered order
-            answer_of(b, 'v3_1')['context'].reverse()
-
-        def shifted_relations(b):
-            # entry i carries entry i+1's unit: a one-place shift that keeps the length
-            context = answer_of(b, 'v3_1')['context']
-            for entry, unit in zip(context, [2, 2]):
-                entry['unit'] = unit
-
-        keyed_v2 = keyed(relation_body(N02_NOTES, self.fields, {'v3_1': [N02_NOTES.split('. ')[0] + '.']}),
-                         *self.units())
+        asked, units = self.units()
+        keyed_v2 = keyed(relation_body(N02_NOTES, self.fields, {'v3_1': [N02_NOTES.split('. ')[0] + '.']}), asked, units)
+        positional_v3 = {'fields': [{**{k: v for k, v in item.items() if k != 'context'},
+                                     'context': [{'unit': u['id'], 'relation': next(n for n in r.PARTITION
+                                                                                    if u['id'] in item['context'][n])}
+                                                 for u in units]} for item in self.good['fields']]}
         v1_list = {'fields': [{'key': item['key'], 'unit_ids': item['unit_ids'], 'conflict': item['conflict'],
-                               'option_ids': [], 'context': [entry['relation'] for entry in item['context']]}
-                              for item in self.good['fields']]}
+                               'option_ids': [], 'context': [entry['relation'] for entry in positional_v3['fields'][n]['context']]}
+                              for n, item in enumerate(self.good['fields'])]}
         attempt_017 = {'fields': [{'key': 'v3_1', 'unit_ids': [1], 'conflict': False, 'option_ids': [], 'context': ['answer']},
                                   {'key': 'v3_2', 'unit_ids': [2], 'conflict': False, 'option_ids': [], 'context': ['answer']},
                                   {'key': 'v3_3', 'unit_ids': [], 'conflict': False, 'option_ids': [], 'context': []}]}
-        # (attempt 017's v1 failure, in this wire: one context entry per SELECTED unit, each correctly named)
-        attempt_017_v3 = {'fields': [{'key': 'v3_1', 'unit_ids': [1], 'conflict': False,
-                                      'context': [{'unit': 1, 'relation': 'answer'}]},
-                                     {'key': 'v3_2', 'unit_ids': [2], 'conflict': False,
-                                      'context': [{'unit': 2, 'relation': 'answer'}]},
-                                     {'key': 'v3_3', 'unit_ids': [], 'conflict': False, 'context': []}]}
+        # (attempt 017's v1 failure, in this wire: each field states only the unit it selected)
+        attempt_017_v4 = {'fields': [{'key': k, 'unit_ids': ids, 'conflict': False,
+                                      'context': {'answer': ids, 'qualifier': [], 'contrary': [], 'unresolved': [],
+                                                  'independent': []}}
+                                     for k, ids in (('v3_1', [1]), ('v3_2', [2]), ('v3_3', []))]}
         first = self.text.index('{"key": "v3_1"')
         return {
             'the v2 keyed shape': json.dumps(keyed_v2),
             'the retained v2 attempt 020 text verbatim': ATTEMPT_020_TEXT,
+            'the v3 positional shape': json.dumps(positional_v3),
             'the v1 list shape': json.dumps(v1_list),
             'attempt 017 as returned (one context entry for two units)': json.dumps(attempt_017),
-            'attempt 017 in this wire (one entry per selected unit)': json.dumps(attempt_017_v3),
+            'attempt 017 in this wire (only the selected units stated)': json.dumps(attempt_017_v4),
             'not JSON': self.text[:-1],
             'two JSON values': self.text + ' {}',
             'a top-level array': '[' + self.text + ']',
@@ -271,29 +307,31 @@ class StrictParser(SimpleTestCase):
             'a key that is an object': self.edited(lambda b: b['fields'][2].update(key={'v3_3': 1})),
             'a field that is not an object': self.edited(lambda b: b['fields'].__setitem__(2, 'v3_3')),
             'a duplicate member inside a field': self.text[:first] + '{"key": "v3_2", ' + self.text[first + 1:],
-            'a duplicate member inside a context entry': self.text.replace('{"unit": 1, "relation": "answer"}',
-                                                                            '{"unit": 1, "unit": 1, "relation": "answer"}', 1),
-            'a short context (an entry dropped)': self.edited(pop_entry(0)),
-            'a short context (the last entry dropped)': self.edited(pop_entry(-1)),
-            'an empty context': self.edited(lambda b: answer_of(b, 'v3_2').update(context=[])),
-            'a long context (an extra unit)': self.edited(
-                lambda b: answer_of(b, 'v3_1')['context'].append({'unit': 3, 'relation': 'independent'})),
-            'a long context (a repeated unit)': self.edited(
-                lambda b: answer_of(b, 'v3_1')['context'].append({'unit': 2, 'relation': 'independent'})),
-            'a repeated unit in place of another (the length kept)': self.edited(shifted_relations),
-            'the units out of the offered order': self.edited(shift),
-            'a unit named by a string': self.edited(lambda b: answer_of(b, 'v3_1')['context'][0].update(unit='1')),
-            'a unit named by true': self.edited(lambda b: answer_of(b, 'v3_1')['context'][0].update(unit=True)),
-            'a unit named by a float': self.text.replace('{"unit": 1, "relation": "answer"}',
-                                                           '{"unit": 1.0, "relation": "answer"}', 1),
-            'an entry without its unit': self.edited(lambda b: answer_of(b, 'v3_1')['context'][0].pop('unit')),
-            'an entry without its relation': self.edited(lambda b: answer_of(b, 'v3_1')['context'][0].pop('relation')),
-            'an entry with an extra member': self.edited(lambda b: answer_of(b, 'v3_1')['context'][0].update(note='x')),
-            'a bare relation in place of an entry': self.edited(
-                lambda b: answer_of(b, 'v3_1')['context'].__setitem__(0, 'answer')),
-            'context as an object': self.edited(lambda b: answer_of(b, 'v3_1').update(context={'1': 'answer', '2': 'independent'})),
-            'a relation outside the five': self.edited(lambda b: relate(b, 'v3_1', 2, 'unrelated')),
-            'a relation that is not a string': self.edited(lambda b: relate(b, 'v3_1', 2, None)),
+            'a duplicate list inside a context': self.text.replace('"context": {"answer": [1]',
+                                                                    '"context": {"answer": [], "answer": [1]', 1),
+            'a unit omitted (from its list)': self.edited(lambda b: answer_of(b, 'v3_3')['context']['independent'].pop()),
+            'every unit omitted': self.edited(lambda b: answer_of(b, 'v3_2').update(context={n: [] for n in r.PARTITION})),
+            'a unit repeated in its own list': self.edited(lambda b: answer_of(b, 'v3_3')['context']['independent'].append(1)),
+            'a unit in two lists': self.edited(move('v3_1', 2, 'contrary', keep=True)),
+            'a unit in every list': self.edited(lambda b: [answer_of(b, 'v3_1')['context'][n].append(1)
+                                                            for n in r.PARTITION if 1 not in answer_of(b, 'v3_1')['context'][n]]),
+            'an unknown unit added': self.edited(lambda b: answer_of(b, 'v3_1')['context']['independent'].append(3)),
+            'an unknown unit in place of one': self.edited(lambda b: answer_of(b, 'v3_3')['context'].update(independent=[1, 9])),
+            'unit 0': self.edited(lambda b: answer_of(b, 'v3_3')['context']['independent'].append(0)),
+            'a negative unit': self.edited(lambda b: answer_of(b, 'v3_3')['context']['independent'].append(-1)),
+            'a unit named by a string': self.edited(lambda b: answer_of(b, 'v3_3')['context'].update(independent=[1, '2'])),
+            'a unit named by true': self.edited(lambda b: answer_of(b, 'v3_3')['context'].update(independent=[True, 2])),
+            'a unit named by a float': self.text.replace('"answer": [1]', '"answer": [1.0]', 1),
+            'a unit named by null': self.edited(lambda b: answer_of(b, 'v3_3')['context'].update(independent=[1, None])),
+            'a list missing': self.edited(lambda b: answer_of(b, 'v3_1')['context'].pop('unresolved')),
+            'an extra list': self.edited(lambda b: answer_of(b, 'v3_1')['context'].update(related=[])),
+            'a list under another name': self.edited(lambda b: answer_of(b, 'v3_1')['context'].update(
+                unrelated=answer_of(b, 'v3_1')['context'].pop('independent'))),
+            'a list that is not a list': self.edited(lambda b: answer_of(b, 'v3_3')['context'].update(independent={'1': 1})),
+            'a list that is a bare ID': self.edited(lambda b: answer_of(b, 'v3_1')['context'].update(answer=1)),
+            'context as a list': self.edited(lambda b: answer_of(b, 'v3_1').update(context=[1, 2])),
+            'context as a v3 entry list': self.edited(lambda b: answer_of(b, 'v3_1').update(
+                context=[{'unit': 1, 'relation': 'answer'}, {'unit': 2, 'relation': 'independent'}])),
             'a repeated unit ID': self.edited(lambda b: answer_of(b, 'v3_1').update(unit_ids=[1, 1])),
             'true as a unit ID': self.edited(lambda b: answer_of(b, 'v3_1').update(unit_ids=[True])),
             'a float unit ID': self.text.replace('"unit_ids": [1]', '"unit_ids": [1.0]', 1),
@@ -315,8 +353,9 @@ class StrictParser(SimpleTestCase):
                  'the top level is not exactly one fields list'),
                 ('a repeated field', lambda b: b['fields'].append(copy.deepcopy(b['fields'][0])),
                  'the fields are not exactly the requested keys, once each'),
-                ('a short context', lambda b: answer_of(b, 'v3_1')['context'].pop(), 'v3_1 context'),
-                ('a unit named by true', lambda b: answer_of(b, 'v3_1')['context'][0].update(unit=True), 'v3_1 context'),
+                ('a unit omitted', lambda b: answer_of(b, 'v3_1')['context']['independent'].pop(), 'v3_1 context'),
+                ('a unit in two lists', lambda b: answer_of(b, 'v3_1')['context']['contrary'].append(1), 'v3_1 context'),
+                ('a unit named by true', lambda b: answer_of(b, 'v3_1')['context'].update(answer=[True]), 'v3_1 context'),
                 ('an extra member', lambda b: answer_of(b, 'v3_2').update(note='x'), 'v3_2 does not carry exactly its members')):
             with self.subTest(name=name), self.assertRaises(ValidationError) as caught:
                 r.parse(self.edited(edit), asked, units)
@@ -378,16 +417,18 @@ class StrictParser(SimpleTestCase):
         body = self.edited(lambda b: answer_of(b, 'v3_1').update(conflict=True))
         self.assertEqual(adopted(N02_NOTES, self.fields, body)['v3_1'], ('conflict', ''))
 
-    def test_a_shifted_context_is_never_read_against_the_wrong_unit(self):
-        # The hazard a bare positional list carries (v1's shape): a one-place shift keeps the length, so 'contrary' for
-        # unit 2 read as unit 1's. Here every entry names its unit; any shift, swap or relabel is refused whole.
+    def test_a_unit_cannot_hide_in_two_relations_or_in_none(self):
+        # The closed world v3's self-naming list kept: every unit stated exactly once. A unit listed both as the answer
+        # and as contrary (the veto that would hold it) is not read as either; a unit missing from every list is not
+        # read as independent by default.
         asked, units = self.units()
         body = copy.deepcopy(self.good)
         relate(body, 'v3_1', 2, 'contrary')
         self.assertEqual(r.parse(json.dumps(body), asked, units).fields[0].context, ['answer', 'contrary'])
-        for name, context in (('swapped', [{'unit': 2, 'relation': 'contrary'}, {'unit': 1, 'relation': 'answer'}]),
-                              ('relabelled', [{'unit': 2, 'relation': 'answer'}, {'unit': 1, 'relation': 'contrary'}]),
-                              ('shifted', [{'unit': 2, 'relation': 'answer'}, {'unit': 2, 'relation': 'contrary'}])):
+        for name, context in (('both answer and contrary', {'answer': [1, 2], 'qualifier': [], 'contrary': [2],
+                                                            'unresolved': [], 'independent': []}),
+                              ('the veto dropped, nothing in its place', {'answer': [1], 'qualifier': [], 'contrary': [],
+                                                                          'unresolved': [], 'independent': []})):
             answer_of(body, 'v3_1')['context'] = context
             with self.subTest(name=name), self.assertRaises(ValidationError):
                 r.parse(json.dumps(body), asked, units)
@@ -401,7 +442,7 @@ class StrictParser(SimpleTestCase):
         with self.assertRaises(ValidationError):
             r.parse(json.dumps(internal), asked, units)
         self.assertEqual(answer_of(json.loads(json.dumps(wired(internal, asked, units))), 'v3_3')['context'],
-                         [{'unit': 1, 'relation': 'independent'}, {'unit': 2, 'relation': 'independent'}])
+                         {'answer': [], 'qualifier': [], 'contrary': [], 'unresolved': [], 'independent': [1, 2]})
 
 
 #: The text block of live attempt 020's retained provider response (case N13 on the field-relations path), verbatim:
@@ -475,7 +516,7 @@ class DisagreementHolds(SimpleTestCase):
                 self.assertIn(label, g.governed_decisions(notes, fields, {**answers, key: forged}))
 
     def disagreements(self, key, unit, other):
-        """(name, edit of the v3 wire) — every way ONE field's selection can disagree with its relations. `unit` is
+        """(name, edit of the v4 wire) — every way ONE field's selection can disagree with its relations. `unit` is
         the field's selected unit ID, `other` a unit it did not select."""
         u, o = unit, other
 
@@ -584,7 +625,7 @@ class ClaimedUnitsCompete(SimpleTestCase):
         return {'unit_ids': unit_ids, 'conflict': conflict, 'context': {'1': relation}}
 
     def respond(self, fields, notes, entries):
-        """`entries`: {key: entry}, each entry's context keyed by unit ID (as this class wrote them for v2), sent in the v3
+        """`entries`: {key: entry}, each entry's context keyed by unit ID (as this class wrote them for v2), sent in the v4
         wire (`from_keyed`: the same selections and relations)."""
         answers = r.validated(raw_result(notes, fields, from_keyed(json.dumps({'fields': entries}))))
         return answers, {k: (v['status'], v['text']) for k, v in answers.items()}
@@ -688,12 +729,13 @@ class ClaimedUnitsCompete(SimpleTestCase):
 
 @override_settings(**RELATIONS)
 class VersionedArtifacts(SimpleTestCase):
-    """v1 and v2 queued jobs, configurations and raw results refuse at their own gates; a v1 record is refused on every
-    reader; a stored draft's v2 record is still read, under its own salt and binding, exactly as before."""
+    """v1-v3 queued jobs, configurations and raw results refuse at their own gates; a v1 record is refused on every
+    reader; a stored draft's v2 or v3 record is still read, under its own salt and binding, exactly as before."""
 
     def test_the_contract_and_salt_moved_and_the_pricing_version_with_them(self):
-        self.assertEqual((r.CONTRACT, r.SALT), ('ordinary-field-relations-v3', 'quillmd.ordinary-field-relations.v3'))
-        self.assertEqual(r.READABLE, {'ordinary-field-relations-v3': 'quillmd.ordinary-field-relations.v3',
+        self.assertEqual((r.CONTRACT, r.SALT), ('ordinary-field-relations-v4', 'quillmd.ordinary-field-relations.v4'))
+        self.assertEqual(r.READABLE, {'ordinary-field-relations-v4': 'quillmd.ordinary-field-relations.v4',
+                                      'ordinary-field-relations-v3': 'quillmd.ordinary-field-relations.v3',
                                       'ordinary-field-relations-v2': 'quillmd.ordinary-field-relations.v2'})
         config = g.configuration()
         self.assertEqual(config['ordinary_field_contract'], r.CONTRACT)
@@ -711,14 +753,15 @@ class VersionedArtifacts(SimpleTestCase):
             again = g.configuration()
         (previous, contract), = seen
         self.assertEqual((again['pricing_version'], contract), (config['pricing_version'], r.CONTRACT))
-        for old in ('ordinary-field-relations-v1', 'ordinary-field-relations-v2'):
+        for old in ('ordinary-field-relations-v1', 'ordinary-field-relations-v2', 'ordinary-field-relations-v3'):
             self.assertNotEqual(real(previous, old), config['pricing_version'])
 
     def test_the_campaign_runners_amendment_formula_is_the_applications(self):
         from unittest.mock import patch
         from ops import provider_campaign as pc
         for previous in ('configured-v1:' + 'a' * 64, 'configured-v1:47caed2bcbbabc7f0d1c2713ba8b497db26f9fdf2dfff1de092410fdd7f784b4'):
-            for contract in ('ordinary-field-relations-v1', 'ordinary-field-relations-v2', r.CONTRACT, 'x'):
+            for contract in ('ordinary-field-relations-v1', 'ordinary-field-relations-v2', 'ordinary-field-relations-v3',
+                             r.CONTRACT, 'x'):
                 self.assertEqual(pc.contract_pricing_version(previous, contract), g.ordinary_pricing_version(previous, contract))
         seen, real = [], g.ordinary_pricing_version
         with patch.object(g, 'ordinary_pricing_version', side_effect=lambda p, c: seen.append(p) or real(p, c)):
@@ -746,42 +789,45 @@ class VersionedArtifacts(SimpleTestCase):
     def test_a_v1_record_is_refused_on_every_reader(self):
         notes, fields, answers, record = self.adopted_record()
         old = self.restamped(record, notes, fields, 'ordinary-field-relations-v1')
-        for salt in ('quillmd.ordinary-field-relations.v1', 'quillmd.ordinary-field-relations.v2', r.SALT):
+        for salt in ('quillmd.ordinary-field-relations.v1', 'quillmd.ordinary-field-relations.v2',
+                     'quillmd.ordinary-field-relations.v3', r.SALT):
             with self.subTest(salt=salt):
                 stale = {**answers, 'sensation': {**answers['sensation'],
                                                   'ordinary_relation': signing.dumps(old, salt=salt, compress=True)}}
                 self.assertIn('Other:', g.governed_decisions(notes, fields, stale))
 
-    def test_a_stored_v2_record_is_still_read_and_held_exactly_as_v2_did(self):
-        # (drafts generated under v2 keep their records: the internal selection is v3's; only its contract, salt and
-        # binding name v2. A v2 record under another salt, or naming the other contract, is refused.)
+    def test_stored_v2_and_v3_records_are_still_read_and_held_exactly_as_before(self):
+        # (drafts generated under v2 or v3 keep their records: the internal selection is v4's; only its contract, salt
+        # and binding name the older contract. A record under another salt, or naming another contract, is refused.)
         notes, fields, answers, record = self.adopted_record()
-        v2 = self.restamped(record, notes, fields, 'ordinary-field-relations-v2')
-        stored = {**answers, 'sensation': {**answers['sensation'], 'ordinary_relation': signing.dumps(
-            v2, salt='quillmd.ordinary-field-relations.v2', compress=True)}}
-        self.assertEqual(g.governed_decisions(notes, fields, stored), [])
         reading = g.governance_for(notes, fields)[11]['preceding']
         evidence = answers['sensation']['evidence']
-        read = r.read(reading, 'Other:', evidence, stored['sensation']['ordinary_relation'], text=notes,
-                      field_key='sensation')
-        self.assertTrue(read['valid'])
-        # a v2 record keeps v2's holds: the same record with a contrary relation is held
-        held = {**v2, 'selection': {**v2['selection'], 'context': ['contrary']}}
-        self.assertFalse(r.read(reading, 'Other:', evidence, signing.dumps(
-            held, salt='quillmd.ordinary-field-relations.v2', compress=True), text=notes, field_key='sensation')['valid'])
-        for name, value, salt in (
-                ('v2 salt, v3 contract named', self.restamped(record, notes, fields, r.CONTRACT),
-                 'quillmd.ordinary-field-relations.v2'),
-                ('v3 salt, v2 contract named', v2, r.SALT),
-                ('v2 salt, v3 binding', {**v2, 'binding': record['binding']}, 'quillmd.ordinary-field-relations.v2'),
-                ('v3 salt, v2 binding', {**record, 'binding': v2['binding']}, r.SALT)):
-            with self.subTest(name=name):
-                forged = {**answers, 'sensation': {**answers['sensation'],
-                                                   'ordinary_relation': signing.dumps(value, salt=salt, compress=True)}}
-                self.assertIn('Other:', g.governed_decisions(notes, fields, forged))
+        for contract, salt in (('ordinary-field-relations-v2', 'quillmd.ordinary-field-relations.v2'),
+                               ('ordinary-field-relations-v3', 'quillmd.ordinary-field-relations.v3')):
+            with self.subTest(contract=contract):
+                old = self.restamped(record, notes, fields, contract)
+                stored = {**answers, 'sensation': {**answers['sensation'], 'ordinary_relation': signing.dumps(
+                    old, salt=salt, compress=True)}}
+                self.assertEqual(g.governed_decisions(notes, fields, stored), [])
+                read = r.read(reading, 'Other:', evidence, stored['sensation']['ordinary_relation'], text=notes,
+                              field_key='sensation')
+                self.assertTrue(read['valid'])
+                # an older record keeps its holds: the same record with a contrary relation is held
+                held = {**old, 'selection': {**old['selection'], 'context': ['contrary']}}
+                self.assertFalse(r.read(reading, 'Other:', evidence, signing.dumps(held, salt=salt, compress=True),
+                                        text=notes, field_key='sensation')['valid'])
+                for name, value, forged_salt in (
+                        ('its salt, the current contract named', self.restamped(record, notes, fields, r.CONTRACT), salt),
+                        ('the current salt, its contract named', old, r.SALT),
+                        ('its salt, the current binding', {**old, 'binding': record['binding']}, salt),
+                        ('the current salt, its binding', {**record, 'binding': old['binding']}, r.SALT)):
+                    with self.subTest(contract=contract, name=name):
+                        forged = {**answers, 'sensation': {**answers['sensation'], 'ordinary_relation': signing.dumps(
+                            value, salt=forged_salt, compress=True)}}
+                        self.assertIn('Other:', g.governed_decisions(notes, fields, forged))
 
-    def test_v1_and_v2_job_configurations_and_raw_results_are_refused(self):
-        for contract in ('ordinary-field-relations-v1', 'ordinary-field-relations-v2'):
+    def test_v1_to_v3_job_configurations_and_raw_results_are_refused(self):
+        for contract in ('ordinary-field-relations-v1', 'ordinary-field-relations-v2', 'ordinary-field-relations-v3'):
             with self.subTest(contract=contract):
                 config = {**g.configuration(), 'ordinary_field_contract': contract}
                 with self.assertRaises(ValidationError):
@@ -796,7 +842,7 @@ class VersionedArtifacts(SimpleTestCase):
 
 @override_settings(**RELATIONS)
 class VetoControls(SimpleTestCase):
-    """Synthetic model outputs through the v3 wire and the whole reader (parse -> records -> validate_selections ->
+    """Synthetic model outputs through the v4 wire and the whole reader (parse -> records -> validate_selections ->
     v3_adopted). `other` is the relation the simulated model gives every non-selected unit."""
 
     def outcome(self, notes, label, picks, *, other='independent', kind='text', options=None, choices=None,
@@ -808,8 +854,8 @@ class VetoControls(SimpleTestCase):
         self.assertTrue(set(picks) <= set(by_quote), (picks, list(by_quote)))
         chosen = [by_quote[q] for q in picks]
         entry = {'key': 'f', 'unit_ids': chosen, 'conflict': False,
-                 'context': [{'unit': u['id'], 'relation': (relations or {}).get(u['quote'], 'answer' if u['id'] in chosen
-                                                                                 else other)} for u in units]}
+                 'context': partitioned((u['id'], (relations or {}).get(u['quote'], 'answer' if u['id'] in chosen
+                                                                         else other)) for u in units)}
         if options:
             entry['option_ids'] = choices or []
         return adopted(notes, fields, {'fields': [entry]})['f']
@@ -908,7 +954,7 @@ class FrozenWalkShape(SimpleTestCase):
     """Refutation F2-FROZEN-WALK, measured independently of the campaign runner (which states the same fact in its notes
     plan and stage decisions: ops/sonnet5_stages.frozen_walk_check). The frozen N6 walk's provider answers through the
     FROZEN diagnostics/notes/app_path_steps.reference_answer, which builds contract v1's list body; this engine refuses it
-    on every relations case, and the v3 translation of the SAME selection is accepted — so the refusal is the answer's
+    on every relations case, and the v4 translation of the SAME selection is accepted — so the refusal is the answer's
     shape, not its content. The frozen file is read, never changed (the freeze manifest pins it)."""
 
     @classmethod
@@ -923,7 +969,7 @@ class FrozenWalkShape(SimpleTestCase):
         cls.steps = app_path_steps
         cls.cases = json.loads((notes / 'cases.json').read_text())
 
-    def test_the_frozen_walks_relations_answer_is_refused_and_its_v3_translation_read(self):
+    def test_the_frozen_walks_relations_answer_is_refused_and_its_v4_translation_read(self):
         measured = []
         for case in self.cases['cases']:
             if 'field_relations' not in case['send_paths']:

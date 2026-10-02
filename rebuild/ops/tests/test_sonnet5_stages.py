@@ -98,7 +98,7 @@ else:
 
     def wire_answer(notes, fields, payload, selection):
         """The provider body for `selection` against the request actually sent: the frozen reference_answer, and on the
-        relations path its list body translated into the contract-v3 wire (test code only; the frozen file is unchanged)."""
+        relations path its list body translated into the contract-v4 wire (test code only; the frozen file is unchanged)."""
         answer, units = st.steps.reference_answer(notes, fields, payload, selection)
         if 'catalogue' in payload:
             asked, offered = st.steps.source_units(notes, fields)

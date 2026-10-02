@@ -54,7 +54,8 @@ class OrdinaryBatchContract(SimpleTestCase):
         self.assertTrue(all(a['status'] == 'missing' for k, a in answers.items() if k != 'q000'))
 
     def test_response_capacity_can_require_batch_below_100_and_never_splits_physical_group(self):
-        note = ' '.join('The patient reports symptom ' + str(i) + '.' for i in range(20))
+        # (60 units: the v4 partition holds about 32 fields per bounded response, so 50 fields need two parts)
+        note = ' '.join('The patient reports symptom ' + str(i) + '.' for i in range(60))
         encounter = sample(50, notes=note); config = g.configuration()
         self.assertTrue(b.needed(encounter.template_version.fields, note, config))
         plan = b.plan_for(encounter, config)
@@ -63,8 +64,10 @@ class OrdinaryBatchContract(SimpleTestCase):
         encounter.template_version.generation_constraints = manifest(encounter.template_version.fields)
         with self.assertRaisesMessage(ValidationError, 'indivisible'):
             b.plan_for(encounter, config)
+        # (a 101-field form over a 300-sentence note needs more than eight bounded v4 responses)
+        long_note = ' '.join('The patient reports finding ' + str(i) + '.' for i in range(300))
         with self.assertRaisesMessage(ValidationError, 'eight'):
-            b.plan_for(sample(101), config)
+            b.plan_for(sample(101, notes=long_note), config)
 
     def test_cross_child_competing_source_and_changed_request_are_held(self):
         encounter = sample(notes=NOTE); fields = encounter.template_version.fields
@@ -79,20 +82,26 @@ class OrdinaryBatchContract(SimpleTestCase):
         changed = copy.deepcopy(plan); changed['units'][0]['quote'] = 'The patient is well.'
         with self.assertRaisesMessage(ValidationError, 'differs'): b.request(changed, 1)
         raw = reply(plan, 1); body = json.loads(raw['content'][0]['text'])
-        body['fields'][0]['context'].pop(0)                              # (a context one unit short)
+        context = body['fields'][0]['context']                           # (a context one unit short)
+        next(ids for ids in context.values() if ids).pop(0)
         raw['content'][0]['text'] = json.dumps(body)
         with self.assertRaises(ValidationError):
             b.assemble(plan, [raw] + [reply(plan, n) for n in range(2, len(plan['parts']) + 1)])
-        # (the v1 list shape, v2's keyed shape, and an answer for another part's fields, are refused too)
+        # (the v1 list shape, v2's keyed shape, v3's entry list, and an answer for another part's fields, are refused too)
         v1 = reply(plan, 1); wire_body = json.loads(v1['content'][0]['text'])
+        relation_of = [{unit: name for name, ids in item['context'].items() for unit in ids} for item in wire_body['fields']]
+        units = [u['id'] for u in plan['units']]
         v1['content'][0]['text'] = json.dumps({'fields': [{**item, 'option_ids': [],
-            'context': [entry['relation'] for entry in item['context']]} for item in wire_body['fields']]})
+            'context': [relation_of[n][u] for u in units]} for n, item in enumerate(wire_body['fields'])]})
         v2 = reply(plan, 1)
         v2['content'][0]['text'] = json.dumps({'fields': {item['key']: {
             **{k: v for k, v in item.items() if k not in ('key', 'context')},
-            'context': {str(entry['unit']): entry['relation'] for entry in item['context']}} for item in wire_body['fields']}})
+            'context': {str(u): relation_of[n][u] for u in units}} for n, item in enumerate(wire_body['fields'])}})
+        v3 = reply(plan, 1)
+        v3['content'][0]['text'] = json.dumps({'fields': [{**item, 'context': [
+            {'unit': u, 'relation': relation_of[n][u]} for u in units]} for n, item in enumerate(wire_body['fields'])]})
         foreign = reply(plan, 2)
-        for raw in (v1, v2, foreign):
+        for raw in (v1, v2, v3, foreign):
             with self.assertRaises(ValidationError):
                 b.assemble(plan, [raw] + [reply(plan, n) for n in range(2, len(plan['parts']) + 1)])
 
