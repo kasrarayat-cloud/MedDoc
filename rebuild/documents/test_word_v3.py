@@ -2345,3 +2345,20 @@ class RefutationRepairs(unittest.TestCase):
         table.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
         fields = self.inspect(docx_bytes(doc))["fields"]
         self.assertIn("table_rows", [f["kind"] for f in fields], [(f["label"], f["kind"]) for f in fields])
+
+    def test_m4_control_a_sub_header_row_beside_a_merged_printed_header_stays_a_header(self):
+        """'Completed by' over 'Initial | Date', beside a printed header 'Site' merged down over both header rows: the
+        second row continues a PRINTED cell (to the right of its own labels), so it stays a header row and the
+        'Initial' column keeps its initials areas."""
+        from . import word_v3 as w
+        doc = Document()
+        table = doc.add_table(rows=3, cols=3)
+        table.cell(0, 0).merge(table.cell(0, 1)).text = "Completed by"
+        table.cell(0, 2).text = "Site"
+        table.cell(0, 2).merge(table.cell(1, 2))
+        table.cell(1, 0).text = "Initial"
+        table.cell(1, 1).text = "Date"
+        data = docx_bytes(doc)
+        fields = w.inspect(data)["fields"]
+        kinds = {f["locator"]["slot"]: f["kind"] for f in fields}
+        self.assertEqual(kinds.get("b/tbl[0]/tr[2]/tc[0]"), "initials", [(f["label"], f["kind"], f["locator"]["slot"]) for f in fields])
