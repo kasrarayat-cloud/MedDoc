@@ -815,7 +815,7 @@ def encounter_detail(request,pk):
     role_offers=(not is_wm and not is_v3 and e.status!='finalized' and bool(e.answers) and bool(printed_roles)
                  and destination_roles.suggestions_enabled())
     # Every offer read again from the current notes at once (core.destination_roles.current_suggestions).
-    role_current=(destination_roles.current_suggestions(e.template_version.fields,e.answers,printed_roles,e.notes,governance,
+    role_current=(destination_roles.current_suggestions(e.template_version.fields,e.answers,printed_roles,e.notes,
                                                         statement_labels) if role_offers else {})
     if is_v3:
         # ⚠️ A QUESTION LABEL THE FORM REPEATS IS SHOWN WITH ITS CONTEXT (counted with generation's own normalizer):
@@ -1116,7 +1116,6 @@ def accept_role_suggestion(request,pk):
     (quillmd/urls_doctor_role_suggestions.py): with it off no request reaches this view."""
     from documents import DocumentError
     from . import destination_roles
-    from .generation import governance_for
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
@@ -1132,9 +1131,8 @@ def accept_role_suggestion(request,pk):
     try:
         roles=destination_roles.legacy_roles(e.template_version)
         statement_labels=[row['label'] for row in e.template_version.review_requirements]
-        governance=governance_for(e.notes,e.template_version.fields,statement_labels)
-        offer=destination_roles.current_suggestions(e.template_version.fields,e.answers,roles,e.notes,governance,
-                                                    statement_labels,keys={key}).get(key)
+        offer=destination_roles.current_suggestions(e.template_version.fields,e.answers,roles,e.notes,statement_labels,
+                                                    keys={key}).get(key)
     except (ValidationError,DocumentError) as exc:
         return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
     if offer is None:return document_refusal(request,e,refusal,400)

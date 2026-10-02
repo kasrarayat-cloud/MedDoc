@@ -4954,17 +4954,14 @@ def role_validated(notes,fields,selections,suggested,plain_context,*,context_lab
 
 def role_reading(answer):
     """The suggestion a validated answer yields - its text and the lines it was read from - when the validator would
-    have ADOPTED it (`supported`, with text no longer than an answer may be, its own source lines, nothing held, offered
-    or set aside), else None. One reader for generation (`role_adopted`) and for the page and the act, which read a
-    stored offer again from the current notes (core.destination_roles.current_suggestions)."""
+    have ADOPTED it (`supported`; held, conflicting, offered or missing readings never are), and the text is no longer
+    than an answer may be; else None. One reader for generation (`role_adopted`) and for the page and the act, which
+    read a stored offer again from the current notes (core.destination_roles.current_suggestions)."""
     from . import destination_roles
     if not isinstance(answer,dict) or answer.get('status')!='supported':return None
-    text=answer.get('text')
-    if not isinstance(text,str) or not text.strip() or len(text)>destination_roles.SUGGESTION_LIMIT:return None
-    if any(answer.get(flag) for flag in ('held_candidate','suggestion','not_patient','governed_acceptance')):return None
-    evidence=answer.get('own_evidence') or answer.get('evidence') or []
-    if not evidence:return None
-    return {'text':text,'evidence':[{'quote':entry['quote'],'start':entry['start'],'end':entry['end']} for entry in evidence]}
+    if len(answer['text'])>destination_roles.SUGGESTION_LIMIT:return None
+    return {'text':answer['text'],'evidence':[{'quote':entry['quote'],'start':entry['start'],'end':entry['end']}
+                                             for entry in answer['evidence']]}
 
 
 def role_adopted(held,answers,suggested=()):

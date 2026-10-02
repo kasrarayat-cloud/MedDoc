@@ -261,7 +261,7 @@ def stored_suggestion(answer):
     if not isinstance(offer, dict) or not isinstance(offer.get('text'), str) or not offer['text'].strip():
         return None
     evidence = offer.get('evidence')
-    if not isinstance(evidence, list) or not evidence or not all(
+    if not isinstance(evidence, list) or not all(
             isinstance(entry, dict) and isinstance(entry.get('quote'), str) and isinstance(entry.get('start'), int)
             and isinstance(entry.get('end'), int) for entry in evidence):
         return None
@@ -273,7 +273,7 @@ def stored_suggestion(answer):
 SUGGESTION_LIMIT = 20000
 
 
-def current_suggestions(fields, answers, roles, notes, governance, statement_labels=(), keys=None):
+def current_suggestions(fields, answers, roles, notes, statement_labels=(), keys=None):
     """{key: offer} for every suggestion still offered NOW (or only `keys`). Read the same way by the page and by the act
     that accepts one, and never trusted from the draft (refutation A1: a stored value and its stored evidence come from
     the same object, so checking one against the other proves nothing):
@@ -283,10 +283,10 @@ def current_suggestions(fields, answers, roles, notes, governance, statement_lab
       suggestion or "Leave blank - reviewed" ends the offer);
     - the offer is EXACTLY what generation's own validator reads again from the CURRENT notes for this field, given the
       offer's cited quotes (core.generation.reread_role_suggestions): the same text and the same lines at the same
-      offsets, a line this field may cite (never one labelled for another row), no longer than an answer may be;
-    - the reading is not governed by a heading or a sentence of the notes, by the reader the page and finalization apply
-      to a `supported` answer (core.generation.governed_supported)."""
-    from .generation import governed_supported, reread_role_suggestions
+      offsets, a line this field may cite (never one labelled for another row), not governed by a heading or a sentence
+      of the notes (the validator's governance is heading_governance, the reader the page and finalization apply to a
+      `supported` answer), no longer than an answer may be. (`keys` only narrows what is read.)"""
+    from .generation import reread_role_suggestions
     candidates = {}
     for field in fields:
         if keys is not None and field['key'] not in keys:
@@ -301,9 +301,7 @@ def current_suggestions(fields, answers, roles, notes, governance, statement_lab
     if not candidates:
         return {}
     readings = reread_role_suggestions(notes, fields, candidates, statement_labels)
-    by_key = {field['key']: field for field in fields}
-    return {key: offer for key, offer in candidates.items() if readings.get(key) == offer and governed_supported(
-        governance, notes, {'status': 'supported', **offer}, by_key[key].get('label'), field_key=key) is None}
+    return {key: offer for key, offer in candidates.items() if readings.get(key) == offer}
 
 
 def generation_refusal(version, fields, config):
