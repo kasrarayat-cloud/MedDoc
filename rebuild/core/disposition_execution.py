@@ -251,7 +251,7 @@ def replay(actor, checkpoint_envelope):
         redacted.append(tombstone); codes.append(deleted)
     holds = retention.replay_journal_holds(actor, records, entries=entries, redact=redact)
     for tombstone in redacted:
-        transaction.on_commit(lambda files=tombstone.files: redaction.remove_files(files))
+        transaction.on_commit(lambda target=tombstone.target_id: redaction.sweep(target))
     audit(actor, 'disposition.journal_replayed', settings.RESTORE_INSTANCE_ID, entries=len(entries),
           journal_sha256=p.digest(entries[-1]) if entries else p.ZERO, holds=holds['holds'], releases=holds['releases'],
           redactions=len(redacted))

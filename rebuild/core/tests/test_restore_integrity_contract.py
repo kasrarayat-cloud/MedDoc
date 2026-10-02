@@ -41,11 +41,7 @@ class ReleaseIntegrityContract(TestCase):
     def test_release_restore_reference_queries_include_immutable_batch_response(self):
         from ops.production_restore_check import FILE_QUERIES
         batch=[sql for kind,sql in FILE_QUERIES if kind=='batch_response']
-        # Every immutable batch response is still a reference, except a storage key whose bytes a redaction removed
-        # (0033): its row stays as accounting evidence and the bytes are absent by design.
-        self.assertEqual(batch,["SELECT result_path,result_sha256 FROM core_generationbatchresponse WHERE result_path<>'' AND "
-                                "NOT EXISTS(SELECT 1 FROM core_redactiontombstone r WHERE r.files @> "
-                                "jsonb_build_array(jsonb_build_object('storage_key',result_path)))"])
+        self.assertEqual(batch,["SELECT result_path,result_sha256 FROM core_generationbatchresponse WHERE result_path<>''"])
         with connection.cursor() as cursor:
             for _,sql in FILE_QUERIES:
                 cursor.execute(sql);cursor.fetchall()

@@ -83,9 +83,10 @@ def content(encounter):
     codes = sorted(m.CodeSuggestion.objects.filter(encounter=encounter).values_list(
         'terminology_id', 'explanation', 'evidence', 'accepted_by_id'), key=lambda row: str(row[0]))
     files = [file_record(key) for key in sorted(referenced_files(encounter.pk))]
+    batches = sorted(m.GenerationBatch.objects.filter(encounter=encounter).values_list('plan_sha256', flat=True))
     value = {'notes': encounter.notes, 'answers': encounter.answers, 'template_review': encounter.template_review,
              'revision': encounter.revision, 'status': encounter.status,
-             'codes': [[str(a), b, c, str(e) if e else None] for a, b, c, e in codes], 'files': files}
+             'codes': [[str(a), b, c, str(e) if e else None] for a, b, c, e in codes], 'files': files, 'batches': batches}
     return p.digest(value), files
 
 
@@ -101,6 +102,11 @@ def refusals(encounter):
     if (jobs.filter(state__in=ACTIVE_JOB_STATES).exists()
             or m.GenerationBatch.objects.filter(encounter=encounter, state__in=ACTIVE_BATCH_STATES).exists()):
         found.add('work_unresolved')
+    # ⚠️ A GENERATION BATCH KEEPS THE NOTES (refutation F1 of dc33e094): its plan holds the full notes and quoted units,
+    # and 0027 makes the row immutable, so blanking the document would leave the content there. Refused, never redacted
+    # around; the database refuses the tombstone too (0033).
+    if m.GenerationBatch.objects.filter(encounter=encounter).exists():
+        found.add('generation_batch_content')
     if m.Reservation.objects.filter(job__encounter=encounter, state='held').exists(): found.add('funds_held')
     for receipt in m.ProviderReceipt.objects.filter(job__encounter=encounter).values('job_id', 'actual_cost'):
         if not (m.Usage.objects.filter(job_id=receipt['job_id']).exists() or m.PlatformCost.objects.filter(
@@ -178,7 +184,7 @@ def execute(actor, request_id, checkpoint_envelope):
     if done:
         if done.journal_entry['body']['redaction']['approved_by'] != str(actor.pk):
             raise ValidationError('This redaction was already executed by another custodian.')
-        transaction.on_commit(lambda: remove_files(done.files))
+        transaction.on_commit(lambda: sweep(done.target_id))
         return done
     blocked = refusals(encounter)
     if blocked:raise ValidationError('Redaction is unavailable: ' + ', '.join(blocked) + '.')
@@ -192,7 +198,7 @@ def execute(actor, request_id, checkpoint_envelope):
     tombstone, codes = apply(entry)
     audit(actor, 'redaction.executed', row.pk, department=encounter.department, journal_sha256=tombstone.entry_sha256,
           files=len(files), code_suggestions=codes)
-    transaction.on_commit(lambda: remove_files(tombstone.files))
+    transaction.on_commit(lambda: sweep(tombstone.target_id))
     return tombstone
 
 
@@ -217,19 +223,50 @@ def apply(entry):
 
 
 def remove_files(files):
-    """Remove each recorded file's bytes, only while they still have the digest the journal recorded. Never raises:
-    the redaction is committed; bytes left behind are logged (no path, no content) and removed by the exact retry."""
+    """Remove each recorded file's bytes, only while they still have the digest recorded for them (a record without one
+    is removed as it is). Never raises: the redaction is committed; bytes left behind are logged (no path, no content),
+    keep restore admission refused (unapplied) and are removed by the exact retry or the next replay."""
     removed = 0
     for record in files:
         try:
             path = private_path(record['storage_key'])
             if path.is_symlink():raise ValidationError('symbolic link')
             if not path.exists():continue
-            if file_record(record['storage_key'])['sha256'] != record['sha256']:raise ValidationError('digest changed')
+            if record.get('sha256') and file_record(record['storage_key'])['sha256'] != record['sha256']:
+                raise ValidationError('digest changed')
             path.unlink(); removed += 1
         except (OSError, ValidationError):
             logging.getLogger(__name__).error('A redacted file was not removed; the exact retry removes it.')
     return removed
+
+
+def redacted_files(target_id):
+    """Every file a redacted document's bytes may live in: the tombstone's journaled list, and every file its rows reference
+    now (refutation F2 of dc33e094: a provider result arriving after the redaction, written before it was refused, is
+    referenced by the job and listed nowhere). Records {storage_key, sha256 or ''}."""
+    records = {}
+    tomb = m.RedactionTombstone.objects.filter(target_id=target_id).values_list('files', flat=True).first() or []
+    for record in tomb:
+        records[record['storage_key']] = record['sha256']
+    for key, sha in referenced_files(target_id).items():
+        records.setdefault(key, sha)
+    return [{'storage_key': key, 'sha256': sha} for key, sha in sorted(records.items())]
+
+
+def sweep(target_id):
+    """Remove the bytes of every file of a redacted document (after its commit, at a retry, at every replay, and after a
+    late provider result was written). Returns how many were removed."""
+    return remove_files(redacted_files(target_id))
+
+
+def withheld(encounter_id):
+    """Whether provider output for this document must not be stored: it has a redaction tombstone here."""
+    return bool(encounter_id) and m.RedactionTombstone.objects.filter(target_id=encounter_id).exists()
+
+
+def files_left(target_id):
+    """How many of a redacted document's files still have bytes on this volume."""
+    return sum(private_path(record['storage_key']).exists() for record in redacted_files(target_id))
 
 
 def redacted_targets():
@@ -242,7 +279,9 @@ def redacted_targets():
 
 
 def unapplied(entries):
-    """Journaled redactions this database does not reflect: no exact tombstone, or the document still holds content."""
+    """Journaled redactions this database or its volume does not reflect: no exact tombstone, the document still holds
+    content, or a file of it still has bytes here (refutation F6 of dc33e094: remove_files logs a failure and admission
+    passed with the bytes on the restored volume)."""
     missing = 0
     for entry in journal.redaction_entries(entries):
         body = entry['body']['redaction']
@@ -250,5 +289,7 @@ def unapplied(entries):
         content_left = m.Encounter.objects.filter(pk=body['target_id']).exclude(
             status='redacted', notes='', answers={}, template_review={}).exists()
         codes_left = m.CodeSuggestion.objects.filter(encounter_id=body['target_id']).exists()
-        missing += tomb != p.digest(entry) or content_left or codes_left
+        listed = {record['storage_key'] for record in body['files']}
+        bytes_left = files_left(body['target_id']) or any(private_path(key).exists() for key in listed)
+        missing += bool(tomb != p.digest(entry) or content_left or codes_left or bytes_left)
     return missing

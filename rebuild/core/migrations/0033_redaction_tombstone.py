@@ -8,7 +8,8 @@ PROTECT). core.redaction removes its content instead and records who, when and w
 - core_redactiontombstone: the executed redaction, holding the signed independent-journal entry verbatim (two distinct
   custodians, the reason hash, the removed files' storage keys and digests). Scalar identities, as for a disposition
   tombstone (0030), so a restore of an older backup can import it from the journal without the request row. Refused
-  while an unreleased retention hold covers the document, and for a finalized one. Append-only.
+  while an unreleased retention hold covers the document, for a finalized one, and while the document has a generation
+  batch (its immutable plan keeps the notes and quoted units, 0027). Append-only.
 - quillmd_redaction_guard on core_encounter (BEFORE INSERT OR UPDATE): a document with a tombstone keeps status
   'redacted' and empty notes, answers, review state and export, so its content cannot come back by an edit or by a
   reconcile that inserts the row again. On core_job, core_generationbatch and core_codesuggestion (BEFORE INSERT): no
@@ -63,6 +64,8 @@ BEGIN
       AND (h.scope='global' OR h.organization_id=org OR h.department_id=target.department_id
            OR h.patient_id=target.patient_id OR h.encounter_id=target.id))
    THEN RAISE EXCEPTION 'A retention hold applies; this content cannot be redacted'; END IF;
+   IF EXISTS(SELECT 1 FROM core_generationbatch b WHERE b.encounter_id=target.id)
+   THEN RAISE EXCEPTION 'A generation batch keeps this document''s notes; it cannot be redacted'; END IF;
   END IF;
   RETURN NEW;
  END IF;

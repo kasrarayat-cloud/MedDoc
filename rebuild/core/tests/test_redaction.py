@@ -29,6 +29,11 @@ SKELETON = ('Job', 'ProviderReceipt', 'Usage', 'LedgerEntry', 'Reservation', 'Wa
             'TemplateVersion')
 
 
+def Q_source(pk):
+    from django.db.models import Q
+    return Q(source_id=pk) | Q(prior_record__encounter_id=str(pk))
+
+
 class RedactionFixture(RepairFixture):
     def write(self, relative, data):
         path = private_path(relative); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
@@ -319,6 +324,170 @@ class Redaction(RedactionFixture, TestCase):
         self.assertEqual(m.RedactionTombstone.objects.count(), 1)
 
 
-def Q_source(pk):
-    from django.db.models import Q
-    return Q(source_id=pk) | Q(prior_record__encounter_id=str(pk))
+
+
+MARKERS = ('SYNTHETIC REDACTABLE', 'chest pain since Monday', 'SYNTHETIC RECORDING BYTES')
+
+
+def stores_holding(markers, roots=()):
+    """Every database column (of EVERY table, enumerated from the catalogue, so a new table or column is covered without
+    editing this) and every file under `roots` whose content holds one of `markers`. Names only, never content."""
+    found = []
+    with connection.cursor() as cursor:
+        for table in connection.introspection.table_names(cursor):
+            for column in connection.introspection.get_table_description(cursor, table):
+                cursor.execute('SELECT count(*) FROM "%s" WHERE "%s"::text ILIKE ANY(%%s)' % (table, column.name),
+                               [['%' + marker + '%' for marker in markers]])
+                if cursor.fetchone()[0]:
+                    found.append(f'{table}.{column.name}')
+    for root in roots:
+        for path in sorted(Path(root).rglob('*')):
+            if path.is_file() and any(marker.encode() in path.read_bytes() for marker in markers):
+                found.append(str(path))
+    return found
+
+
+@override_settings(**ISOLATED)
+class RefutationRepairs(RedactionFixture, TestCase):
+    """Refutation of dc33e094: F1 (batch plans keep the notes), F6 (admission with redacted bytes still on the volume),
+    and F12 (each refusal arm alone, the requester re-check and the file digest in the content)."""
+
+    def setUp(self): self.setup_journal()
+
+    def batch(self, row, state='succeeded'):
+        # As core.generation_batch writes it: the plan carries the full notes and unit quotes, and the row is immutable.
+        return m.GenerationBatch.objects.create(encounter=row, user=self.scope[0], admission_key=uuid.uuid4(),
+            revision=row.revision, plan={'notes': row.notes, 'units': [{'id': 'u1', 'quote': 'chest pain since Monday'}],
+                                         'parts': []}, plan_sha256='a' * 64, maximum_charge=Decimal('0'), state=state)
+
+    def test_F1_a_draft_with_a_generation_batch_is_refused(self):
+        row, _, _ = self.worked_draft()
+        batch = self.batch(row)
+        self.assertEqual(redaction.refusals(row), ['generation_batch_content'])  # dc33e094: [] and the plan kept the notes
+        with self.assertRaisesMessage(ValidationError, 'generation_batch_content'):
+            redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+        m.GenerationBatch.objects.filter(pk=batch.pk).update(state='running')
+        self.assertEqual(redaction.refusals(row), ['generation_batch_content', 'work_unresolved'])
+        # The database refuses the tombstone whatever the application does (0033).
+        tomb = str(uuid.uuid4())
+        entry = {'key_id': 'writer', 'signature': '0' * 128, 'body': {'contract': j.REDACTION, 'redaction': {
+            'id': tomb, 'target_id': str(row.pk), 'department_id': str(row.department_id), 'request_id': tomb,
+            'content_sha256': 'e' * 64, 'files': [], 'requested_by': str(self.admin.pk), 'approved_by': str(self.second.pk)}}}
+        with self.assertRaisesMessage(DatabaseError, 'generation batch'), transaction.atomic():
+            m.RedactionTombstone.objects.create(id=tomb, target_id=row.pk, department_id=row.department_id, request_id=tomb,
+                                                content_sha256='e' * 64, files=[], journal_entry=entry, entry_sha256='f' * 64)
+        self.assertFalse(m.RedactionTombstone.objects.exists())
+
+    def test_F1_no_store_holds_the_redacted_content_afterwards(self):
+        row, _, _ = self.worked_draft()
+        from django.conf import settings
+        self.assertTrue(stores_holding(MARKERS, (settings.MEDIA_ROOT,)))  # the control: the content is somewhere first
+        self.redact(row)
+        self.assertEqual(stores_holding(MARKERS, (settings.MEDIA_ROOT, Path(self.journal_temp.name))), [])
+
+    def test_F6_admission_refuses_while_redacted_bytes_remain_on_the_restored_volume(self):
+        row, _, files = self.worked_draft()
+        originals = {relative: private_path(relative).read_bytes() for relative in files}
+        self.older_backup(lambda: self.redact(row))
+        for relative, data in originals.items(): self.write(relative, data)
+        real_unlink = Path.unlink
+        def refuse(path, *args, **kwargs):
+            if any(str(path).endswith(relative) for relative in files): raise PermissionError(13, 'SYNTHETIC EACCES')
+            return real_unlink(path, *args, **kwargs)
+        with self.quarantine():
+            with patch.object(Path, 'unlink', refuse), self.assertLogs('core.redaction', 'ERROR'):
+                with self.captureOnCommitCallbacks(execute=True):
+                    x.replay(self.admin, self.fresh())
+            self.assertTrue(all(private_path(relative).exists() for relative in files))
+            report = restore_admission.assess(self.instance, self.fresh(), RELEASE)
+            self.assertIn('redaction_replay_incomplete', report['blockers'])  # dc33e094: admissible
+            self.assertEqual(report['redactions_unapplied'], 1)
+            with self.captureOnCommitCallbacks(execute=True):
+                x.replay(self.admin, self.fresh())  # the next replay removes them
+            self.assertFalse(any(private_path(relative).exists() for relative in files))
+            self.assertEqual(restore_admission.assess(self.instance, self.fresh(), RELEASE)['blockers'], [])
+
+    def test_F2_a_file_a_redacted_documents_rows_reference_later_is_swept_and_counted(self):
+        row, job, _ = self.worked_draft()
+        self.redact(row)
+        late = f'receipts/{uuid.uuid4().hex}{"4"*16}.json'
+        self.write(late, b'{"provider_output": "SYNTHETIC REDACTABLE LATE OUTPUT"}')
+        m.Job.objects.filter(pk=job.pk).update(result_path=late, result_sha256=hashlib.sha256(
+            b'{"provider_output": "SYNTHETIC REDACTABLE LATE OUTPUT"}').hexdigest())
+        self.assertEqual(redaction.unapplied(j.verified()), 1)  # its bytes are on the volume
+        from ops.backup_restore import FILE_QUERIES
+        with connection.cursor() as cursor:
+            keys = set()
+            for _kind, statement in FILE_QUERIES:
+                cursor.execute(statement); keys |= {r[0] for r in cursor.fetchall()}
+        self.assertNotIn(late, keys)  # a redacted document's files are never a backup's file reference
+        self.assertEqual(redaction.sweep(row.pk), 1)
+        self.assertFalse(private_path(late).exists())
+        self.assertEqual(redaction.unapplied(j.verified()), 0)
+
+    # F12: each refusal arm alone, with the exact set of labels.
+    def assert_refused_only(self, row, label):
+        self.assertEqual(redaction.refusals(row), [label])
+        with self.assertRaisesMessage(ValidationError, label):
+            redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+
+    def test_F12_a_file_shared_with_another_record_alone_refuses(self):
+        row, job, files = self.worked_draft()
+        other = self.worked_draft(self.other)[0]
+        m.Job.objects.create(encounter=other, user=self.other[0], kind='transcription', state='failed',
+                             request_key=str(uuid.uuid4()), input_path=files[0])
+        self.assert_refused_only(row, 'shared_or_preserved_file')
+
+    def test_F12_preserved_evidence_alone_refuses(self):
+        row, _, _ = self.worked_draft()
+        m.PreservedRecord.objects.create(source_table='core_encounter', source_id=row.pk, operation='UPDATE', hold_ids=[],
+                                         prior_record={'id': str(row.pk)})
+        self.assert_refused_only(row, 'preserved_evidence')
+
+    def test_F12_held_funds_alone_refuse(self):
+        row, job, _ = self.worked_draft()
+        m.Reservation.objects.create(job=job, wallet=m.Wallet.objects.get(user=self.scope[0], kind='promo'),
+                                     amount=Decimal('0.10'), state='held')
+        self.assert_refused_only(row, 'funds_held')
+
+    def test_F12_a_receipt_without_its_accounting_alone_refuses(self):
+        row, _, _ = self.worked_draft()
+        orphan = m.Job.objects.create(encounter=row, user=self.scope[0], kind='transcription', state='failed',
+                                      request_key=str(uuid.uuid4()))
+        m.ProviderReceipt.objects.create(job=orphan, provider='synthetic:fixture', actual_cost=Decimal('0.02'), simulated=True)
+        self.assert_refused_only(row, 'receipt_accounting_unresolved')
+
+    def test_F12_unresolved_financial_history_alone_refuses(self):
+        row, job, _ = self.worked_draft()
+        m.CostReconciliation.objects.create(usage=m.Usage.objects.get(job=job), reconciled_cost=Decimal('0.03'),
+            evidence_reference='synthetic', recorded_by=self.admin, charge_delta=Decimal('0.01'), ledger_status='pending_funds')
+        self.assert_refused_only(row, 'financial_history_unresolved')
+
+    def test_F12_a_disposition_tombstone_alone_refuses(self):
+        row, _, _ = self.worked_draft()
+        instruction = str(uuid.uuid4())
+        entry = {'key_id': 'writer', 'signature': '0' * 128, 'body': {'contract': 'disposition-journal-entry-v1', 'instruction': {
+            'id': instruction, 'target_id': str(row.pk), 'department_id': str(row.department_id),
+            'created_by': str(self.admin.pk), 'approved_by': str(self.second.pk)}}}
+        m.DispositionTombstone.objects.create(target_id=row.pk, department_id=row.department_id, instruction_id=instruction,
+                                              journal_entry=entry, entry_sha256='f' * 64)
+        self.assert_refused_only(row, 'disposed_target')
+
+    def test_F12_an_already_redacted_document_says_so(self):
+        row, _, _ = self.worked_draft()
+        self.redact(row); row.refresh_from_db()
+        self.assertEqual(redaction.refusals(row), ['already_redacted', 'not_an_unfinalized_document'])
+
+    def test_F12_a_requester_no_longer_a_custodian_blocks_execution(self):
+        row, _, _ = self.worked_draft()
+        requested = redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+        m.User.objects.filter(pk=self.admin.pk).update(is_active=False)
+        with self.assertRaises(PermissionDenied): redaction.execute(self.second, requested.pk, self.fresh())
+        self.assertFalse(m.RedactionTombstone.objects.exists())
+
+    def test_F12_changed_file_bytes_change_the_content(self):
+        row, _, files = self.worked_draft()
+        requested = redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+        self.write(files[1], b'{"raw_transcript": "SYNTHETIC CHANGED", "transcript": "SYNTHETIC"}')
+        with self.assertRaisesMessage(ValidationError, redaction.CONTENT_CHANGED):
+            redaction.execute(self.second, requested.pk, self.fresh())

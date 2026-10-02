@@ -762,11 +762,20 @@ def run_one():
             # A synthetic narrative response (fixture mode): kept as the text the validator read, and named as such.
             saved={'provider_output_text':result['narrative_replay'],'synthetic_source':result['replay_source']}
         else:saved={'answers':result}
-        result_path=f'receipts/{secrets.token_hex(24)}.json'
-        path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-        payload=json.dumps(saved,ensure_ascii=False).encode()
-        with path.open('xb') as file:path.chmod(0o600);file.write(payload)
-        job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
+        # ⚠️ A REDACTED DOCUMENT'S PROVIDER OUTPUT IS NEVER STORED (refutation F2 of dc33e094): a result arriving after the
+        # redaction (a late receipt) wrote the quoted notes to a file no tombstone listed. Its accounting facts are the
+        # receipt above; the output itself is not kept. A redaction committing while this file is written is covered by
+        # whichever finishes last: the check below, or the redaction's own sweep of every file its rows reference.
+        from .redaction import sweep, withheld
+        if withheld(job.encounter_id):
+            audit(job.user,'provider.output_withheld',job.pk,department=e.department,reason='document_redacted')
+        else:
+            result_path=f'receipts/{secrets.token_hex(24)}.json'
+            path=private_path(result_path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            payload=json.dumps(saved,ensure_ascii=False).encode()
+            with path.open('xb') as file:path.chmod(0o600);file.write(payload)
+            job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
+            if withheld(job.encounter_id):sweep(job.encounter_id)
         # Settling provider cost is independent of clinical acceptance: invalid answers are never adopted.
         # The connection that will carry settlement's COMMIT, kept to tell afterwards whether Django had to drop it (RS-1).
         connection.ensure_connection(); carrier=connection.connection; settling=True
