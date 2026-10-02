@@ -127,7 +127,12 @@ THIRD_PERSON = (('the maximum charge you approved', 'the approved maximum charge
                 ('It is not charged to you.', 'It is not charged.'),
                 ('it is not charged to you.', 'it is not charged.'),
                 ('Contact your administrator before resubmitting.', 'Its requester should contact an administrator before '
-                                                                   'resubmitting.'))
+                                                                   'resubmitting.'),
+                # 'Billing shows it' is true of the REQUESTER's Billing: a colleague's or an owner's Billing shows a charge on
+                # the requester's own wallet nowhere (refutation R4B-2 of b3d8111d).
+                ('Billing shows it', "its requester's Billing shows it"),
+                ('Billing shows the charge', "its requester's Billing shows the charge"),
+                ('Its charge is shown under Billing.', "Its charge is shown under its requester's Billing."))
 
 
 def for_others(status):
@@ -137,7 +142,7 @@ def for_others(status):
     text = status.explanation
     for mine, theirs in THIRD_PERSON:
         text = text.replace(mine, theirs)
-    if re.search(r'(?i)\byou(r)?\b', text):
+    if re.search(r'(?i)\byou(r)?\b', text) or re.search(r"(?<!requester's )\bBilling\b", text):
         text = status.label + '.'
     return status._replace(explanation=text)
 

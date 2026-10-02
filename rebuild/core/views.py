@@ -918,7 +918,10 @@ def encounter_detail(request,pk):
     # The doctor reads one status vocabulary (core.doctor_status): never an internal state word or an administrator's note.
     for job in jobs:
         # A charged completion keeps the page's own next-step text (the transcript or the draft is ready below).
-        job.doctor_status=doctor_status(job); job.display_error='' if job.doctor_status.key=='completed' else job.doctor_status.explanation
+        # Another person's request reads in the third person here too (refutation R4B-1 of b3d8111d): every member of the
+        # department sees every request on the document, with no requester named.
+        job.doctor_status=doctor_status(job) if job.user_id==request.user.pk else for_others(doctor_status(job))
+        job.display_error='' if job.doctor_status.key=='completed' else job.doctor_status.explanation
         job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
     # ⚠️ "Earlier requests remain charged" is read from the LEDGER, as the request list beside it is (doctor_status): the
     # job state said so for a request whose charge a reconciliation had credited back in full, beside "No charge is

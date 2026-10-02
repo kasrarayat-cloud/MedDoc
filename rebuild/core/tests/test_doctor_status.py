@@ -276,9 +276,44 @@ class OthersRequestsAreNotAddressedToTheViewer(TestCase):
                     mine = ds.doctor_status(Job(state=state, error=error, kind='generation'))
                     theirs = ds.for_others(mine)
                     self.assertNotRegex(theirs.explanation, r'(?i)\byou(r)?\b')
+                    # R4B-2: 'Billing shows it' is true only of the requester's Billing.
+                    self.assertNotRegex(theirs.explanation, r"(?<!requester's )\bBilling\b")
                     self.assertNotEqual(theirs.explanation, theirs.label + '.')   # rewritten, never the bare fallback
                     self.assertEqual((theirs.key, theirs.label, theirs.charged), (mine.key, mine.label, mine.charged))
         waiting = ds.doctor_status(Job(state='queued', kind='generation'))
         self.assertIn('the maximum charge you approved', waiting.explanation)          # the requester's own words stay
-        stray = waiting._replace(explanation='A sentence no rewrite knows, addressed to you.')
-        self.assertEqual(ds.for_others(stray).explanation, waiting.label + '.')        # an unknown 'you' falls back
+        for unknown in ('A sentence no rewrite knows, addressed to you.', 'Your request is queued.',   # R4F-13: any case,
+                        'You approved its maximum.', 'It waits for your approval.',                    # 'you' and 'your',
+                        'Its charge is under Billing.'):                                            # and a bare Billing
+            with self.subTest(unknown=unknown):
+                self.assertEqual(ds.for_others(waiting._replace(explanation=unknown)).explanation, waiting.label + '.')
+
+
+@override_settings(**TEST_SETTINGS)
+class ColleaguesReadAnotherPersonsRequestInTheThirdPerson(TestCase):
+    """Refutation R4B-1 of b3d8111d: the encounter page lists every request on the document to every member of its
+    department, and each carried its requester's sentence ('the maximum charge you approved is held'), with no requester
+    named. Another person's request reads in the third person there too (doctor_status.for_others)."""
+    workflow = test_workflow.DocumentWorkflow
+    setUp, make_docx, upload, create_encounter = workflow.setUp, workflow.make_docx, workflow.upload, workflow.create_encounter
+
+    def test_the_encounter_page_tells_a_colleague_the_request_in_the_third_person(self):
+        from django.test import Client
+        from core.billing import reserve
+        from core.models import Membership, User
+        _t, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, 'Symptoms: no chest pain.\nExamination: Normal gait.')
+        job = Job.objects.create(encounter=encounter, user=self.user, request_key='r4b1:job', state='queued', kind='generation')
+        reserve(job, charge_limit=Decimal('0.40'))
+        colleague = User.objects.create_user(username='r4b1-colleague', email='r4b1-colleague@synthetic.invalid',
+                                             verified_at=timezone.now())
+        Membership.objects.create(user=colleague, department=self.department, role='clinician')
+        other = Client(); other.force_login(colleague)
+        for state in ('queued', 'reconciliation'):
+            Job.objects.filter(pk=job.pk).update(state=state)
+            with self.subTest(state=state):
+                theirs = other.get(f'/encounters/{encounter.pk}/').content.decode()
+                mine = self.client.get(f'/encounters/{encounter.pk}/').content.decode()
+                self.assertNotIn('you approved', theirs)                       # b3d8111d: the requester's sentence
+                self.assertIn('the approved maximum', theirs)
+                self.assertIn('you approved', mine)
