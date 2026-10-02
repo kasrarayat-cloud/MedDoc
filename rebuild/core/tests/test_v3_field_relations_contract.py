@@ -335,6 +335,13 @@ class StrictParser(SimpleTestCase):
             body = copy.deepcopy(good); edit(body)
             with self.subTest(name=name), self.assertRaises(ValidationError):
                 adopted(notes, fields, body)
+            # (the PARSER itself refuses it, whole: records() refusing it later is not the only guard - the stage
+            # runner's raw_selection reads parse() alone, and would otherwise drop the foreign option silently)
+            asked, context, _ = g.v3_generation_fields(fields)
+            units = g.source_units(notes, asked, context_labels=context)[0]
+            with self.subTest(name=name, reader='parse'), self.assertRaises(ValidationError) as caught:
+                r.parse(json.dumps(body), asked, units)
+            self.assertIn(r.MALFORMED, caught.exception.messages[0])
 
     def test_answers_that_parse_but_disagree_with_their_selection_hold_that_field_only(self):
         # (was: refused by records() for the WHOLE response, which failed the job — live attempt 020. A disagreement
