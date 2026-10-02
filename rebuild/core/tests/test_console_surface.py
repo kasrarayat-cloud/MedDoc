@@ -227,15 +227,22 @@ class DoctorSurfaceHasNoConsole(TestCase):
     def test_the_doctor_surface_resolves_against_a_urlconf_with_no_console_route(self):
         """Defence in depth: whatever the path rule decides, the doctor surface's own URLconf mounts no console view,
         so no path variant can resolve to one there."""
+        from django.conf import settings
         from django.urls import Resolver404, resolve
-        from quillmd import urls_doctor
+        from quillmd import urls_doctor, urls_doctor_role_suggestions
         self.assertFalse([p for p in urls_doctor.urlpatterns if str(p.pattern).startswith('console')])
         self.assertEqual(len(urls_doctor.urlpatterns) + len(console_routes()), len(list(all_patterns())))
-        for route, _ in console_routes():
-            with self.subTest(route=route), self.assertRaises(Resolver404):
-                resolve(sample_path(route), urlconf='quillmd.urls_doctor')
+        # The doctor surface's other URLconf (QUILLMD_ROLE_SUGGESTIONS on) is the same routes plus one doctor act.
+        self.assertFalse([p for p in urls_doctor_role_suggestions.urlpatterns if str(p.pattern).startswith('console')])
+        self.assertEqual(len(urls_doctor_role_suggestions.urlpatterns), len(urls_doctor.urlpatterns) + 1)
+        for urlconf in ('quillmd.urls_doctor', 'quillmd.urls_doctor_role_suggestions'):
+            for route, _ in console_routes():
+                with self.subTest(urlconf=urlconf, route=route), self.assertRaises(Resolver404):
+                    resolve(sample_path(route), urlconf=urlconf)
         client = self.clients()['clinician']
-        self.assertEqual(client.get('/patients/').wsgi_request.urlconf, 'quillmd.urls_doctor')
+        expected = ('quillmd.urls_doctor_role_suggestions' if getattr(settings, 'QUILLMD_ROLE_SUGGESTIONS', '0') == '1'
+                    else 'quillmd.urls_doctor')
+        self.assertEqual(client.get('/patients/').wsgi_request.urlconf, expected)
 
     def test_positive_control_the_doctor_routes_are_still_reached(self):
         """The surface rule must not swallow the doctor application: its dashboard still reaches its view."""
