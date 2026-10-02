@@ -26,7 +26,7 @@ from docx import Document
 from core import destination_roles, generation
 from core.jobs import enqueue, run_one
 from core.models import (AuditEvent, Department, Encounter, Job, MappingConfirmation, Membership, Organization,
-                         TemplateVersion, User)
+                         Template, TemplateVersion, User)
 from core.security import private_path
 from core.tests.test_destination_roles import LIVE, legacy_rows
 from core.tests.test_generation_batch import SETTINGS as BATCH, BatchFixture
@@ -1234,8 +1234,12 @@ class Review(Legacy, TestCase):
             with self.subTest(version=name):
                 e = self.generated()
                 self.assertTrue(self.offered(e))
-                latest = self.latest(self.template)
-                moved = TemplateVersion.objects.create(template=self.template, number=latest.number + 1,
+                # Model pre-binding stored state on a separate historical original: an imported template's engine
+                # is immutable. Do not replace its bound legacy engine just to reach this negative act control.
+                historical=Template.objects.create(department=self.template.department,
+                    name='Synthetic historical '+name,format=self.template.format,original_name=self.template.original_name,
+                    original_path=self.template.original_path,sha256=self.template.sha256,created_by=self.user)
+                moved = TemplateVersion.objects.create(template=historical, number=1,
                                                        fields=self.version.fields, created_by=self.user, **extra)
                 MappingConfirmation.objects.create(version=moved, confirmed_by=self.user)
                 Encounter.objects.filter(pk=e.pk).update(template_version=moved)

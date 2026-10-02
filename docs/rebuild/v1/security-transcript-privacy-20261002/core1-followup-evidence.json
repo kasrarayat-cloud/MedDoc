@@ -1,0 +1,55 @@
+{
+  "base": "6ee290af4beabbff9dbe4ed3be804af53c210d97",
+  "fixture_checks": 9,
+  "fixture_exit": 0,
+  "seconds": 36.769,
+  "provider_calls": 0,
+  "clinical_simulated_checks": [
+    31,
+    8,
+    10
+  ],
+  "clinical_source3_still_unqualified": true,
+  "files": [
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/core1-fixture-1.log",
+      "durable": "core1-fixture-1.log",
+      "sha256": "75b09d1bed82f74188df7ea1b2994432d88923d8714acc1f1696ec3754a7b952"
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/ci-313c-core1-followup-errors.json",
+      "durable": "ci-313c-core1-followup-errors.json",
+      "sha256": "37d700ae958d43b8e330cdec2c94a180b7a0cffc3c2fbd04cfe7000a88092dab"
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-governance-2.json",
+      "durable": "refute-notes-repaired-governance-2.json",
+      "sha256": "17cb0586a98eac0dd52966b95b378a40ec1aa29e2ecce34cf6f2c8f0c209c10a"
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-governance-3.json",
+      "durable": "refute-notes-repaired-governance-3.json",
+      "sha256": "1dfb7ece8b0e37713e22050b9566063ded0949a1ce38fcfd851c6a5627bb1117"
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-governance-4.json",
+      "durable": "refute-notes-repaired-governance-4.json",
+      "sha256": "9b29098a9b64c245ee848d0ceca76dea28fbc32a2a0a2daa00bd259083dd7f12"
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-parser-2.json",
+      "durable": "refute-notes-repaired-parser-2.json",
+      "sha256": "82087c2efd93c03ef7f0064caf5fd1daba68ae4dbc2d2fcc116e08d0bc4d82c0"
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-2-source/manifest.json",
+      "durable": "notes-repaired-refutation-2-source.json",
+      "sha256": "c952a48e9a286696b0d7e85f79d46cc585369238d94e344ff2723b07b2041ec2"
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-3-source/manifest.json",
+      "durable": "notes-repaired-refutation-3-source.json",
+      "sha256": "83d86acf053a817203e89c18d908215979152bcc004ebd3a1db547866c4ab9bf"
+    }
+  ]
+}

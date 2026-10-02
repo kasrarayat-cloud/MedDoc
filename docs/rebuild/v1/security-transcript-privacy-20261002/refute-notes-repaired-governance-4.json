@@ -1,0 +1,112 @@
+[
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. No longer routine.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. No longer usual.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. No longer regular.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. No longer a daily medication.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. No longer since last Thursday.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Her father is the only person taking warfarin.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Her father is the sole warfarin user.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Her father is the only patient on warfarin.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Her father is the sole apixaban user.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Her father is the only person taking apixaban.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  }
+]
