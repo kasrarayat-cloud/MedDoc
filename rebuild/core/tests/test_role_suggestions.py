@@ -322,6 +322,8 @@ class Generation(Legacy, TestCase):
         """G2: the suggested row's answer under an ordinary key, a held row's key or an invented key costs the
         suggestion only; an ordinary key answered twice keeps the one answer its own field accepts."""
         plain, _, _ = self.live(flag='0')
+        control, job, _ = self.live(flag='1')                          # positive control: asked and offered
+        self.assertEqual((job.state, self.offered(control)['text']), ('succeeded', '14 ng/L'))
         key, plan, held = self.key('Troponin (initial)'), self.key('Plan'), self.key('Electronically signed by')
 
         def under(target):
@@ -457,6 +459,7 @@ class TabForms(Legacy, TestCase):
                 self.assertEqual(e.answers, {})
         e, job, _ = self.live(self.notes, flag='1', provider=unit_provider)   # positive control
         self.assertEqual(job.state, 'succeeded')
+        self.assertEqual(self.offered(e)['text'], '14 ng/L')
 
 
 @override_settings(**V3)
