@@ -119,6 +119,29 @@ def doctor_status(job):
     return _status('unknown', charge=charge)
 
 
+#: ⚠️ ANOTHER PERSON'S REQUEST IS TOLD IN THE THIRD PERSON (refutation R3B-2 of 75d11c09): the held list shows an owner of
+#: the paying organization the requests colleagues made, and each carried its requester's sentence ("the maximum charge you
+#: approved is held"), telling the owner they approved a hold they never saw. The same facts, without "you".
+THIRD_PERSON = (('the maximum charge you approved', 'the approved maximum charge'),
+                ('the maximum you approved', 'the approved maximum'),
+                ('It is not charged to you.', 'It is not charged.'),
+                ('it is not charged to you.', 'it is not charged.'),
+                ('Contact your administrator before resubmitting.', 'Its requester should contact an administrator before '
+                                                                   'resubmitting.'))
+
+
+def for_others(status):
+    """`status` as read by someone other than its requester. Any sentence still addressed to the reader falls back to the
+    label alone: a closed list of rewrites is checked, never trusted."""
+    import re
+    text = status.explanation
+    for mine, theirs in THIRD_PERSON:
+        text = text.replace(mine, theirs)
+    if re.search(r'(?i)\byou(r)?\b', text):
+        text = status.label + '.'
+    return status._replace(explanation=text)
+
+
 ENCOUNTER_LABELS = {'draft': 'Draft', 'review': 'Answers ready for review', 'finalized': 'Finalized', 'redacted': 'Redacted'}
 
 

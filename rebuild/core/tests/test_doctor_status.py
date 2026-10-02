@@ -6,6 +6,7 @@ never changed, and the tests check that no money row moves.
 """
 import re
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -191,6 +192,9 @@ class HeldListScope(TestCase):
                     self.assertEqual(client.get(f'/billing/jobs/{row["job"].pk}/').status_code, 200)
                     if row['job'].user_id != page.context['user'].pk:
                         self.assertIn(row['job'].user.email, text)                        # the requester is named
+                        self.assertNotRegex(row['status'].explanation, r'(?i)\byou(r)?\b')  # R3B-2: not "you approved"
+                    else:
+                        self.assertIn('you approved', row['status'].explanation)          # the requester's own words
                 for job in (mine, mapping, personal):                                     # the charge page agrees
                     opens = client.get(f'/billing/jobs/{job.pk}/').status_code == 200
                     self.assertEqual(opens, str(job.pk) in [row[0] for row in expected], (viewer, job.request_key))
@@ -245,3 +249,36 @@ class HeldListOneRowPerRequest(BatchFixture, TestCase):
         rows = self.client.get('/billing/').context['held_requests']
         self.assertEqual(len(rows), 500)
         self.assertEqual([row for row in rows if row['job'].kind == 'generation_part'], [])  # older than the newest 500: absent
+
+    def test_R3F11_each_parts_charge_page_names_its_own_part(self):
+        import html
+        batch = self.admit()
+        for part in batch.parts.order_by('ordinal'):
+            with self.subTest(ordinal=part.ordinal):
+                page = html.unescape(self.client.get(f'/billing/jobs/{part.job_id}/').content.decode())
+                self.assertIn(f'this page explains part {part.ordinal} of 2', page)
+
+
+class OthersRequestsAreNotAddressedToTheViewer(TestCase):
+    """Refutation R3B-2 of 75d11c09: the held list shows an owner of the paying organization the requests colleagues made,
+    each with the requester's own sentence: 'the maximum charge you approved is held'. That owner approved nothing. A row
+    of another person's request is told in the third person (doctor_status.for_others)."""
+    def test_no_sentence_for_another_persons_request_says_you(self):
+        from core.models import GenerationBatch  # noqa: F401  (the batch states are covered by the same sentences)
+        cases = [('queued', ''), ('running', ''), ('reconciliation', ''), ('succeeded', ''), ('cancelled', CANCELLED_ERROR),
+                 ('failed', PLATFORM_FAILURE + 'Provider supplied no usable transcript.'),
+                 ('failed', NOT_ADOPTED + 'Source changed while this job ran; output was not adopted. Its recorded usage stays billed.'),
+                 ('failed', 'Access was revoked before processing.'), ('unknown-state', '')]
+        for state, error in cases:
+            for charge in (0, Decimal('0.15')):
+                with self.subTest(state=state, charge=charge), \
+                        patch('core.doctor_status.net_charge', return_value=charge):
+                    mine = ds.doctor_status(Job(state=state, error=error, kind='generation'))
+                    theirs = ds.for_others(mine)
+                    self.assertNotRegex(theirs.explanation, r'(?i)\byou(r)?\b')
+                    self.assertNotEqual(theirs.explanation, theirs.label + '.')   # rewritten, never the bare fallback
+                    self.assertEqual((theirs.key, theirs.label, theirs.charged), (mine.key, mine.label, mine.charged))
+        waiting = ds.doctor_status(Job(state='queued', kind='generation'))
+        self.assertIn('the maximum charge you approved', waiting.explanation)          # the requester's own words stay
+        stray = waiting._replace(explanation='A sentence no rewrite knows, addressed to you.')
+        self.assertEqual(ds.for_others(stray).explanation, waiting.label + '.')        # an unknown 'you' falls back

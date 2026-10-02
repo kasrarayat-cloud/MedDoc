@@ -122,6 +122,17 @@ class BatchStatusFollowsTheLedger(BatchFixture, TestCase):
         self.assertTrue(status.charged)
         self.assertIn('remains charged', status.explanation)
 
+    def test_R3F10_a_charged_complete_form_request_is_disclosed_as_an_earlier_charge(self):
+        batch = self.admit()
+        _first, second = batch.parts.select_related('job').order_by('ordinal')
+        GenerationBatch.objects.filter(pk=batch.pk).update(state='not_adopted')
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertEqual(page.context['prior_generations'], 0)             # the control: nothing on the ledger
+        self.charge(second)
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertEqual(page.context['prior_generations'], 1)
+        self.assertContains(page, 'Earlier generations remain charged')
+
 
 @override_settings(**test_workflow.TEST_SETTINGS)
 class OnePageOneAnswer(TestCase):
@@ -153,3 +164,4 @@ class OnePageOneAnswer(TestCase):
         self.assertContains(page, 'No charge is recorded for it.')
         self.assertNotContains(page, 'Earlier generations remain charged')    # 4cfa4301: both sentences
         self.assertEqual(page.context['prior_generations'], 0)
+

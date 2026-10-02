@@ -31,7 +31,7 @@ from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcil
 from .context import integration_status
 from . import batch_jobs, generation_batch
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full,LATE_RECEIPT_ACTION
-from .doctor_status import doctor_status,encounter_label,reuse_message
+from .doctor_status import doctor_status,encounter_label,for_others,reuse_message
 from .billing import available_balance
 from . import wm_review
 from . import v3_mapping
@@ -2036,7 +2036,10 @@ def held_requests(user):
     for (kind,ident),amount in amounts.items():
         job=firsts.get(ident) if kind=='batch' else singles.get(ident)
         if job is not None:
-            rows.append({'job':job,'label':REQUEST_LABELS.get(job.kind,'Request'),'amount':amount,'status':doctor_status(job)})
+            # Another person's request is told in the third person: its requester approved its maximum, not this viewer
+            # (refutation R3B-2 of 75d11c09).
+            status=doctor_status(job) if job.user_id==user.pk else for_others(doctor_status(job))
+            rows.append({'job':job,'label':REQUEST_LABELS.get(job.kind,'Request'),'amount':amount,'status':status})
     return rows
 
 def usage_rows(usage):
