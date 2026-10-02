@@ -21,6 +21,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 JOB = '9c432a90-8d63-4238-b9da-a7f6a1e24c35'
@@ -155,9 +156,14 @@ def csrf(page):
 
 
 def main():
+    global OUT, EMAIL
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inspect', action='store_true', help='Read evidence and QA rows only; no mutation')
+    parser.add_argument('--resolution-run', choices=(1, 2), type=int, default=1)
     args = parser.parse_args()
+    if args.resolution_run == 2:
+        OUT = OUT.with_name('rejection-resolution-2')
+        EMAIL = 'http400-resolution2@synthetic.quillmd.invalid'
     os.umask(0o077)
     facts = evidence()
     env = environment(protected_file(PASSWORD), secrets.token_urlsafe(48))
@@ -188,6 +194,14 @@ def main():
     require(not OUT.exists(), 'Existing resolution evidence: inspect instead of repeating')
     OUT.mkdir(mode=0o700)
     write_new(OUT / 'before.json', {'facts': facts, **before})
+    # Verify served-page prerequisites before creating any administrator.
+    require(not (REBUILD / 'staticfiles').is_symlink(), 'Linked static output refused')
+    with open(OUT / 'collectstatic.log', 'xb') as stream:
+        collected = subprocess.run([sys.executable, '-B', 'manage.py', 'collectstatic', '--noinput'],
+                                   cwd=REBUILD, env=env, stdout=stream, stderr=stream, timeout=30)
+    require(collected.returncode == 0, 'Static collection failed; no administrator created')
+    static = json.loads((REBUILD / 'staticfiles/staticfiles.json').read_text())
+    require('app.css' in static.get('paths', {}), 'Served static manifest is incomplete')
     # The container's local socket needs no password. It is the verified QA
     # container; the installed production database/credentials are never used.
     ports = subprocess.check_output(['docker', 'port', 'v1-sonnet5-qa-pg', '5432'], text=True).strip()
@@ -225,11 +239,16 @@ def main():
         base = f'http://127.0.0.1:{PORT}'
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
                     urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        readiness_attempts = 0
         while True:
             require(server.poll() is None and time.monotonic() < DEADLINE, 'Admin readiness deadline or process exit')
+            readiness_attempts += 1
             try:
                 page = opener.open(base + '/login/', timeout=2).read().decode(); break
+            except urllib.error.HTTPError as failure:
+                raise RuntimeError(f'Admin readiness served HTTP{failure.code}; no readiness retry') from None
             except OSError:
+                require(readiness_attempts < 25, 'Admin connection readiness attempt bound')
                 time.sleep(.2)
         code = hmac.new(bytes.fromhex(device.key), struct.pack('>Q', int(time.time())//30), 'sha1').digest()
         offset = code[-1] & 15
