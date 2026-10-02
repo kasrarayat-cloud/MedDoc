@@ -366,6 +366,15 @@ class RoundTwoRepairs(Worst):
             # SUP2F-5: the old value under 'onto'
             ('The patient takes atenolol 50 mg daily.', 'She was changed onto bisoprolol from atenolol.')))
 
+    def test_a_named_supersession_holds_only_what_it_names(self):
+        # (mutants P06, P13, P14 survived the holds above: each turns these named readings bare, holding every answer)
+        clinic = 'The patient attends the clinic every week.'
+        for tail in ('Clopidogrel hold for 7 days before surgery.', 'She was changed onto bisoprolol from atenolol.'):
+            with self.subTest(tail=tail):
+                self.assert_adopted(clinic + ' ' + tail, ('Clinic attendance', 'Plan'), 'Clinic attendance', clinic)
+        # and 'changed onto' with no old value names nothing it ended
+        self.assert_cases_held((('The patient takes atenolol 50 mg daily.', 'She was changed onto bisoprolol.'),))
+
     def test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned(self):
         self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
             # M1: names_carer, names_person, AGENT_NOUNS, the -ian ending
