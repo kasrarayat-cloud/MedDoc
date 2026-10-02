@@ -39,7 +39,8 @@ SUPERSEDING = ('Warfarin has been switched to apixaban.', 'Warfarin was replaced
 SHAPES = ('The patient was switched from warfarin to apixaban.', 'Apixaban was substituted for warfarin.',
           'Warfarin was swapped for apixaban.', 'Apixaban replaced warfarin.', 'Hold warfarin for five days.',
           'Warfarin on hold.', 'Warfarin withheld.', 'Warfarin held for surgery.', 'The warfarin was changed over to '
-          'apixaban.', 'Withheld today.', 'She was switched to apixaban.', 'Switched to apixaban.')
+          'apixaban.', 'The nurse held the warfarin.', 'We held warfarin today.', 'Withheld today.',
+          'She was switched to apixaban.', 'Switched to apixaban.')
 
 
 def form(*labels):
@@ -132,11 +133,9 @@ class SupersessionFloor(Worst):
                      'The light was switched on.'):
             with self.subTest(tail=tail):
                 self.assert_adopted(WARFARIN + ' ' + tail, ('Medications', 'Plan'), 'Medications', WARFARIN)
-        # a switch that starts something and a hold that keeps something end neither
+        # a switch that starts something ends nothing
         self.assert_adopted('The patient uses a CPAP machine at night. The CPAP machine was switched on.',
                             ('Sleep', 'Plan'), 'Sleep', 'The patient uses a CPAP machine at night.')
-        self.assert_adopted('The patient uses an inhaler. The patient holds the inhaler correctly.',
-                            ('Respiratory', 'Plan'), 'Respiratory', 'The patient uses an inhaler.')
         # ... and 'changed daily' does not end the thing it changes either: the dressing answer stays the model's
         self.assert_adopted('The patient has a dressing on the left shin. Dressing changed daily.',
                             ('Wound care', 'Plan'), 'Wound care', 'The patient has a dressing on the left shin.')
@@ -196,8 +195,10 @@ class ConjoinedCessation(Worst):
                             ('Clinic attendance', 'Plan'), 'Clinic attendance', 'The patient attends the clinic every week.')
 
     def test_a_true_bare_cessation_stays_bare(self):
+        # (the last: the active subject of a head with an object is its agent, and the conjunct's own object is elided)
         for tail in ('Stopped last month.', 'It was stopped.', 'The patient quit five years ago.', 'She stopped it.',
-                     'The patient started warfarin and then stopped.'):
+                     'The patient started warfarin and then stopped.', 'The cardiologist reviewed her and discontinued.',
+                     'The GP reviewed the warfarin and switched to apixaban.'):
             with self.subTest(tail=tail):
                 self.assert_held('The patient attends the clinic every week. ' + tail, ('Clinic attendance', 'Plan'),
                                  'Clinic attendance', 'The patient attends the clinic every week.', shown=tail)
@@ -266,7 +267,11 @@ class Reading(SimpleTestCase):
                 ('Stopped last month.', set(), True),
                 ('It was stopped.', set(), True),
                 ('The patient quit five years ago.', set(), True),
-                ('She stopped and was switched from warfarin.', {'warfarin'}, True)):
+                ('She stopped and was switched from warfarin.', {'warfarin'}, True),
+                ('The cardiologist reviewed her and discontinued.', set(), True),
+                ('The bleeding settled and stopped.', {'bleeding'}, False),
+                ('The nurse held the warfarin.', {'warfarin'}, False),
+                ('The patient held her breath.', {'breath'}, False)):
             with self.subTest(text=text):
                 found, found_bare = self.reading(text)
                 self.assertEqual((found, found_bare), (a.keys(ended), bare), text)

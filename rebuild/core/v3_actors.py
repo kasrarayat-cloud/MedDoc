@@ -475,9 +475,12 @@ def _shared_subjects(token, inside):
     shares 'warfarin'), and a predicate complement of a linking verb shares that verb's subject ('The scope was advanced
     to the terminal ileum and withdrawn slowly.': the parser reads 'advanced' as the copula's adjective and 'withdrawn'
     as its conjunct, so 'withdrawn' shares 'scope'). [(subject, passive)], subjects inside the read words only; one
-    reached through a linking verb's complement reads as passive ('was advanced and withdrawn'). Empty for a predicate
-    that is not a conjunct or whose chain reaches a noun or no subject; a shared subject may be the patient or a pronoun
-    ('The patient started warfarin and then stopped.' names nothing it stopped). Read only by the relation floors."""
+    reached through a linking verb's complement reads as passive ('was advanced and withdrawn'). The active subject of a
+    head with an object is that head's AGENT, and the conjunct's own object is then elided, so nothing is shared ('The
+    cardiologist reviewed her and discontinued.' names nothing it discontinued and stays bare, as on ab58c98f). Empty for
+    a predicate that is not a conjunct or whose chain reaches a noun or no subject; a shared subject may be the patient
+    or a pronoun ('The patient started warfarin and then stopped.' names nothing it stopped). Read only by the relation
+    floors."""
     if token.dep_ != 'conj':
         return []
     head = token
@@ -487,7 +490,8 @@ def _shared_subjects(token, inside):
             return []
         found = [(c, c.dep_ == 'nsubjpass') for c in head.children if c.dep_ in ('nsubj', 'nsubjpass') and c.i in inside]
         if found:
-            return found
+            transitive = any(c.dep_ in ('dobj', 'obj') for c in head.children)
+            return [(c, passive) for c, passive in found if passive or not transitive]
     if head.dep_ == 'acomp' and head.head.i != head.i and head.head.pos_ in ('VERB', 'AUX'):
         return [(c, True) for c in head.head.children if c.dep_ in ('nsubj', 'nsubjpass') and c.i in inside]
     return []
@@ -518,8 +522,9 @@ def _superseded(t, lem, txt, inside):
     never ended: 'Warfarin was switched from aspirin.' ends aspirin, not warfarin. 'change' is one only with 'to' or
     'from' ('The warfarin was changed to apixaban.', never 'Dressing changed daily.'; a noun, 'no change in symptoms',
     is never one); switching, swapping or changing 'between' alternates and ends nothing ('She switches between two
-    inhalers.'); 'switch' with the particle 'on' starts something; 'hold' is one only without both an active subject
-    and an object ('The patient held her breath.') and never bare ('The patient was held overnight.'). Any other one
+    inhalers.'); 'switch' with the particle 'on' starts something; 'hold' is never bare ('The patient was held
+    overnight.'), and an agent holding a thing ends it ('The nurse held the warfarin.'; also, an over-hold, 'The
+    patient held her breath.'). Any other one
     naming nothing but the patient or a pronoun holds as a bare cessation, as a cessation does ('She was switched to
     apixaban.', 'Withheld today.'). A participle's spelling is read whatever the tagger calls it ('Withheld today.' is
     tagged a proper noun); a noun is never one. Only HOLDS."""
@@ -539,11 +544,8 @@ def _superseded(t, lem, txt, inside):
         return None
     subjects = _subjects(t, inside)
     objects = [c for c in t.children if c.dep_ in ('dobj', 'obj') and c.i in inside]
-    passive = [s for s, is_passive in subjects if is_passive]
-    active = [s for s, is_passive in subjects if not is_passive]
-    if verb == 'hold' and active and objects:
-        return None
-    theme = passive + objects + ([] if objects else active)
+    theme = [s for s, is_passive in subjects if is_passive] + objects + (
+        [] if objects else [s for s, is_passive in subjects if not is_passive])
     old = _phrase_lemmas([o for word in SUPERSEDED_PREPOSITIONS.get(verb, ()) for o in preps.get(word, ())], inside)
     ended = old if keys(old - {'patient'}) else _phrase_lemmas(theme, inside)
     return ended, verb != 'hold'
