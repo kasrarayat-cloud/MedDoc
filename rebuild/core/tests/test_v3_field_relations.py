@@ -42,11 +42,65 @@ def keyed(body, asked, units, keys=None):
     return {'fields': fields}
 
 
+def wired(body, asked, units, keys=None):
+    """The v3 WIRE body for an internal list-shaped `body` (relation_body's): a list of answers each naming its key, each
+    field's context a list of {unit, relation} entries in the offered unit order, and option_ids on every field when any
+    requested field has printed options (empty on the others). `keys`: the requested subset (a batch part)."""
+    by_key = {f['key']: f for f in asked}
+    items = [item for item in body['fields'] if keys is None or item['key'] in keys]
+    with_options = any(r.options(by_key[item['key']]) for item in items)
+    fields = []
+    for item in items:
+        entry = {'key': item['key'], 'unit_ids': item['unit_ids'], 'conflict': item['conflict']}
+        if with_options:
+            entry['option_ids'] = item['option_ids']
+        entry['context'] = [{'unit': u['id'], 'relation': relation} for u, relation in zip(units, item['context'])]
+        fields.append(entry)
+    return {'fields': fields}
+
+
+def from_keyed(text):
+    """The v3 wire TEXT carrying exactly the selections of a retained v2 keyed answer `text` (test code only; the
+    retained provider bodies stay verbatim): fields in the v2 member order, each naming its key; each context in unit-ID
+    order, entry per unit; option_ids on every field when any field carried them (v2 carried them exactly on option
+    fields, so exactly when the request had one)."""
+    body = json.loads(text)
+    with_options = any('option_ids' in item for item in body['fields'].values())
+    fields = []
+    for key, item in body['fields'].items():
+        entry = {'key': key, 'unit_ids': item['unit_ids'], 'conflict': item['conflict']}
+        if with_options:
+            entry['option_ids'] = item.get('option_ids', [])
+        entry['context'] = [{'unit': int(unit), 'relation': relation}
+                            for unit, relation in sorted(item['context'].items(), key=lambda pair: int(pair[0]))]
+        fields.append(entry)
+    return json.dumps({'fields': fields}, separators=(',', ':'))
+
+
+def answer_of(body, key):
+    """The one answer of `key` in a v3 wire body (tests edit it in place)."""
+    found = [item for item in body['fields'] if item['key'] == key]
+    assert len(found) == 1, key
+    return found[0]
+
+
+def set_relation(answer, unit, relation):
+    """Set one v3 answer's relation to unit `unit`, in place."""
+    entries = [entry for entry in answer['context'] if entry['unit'] == unit]
+    assert len(entries) == 1, (answer.get('key'), unit)
+    entries[0]['relation'] = relation
+
+
+def relate(body, key, unit, relation):
+    """Set `key`'s relation to unit `unit` in a v3 wire body, in place."""
+    set_relation(answer_of(body, key), unit, relation)
+
+
 def relation_wire(notes, fields, picks, *, choices=None, overrides=None, keys=None):
-    """What a model returning these picks sends under the keyed contract (the wire; relation_body is internal)."""
+    """What a model returning these picks sends under the v3 contract (the wire; relation_body is internal)."""
     asked, context, _ = g.v3_generation_fields(fields)
     units = g.source_units(notes, asked, context_labels=context)[0]
-    return keyed(relation_body(notes, fields, picks, choices=choices, overrides=overrides), asked, units, keys)
+    return wired(relation_body(notes, fields, picks, choices=choices, overrides=overrides), asked, units, keys)
 
 
 def offered(notes, fields, picks, *, choices=None, overrides=None):

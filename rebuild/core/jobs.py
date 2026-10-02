@@ -50,6 +50,27 @@ class JobNoLongerRunning(ValidationError):
 PROVIDER_NOT_CONNECTED='Generation provider is not connected.'
 
 
+#: What the doctor reads about a request the provider refused without processing it (after NOT_PROCESSED). Fixed and
+#: non-clinical: the status and the provider's request id, never the provider's own words, which can quote the request.
+PROVIDER_REFUSED=('The AI provider refused this request without processing it (HTTP {status}, request {request}). Nothing '
+                  'was charged and the held funds were released.')
+#: The audit action that records a definite provider refusal, with the provider's request id.
+PROVIDER_REFUSED_ACTION='provider.refused'
+#: A provider request id (or error type) as the provider writes it; anything else is recorded as ''. Bounded so every
+#: message carrying it fits its 250-character column (a live id is 28 characters).
+REQUEST_ID=re.compile(r'[A-Za-z0-9_-]{1,64}')
+
+
+class ProviderRefusedRequest(ValidationError):
+    """The provider DEFINITELY refused the request without processing it (`provider_refused`): an HTTP 400
+    invalid_request_error or an HTTP 413, for the request's only attempt. Nothing was processed, so nothing is billed
+    (the provider bills processed tokens; a refused request has none) and the held funds are released."""
+    def __init__(self,refusal):
+        self.refusal=refusal
+        super().__init__(PROVIDER_REFUSED.format(status=refusal['status'],
+                                                 request=refusal['request_id'] or 'without a request id'))
+
+
 def sdk_code(module,owner,name):
     """The code object of a LOADED provider SDK's own method, or None. Nothing is imported: an SDK this process never
     loaded cannot be in a traceback, and an exception handler must not pay for, or fail on, an import."""
@@ -88,6 +109,60 @@ def never_transmitted(error):
     if OpenAIError is None or type(error) is not OpenAIError: return False
     return (len(frames)>1 and frames[-1] is sdk_code('openai._client','OpenAI','__init__')
             and frames[-2] is getattr(generation.generate,'__code__',None))
+
+
+def provider_refused(error):
+    """{'status', 'request_id', 'error_type'} when `error` PROVES the provider refused the request without processing
+    it; otherwise None (2026-10-02: campaign 3's 400 'Schema is too complex for compilation' was held as an unknown
+    outcome with its hold kept).
+
+    The proof is structural, like `never_transmitted`, never a message match. All of:
+    - the class IS the loaded anthropic SDK's own BadRequestError (whose body's error type is invalid_request_error) or
+      RequestTooLargeError - identity, never a subclass or a name;
+    - it carries the httpx.Response the SDK built it from, whose status is that class's status, and whose request is the
+      error's own request;
+    - the innermost frame is the SDK's own request loop (SyncAPIClient.request), where it raises a status error for a
+      response it received - so the provider answered, and nothing else raised it;
+    - the request was the Messages call itself (POST /v1/messages), never another endpoint;
+    - that request was the FIRST and only attempt: the SDK's own x-stainless-retry-count header is '0'. Every QuillMD
+      client is built with max_retries=0; a 400 answering a retry would prove nothing about the attempt before it.
+    A 400 or 413 is the provider's refusal to process the request at all: no tokens are processed and nothing is billed.
+    Every other outcome - 401, 403, 404, 408, 409, 422, 429, 5xx, 529, a timeout, a dropped connection, any other
+    provider SDK, the same class raised anywhere else - stays an unknown outcome with its hold kept: the conservative
+    status quo, which an administrator's reconciliation resolves from provider evidence."""
+    module=sys.modules.get('anthropic._exceptions')
+    if module is None: return None
+    statuses={getattr(module,'BadRequestError',None):400,getattr(module,'RequestTooLargeError',None):413}
+    status=statuses.get(type(error))
+    if status is None: return None
+    response=getattr(error,'response',None)
+    try: request=response.request if isinstance(response,httpx.Response) else None
+    except RuntimeError: request=None
+    if (request is None or response.status_code!=status or getattr(error,'status_code',None)!=status
+            or getattr(error,'request',None) is not request
+            or request.headers.get('x-stainless-retry-count')!='0'): return None
+    # Only the one call a job makes: POST /v1/messages (refutation of 9c2ffa92, T4 - a refused count_tokens, models or
+    # batches call must never release the hold of a messages request the provider did process).
+    if request.method!='POST' or request.url.path!='/v1/messages': return None
+    error_type=getattr(error,'type',None)
+    if status==400 and error_type!='invalid_request_error': return None
+    trace=error.__traceback__
+    if trace is None: return None
+    while trace.tb_next is not None: trace=trace.tb_next
+    if trace.tb_frame.f_code is not sdk_code('anthropic._base_client','SyncAPIClient','request'): return None
+    request_id=getattr(error,'request_id',None)
+    return {'status':status,'request_id':request_id if isinstance(request_id,str) and REQUEST_ID.fullmatch(request_id) else '',
+            'error_type':error_type if isinstance(error_type,str) and REQUEST_ID.fullmatch(error_type) else ''}
+
+
+def record_refusal(job,exc,action):
+    """Inside the caller's transaction, under the job's row lock: the provider's request id on the job and the audit
+    record of the refusal (status, error type, request id; never the provider's message)."""
+    refusal=exc.refusal
+    job.provider=f"anthropic:{job.config.get('model','')}"[:60];job.provider_request_id=refusal['request_id']
+    audit(job.user,PROVIDER_REFUSED_ACTION,job.pk,department=job.department,kind=job.kind,status=refusal['status'],
+          error_type=refusal['error_type'],request_id=refusal['request_id'],job_action=action)
+    return ['provider','provider_request_id']
 
 
 class RecordingOverLimit(ValidationError):
@@ -245,7 +320,7 @@ def may_cancel(job,user):
 def failure_reason(exc):
     """Display text for a post-settlement failure. Only QuillMD's own fixed messages are shown; any other exception is named by class,
     because provider or validation messages can quote the source text."""
-    if isinstance(exc,(NotAdoptedByUser,PlatformFailure,NoProviderRequest)): return '; '.join(exc.messages)
+    if isinstance(exc,(NotAdoptedByUser,PlatformFailure,NoProviderRequest,ProviderRefusedRequest)): return '; '.join(exc.messages)
     return f'Output could not be adopted ({type(exc).__name__}); review required.'
 
 
@@ -811,6 +886,8 @@ def run_one():
     except Exception as exc:
         # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
         if not provider_returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
+        # A request the provider definitely refused without processing it is not an unknown outcome (2026-10-02).
+        elif not provider_returned and (refusal:=provider_refused(exc)): exc=ProviderRefusedRequest(refusal)
         # Read before anything reconnects: whether settle()'s COMMIT went out and its answer was lost (RS-1).
         in_doubt=settling and commit_in_doubt(exc,carrier)
         usable_connection()
@@ -934,10 +1011,13 @@ def end_failed_job(job,exc,provider_returned,in_doubt):
             fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
             declined=known and isinstance(exc,NotAdoptedByUser)
             unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)
-            job.state='failed' if known or fixture or unsent else 'reconciliation'
+            # The provider answered with a definite refusal (`provider_refused`): nothing was processed or billed.
+            refused=not known and not provider_returned and not fixture and isinstance(exc,ProviderRefusedRequest)
+            job.state='failed' if known or fixture or unsent or refused else 'reconciliation'
             # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
             if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
             elif unsent: job.error=(NOT_PROCESSED+failure_reason(exc)+' No provider request was made; nothing was charged and the held funds were released.')[:250]
+            elif refused: job.error=(NOT_PROCESSED+failure_reason(exc))[:250]
             elif fixture:
                 job.error=FIXTURE_VALIDATION if isinstance(exc,ValidationError) else FIXTURE_PLATFORM_ERROR.format(
                     kind='database ' if isinstance(exc,DatabaseError) else '',name=type(exc).__name__)[:250]
@@ -949,16 +1029,17 @@ def end_failed_job(job,exc,provider_returned,in_doubt):
             job.finished_at=timezone.now()
             fields=['state','error','finished_at']
             if job.state=='failed': job.request_key=ended_key(job,'failed'); fields.append('request_key')
+            if refused: fields+=record_refusal(job,exc,'job.failed')
             job.save(update_fields=fields)
             # One transaction: a job never reads 'held funds were released' while its hold is still held.
-            if fixture or unsent: release(job)
+            if fixture or unsent or refused: release(job)
             # ⚠️ Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the
             # user's charge IN THE SAME TRANSACTION as the failed state (RS-3). A successful generation the user did not adopt
             # (declined) remains billable, with no reversal and no platform cost.
             elif known and not declined:
                 absorbing=True; absorb_failed_job(job); absorbing=False
             audit(job.user,'job.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
-                  billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'fixture' if fixture else 'uncertain')
+                  billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'provider_refused' if refused else 'fixture' if fixture else 'uncertain')
     except Exception as absorb_error:
         if not absorbing: raise
         # ⚠️ A REVERSAL THAT FAILED NEVER LEAVES A 'failed' JOB CHARGED (RS-3). It used to: the failed state was durable, the

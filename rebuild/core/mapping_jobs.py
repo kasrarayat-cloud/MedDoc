@@ -160,8 +160,11 @@ def run_one():
                   unresolved=len(proposal['review']['unresolved']),simulated=simulated)
     except Exception as exc:
         # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
-        from .jobs import OUTCOME_UNRECORDED, PROVIDER_NOT_CONNECTED, commit_in_doubt, hold_for_reconciliation, never_transmitted, usable_connection
+        from .jobs import (OUTCOME_UNRECORDED, PROVIDER_NOT_CONNECTED, ProviderRefusedRequest, commit_in_doubt,
+                           hold_for_reconciliation, never_transmitted, provider_refused, usable_connection)
         if not returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
+        # A request the provider definitely refused without processing it is not an unknown outcome (as core.jobs).
+        elif not returned and (refusal:=provider_refused(exc)): exc=ProviderRefusedRequest(refusal)
         # Read before anything reconnects: whether settle()'s COMMIT went out and its answer was lost (as core.jobs, RS-1).
         in_doubt=settling and commit_in_doubt(exc,carrier)
         usable_connection()
@@ -182,8 +185,8 @@ def end_failed_job(job,exc,returned,sent,in_doubt):
     decision and the write happen under the job's row lock, where the committed record is final (a transaction whose COMMIT
     answer was lost holds that lock until it ends), and an outcome a committed transaction recorded is never overwritten.
     An in-doubt settlement COMMIT asserts nothing and holds the job with its request key."""
-    from .jobs import (ABSORPTION_FAILED, SETTLEMENT_UNKNOWN, NoProviderRequest, NotAdoptedByUser, ended_key,
-                       hold_for_reconciliation, outcome_already_recorded)
+    from .jobs import (ABSORPTION_FAILED, SETTLEMENT_UNKNOWN, NoProviderRequest, NotAdoptedByUser, ProviderRefusedRequest,
+                       ended_key, failure_reason, hold_for_reconciliation, outcome_already_recorded, record_refusal)
     if in_doubt:return hold_for_reconciliation(job,exc,SETTLEMENT_UNKNOWN,action='mapping.reconciliation')
     absorbing=False
     try:
@@ -193,19 +196,25 @@ def end_failed_job(job,exc,returned,sent,in_doubt):
             known=Usage.objects.filter(job=job).exists()
             declined=known and isinstance(exc,NotAdoptedByUser)
             unsent=not returned and (not sent or isinstance(exc,NoProviderRequest))
-            job.state='failed' if known or unsent else 'reconciliation'
+            # The provider answered with a definite refusal (core.jobs.provider_refused): nothing processed or billed.
+            refused=not known and not unsent and not returned and sent and isinstance(exc,ProviderRefusedRequest)
+            job.state='failed' if known or unsent or refused else 'reconciliation'
             job.error=('not_adopted: Source or permission changed; output was not adopted.' if declined else
                        'platform_failure: Mapping output could not be adopted.' if known else
                        'not_processed: Mapping refused before submission; held funds released.' if unsent else
+                       ('not_processed: '+failure_reason(exc))[:250] if refused else
                        'Provider outcome or settlement is uncertain; reconcile before retrying.')
             job.finished_at=timezone.now()
             if job.state=='failed':job.request_key=ended_key(job,'failed')
-            job.save(update_fields=['state','error','finished_at','request_key'])
-            if unsent:release(job)
+            fields=['state','error','finished_at','request_key']
+            if refused:fields+=record_refusal(job,exc,'mapping.failed')
+            job.save(update_fields=fields)
+            if unsent or refused:release(job)
             # ⚠️ In the same transaction as the failed state (RS-3, as core.jobs): a reversal that fails never leaves a
             # 'failed' job charged with its request key freed, which let the same mapping be bought again.
             if known and not declined:absorbing=True;absorb_failed_job(job);absorbing=False
-            audit(job.user,'mapping.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__)
+            audit(job.user,'mapping.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
+                  **({'billing':'provider_refused'} if refused else {}))
     except Exception as absorb_error:
         if not absorbing:raise
         hold_for_reconciliation(job,exc,ABSORPTION_FAILED,billing='platform_failure',absorb_error=absorb_error,
