@@ -16,7 +16,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
-from core import disposition_execution as x, disposition_journal as j, exposure
+from core import disposition_execution as x, disposition_journal as j, exposure, models as m, redaction
+from core.security import private_path
 from core.tests.test_redaction import RedactionFixture
 from core.tests.test_retention_preservation import ISOLATED
 
@@ -144,3 +145,54 @@ class BackupExposureLedger(RedactionFixture, TestCase):
             call_command('backup_exposure_ledger', '--checkpoint', str(stale), '--recovery-points', str(inventory),
                          '--output', str(self.out / 'other.json'), stdout=io.StringIO())
         self.assertFalse(inside.exists()); self.assertFalse((self.out / 'other.json').exists())
+
+    # Refutation round 2 of 4cfa4301: commit evidence is evidence that the content LEFT this database and volume.
+    def test_X1_a_disposition_replay_imported_while_the_row_stayed_has_no_commit_evidence(self):
+        """A restore older than a disposition replays its instruction: the tombstone is imported while the draft's row stays
+        (restored content is preserved). The tombstone's creation is not the content leaving, so every later recovery point
+        may still hold the row (4cfa4301: a backup three hours later was listed as holding nothing)."""
+        row, instruction = self.approved()
+        self.older_backup(lambda: x.execute(self.admin, instruction.pk, self.fresh()))
+        self.clock.return_value = self.base + timedelta(hours=2)
+        with self.quarantine(), self.captureOnCommitCallbacks(execute=True):
+            x.replay(self.admin, self.fresh())
+        self.admit()
+        self.assertTrue(m.Encounter.objects.filter(pk=row.pk).exists())          # the row is still here
+        later = {'id': 'db-backup-T+3h', 'created_at': self.base + timedelta(hours=3), 'expires_at': None, 'location': 'x'}
+        act = exposure.ledger(j.verified(self.fresh()), [later], self.base + timedelta(hours=4), exposure.commit_evidence())['acts'][0]
+        self.assertIsNone(act['committed_at'])                                    # 4cfa4301: the replay's tombstone time
+        self.assertEqual(act['possibly_exposed_recovery_points'], ['db-backup-T+3h'])
+
+    def test_X2_bytes_a_failed_unlink_left_keep_a_redaction_exposed_until_they_are_removed(self):
+        row, _job, (audio, _result) = self.worked_draft()
+        real = Path.unlink
+        def refuse(path, *args, **kwargs):
+            if str(path).endswith(audio): raise PermissionError(13, 'SYNTHETIC EACCES')
+            return real(path, *args, **kwargs)
+        with patch.object(Path, 'unlink', refuse), self.assertLogs('core.redaction', 'ERROR'):
+            requested, _tomb = self.redact(row)
+        acted = exposure.acts(j.verified())[0]['acted_at']
+        snapshot = {'id': 'volume-snapshot-T+1h', 'created_at': acted + timedelta(hours=1), 'expires_at': None, 'location': 'v'}
+        act = exposure.ledger(j.verified(), [snapshot], acted + timedelta(hours=2), exposure.commit_evidence())['acts'][0]
+        self.assertIsNone(act['committed_at'])                                    # bytes on the volume: not gone
+        self.assertEqual(act['possibly_exposed_recovery_points'], ['volume-snapshot-T+1h'])  # 4cfa4301: []
+        self.clock.return_value = acted + timedelta(hours=2)
+        with self.captureOnCommitCallbacks(execute=True):
+            redaction.execute(self.second, requested.pk, self.fresh())            # the exact retry removes them
+        self.assertFalse(private_path(audio).exists())
+        later = {'id': 'volume-snapshot-T+3h', 'created_at': acted + timedelta(hours=3), 'expires_at': None, 'location': 'v'}
+        act = exposure.ledger(j.verified(), [snapshot, later], acted + timedelta(hours=4), exposure.commit_evidence())['acts'][0]
+        self.assertEqual(act['possibly_exposed_recovery_points'], ['volume-snapshot-T+1h'])  # exposure ends at the removal
+        self.assertEqual(act['committed_at'], (acted + timedelta(hours=2)).isoformat())
+
+    def test_FG12_the_command_passes_the_databases_commit_evidence(self):
+        self.two_acts()
+        checkpoint = self.out / 'checkpoint.json'; checkpoint.write_text(json.dumps(self.fresh()))
+        inventory = self.out / 'points.json'
+        inventory.write_text(json.dumps({'recovery_points': [self.point('after-both', timedelta(hours=2))]}))
+        output = self.out / 'ledger.json'
+        call_command('backup_exposure_ledger', '--checkpoint', str(checkpoint), '--recovery-points', str(inventory),
+                     '--output', str(output), stdout=io.StringIO())
+        value = json.loads(output.read_text())
+        self.assertEqual({row['id']: row['contains'] for row in value['recovery_points']}, {'after-both': []})
+        self.assertTrue(all(row['committed_at'] for row in value['acts']))

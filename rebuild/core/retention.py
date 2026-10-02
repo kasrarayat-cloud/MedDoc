@@ -401,8 +401,13 @@ def release_marker_consistent(marker,hold_outcome,row,release):
     if marker.outcome=='target_absent':
         if hold_outcome!='target_absent':return False
         if row is None:return not RetentionHold.objects.filter(pk=release['hold_id']).exists()
-        # F8: a stale absence marker (ac43e379) with the hold since ended HERE by another release: the journal and this
-        # database have both ended the hold, so preservation agrees; replay records the differing evidence.
+        # A row under the journal's OWN id is the journaled release (replay or quillmd_restore_absent_hold applied it):
+        # it must be exactly that release (refutation R2D-F8a of 4cfa4301: other evidence under the signed id was accepted
+        # and recorded nowhere).
+        if str(row.pk)==release['id']:
+            return exact and attributed(row.created_by_id,release['created_by'],marker.created_by_id)
+        # F8: a stale absence marker (ac43e379) with the hold since ended HERE by another release under its own id: the
+        # journal and this database have both ended the hold, so preservation agrees; replay records the differing evidence.
         return True
     return False
 

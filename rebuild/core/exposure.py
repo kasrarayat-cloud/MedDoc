@@ -41,11 +41,30 @@ COMMIT_TOLERANCE = timedelta(minutes=5)
 
 
 def commit_evidence():
-    """{act id: when its tombstone was written in THIS database}: a disposition's by its instruction id, a redaction's by
-    its tombstone id (the journal entry's id). An act missing here has no commit evidence and counts as uncommitted."""
-    from .models import DispositionTombstone, RedactionTombstone
-    found = {str(ident): moment for ident, moment in DispositionTombstone.objects.values_list('instruction_id', 'created_at')}
-    found.update({str(ident): moment for ident, moment in RedactionTombstone.objects.values_list('id', 'created_at')})
+    """{act id: when the content the act removes was last in THIS database or on this volume}: a disposition's by its
+    instruction id, a redaction's by its tombstone id (the journal entry's id). An act missing here counts as uncommitted:
+    every later recovery point may still hold its content.
+
+    A tombstone alone is not that evidence (refutation round 2 of 4cfa4301):
+    - a disposition counts only once the document's row is gone: replay imports the tombstone of a disposition into an
+      older restore and keeps a restored row whose content conflicts (X1), and later backups then hold that row;
+    - a redaction counts only while none of its bytes is left on this volume, and from the later of its tombstone and the
+      last removal of its bytes (redaction.files_removed): a failed unlink leaves the recording after the commit, and
+      volume snapshots taken meanwhile hold it (X2)."""
+    from .models import AuditEvent, DispositionTombstone, Encounter, RedactionTombstone
+    from . import redaction
+    found = {}
+    disposed = list(DispositionTombstone.objects.values_list('instruction_id', 'created_at', 'target_id'))
+    present = set(Encounter.objects.filter(pk__in=[target for _i, _m, target in disposed]).values_list('pk', flat=True))
+    for ident, moment, target in disposed:
+        if target not in present:
+            found[str(ident)] = moment
+    removed = {}
+    for target, moment in AuditEvent.objects.filter(action='redaction.files_removed').values_list('target', 'created_at'):
+        removed[target] = max(moment, removed.get(target, moment))
+    for ident, moment, target in RedactionTombstone.objects.values_list('id', 'created_at', 'target_id'):
+        if not redaction.files_left(target):
+            found[str(ident)] = max(moment, removed.get(str(target), moment))
     return {ident: moment.astimezone(dt_timezone.utc) for ident, moment in found.items()}
 
 

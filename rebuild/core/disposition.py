@@ -241,8 +241,10 @@ def journal_accounted(key):
                 missing=retention.unaccounted_journal_records()
         if not missing:
             # A redaction journaled after admission (another host's) is re-applied by replay before this target serves.
+            # Its database state only: bytes a failed unlink left on THIS volume never quarantine a serving instance
+            # (refutation R2D-Q1 of 4cfa4301); restore admission still counts them.
             from . import disposition_journal, redaction
-            missing=redaction.unapplied(disposition_journal.verified())
+            missing=redaction.unapplied(disposition_journal.verified(),volume=False)
     except (ValidationError,DatabaseError):return False
     if missing:return False
     _ACCOUNTED[key]=identity

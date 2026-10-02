@@ -7,8 +7,9 @@ Redaction keeps every one of those rows and removes the content instead:
 - the document's notes, answers and review state become empty and its status 'redacted';
 - its code suggestions (diagnosis codes and their quoted evidence are clinical content) are deleted;
 - the bytes of the private files its rows reference (the recording, provider results) are removed after the commit,
-  each only if it still has the digest the journal recorded. The rows keep their storage keys as accounting evidence;
-  backups and the restore drill no longer expect those bytes (ops.backup_restore.FILE_QUERIES).
+  unless another record references the same key (round 2: not 'only while they have the journaled digest'). The rows
+  keep their storage keys as accounting evidence; backups and the restore drill no longer expect those bytes
+  (ops.backup_restore.FILE_QUERIES).
 
 Who, when and why: a verified custodian requests it, naming the exact content by its digest and the reason by a
 SHA-256 of the authority document (never prose); a second, distinct custodian executes it while the content still has
@@ -116,19 +117,36 @@ def refusals(encounter):
         found.add('financial_history_unresolved')
     if m.PreservedRecord.objects.filter(Q(source_id=encounter.pk) | Q(prior_record__encounter_id=str(encounter.pk))).exists():
         found.add('preserved_evidence')
-    keys = list(referenced_files(encounter.pk))
-    if keys:
-        own_jobs = list(jobs.values_list('pk', flat=True))
-        if (m.PreservedFile.objects.filter(storage_key__in=keys).exists()
-                or m.Job.objects.filter(Q(input_path__in=keys) | Q(result_path__in=keys)).exclude(pk__in=own_jobs).exists()
-                or m.ProviderReceipt.objects.filter(result_path__in=keys).exclude(job_id__in=own_jobs).exists()
-                or m.GenerationBatchResponse.objects.filter(result_path__in=keys).exclude(part__job_id__in=own_jobs).exists()
-                or m.Template.objects.filter(original_path__in=keys).exists()
-                or m.Encounter.objects.filter(export_path__in=keys).exclude(pk=encounter.pk).exists()
-                or m.PreservedRecord.objects.filter(Q(prior_record__input_path__in=keys) | Q(prior_record__result_path__in=keys)
-                    | Q(prior_record__original_path__in=keys) | Q(prior_record__export_path__in=keys)).exists()):
-            found.add('shared_or_preserved_file')
+    if shared_keys(referenced_files(encounter.pk), encounter.pk):
+        found.add('shared_or_preserved_file')
     return sorted(found)
+
+
+PRIOR_FILE_FIELDS = ('input_path', 'result_path', 'original_path', 'export_path')
+
+
+def shared_keys(keys, encounter_id):
+    """The keys, among `keys`, that a record other than this document's own rows references: another job, receipt or
+    batch response, a template's original, another document's export, preserved evidence. Execution refuses while any
+    exists; and a sweep never removes their bytes, which are that record's (round 2, R2D-R1)."""
+    keys = set(keys)
+    if not keys:
+        return set()
+    own_jobs = list(m.Job.objects.filter(encounter_id=encounter_id).values_list('pk', flat=True))
+    found = set(m.PreservedFile.objects.filter(storage_key__in=keys).values_list('storage_key', flat=True))
+    for row in m.Job.objects.filter(Q(input_path__in=keys) | Q(result_path__in=keys)).exclude(pk__in=own_jobs).values(
+            'input_path', 'result_path'):
+        found |= {row['input_path'], row['result_path']} & keys
+    found |= set(m.ProviderReceipt.objects.filter(result_path__in=keys).exclude(job_id__in=own_jobs).values_list(
+        'result_path', flat=True))
+    found |= set(m.GenerationBatchResponse.objects.filter(result_path__in=keys).exclude(part__job_id__in=own_jobs).values_list(
+        'result_path', flat=True))
+    found |= set(m.Template.objects.filter(original_path__in=keys).values_list('original_path', flat=True))
+    found |= set(m.Encounter.objects.filter(export_path__in=keys).exclude(pk=encounter_id).values_list('export_path', flat=True))
+    for prior in m.PreservedRecord.objects.filter(Q(prior_record__input_path__in=keys) | Q(prior_record__result_path__in=keys)
+            | Q(prior_record__original_path__in=keys) | Q(prior_record__export_path__in=keys)).values_list('prior_record', flat=True):
+        found |= {prior.get(field) for field in PRIOR_FILE_FIELDS if isinstance(prior, dict)} & keys
+    return found
 
 
 def journal_only_holds(encounter_id):
@@ -222,21 +240,36 @@ def apply(entry):
     return tombstone, deleted
 
 
-def remove_files(files):
-    """Remove each recorded file's bytes, only while they still have the digest recorded for them (a record without one
-    is removed as it is). Never raises: the redaction is committed; bytes left behind are logged (no path, no content),
-    keep restore admission refused (unapplied) and are removed by the exact retry or the next replay."""
+def remove_files(files, target_id):
+    """Remove the bytes of each file of the redacted document `target_id`, whatever they hold now, except a key another
+    record references (shared_keys): those bytes are that record's.
+
+    ⚠️ NOT ONLY WHILE THEY HAVE THE JOURNALED DIGEST (refutation R2D-R1 of 4cfa4301): a recording missing when the
+    redaction ran is journaled as empty (sha256 of nothing, 0 bytes), so after a restore of an older recovery point its
+    bytes never matched, every sweep logged 'digest changed' and kept the redacted recording, and the restore could never
+    be admitted. A redacted document's storage keys are its own (a key is never reused: retention.file_creation), so the
+    bytes at them are its content, journaled or not. Never raises: the redaction is committed; bytes left behind are logged
+    (no path, no content), keep restore admission refused (unapplied) and are removed by the exact retry or the next
+    replay."""
+    log = logging.getLogger(__name__)
+    keys = [record['storage_key'] for record in files]
+    try:
+        shared = shared_keys(keys, target_id)
+    except Exception:  # noqa: BLE001 - unknown sharing removes nothing; the retry or the next replay tries again
+        log.error('Whether a redacted file is shared could not be read; nothing was removed.')
+        return 0
     removed = 0
-    for record in files:
+    for key in keys:
+        if key in shared:
+            log.error('A redacted file is referenced by another record and was kept.')
+            continue
         try:
-            path = private_path(record['storage_key'])
+            path = private_path(key)
             if path.is_symlink():raise ValidationError('symbolic link')
             if not path.exists():continue
-            if record.get('sha256') and file_record(record['storage_key'])['sha256'] != record['sha256']:
-                raise ValidationError('digest changed')
             path.unlink(); removed += 1
         except (OSError, ValidationError):
-            logging.getLogger(__name__).error('A redacted file was not removed; the exact retry removes it.')
+            log.error('A redacted file was not removed; the exact retry or the next replay removes it.')
     return removed
 
 
@@ -254,19 +287,36 @@ def redacted_files(target_id):
 
 
 def sweep(target_id):
-    """Remove the bytes of every file of a redacted document (after its commit, at a retry, at every replay, and after a
-    late provider result was written). Returns how many were removed."""
-    return remove_files(redacted_files(target_id))
+    """Remove the bytes of every file of a redacted document (after its commit, at a retry and at every replay). Returns
+    how many were removed; a removal is audited (a count, no path), and that time is when the bytes left this volume
+    (core.exposure.commit_evidence)."""
+    removed = remove_files(redacted_files(target_id), target_id)
+    if removed:
+        audit(None, 'redaction.files_removed', target_id, files=removed)
+    return removed
 
 
 def withheld(encounter_id):
-    """Whether provider output for this document must not be stored: it has a redaction tombstone here."""
-    return bool(encounter_id) and m.RedactionTombstone.objects.filter(target_id=encounter_id).exists()
+    """Whether provider output for this document must not be stored: this database has its redaction tombstone, or the
+    independent journal holds its redaction (refutation R2D-L1 of 4cfa4301: while a journaled redaction waits for its
+    retried commit, a late result wrote the quoted notes to receipts, and the new file changed the content so the exact
+    retry could never commit). The same reading as require_access; an unverifiable journal raises, as it does there."""
+    if not encounter_id:
+        return False
+    if m.RedactionTombstone.objects.filter(target_id=encounter_id).exists():
+        return True
+    if getattr(settings, 'DISPOSITION_JOURNAL_PATH', ''):
+        return any(entry['body']['redaction']['target_id'] == str(encounter_id)
+                   for entry in journal.redaction_entries(journal.verified()))
+    return False
 
 
-def files_left(target_id):
-    """How many of a redacted document's files still have bytes on this volume."""
-    return sum(private_path(record['storage_key']).exists() for record in redacted_files(target_id))
+def files_left(target_id, listed=()):
+    """How many files of a redacted document still have bytes on this volume: the tombstone's (or `listed`, a journaled
+    list) and those its rows reference, never one another record references (those bytes are that record's)."""
+    keys = {record['storage_key'] for record in redacted_files(target_id)} | set(listed)
+    keys -= shared_keys(keys, target_id)
+    return sum(private_path(key).exists() for key in keys)
 
 
 def redacted_targets():
@@ -278,10 +328,15 @@ def redacted_targets():
     return targets
 
 
-def unapplied(entries):
-    """Journaled redactions this database or its volume does not reflect: no exact tombstone, the document still holds
-    content, or a file of it still has bytes here (refutation F6 of dc33e094: remove_files logs a failure and admission
-    passed with the bytes on the restored volume)."""
+def unapplied(entries, volume=True):
+    """Journaled redactions this database (and, with `volume`, its volume) does not reflect: no exact tombstone, the
+    document still holds content, or a file of it still has bytes here.
+
+    Restore admission counts the bytes (refutation F6 of dc33e094: remove_files logs a failure and admission passed with
+    them on the restored volume). The serving gate of an admitted instance does NOT (volume=False, disposition
+    .journal_accounted): one failed unlink quarantined every doctor's processing there, and the replay it pointed to
+    could not lift it (refutation R2D-Q1 of 4cfa4301). Those bytes are logged, keep the exposure ledger open
+    (core.exposure), and are removed by the exact retry."""
     missing = 0
     for entry in journal.redaction_entries(entries):
         body = entry['body']['redaction']
@@ -289,7 +344,6 @@ def unapplied(entries):
         content_left = m.Encounter.objects.filter(pk=body['target_id']).exclude(
             status='redacted', notes='', answers={}, template_review={}).exists()
         codes_left = m.CodeSuggestion.objects.filter(encounter_id=body['target_id']).exists()
-        listed = {record['storage_key'] for record in body['files']}
-        bytes_left = files_left(body['target_id']) or any(private_path(key).exists() for key in listed)
+        bytes_left = volume and files_left(body['target_id'], [record['storage_key'] for record in body['files']])
         missing += bool(tomb != p.digest(entry) or content_left or codes_left or bytes_left)
     return missing

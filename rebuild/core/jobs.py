@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import hashlib
 import json
+import logging
 import re
 import secrets
 import os
@@ -764,9 +765,12 @@ def run_one():
         else:saved={'answers':result}
         # ⚠️ A REDACTED DOCUMENT'S PROVIDER OUTPUT IS NEVER STORED (refutation F2 of dc33e094): a result arriving after the
         # redaction (a late receipt) wrote the quoted notes to a file no tombstone listed. Its accounting facts are the
-        # receipt above; the output itself is not kept. A redaction committing while this file is written is covered by
-        # whichever finishes last: the check below, or the redaction's own sweep of every file its rows reference.
-        from .redaction import sweep, withheld
+        # receipt above; the output itself is not kept. "Redacted" includes a redaction the independent journal holds whose
+        # database commit has not happened yet (refutation R2D-L1 of 4cfa4301). A redaction journaled while this file is
+        # written is covered by the check after it, which removes THIS file and its reference (never the document's other
+        # files: an uncommitted redaction's exact retry must still find the content it was requested from), or, once
+        # committed, by the redaction's own sweep of every file its rows reference.
+        from .redaction import withheld
         if withheld(job.encounter_id):
             audit(job.user,'provider.output_withheld',job.pk,department=e.department,reason='document_redacted')
         else:
@@ -775,7 +779,14 @@ def run_one():
             payload=json.dumps(saved,ensure_ascii=False).encode()
             with path.open('xb') as file:path.chmod(0o600);file.write(payload)
             job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
-            if withheld(job.encounter_id):sweep(job.encounter_id)
+            if withheld(job.encounter_id):
+                try:path.unlink()
+                except OSError:
+                    # Kept referenced, so the redaction's sweep (at its commit, retry or replay) still finds and removes it.
+                    logging.getLogger(__name__).error('A withheld provider result was not removed; the redaction sweep removes it.')
+                else:
+                    job.result_path='';job.result_sha256='';job.save(update_fields=['result_path','result_sha256'])
+                    audit(job.user,'provider.output_withheld',job.pk,department=e.department,reason='document_redacted')
         # Settling provider cost is independent of clinical acceptance: invalid answers are never adopted.
         # The connection that will carry settlement's COMMIT, kept to tell afterwards whether Django had to drop it (RS-1).
         connection.ensure_connection(); carrier=connection.connection; settling=True

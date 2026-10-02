@@ -172,3 +172,36 @@ class ReleaseJournaledAfterReinsertion(RepairFixture, TestCase):
         with self.quarantine(), self.assertRaisesMessage(ValidationError, 'conflicts with the independent journal'):
             x.replay(self.admin, self.fresh())
         self.assertEqual(m.RetentionHoldRelease.objects.get(hold=hold).pk, local.pk)
+
+    def stale_marker(self, hold, release, entry):
+        m.RetentionHoldReplay.objects.create(record_id=release['id'], hold_id=hold.pk, event='release',
+                                             outcome='target_absent', journal_entry=entry, entry_sha256=p.digest(entry),
+                                             created_by=self.admin)
+
+    def test_F8a_a_release_under_the_journals_own_id_with_other_evidence_still_conflicts(self):
+        """Refutation R2D-F8a (4cfa4301): the relaxed reader accepted ANY release row under a stale absence marker, so a row
+        carrying the SIGNED release's id with another authority hash and custodian was admitted, and nothing was recorded
+        (the divergence audit is keyed on differing ids). Only the P13 shape (a local release under its own id) is accepted;
+        a row that reuses the journal's id must match the journal."""
+        target, hold = self.reinserted()
+        release, entry = self.journal_release(hold)
+        self.stale_marker(hold, release, entry)
+        m.RetentionHoldRelease.objects.create(id=release['id'], hold=hold, authority_sha256='c' * 64,
+                                              created_by=self.custodian('custodian3'))
+        with self.quarantine():
+            with self.assertRaisesMessage(ValidationError, 'conflicts with the independent journal'):
+                x.replay(self.admin, self.fresh())                           # 4cfa4301: accepted, admitted
+            assessed = restore_admission.assess(self.instance, self.fresh(), RELEASE)
+        self.assertNotEqual(assessed['blockers'], [])
+
+    def test_FG11_the_differing_evidence_is_recorded_once_however_often_replay_runs(self):
+        target, hold = self.reinserted()
+        release, entry = self.journal_release(hold)
+        self.stale_marker(hold, release, entry)
+        third = self.custodian('custodian3')
+        with self.assertLogs('core.retention', 'ERROR'):
+            self.committed(lambda: retention.release_hold(third, hold.pk, 'c'*64))
+        with self.quarantine():
+            for _ in range(3):
+                x.replay(self.admin, self.fresh())
+        self.assertEqual(m.AuditEvent.objects.filter(action='retention.release_evidence_differs', target=str(hold.pk)).count(), 1)

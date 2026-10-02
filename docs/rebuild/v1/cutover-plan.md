@@ -427,6 +427,15 @@ network denied (MIG-R-1):
   4. any edit of a **redacted** document (0033, `quillmd_redaction_guard`), which the older releases
      neither hide nor know: they would show its emptied page and the database refuses any content
      written to it. None exists unless redaction was used (`SELECT count(*) FROM core_redactiontombstone`).
+- **Every backup run from dedac162's or ac43e379's image fails once any redaction exists** (the
+  7A refutation, round 2, R2D-D1: ac43e379's `FILE_QUERIES` run verbatim on a redacted synthetic
+  database). Their backup file queries have no redaction filter, so they still list the recording and
+  provider results whose bytes the redaction removed; reading one raises `FileNotFoundError`, and their
+  `backup()` then writes `INCOMPLETE` and stops. No new recovery point is made for as long as the older
+  image runs, and the backup alerts report the failed runs. Before an image rollback, count the
+  redactions with the query in item 4: if it is not zero, either take the last complete backup from
+  this release first and keep the rollback window short, or do not roll back past 0033's image; never
+  restore the removed bytes to make the older backup pass (they are redacted content).
 - **A document on an unconfirmed v3 mapping is held, never finalized.** The same guard refuses any
   move to `finalized` of a document whose mapping is contract v3 with no confirmation, whoever writes
   it, and V1's finalize refuses it first with a message naming the mapping version ("has not been

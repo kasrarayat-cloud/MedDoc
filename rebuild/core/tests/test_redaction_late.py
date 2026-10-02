@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from django.conf import settings
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -91,23 +91,81 @@ class LateResultAfterRedaction(ssw.Console, HeldSettlementFixture, TransactionTe
 
     def test_a_redaction_committing_while_the_late_result_is_written_still_leaves_no_bytes(self):
         """The race: the result file is written while the redaction has not committed yet (the first check reads no
-        tombstone), and the redaction commits before the result's own check afterwards. That check removes the bytes."""
+        tombstone), and the redaction commits before the result's own check afterwards. That check removes the file it
+        wrote and clears the job's reference to it (round 2: it no longer sweeps the whole document, so a redaction that is
+        only journaled keeps its content fingerprint for its exact retry)."""
         self.journal()
         seen = {}
 
         def redact(job, draft):
             requested = redaction.request(self.c1, draft.pk, 'c' * 64, uuid.uuid4())
             seen['tombstone'] = redaction.execute(self.c2, requested.pk, self.checkpoint(j.verified()))
-        real = redaction.withheld
-        calls = []
-        def first_check_misses(encounter_id):
-            calls.append(encounter_id)
-            return False if len(calls) == 1 else real(encounter_id)
-        with patch('core.redaction.withheld', side_effect=first_check_misses):
+        with patch('core.redaction.withheld', side_effect=self.first_check_misses()):
             job, draft, _before, _document, _seen = self.second_worker_during_the_call(
                 'late-race', resolve_form=ssw.RELEASE, then=redact)
         job.refresh_from_db()
-        self.assertTrue(job.result_path)                     # written while the redaction had not committed
-        from core.security import private_path
-        self.assertFalse(private_path(job.result_path).exists())  # and removed once it had
+        self.assertEqual((job.result_path, job.result_sha256), ('', ''))  # round 1: the key stayed, its bytes swept
+        self.assertEqual(self.holding_the_quote(), [])
+        self.assertTrue(m.AuditEvent.objects.filter(action='provider.output_withheld', target=str(job.pk)).exists())
         self.assertEqual(redaction.unapplied(j.verified()), 0)
+
+    def first_check_misses(self):
+        real = redaction.withheld
+        calls = []
+        def check(encounter_id):
+            calls.append(encounter_id)
+            return False if len(calls) == 1 else real(encounter_id)
+        return check
+
+    def holding_the_quote(self):
+        return [path for path in Path(settings.MEDIA_ROOT).rglob('*.json') if QUOTE.encode() in path.read_bytes()]
+
+    def sdk_like(self):
+        real = ssw.adopted_live_result
+        def result(notes, fields, request_id, *args, **kwargs):
+            value = real(notes, fields, request_id, *args, **kwargs)
+            response = value[0]['anthropic_response']
+            response.model_dump = lambda **kw: {'id': response.id, 'content': [{'type': c.type, 'text': c.text}
+                                                                               for c in response.content]}
+            return value
+        return patch.object(ssw, 'adopted_live_result', result)
+
+    def journaled_only(self, seen):
+        """A redaction journaled and fsynced whose database commit then failed (F3's state): the window of R2D-L1."""
+        def redact(job, draft):
+            requested = redaction.request(self.c1, draft.pk, 'c' * 64, uuid.uuid4())
+            seen['request'] = requested
+            with patch('core.redaction.apply', side_effect=DatabaseError('SYNTHETIC lost connection')):
+                with self.assertRaises(DatabaseError):
+                    redaction.execute(self.c2, requested.pk, self.checkpoint(j.verified()))
+        return redact
+
+    def assert_withheld_then_the_exact_retry_commits(self, job, draft, seen):
+        job.refresh_from_db()
+        self.assertFalse(m.RedactionTombstone.objects.filter(target_id=draft.pk).exists())   # journaled, not committed
+        self.assertEqual((job.result_path, job.result_sha256), ('', ''))   # 4cfa4301: receipts/<new>.json with the quote
+        self.assertEqual(self.holding_the_quote(), [])
+        self.assertTrue(m.AuditEvent.objects.filter(action='provider.output_withheld', target=str(job.pk)).exists())
+        self.assertEqual(self.resolve(job).status_code, 302)               # the administrator resolves the late receipt
+        redaction.execute(self.c2, seen['request'].pk, self.checkpoint(j.verified()))   # 4cfa4301: CONTENT_CHANGED for good
+        self.assertEqual(m.Encounter.objects.get(pk=draft.pk).status, 'redacted')
+        self.assertEqual(redaction.unapplied(j.verified()), 0)
+
+    def test_L1_a_late_result_after_a_redaction_that_is_only_journaled_is_withheld_and_the_retry_commits(self):
+        """Refutation R2D-L1 (4cfa4301): withheld() read only the database tombstone, so while a journaled redaction waited
+        for its retried commit, a late provider result wrote the quoted notes to receipts (and backups copied it), and the
+        new file changed the content: the exact retry refused for good and the journal refused any other request."""
+        self.journal()
+        seen = {}
+        with self.sdk_like():
+            job, draft, *_ = self.second_worker_during_the_call('late-journaled', resolve_form=ssw.RELEASE,
+                                                               then=self.journaled_only(seen))
+        self.assert_withheld_then_the_exact_retry_commits(job, draft, seen)
+
+    def test_L1_race_a_redaction_journaled_while_the_late_result_is_written(self):
+        self.journal()
+        seen = {}
+        with self.sdk_like(), patch('core.redaction.withheld', side_effect=self.first_check_misses()):
+            job, draft, *_ = self.second_worker_during_the_call('late-journaled-race', resolve_form=ssw.RELEASE,
+                                                               then=self.journaled_only(seen))
+        self.assert_withheld_then_the_exact_retry_commits(job, draft, seen)

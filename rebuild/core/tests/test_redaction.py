@@ -105,8 +105,11 @@ class Redaction(RedactionFixture, TestCase):
         self.assertEqual(sorted(f['storage_key'] for f in body['files']), sorted(files))
         self.assertEqual([e['body']['redaction'] for e in j.redaction_entries(j.verified(self.fresh()))], [body])
         self.assertEqual(tombstone.entry_sha256, p.digest(tombstone.journal_entry))
+        # Round 2 (R2D-X2): the removal of the bytes is audited too, a count and no path, so the exposure ledger knows when
+        # they left this volume (core.exposure.commit_evidence).
         self.assertEqual(sorted(m.AuditEvent.objects.filter(action__startswith='redaction.').values_list('action', flat=True)),
-                         ['redaction.executed', 'redaction.requested'])
+                         ['redaction.executed', 'redaction.files_removed', 'redaction.requested'])
+        self.assertEqual(m.AuditEvent.objects.get(action='redaction.files_removed').details, {'files': len(files)})
         for text in (self.path.read_text(), json.dumps(list(m.AuditEvent.objects.values('details'))), json.dumps(tombstone.files)):
             for private in ('SYNTHETIC REDACTABLE', 'chest pain', self.scope[3].display_name):
                 self.assertNotIn(private, text)
@@ -282,15 +285,21 @@ class Redaction(RedactionFixture, TestCase):
             self.assertFalse(d.quarantined())
         self.assertEqual(m.Encounter.objects.get(pk=row.pk).status, 'redacted')
 
-    def test_file_bytes_are_removed_only_while_they_have_the_journaled_digest(self):
-        kept = self.write(f'receipts/{uuid.uuid4().hex}{"2"*16}.json', b'SYNTHETIC CHANGED AFTER THE JOURNAL')
-        gone = self.write(f'receipts/{uuid.uuid4().hex}{"3"*16}.json', b'SYNTHETIC AS JOURNALED')
-        records = [{'storage_key': str(path.relative_to(private_path('receipts').parent)), 'sha256':
-                    hashlib.sha256(b'SYNTHETIC AS JOURNALED').hexdigest(), 'byte_count': 21} for path in (kept, gone)]
-        with self.assertLogs('core.redaction', 'ERROR'):
-            self.assertEqual(redaction.remove_files(records), 1)
-        self.assertTrue(kept.exists()); self.assertFalse(gone.exists())
-        self.assertEqual(redaction.remove_files(records[1:]), 0)  # already gone: nothing to do, nothing logged
+    def test_file_bytes_are_removed_unless_another_record_references_them(self):
+        """Round 2 (R2D-R1 of 4cfa4301): bytes whose digest differs from the journaled one were kept and logged on every
+        sweep, so a recording missing at the redaction (journaled as empty) and restored later was never removed and the
+        restore never admitted. A redacted document's storage keys are its own (never reused), so its bytes are removed
+        whatever they hold now; only a key another record references is kept, and that record's bytes are not the
+        redaction's."""
+        row, job, (audio, result) = self.worked_draft()
+        self.redact(row)
+        changed = self.write(result, b'SYNTHETIC CHANGED AFTER THE JOURNAL')
+        restored = self.write(audio, b'SYNTHETIC RECORDING BYTES')
+        records = [{'storage_key': key, 'sha256': hashlib.sha256(b'SYNTHETIC AS JOURNALED').hexdigest(), 'byte_count': 21}
+                   for key in (audio, result)]
+        self.assertEqual(redaction.remove_files(records, row.pk), 2)  # 4cfa4301: 0, both logged 'digest changed'
+        self.assertFalse(changed.exists()); self.assertFalse(restored.exists())
+        self.assertEqual(redaction.remove_files(records, row.pk), 0)  # already gone: nothing to do, nothing logged
 
     def test_the_command_requests_then_a_second_custodian_executes_with_ids_and_counts_only(self):
         import io
@@ -491,3 +500,111 @@ class RefutationRepairs(RedactionFixture, TestCase):
         self.write(files[1], b'{"raw_transcript": "SYNTHETIC CHANGED", "transcript": "SYNTHETIC"}')
         with self.assertRaisesMessage(ValidationError, redaction.CONTENT_CHANGED):
             redaction.execute(self.second, requested.pk, self.fresh())
+
+
+@override_settings(**ISOLATED)
+class RoundTwoRepairs(RedactionFixture, TestCase):
+    """Refutation round 2 of 4cfa4301: the data-loss lens (R2D-Q1, R2D-R1) and the false-green lens (FG-2, FG-4, FG-13)."""
+    def setUp(self): self.setup_journal()
+
+    def refusing(self, *keys):
+        real = Path.unlink
+        def refuse(path, *args, **kwargs):
+            if any(str(path).endswith(key) for key in keys): raise PermissionError(13, 'SYNTHETIC EACCES')
+            return real(path, *args, **kwargs)
+        return patch.object(Path, 'unlink', refuse)
+
+    def late(self, job):
+        data = b'{"provider_output": "SYNTHETIC REDACTABLE LATE OUTPUT"}'
+        key = f'receipts/{uuid.uuid4().hex}{"5"*16}.json'
+        self.write(key, data)
+        m.Job.objects.filter(pk=job.pk).update(result_path=key, result_sha256=hashlib.sha256(data).hexdigest())
+        return key
+
+    def test_Q1_bytes_a_failed_unlink_left_never_quarantine_an_admitted_instance(self):
+        """unapplied() counted leftover bytes (F6) and is also the check behind quarantined() on an admitted instance, so one
+        failed unlink stopped all provider processing. Admission still refuses while bytes remain; serving does not."""
+        self.older_backup(self.patient_hold)
+        with self.quarantine():
+            x.replay(self.admin, self.fresh())
+        self.admit()
+        row, _job, (audio, _result) = self.worked_draft(self.other)  # outside the hold's scope
+        with self.lifted():
+            self.assertFalse(d.quarantined())
+            with self.refusing(audio), self.assertLogs('core.redaction', 'ERROR'):
+                requested, _tomb = self.redact(row)
+            self.assertTrue(private_path(audio).exists())
+            self.assertFalse(d.quarantined())                         # 4cfa4301: True, every request refused
+            d.require_processing()
+            self.assertEqual(redaction.unapplied(j.verified()), 1)    # a restore of this volume would still be refused
+            with self.captureOnCommitCallbacks(execute=True):
+                redaction.execute(self.second, requested.pk, self.fresh())  # the exact retry removes them
+            self.assertFalse(private_path(audio).exists())
+            self.assertEqual(redaction.unapplied(j.verified()), 0)
+            self.assertFalse(d.quarantined())
+
+    def test_R1_a_file_missing_at_the_redaction_and_restored_later_is_removed_by_replay(self):
+        row, _job, (audio, result) = self.worked_draft()
+        originals = {key: private_path(key).read_bytes() for key in (audio, result)}
+        private_path(audio).unlink()                                  # the stored upload was missing at the redaction
+        self.older_backup(lambda: self.redact(row))
+        record = [f for f in j.redaction_entries(j.verified())[0]['body']['redaction']['files'] if f['storage_key'] == audio]
+        self.assertEqual([(f['sha256'], f['byte_count']) for f in record], [(hashlib.sha256(b'').hexdigest(), 0)])
+        for key, data in originals.items(): self.write(key, data)     # the older recovery point's volume holds both
+        with self.quarantine():
+            with self.captureOnCommitCallbacks(execute=True):
+                x.replay(self.admin, self.fresh())
+            self.assertFalse(private_path(audio).exists())            # 4cfa4301: kept on every replay, admission refused
+            self.assertFalse(private_path(result).exists())
+            self.assertEqual(restore_admission.assess(self.instance, self.fresh(), RELEASE)['blockers'], [])
+
+    def test_R1_a_redacted_key_another_record_references_is_never_removed(self):
+        row, _job, (audio, _result) = self.worked_draft()
+        self.redact(row)
+        _other_row, other_job, _ = self.worked_draft(self.other)
+        self.write(audio, b'SYNTHETIC BYTES ANOTHER RECORD OWNS')
+        m.Job.objects.filter(pk=other_job.pk).update(input_path=audio)  # (a record that references the same key)
+        with self.assertLogs('core.redaction', 'ERROR'):
+            self.assertEqual(redaction.sweep(row.pk), 0)
+        self.assertEqual(private_path(audio).read_bytes(), b'SYNTHETIC BYTES ANOTHER RECORD OWNS')
+        self.assertEqual(redaction.files_left(row.pk), 0)               # another record's bytes are not the redaction's
+        self.assertEqual(redaction.unapplied(j.verified()), 0)
+
+    def test_FG2_replay_removes_a_late_result_the_documents_rows_reference(self):
+        row, job, _ = self.worked_draft()
+        self.redact(row)
+        key = self.late(job)  # written and referenced, its own after-check never ran (the worker died)
+        with self.quarantine():
+            with self.captureOnCommitCallbacks(execute=True):
+                x.replay(self.admin, self.fresh())
+            self.assertFalse(private_path(key).exists())
+            self.assertEqual(restore_admission.assess(self.instance, self.fresh(), RELEASE)['blockers'], [])
+
+    def test_FG4_the_exact_retry_removes_a_late_result_the_documents_rows_reference(self):
+        row, job, _ = self.worked_draft()
+        requested, _tomb = self.redact(row)
+        key = self.late(job)
+        with self.captureOnCommitCallbacks(execute=True):
+            redaction.execute(self.second, requested.pk, self.fresh())
+        self.assertFalse(private_path(key).exists())
+        self.assertEqual(redaction.unapplied(j.verified()), 0)
+
+    def tombstone_for(self, row):
+        ident = str(uuid.uuid4())
+        entry = {'key_id': 'writer', 'signature': '0' * 128, 'body': {'contract': j.REDACTION, 'redaction': {
+            'id': ident, 'target_id': str(row.pk), 'department_id': str(row.department_id), 'request_id': ident,
+            'content_sha256': 'e' * 64, 'files': [], 'requested_by': str(self.admin.pk), 'approved_by': str(self.second.pk)}}}
+        return m.RedactionTombstone(id=ident, target_id=row.pk, department_id=row.department_id, request_id=ident,
+                                    content_sha256='e' * 64, files=[], journal_entry=entry, entry_sha256='f' * 64)
+
+    def test_FG13_the_database_refuses_a_tombstone_for_a_finalized_document(self):
+        """The database's own refusal, by behaviour: a reviewed change that re-pins the guard's hash cannot drop it
+        unnoticed (the round-1 'killed' for this arm came from the hash pin alone)."""
+        row, _, _ = self.worked_draft()
+        with transaction.atomic():                                   # the control: unfinalized, the same row is taken
+            self.tombstone_for(row).save(force_insert=True)
+            transaction.set_rollback(True)
+        m.Encounter.objects.filter(pk=row.pk).update(status='finalized')
+        with self.assertRaisesMessage(DatabaseError, 'Only an unfinalized document of its own department can be redacted'):
+            with transaction.atomic():
+                self.tombstone_for(row).save(force_insert=True)
