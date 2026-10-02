@@ -208,11 +208,26 @@ def stop(batch_id, reason, *, uncertain_part=None, user_declined=False):
         sent=(part.events.filter(kind='send_intent').exists()
               and not part.events.filter(kind='not_transmitted').exists())
         known=Usage.objects.filter(job=job).exists()
+        # Durable proof that the provider definitely refused this child's only attempt without processing it
+        # (core.jobs.provider_refused, recorded by run_one): nothing processed, nothing billed (2026-10-02).
+        refused=part.events.filter(kind='provider_refused').first() if sent and not known else None
         if job.state=='succeeded':continue
         # Explicitly resolved attempts stay consumed. Their immutable evidence
         # remains, but absence of Usage is valid for no-cost/platform-only
         # closeout. A late receipt explicitly reopens the child above instead.
         if job.state=='failed' and part.events.filter(kind='financially_resolved').exists():continue
+        if refused is not None and uncertain_part!=part.pk:
+            from .jobs import NOT_PROCESSED, PROVIDER_REFUSED
+            job.state='failed'
+            job.error=(NOT_PROCESSED+PROVIDER_REFUSED.format(status=refused.details.get('status'),
+                       request=refused.details.get('request_id') or 'without a request id'))[:250]
+            job.finished_at=timezone.now()
+            job.provider=f"anthropic:{batch.plan['config'].get('model','')}"[:60]
+            job.provider_request_id=refused.details.get('request_id') or ''
+            job.save(update_fields=['state','error','finished_at','provider','provider_request_id'])
+            release(job)
+            event(batch,'stopped',part=part,details={'state':job.state,'sent':sent,'provider_refused':True})
+            continue
         if (uncertain_part==part.pk or (sent and not known)):
             job.state='reconciliation';job.error='Batch request outcome requires reconciliation; it will not be sent again.'
         else:
@@ -348,15 +363,27 @@ def run_one():
     except Exception as error:
         event(batch,'part_failed',part=part,details={'error_class':type(error).__name__})
         known=Usage.objects.filter(job=job).exists()
-        from .jobs import never_transmitted
+        from .jobs import PROVIDER_REFUSED_ACTION, never_transmitted, provider_refused
         untransmitted=sent and not known and never_transmitted(error)
         if untransmitted:
             # The send intent is consumed, but the SDK refused while BUILDING the request (no credential): nothing
             # left (MONEY-2). The durable evidence makes stop() treat this child as unsent: cancelled, hold released.
             event(batch,'not_transmitted',part=part,details={'error_class':type(error).__name__,
                                                             'proof':'provider SDK request build'})
-        stop(batch.pk,'A batch part failed or needs reconciliation; no partial form was adopted.',
-             uncertain_part=part.pk if sent and not known and not untransmitted else None)
+        refusal=provider_refused(error) if sent and not known and not untransmitted else None
+        reason='A batch part failed or needs reconciliation; no partial form was adopted.'
+        if refusal:
+            # The provider answered this child's only attempt with a definite refusal it did not process
+            # (core.jobs.provider_refused): the durable evidence makes stop() end this child failed, not processed, with
+            # its hold released; it is never an unknown outcome waiting for an administrator.
+            event(batch,'provider_refused',part=part,details=refusal)
+            audit(job.user,PROVIDER_REFUSED_ACTION,job.pk,department=batch.department,kind=job.kind,
+                  status=refusal['status'],error_type=refusal['error_type'],request_id=refusal['request_id'],
+                  job_action='generation_batch.stopped')
+            reason=(f"The AI provider refused part {part.ordinal} of this form without processing it (HTTP "
+                    f"{refusal['status']}, request {refusal['request_id'] or 'without a request id'}); no partial form "
+                    'was adopted and nothing is charged for it.')
+        stop(batch.pk,reason,uncertain_part=part.pk if sent and not known and not untransmitted and not refusal else None)
     return True
 
 

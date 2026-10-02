@@ -998,7 +998,16 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # that part's fields over the whole note and catalogue, and plan_constraints is None for such a plan without a
 # manifest; batch_jobs.current_plan compares plan_constraints. Each part is priced and held as before (one reservation
 # per part, settled on success or failure); the union is adopted only whole.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02', 'core/batch_jobs.py': 'c759a6a1404d849ede7144f847f4713e4c3de011f7484c0e6486d5c1f82d589a'}
+# The provider-refusal addendum (fix/v2-relations-scale; batch_jobs was c759a6a1...): billing classification in run_one's
+# handler and stop() only. A part whose only attempt the provider DEFINITELY refused without processing it (an HTTP 400
+# invalid_request_error or 413 the SDK raised for its first attempt: core.jobs.provider_refused) records a
+# 'provider_refused' event and an audit row with the provider's request id, and stop() ends that part 'failed' (not
+# processed) with its hold RELEASED, where it used to hold it in 'reconciliation' for an administrator. No usage, receipt
+# or ledger row is written for it; a part that was settled is absorbed exactly as before. PRICED EFFECT: none on any
+# request or price - generation_batch (plan_for, request: the priced wire) is unchanged, and in batch_jobs the send
+# (client.messages.create(**wire), max_retries=0, inside run_one's try) and every definition but stop() and run_one's
+# exception handler are AST-identical; a refused part's hold is released instead of kept.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02', 'core/batch_jobs.py': '0e5dc19bda55a29a3b07691dca2a256da1e5198d85d2ef130a7545d1e0bffeda'}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
