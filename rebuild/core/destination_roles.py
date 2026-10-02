@@ -227,9 +227,10 @@ ROLE_SUGGESTION_WARNING = ('The printed form may expect a handwritten signature 
 
 
 def suggestions_enabled():
-    """Whether this deployment offers role suggestions at all (QUILLMD_ROLE_SUGGESTIONS='1'). Read by the page and the
-    accepting act, so turning the setting off withdraws every stored suggestion at once; a job's request is decided by
-    the configuration it was quoted under (core.generation.role_suggestions)."""
+    """Whether this deployment offers role suggestions at all (QUILLMD_ROLE_SUGGESTIONS='1'). Read by core.middleware,
+    which mounts the accepting act on the doctor surface only while it is on - and the page offers a suggestion only on a
+    request that can reach that act (core.middleware.role_act_routed) - so turning the setting off withdraws every stored
+    suggestion at once; read by admission and the worker for what a job asks (core.generation.role_suggestions)."""
     from django.conf import settings
     return getattr(settings, 'QUILLMD_ROLE_SUGGESTIONS', '0') == '1'
 

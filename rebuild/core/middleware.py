@@ -8,6 +8,12 @@ from .security import audit
 DOCTOR_URLCONF='quillmd.urls_doctor'
 #: ... and, only while QUILLMD_ROLE_SUGGESTIONS is on, against the same routes plus the role-suggestion act.
 ROLE_SUGGESTIONS_URLCONF='quillmd.urls_doctor_role_suggestions'
+def role_act_routed(request):
+    """Whether THIS request resolves against the URLconf that mounts the role-suggestion act: the one decision the page
+    reads to offer a suggestion and its act (core.views.encounter_detail), so the page and the route cannot disagree.
+    (Refutation round 3, RS3A-1: the page read the setting, the route exists only on the doctor surface, and the
+    administration surface - the root URLconf - rendered the act and raised NoReverseMatch.)"""
+    return getattr(request,'urlconf',None)==ROLE_SUGGESTIONS_URLCONF
 def console_path(path_info):
     return path_info=='/console' or path_info.startswith('/console/')
 class AccessMiddleware:
@@ -18,7 +24,8 @@ class AccessMiddleware:
         # surface served the console (refutation R1).
         path=request.path_info
         if not settings.ADMIN_SITE:
-            request.urlconf=ROLE_SUGGESTIONS_URLCONF if getattr(settings,'QUILLMD_ROLE_SUGGESTIONS','0')=='1' else DOCTOR_URLCONF
+            from .destination_roles import suggestions_enabled
+            request.urlconf=ROLE_SUGGESTIONS_URLCONF if suggestions_enabled() else DOCTOR_URLCONF
             # The console exists on the administration surface only. On the doctor host every /console path answers the
             # application's own 404 page to every caller — signed out, clinician or administrator, before the MFA
             # redirect and before CommonMiddleware's slash redirect (which named the route: refutation R2), exactly as

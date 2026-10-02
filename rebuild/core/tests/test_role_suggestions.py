@@ -14,6 +14,7 @@ F08, F12 are each pinned below by name.
 import io
 import json
 import re
+import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -26,6 +27,7 @@ from core.models import (AuditEvent, Department, Encounter, Job, MappingConfirma
                          TemplateVersion, User)
 from core.security import private_path
 from core.tests.test_destination_roles import LIVE, legacy_rows
+from core.tests.test_generation_batch import SETTINGS as BATCH, BatchFixture
 from core.tests.test_word_v3_workflow import V3, V3Fixture, part_text
 from core.tests.test_workflow import TEST_SETTINGS
 
@@ -217,7 +219,9 @@ class Generation(Legacy, TestCase):
         self.assertEqual(job.config['role_suggestion_contract'], generation.ROLE_SUGGESTION_CONTRACT)
         self.assertEqual([q['label'] for q in payload['questions']], ['Troponin (initial)', 'Plan'])
         self.assertTrue(all(set(q) == {'key', 'label', 'answer_policy'} for q in payload['questions']))
-        self.assertEqual(payload['context_labels'], ['Electronically signed by', 'Signature (patient)'])
+        # E-1: the role row's label stays a context label, exactly where the request without it puts it
+        self.assertEqual(payload['context_labels'], ['Troponin (initial)', 'Electronically signed by',
+                                                     'Signature (patient)'])
         answer = e.answers[self.key('Troponin (initial)')]
         self.assertEqual((answer['status'], answer['text'], answer['role_suggestion']['text']), ('missing', '', '14 ng/L'))
         self.assertEqual(e.answers[self.key('Plan')]['text'], 'Rest.')
@@ -592,6 +596,274 @@ class RoundTwoTolerance(Legacy, TestCase):
         self.assertEqual(e.answers[repeat]['text'], '40 ng/L')
 
 
+S55 = dict(LIVE, AI_MODEL='claude-sonnet-5-5', AI_INPUT_RATE='2', AI_OUTPUT_RATE='10', AI_CACHED_RATE='0.20',
+           AI_THINKING='disabled', AI_EFFORT='medium', AI_INFERENCE_GEO='', V3_FIELD_RELATIONS_SWITCH=None)
+MODELS = (('claude-sonnet-4-6', LIVE), ('claude-sonnet-5-5', S55))
+
+
+def mixed(*specs):
+    """A legacy form of ('label', 'cell' | 'tab') rows: a two-column table row, or an underlined-tab paragraph."""
+    doc = Document(); doc.add_paragraph('Synthetic clinic sheet')
+    for label, kind in specs:
+        if kind == 'cell':
+            doc.add_table(rows=1, cols=2).cell(0, 0).text = label
+        else:
+            paragraph = doc.add_paragraph(); paragraph.add_run(label + ': ')
+            paragraph.add_run('\t').font.underline = True
+    out = io.BytesIO(); doc.save(out); return out.getvalue()
+
+
+def honest(payload):
+    """Each asked question answered with what its own label introduces: the units that label opens (tab contract), or
+    the complete value after 'Label:' (legacy contract)."""
+    out = []
+    for question in payload['questions']:
+        wanted = generation.question_key(question['label'])
+        if 'source_units' in payload:
+            ids = [unit['id'] for unit in payload['source_units'] if ':' in unit['quote']
+                   and generation.question_key(unit['quote'].split(':', 1)[0]) == wanted]
+            out.append({'key': question['key'], 'unit_ids': ids, 'conflict': False})
+        else:
+            quotes = [line.split(':', 1)[1].strip() for line in payload['notes'].splitlines()
+                      if ':' in line and generation.question_key(line.split(':', 1)[0]) == wanted]
+            out.append({'key': question['key'], 'quotes': [q for q in quotes if q], 'conflict': False})
+    return out
+
+
+def wire(model, answer=None):
+    """A REAL anthropic.Anthropic over an in-process transport (test_sonnet55_profile.Wire): the bytes the SDK serialized
+    are recorded in `.bodies`, and each request is answered by `answer(payload)` (default: honestly)."""
+    from core.tests.test_sonnet5_profile import message_json
+    from core.tests.test_sonnet55_profile import Wire
+
+    def reply(body):
+        payload = json.loads(body['messages'][0]['content'])
+        return message_json({'type': 'text', 'text': json.dumps((answer or (lambda p: {'fields': honest(p)}))(payload))},
+                            model=model, ident='msg_' + uuid.uuid4().hex)
+    return Wire(reply)
+
+
+def without_questions(body, keys):
+    """(the request body with the entries of the questions `keys` removed, the questions removed). The payload is dumped
+    again exactly as generation dumps it (json.dumps) - `RequestInvariant.check` proves that dump is faithful."""
+    request = json.loads(body)
+    payload = json.loads(request['messages'][0]['content'])
+    removed = [q for q in payload['questions'] if q['key'] in keys]
+    payload['questions'] = [q for q in payload['questions'] if q['key'] not in keys]
+    request['messages'][0]['content'] = json.dumps(payload)
+    return request, removed
+
+
+def plain(answers):
+    """Every answer without its role suggestion."""
+    return {k: {kk: vv for kk, vv in v.items() if kk != 'role_suggestion'} for k, v in answers.items()}
+
+
+@override_settings(**ON)
+class RequestInvariant(Legacy, TestCase):
+    """E-1/E-2 (refutation round 3): the '1' request is the '0' request plus the asked role questions' entries, BYTE FOR
+    BYTE - the evidence contract, schema, instructions, attestation guidance, source units, context labels, notes - and
+    the ordinary answers are the '0' answers. A role row whose question would change anything else (a table cell among
+    underlined-tab rows moves every ordinary row off the tab contract) is not asked and offers nothing."""
+    NOTES = 'Troponin (initial): 14 ng/L\nTroponin (repeat): 40 ng/L\nPlan: Rest and fluids.'
+    TWO = 'Troponin (initial): 14 ng/L\nLactate (initial): 2.1 mmol/L\nTroponin (repeat): 40 ng/L\nPlan: Rest and fluids.'
+
+    def use(self, data, name):
+        self.version = self.uploaded(data=data, name=name)[1]
+        self.by = self.by_label(self.version)
+        self.assertEqual(self.version.contract, '')
+        return {f['key'] for f in destination_roles.generation_fields(self.version, suggest=True)
+                if (f.get('destination_role') or {}).get('suggest')}
+
+    def worker(self, flag, base, model, notes=None):
+        """(encounter, job, the one request body) through the real worker, live, a real SDK client in process."""
+        e = self.encounter(notes or self.NOTES)
+        sdk = wire(model)
+        with override_settings(**dict(base, QUILLMD_ROLE_SUGGESTIONS=flag)):
+            job = enqueue(Encounter.objects.get(pk=e.pk), self.user)
+            with sdk.patched():
+                self.assertTrue(run_one())
+        e.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual((job.state, len(sdk.bodies)), ('succeeded', 1), job.error)
+        return e, job, sdk.bodies[0]
+
+    def check(self, data, name, asked, offered, notes=None):
+        """`asked`: the role labels '1' asks; `offered`: {label: text} it stores AND the page shows."""
+        roles = self.use(data, name)
+        for model, base in MODELS:
+            with self.subTest(form=name, model=model):
+                off, job_off, body_off = self.worker('0', base, model, notes)
+                on, job_on, body_on = self.worker('1', base, model, notes)
+                request_off = json.loads(body_off)
+                content = request_off['messages'][0]['content']
+                self.assertEqual(json.dumps(json.loads(content)), content)          # the re-dump is faithful
+                stripped, removed = without_questions(body_on, roles)
+                self.assertEqual([q['label'] for q in removed], list(asked))
+                self.assertEqual(stripped['messages'][0]['content'], content)        # the payload, byte for byte
+                self.assertEqual(json.dumps(stripped), json.dumps(request_off))      # and everything else
+                self.assertEqual(plain(on.answers), off.answers)                     # the ordinary answers
+                stored = {f['label']: on.answers[f['key']]['role_suggestion']['text'] for f in self.version.fields
+                          if 'role_suggestion' in on.answers[f['key']]}
+                self.assertEqual(stored, offered)
+                body = self.client.get(f'/encounters/{on.pk}/').content.decode()
+                self.assertEqual(body.count('data-role-suggestion'), len(offered))  # every stored offer is shown
+                if not asked:
+                    self.assertEqual(body_on, body_off)                              # nothing asked: the same bytes
+
+    def test_an_all_tab_form_asks_the_role_row_and_changes_nothing_else(self):
+        self.check(tab_sheet('Troponin (initial)', 'Troponin (repeat)', 'Plan'), 'Synthetic all tab',
+                   ['Troponin (initial)'], {'Troponin (initial)': '14 ng/L'})
+
+    def test_an_all_cell_form_asks_the_role_row_and_changes_nothing_else(self):
+        self.check(legacy_rows('Troponin (initial)', 'Troponin (repeat)', 'Plan'), 'Synthetic all cell',
+                   ['Troponin (initial)'], {'Troponin (initial)': '14 ng/L'})
+
+    def test_e1_a_cell_role_row_among_tab_rows_is_not_asked(self):
+        self.check(mixed(('Troponin (initial)', 'cell'), ('Troponin (repeat)', 'tab'), ('Plan', 'tab')),
+                   'Synthetic mixed', [], {})
+
+    def test_only_the_role_rows_that_change_nothing_else_are_asked(self):
+        self.check(mixed(('Troponin (initial)', 'tab'), ('Lactate (initial)', 'cell'), ('Troponin (repeat)', 'tab'),
+                         ('Plan', 'tab')), 'Synthetic two roles mixed', ['Troponin (initial)'],
+                   {'Troponin (initial)': '14 ng/L'}, self.TWO)
+
+    def test_a_form_already_on_the_legacy_contract_asks_a_tab_role_row_and_stores_only_what_the_page_shows(self):
+        """Ordinary rows of both kinds (the legacy quote contract under '0'): a tab role row changes nothing else, so it
+        is asked. But the page reads a stored offer on its own field - by the tab contract its locator selects - and that
+        reading is not the request's, so the page would never show it: it is not stored (`role_offered`)."""
+        self.check(mixed(('Troponin (initial)', 'tab'), ('Troponin (repeat)', 'cell'), ('Plan', 'tab')),
+                   'Synthetic legacy mixed', ['Troponin (initial)'], {})
+
+    def test_e2_the_fixture_answers_the_mixed_form_under_1_exactly_as_under_0(self):
+        """E-2: fixture mode (QA). The cell role row is not asked, so the job succeeds with the '0' answers."""
+        self.use(mixed(('Troponin (initial)', 'cell'), ('Troponin (repeat)', 'tab'), ('Plan', 'tab')), 'Synthetic E-2')
+        for notes in (self.NOTES, 'Troponin (repeat): 40 ng/L\nPlan: Rest and fluids.'):
+            with self.subTest(notes=notes):
+                answers = {}
+                for flag in ('0', '1'):
+                    with override_settings(QUILLMD_ROLE_SUGGESTIONS=flag):
+                        e = self.generated(notes)
+                    self.assertEqual(Job.objects.filter(encounter=e).get().state, 'succeeded')
+                    answers[flag] = e.answers
+                self.assertEqual(answers['1'], answers['0'])
+                self.assertEqual(answers['0'][self.key('Troponin (repeat)')]['text'], '40 ng/L')
+        self.use(tab_sheet('Troponin (initial)', 'Troponin (repeat)', 'Plan'), 'Synthetic E-2 control')
+        self.assertEqual(self.offered(self.generated(self.NOTES))['text'], '14 ng/L')        # positive control
+
+
+@override_settings(**ON)
+class MixedTabAndCell(Legacy, TestCase):
+    """E-1: underlined-tab ordinary rows and ONE table-cell role row. The tab contract's note-wide holds - an inline
+    correction, quotation, 'As above.' - hold the ordinary rows for a decision under '1' exactly as under '0', and the
+    document cannot be finalized on review ticks under either."""
+    labels = (('Patient initials', 'cell'), ('Troponin (repeat)', 'tab'), ('Plan', 'tab'))
+    form = staticmethod(mixed)
+
+    def finalize(self, flag, base, model, notes):
+        e = self.encounter(notes)
+        sdk = wire(model)
+        with override_settings(**dict(base, QUILLMD_ROLE_SUGGESTIONS=flag)):
+            job = enqueue(Encounter.objects.get(pk=e.pk), self.user)
+            with sdk.patched():
+                self.assertTrue(run_one())
+        job.refresh_from_db(); e.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        payload = json.loads(json.loads(sdk.bodies[0])['messages'][0]['content'])
+        generated = e.answers
+        self.review_all(e)
+        self.finalized(e)
+        return generated, payload, e.status
+
+    def test_e1_the_tab_contracts_holds_stand_under_both_settings(self):
+        self.assertTrue(any((f.get('destination_role') or {}).get('suggest')
+                            for f in destination_roles.generation_fields(self.version, suggest=True)))
+        cases = (('correction', 'Troponin (repeat): 40 ng/L; correction, 41 ng/L\nPlan: Rest and fluids.',
+                  ('Troponin (repeat)',)),
+                 ('quoted', 'Troponin (repeat): 40 ng/L\nPlan: Patient said "I feel fine" and will rest.',
+                  ('Troponin (repeat)', 'Plan')),
+                 ('pointer', 'Troponin (repeat): 40 ng/L\nPlan: As above.', ('Troponin (repeat)', 'Plan')))
+        for model, base in MODELS:
+            for name, notes, held in cases:
+                with self.subTest(model=model, case=name):
+                    results = {flag: self.finalize(flag, base, model, notes) for flag in ('0', '1')}
+                    self.assertEqual(results['1'][0], results['0'][0])
+                    self.assertEqual(results['1'][1], results['0'][1])
+                    self.assertIn('source_units', results['1'][1])                   # the tab contract
+                    for label in held:
+                        self.assertEqual(results['1'][0][self.key(label)]['status'], 'conflict')
+                    self.assertEqual((results['0'][2], results['1'][2]), ('review', 'review'))
+            with self.subTest(model=model, case='control'):                        # positive control: plain notes
+                results = {flag: self.finalize(flag, base, model, 'Troponin (repeat): 40 ng/L\nPlan: Rest and fluids.')
+                           for flag in ('0', '1')}
+                self.assertEqual(results['1'][0], results['0'][0])
+                self.assertEqual((results['0'][2], results['1'][2]), ('finalized', 'finalized'))
+
+
+def relations_read(answers):
+    """The answers with each signed relation record read (its signature is timestamped, so its bytes differ by run)."""
+    from django.core import signing
+    from core.v3_field_relations import SALT
+    return {k: dict(v, ordinary_relation=signing.loads(v['ordinary_relation'], salt=SALT))
+            if v.get('ordinary_relation') else v for k, v in answers.items()}
+
+
+V3_S55 = dict(V3, AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='claude-sonnet-5-5', AI_INPUT_RATE='2',
+              AI_OUTPUT_RATE='10', AI_CACHED_RATE='0.20', AI_THINKING='disabled', AI_EFFORT='medium', AI_INFERENCE_GEO='',
+              V3_FIELD_RELATIONS_SWITCH=None, V3_HISTORY_CONTEXT=False, V3_GENERATION_BATCHES=False)
+
+
+@override_settings(**V3_S55)
+class RelationsRequest(V3Fixture, TestCase):
+    """The relations contract on claude-sonnet-5-5 (a contract v3 form): '1' sends the same bytes and adopts the same
+    answers as '0' - the role-suggestion contract is never admitted for it."""
+    def test_the_relations_request_is_byte_identical(self):
+        from core.tests.test_destination_roles import lines
+        from core.tests.test_v3_field_relations import relation_wire
+        template, version = self.uploaded(data=lines('Heart rate: ______', 'Troponin (initial): ______', 'Plan: ______'),
+                                          name='Synthetic v3 relations')
+        version = self.confirm(template, version)
+        notes = 'Heart rate: 72 bpm\nTroponin (initial): 14 ng/L\nPlan: Rest.'
+        self.assertTrue(generation.configuration(version.fields).get('ordinary_field_contract'))  # the relations contract
+        seen = {}
+        for flag in ('0', '1'):
+            self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+            e = Encounter.objects.latest('created_at')
+            sdk = wire('claude-sonnet-5-5', lambda payload: relation_wire(notes, version.fields, {}))
+            with override_settings(QUILLMD_ROLE_SUGGESTIONS=flag):
+                job = enqueue(Encounter.objects.get(pk=e.pk), self.user)
+                with sdk.patched():
+                    self.assertTrue(run_one())
+            e.refresh_from_db(); job.refresh_from_db()
+            self.assertEqual(len(sdk.bodies), 1)
+            self.assertIn('catalogue', json.loads(json.loads(sdk.bodies[0])['messages'][0]['content']))
+            seen[flag] = (sdk.bodies[0], job.config, job.state, relations_read(e.answers))
+        self.assertEqual(seen['1'], seen['0'])
+        self.assertEqual(seen['0'][2], 'succeeded')
+
+
+@override_settings(**BATCH)
+class BatchRequest(BatchFixture, TestCase):
+    """A complete-form batch (contract v3, parts): '1' admits the same plan and sends the same part requests as '0'."""
+    def test_the_batch_plan_and_its_part_requests_are_byte_identical(self):
+        from core import generation_batch
+        seen = {}
+        for flag in ('0', '1'):
+            if flag == '1':
+                self.new_encounter(self.version, self.notes)
+                self.encounter = Encounter.objects.latest('created_at')
+            with override_settings(QUILLMD_ROLE_SUGGESTIONS=flag):
+                batch = self.admit()
+            parts = list(batch.parts.order_by('ordinal'))
+            # (a part's config also names its batch and the plan's digest, which binds the encounter: both left out)
+            seen[flag] = ([json.dumps(generation_batch.request(batch.plan, part.ordinal)) for part in parts],
+                          [part.field_ids for part in parts],
+                          [dict(part.job.config, generation_part={k: v for k, v in part.job.config['generation_part'].items()
+                                                                  if k not in ('batch_id', 'plan_sha256')}) for part in parts],
+                          batch.maximum_charge)
+        self.assertEqual(seen['1'], seen['0'])
+        self.assertEqual(len(seen['0'][0]), 2)                                       # positive control: two parts
+
+
 @override_settings(**V3)
 class V3RolePlaces(V3Fixture, TestCase):
     def test_v3_role_places_are_never_offered(self):
@@ -657,6 +929,33 @@ class Review(Legacy, TestCase):
         owner = self.client.get(f'/encounters/{e.pk}/').content.decode()          # positive control
         self.assertIn('Use this value', owner)
         self.assertIn('data-role-accept', owner)
+
+    def test_the_page_offers_the_act_exactly_where_the_act_is_routed(self):
+        """RS3A-1: the administration surface resolves against the root URLconf, which never mounts the act, so its page
+        offers neither the suggestion nor the act (it raised NoReverseMatch, a 500). The page reads the decision the
+        middleware made for THIS request; the act answers a request exactly where the page offered it."""
+        from django.utils import timezone
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        e = self.generated()
+        ops = User.objects.create_user(username='rs3a-ops', email='rs3a-ops@synthetic.invalid', first_name='Synthetic',
+                                       last_name='Ops Clinician', verified_at=timezone.now(), is_staff=True)
+        Membership.objects.create(user=ops, department=self.department, role='clinician')
+        device = TOTPDevice.objects.create(user=ops, name='Synthetic authenticator', confirmed=True)
+        client = Client(); client.force_login(ops)
+        session = client.session; session['otp_device_id'] = device.persistent_id; session.save()
+        for admin, flag, offered in ((False, '1', True), (True, '1', False), (False, '0', False), (True, '0', False)):
+            with self.subTest(admin_site=admin, setting=flag), override_settings(ADMIN_SITE=admin,
+                                                                                 QUILLMD_ROLE_SUGGESTIONS=flag):
+                page = client.get(f'/encounters/{e.pk}/')
+                self.assertEqual(page.status_code, 200)
+                body = page.content.decode()
+                self.assertEqual((body.count('data-role-suggestion'), body.count('data-role-accept')),
+                                 (1, 1) if offered else (0, 0))
+                stale = client.post(f'/encounters/{e.pk}/role-suggestion/', {
+                    'key': self.key('Troponin (initial)'), 'value': '14 ng/L', 'revision': e.revision + 7})
+                self.assertEqual(stale.status_code, 409 if offered else 404)    # routed exactly where offered
+                e.refresh_from_db()
+                self.assertFalse(AuditEvent.objects.filter(action=ACTION).exists())
 
     def test_with_the_setting_off_the_route_is_not_routed_at_all(self):
         """I-2, I2-1/A2: with the setting off every request to the act - any method, role, CSRF state, with or without

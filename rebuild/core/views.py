@@ -812,8 +812,10 @@ def encounter_detail(request,pk):
               else as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
     from . import destination_roles
     # Role suggestions are offered on a legacy draft only (never the qualified Word form, contract v3 or a finalized record).
+    # ... and only where THIS request can reach the act: the middleware's own decision (RS3A-1), never the setting again.
+    from .middleware import role_act_routed
     role_offers=(not is_wm and not is_v3 and e.status!='finalized' and bool(e.answers) and bool(printed_roles)
-                 and destination_roles.suggestions_enabled())
+                 and role_act_routed(request))
     # Every offer read again from the current notes at once (core.destination_roles.current_suggestions).
     role_current=(destination_roles.current_suggestions(e.template_version.fields,e.answers,printed_roles,e.notes,
                                                         statement_labels) if role_offers else {})
@@ -1107,13 +1109,19 @@ def clear_review(request,pk):
 @transaction.atomic
 def accept_role_suggestion(request,pk):
     """"Use this value": a clinician's explicit act that enters a role suggestion (core.destination_roles) as their OWN
-    answer - exactly what typing it into the box and saving would store (save_answers: 'edited', by this clinician, not
-    reviewed, not an accepted suggestion), so the legacy rule that a role row keeps the clinician's own typed value and
-    never generated or accepted text applies to it unchanged. Refused, with nothing written, unless the document is an
-    unfinalized draft at the posted revision, the actor may make clinical decisions, the suggestion is still offered
-    NOW (current_suggestions, the page's own reader) and the posted value is that suggestion. Audited with the field key
-    and the new revision only - nothing derived from the value. Routed only while QUILLMD_ROLE_SUGGESTIONS is on
-    (quillmd/urls_doctor_role_suggestions.py): with it off no request reaches this view."""
+    answer - the record typing it into the box and saving would store for THIS field (save_answers: 'edited', by this
+    clinician, not reviewed, not an accepted suggestion), so the legacy rule that a role row keeps the clinician's own
+    typed value and never generated or accepted text applies to it unchanged. Refused, with nothing written, unless the
+    document is an unfinalized draft at the posted revision, the actor may make clinical decisions, the suggestion is
+    still offered NOW (current_suggestions, the page's own reader) and the posted value is that suggestion. Audited with
+    the field key and the new revision only - nothing derived from the value. Routed only while QUILLMD_ROLE_SUGGESTIONS
+    is on, on the doctor surface (quillmd/urls_doctor_role_suggestions.py): otherwise no request reaches this view.
+
+    RECORDED (refutation round 3, RS3A-2): it is not save_answers in every state. save_answers refuses while ANY role
+    row holds generated text (a draft from before the destination-roles salvage); this act writes only its own row, and
+    the generated_text check below reads only that row, which it has just made the clinician's own - so that check
+    cannot fire. Nothing wrong reaches a record: every later save, and so finalization, is refused until the other row
+    is cleared."""
     from documents import DocumentError
     from . import destination_roles
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
