@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import UUID
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout
+from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout,update_session_auth_hash
 from django.core.exceptions import PermissionDenied,ValidationError
 from django.core import signing
 from django.db import transaction,IntegrityError,DatabaseError
@@ -32,6 +32,7 @@ from .context import integration_status
 from . import batch_jobs, generation_batch
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full,LATE_RECEIPT_ACTION
 from .billing import available_balance
+from .admin_authority import reenrolment_open
 from . import wm_review
 from . import v3_mapping
 from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_INPUT_UNITS
@@ -258,6 +259,9 @@ def login_view(request):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
             user=authenticate(request,username=found.username if found else email,password=form.cleaned_data['password'])
+            # WHY it failed, for the audit trail only (inventory 7A, F4): the person signing in still reads one sentence
+            # whatever the reason, so the classification tells an administrator what an attacker is never told.
+            reason=None if user else 'unknown_account' if found is None else 'inactive' if not found.is_active else 'password'
             device=None
             enrol=False
             # Administrators always need a confirmed authenticator. With QUILLMD_MFA_REQUIRED_ALL every account
@@ -267,8 +271,10 @@ def login_view(request):
                 with transaction.atomic():
                     device=TOTPDevice.objects.select_for_update().filter(user=user,confirmed=True).first()
                     if device:
-                        if not device.verify_token(form.cleaned_data['otp']): user=None
-                    elif user.is_staff: user=None
+                        if not device.verify_token(form.cleaned_data['otp']): user=None;reason='authenticator'
+                    # An administrator without one signs in only to re-enrol after a DECLARED reset, on the
+                    # administration surface, inside its window (core.admin_authority.reenrolment_open).
+                    elif user.is_staff and not reenrolment_open(user): user=None;reason='authenticator_missing'
                     else: enrol=True
             if user and user.verified_at and (not settings.ADMIN_SITE or user.is_staff):
                 auth_login(request,user)
@@ -278,7 +284,8 @@ def login_view(request):
                     return redirect('mfa_setup')
                 audit(user,'auth.login')
                 return redirect(next_url or ('admin_dashboard' if settings.ADMIN_SITE else 'dashboard'))
-            audit(None,'auth.login_failed',details='No credentials recorded')
+            if user:reason='unverified' if not user.verified_at else 'not_administrator'
+            audit(None,'auth.login_failed',found.pk if found else '',details='No credentials recorded',reason=reason)
             form.add_error(None,'Sign-in failed. Check your credentials, verification, and authenticator code.')
     return render(request,'login.html',{'form':form,'next':next_url})
 
@@ -345,19 +352,47 @@ def verify(request,raw):
 @require_http_methods(['GET','POST'])
 def mfa_setup(request):
     if not request.user.is_authenticated: return redirect('login')
-    device=TOTPDevice.objects.filter(user=request.user).first()
-    if not device:device=TOTPDevice.objects.create(user=request.user,name='Authenticator',confirmed=False)
+    device=TOTPDevice.objects.filter(user=request.user,confirmed=True).order_by('pk').first() or enrolment_device(request)
     form=OTPForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
         with transaction.atomic():
-            device=TOTPDevice.objects.select_for_update().get(pk=device.pk)
-            if device.verify_token(form.cleaned_data['code']):
-                device.confirmed=True;device.save(update_fields=['confirmed']);otp_login(request,device);audit(request.user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
+            user=User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
+            device=TOTPDevice.objects.select_for_update().filter(pk=device.pk,user=user).first()
+            if device and device.verify_token(form.cleaned_data['code']):
+                if not device.confirmed:
+                    # A new authenticator is a new credential. Every other session of this account ends here — one
+                    # opened with the password alone in an enrolment window included — and every other session's
+                    # unconfirmed key is discarded; this session continues under the new session version.
+                    device.confirmed=True;device.save(update_fields=['confirmed'])
+                    TOTPDevice.objects.filter(user=user,confirmed=False).delete()
+                    user.session_version+=1;user.save(update_fields=['session_version'])
+                    update_session_auth_hash(request,user)
+                    request.session.pop(ENROLMENT_DEVICE,None)
+                otp_login(request,device);audit(user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
         form.add_error('code','Invalid or already used code.')
     # QUILLMD_MFA_REQUIRED_ALL puts every clinician through this page, many on a phone that cannot scan its own
     # screen: the same key is also shown as grouped text for manual entry. Default mode renders the page as before.
     secret=manual_entry_key(device) if settings.QUILLMD_MFA_REQUIRED_ALL and not device.confirmed else ''
     return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device,'secret':secret})
+
+#: The session key holding the unconfirmed authenticator THIS session was shown.
+ENROLMENT_DEVICE='mfa_enrolment_device'
+
+def enrolment_device(request):
+    """The unconfirmed authenticator this session enrols, created the first time this session opens the page and kept
+    for its reloads. An unconfirmed key another session was shown is never reused: it is deleted and this session gets
+    its own, so the key a confirmation proves is known only to the session that confirmed it. Before this, every
+    password-only session shared the first unconfirmed device, and a second holder of the password learned the secret
+    the administrator then confirmed (refutation R4)."""
+    with transaction.atomic():
+        user=User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
+        own=request.session.get(ENROLMENT_DEVICE)
+        device=TOTPDevice.objects.filter(pk=own,user=user,confirmed=False).first() if isinstance(own,int) else None
+        if device is None:
+            TOTPDevice.objects.filter(user=user,confirmed=False).delete()
+            device=TOTPDevice.objects.create(user=user,name='Authenticator',confirmed=False)
+            request.session[ENROLMENT_DEVICE]=device.pk
+    return device
 
 def manual_entry_key(device):
     """The device's base32 key — exactly the `secret` in its otpauth URI — in groups of four for typing."""
@@ -1729,7 +1764,7 @@ def team(request):
         else:messages.warning(request,'Invitation saved, but email delivery could not be confirmed. Ask your administrator to recover the private invitation link or send a new invitation after delivery is repaired.')
         return redirect('team')
     ds=departments(request.user)
-    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds,'now':timezone.now()})
+    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(user=request.user),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds,'now':timezone.now()})
 
 @require_POST
 @transaction.atomic
@@ -1745,15 +1780,17 @@ def invitation_revoke(request,pk):
 @require_POST
 @transaction.atomic
 def create_department(request):
-    form=DepartmentForm(request.POST)
-    owner=Membership.objects.filter(user=request.user,active=True,role='owner').select_related('department__organization').first()
-    if not owner:raise PermissionDenied
+    form=DepartmentForm(request.POST,user=request.user)
+    if not form.owned:raise PermissionDenied
     if form.is_valid():
-        d=Department.objects.create(organization=owner.department.organization,**form.cleaned_data)
+        organization=form.cleaned_data['organization']
+        # The choice is re-read under this transaction: an active owner membership in THAT organization, locked.
+        if not Membership.objects.select_for_update().filter(user=request.user,active=True,role='owner',department__organization=organization).exists():raise PermissionDenied
+        d=Department.objects.create(organization=organization,name=form.cleaned_data['name'],organization_pays=form.cleaned_data['organization_pays'])
         Membership.objects.create(user=request.user,department=d,role='owner')
         Wallet.objects.get_or_create(organization=d.organization,kind='paid')
         audit(request.user,'department.create',d.pk,department=d)
-    else:messages.error(request,'Enter a department name.')
+    else:messages.error(request,' '.join(error for errors in form.errors.values() for error in errors) or 'Enter a department name.')
     return redirect('team')
 
 @require_POST
@@ -1770,6 +1807,9 @@ def membership_update(request,pk):
 
 @require_http_methods(['GET','POST'])
 def invite_accept(request,raw):
+    # A department invitation is accepted on the doctor surface only, as a clinic-owner invitation is (clinic_invitations):
+    # on the administration host a signed-in administrator would join a clinic through it (inventory 7A, LOW).
+    if settings.ADMIN_SITE:raise Http404
     invite=get_object_or_404(Invitation,token_hash=digest(raw),expires_at__gt=timezone.now(),accepted_at__isnull=True)
     existing_account=User.objects.filter(email__iexact=invite.email).exists()
     form=RegisterForm(request.POST or None,initial={'email':invite.email})

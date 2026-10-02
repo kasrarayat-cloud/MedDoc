@@ -34,6 +34,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import Client, TestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -115,10 +116,10 @@ class AccountDoors(TestCase):
     def issue(self, email):
         """Issue a department invitation (as the owner, /team/) and a clinic-owner invitation (as a platform administrator,
         /console/clinic-invitations/) to `email`; return both responses. Delivery is replaced: nothing is sent."""
-        owner = Client(raise_request_exception=False)
+        owner = SurfaceClient(raise_request_exception=False)
         owner.force_login(self.owner)
         device = TOTPDevice.objects.create(user=self.admin, name='Synthetic authenticator', confirmed=True)
-        console = Client(raise_request_exception=False)
+        console = SurfaceClient(raise_request_exception=False)
         console.force_login(self.admin)
         session = console.session
         session['otp_device_id'] = device.persistent_id
@@ -133,7 +134,7 @@ class AccountDoors(TestCase):
 
     def accept(self, link, email):
         """Accept an invitation as a new account (no signed-in session); a 500 is returned, not raised."""
-        return Client(raise_request_exception=False).post(link, registration(email))
+        return SurfaceClient(raise_request_exception=False).post(link, registration(email))
 
 
 class AccountEmailRule(AccountDoors):
@@ -142,14 +143,14 @@ class AccountEmailRule(AccountDoors):
     @override_settings(QUILLMD_REGISTRATION='open')
     def test_register_refuses_the_long_s_twin_of_an_existing_account(self):
         self.legacy_account(ORDINARY)
-        response = Client().post('/register/', registration(LONG_S))
+        response = SurfaceClient().post('/register/', registration(LONG_S))
         self.assertContains(response, ASCII_REFUSAL, status_code=200)
         self.assertEqual(self.accounts(ORDINARY), 1)
 
     @override_settings(QUILLMD_REGISTRATION='open')
     def test_register_refuses_an_address_a_legacy_long_s_account_already_answers(self):
         self.legacy_account(LONG_S)
-        response = Client().post('/register/', registration(ORDINARY))
+        response = SurfaceClient().post('/register/', registration(ORDINARY))
         self.assertContains(response, 'An account with this email address already exists.', status_code=200)
         self.assertEqual(self.accounts(ORDINARY), 1)
         self.assertFalse(User.objects.filter(email=ORDINARY).exists())
@@ -158,7 +159,7 @@ class AccountEmailRule(AccountDoors):
     def test_department_invitation_cannot_create_the_long_s_twin(self):
         self.legacy_account(ORDINARY)
         link = self.department_invitation(LONG_S)
-        response = Client().post(link, registration(LONG_S))
+        response = SurfaceClient().post(link, registration(LONG_S))
         self.refused(response, ASCII_REFUSAL)
         self.assertEqual(self.accounts(ORDINARY), 1)
         self.assertIsNone(Invitation.objects.get(email=LONG_S).accepted_at)
@@ -167,7 +168,7 @@ class AccountEmailRule(AccountDoors):
     def test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers(self):
         self.legacy_account(LONG_S)
         link = self.department_invitation(ORDINARY)
-        response = Client().post(link, registration(ORDINARY))
+        response = SurfaceClient().post(link, registration(ORDINARY))
         self.refused(response, 'An account with this email address already exists.')
         self.assertEqual(self.accounts(ORDINARY), 1)
         self.assertIsNone(Invitation.objects.get(email=ORDINARY).accepted_at)
@@ -176,7 +177,7 @@ class AccountEmailRule(AccountDoors):
     def test_clinic_invitation_cannot_create_the_long_s_twin(self):
         self.legacy_account(ORDINARY)
         link = self.clinic_invitation(LONG_S)
-        response = Client().post(link, registration(LONG_S))
+        response = SurfaceClient().post(link, registration(LONG_S))
         self.refused(response, ASCII_REFUSAL)
         self.assertEqual(self.accounts(ORDINARY), 1)
         self.assertIsNone(ClinicInvitation.objects.get(email=LONG_S).accepted_at)
@@ -186,7 +187,7 @@ class AccountEmailRule(AccountDoors):
     def test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers(self):
         self.legacy_account(LONG_S)
         link = self.clinic_invitation(ORDINARY)
-        response = Client().post(link, registration(ORDINARY))
+        response = SurfaceClient().post(link, registration(ORDINARY))
         self.refused(response, 'An account with this email address already exists.')
         self.assertEqual(self.accounts(ORDINARY), 1)
         self.assertIsNone(ClinicInvitation.objects.get(email=ORDINARY).accepted_at)
@@ -212,10 +213,10 @@ class AccountEmailRule(AccountDoors):
 
     @override_settings(QUILLMD_REGISTRATION='open')
     def test_an_ordinary_address_is_stored_lowercased_and_its_case_variant_refused(self):
-        response = Client().post('/register/', registration(' Sam.Smith@Synthetic.Invalid '))
+        response = SurfaceClient().post('/register/', registration(' Sam.Smith@Synthetic.Invalid '))
         self.assertEqual(response.status_code, 302)
         self.assertTrue(User.objects.filter(email='sam.smith@synthetic.invalid', username='sam.smith@synthetic.invalid').exists())
-        again = Client().post('/register/', registration('SAM.SMITH@synthetic.invalid'))
+        again = SurfaceClient().post('/register/', registration('SAM.SMITH@synthetic.invalid'))
         self.assertEqual(again.status_code, 200)
         self.assertIn('email', again.context['form'].errors)
         self.assertEqual(self.accounts('sam.smith@synthetic.invalid'), 1)
@@ -223,13 +224,13 @@ class AccountEmailRule(AccountDoors):
     @override_settings(QUILLMD_REGISTRATION='invite')
     def test_an_ordinary_invitation_still_creates_its_account(self):
         link = self.department_invitation('new.clinician@synthetic.invalid')
-        response = Client().post(link, registration('New.Clinician@synthetic.invalid'))
+        response = SurfaceClient().post(link, registration('New.Clinician@synthetic.invalid'))
         self.assertEqual(response.status_code, 302)
         account = User.objects.get(email='new.clinician@synthetic.invalid')
         self.assertTrue(Membership.objects.filter(user=account, department=self.department, active=True).exists())
         invitation, raw = clinic_invitations.issue(self.admin, 'Clinic.Owner@Synthetic.Invalid', 'Synthetic owner clinic', 'Main')
         self.assertEqual(invitation.email, 'clinic.owner@synthetic.invalid')
-        response = Client().post(f'/invite/clinic/{raw}/', registration('clinic.owner@synthetic.invalid'))
+        response = SurfaceClient().post(f'/invite/clinic/{raw}/', registration('clinic.owner@synthetic.invalid'))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.accounts('clinic.owner@synthetic.invalid'), 1)
 
@@ -259,7 +260,7 @@ class AccountEmailBounds(AccountDoors):
         for length in (151, 254):
             email = address(length)
             with self.subTest(length=length):
-                response = Client(raise_request_exception=False).post('/register/', registration(email))
+                response = SurfaceClient(raise_request_exception=False).post('/register/', registration(email))
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(TOO_LONG, ' '.join(response.context['form'].errors['email']))
                 self.assertFalse(User.objects.filter(email__iexact=email).exists())
@@ -307,7 +308,7 @@ class AccountEmailBounds(AccountDoors):
         self.assertTrue(Membership.objects.filter(user=account, department=self.department).exists())
         other = address(150, '@other.synthetic.invalid')
         with override_settings(QUILLMD_REGISTRATION='open'):
-            self.assertEqual(Client().post('/register/', registration(other)).status_code, 302)
+            self.assertEqual(SurfaceClient().post('/register/', registration(other)).status_code, 302)
         self.assertTrue(User.objects.filter(email=other, username=other).exists())
 
 
@@ -320,7 +321,7 @@ class QuotedLocalPart(AccountDoors):
         self.legacy_account(ORDINARY)
         for email in QUOTED:
             with self.subTest(email=email):
-                response = Client().post('/register/', registration(email))
+                response = SurfaceClient().post('/register/', registration(email))
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(QUOTED_REFUSAL, ' '.join(response.context['form'].errors['email']))
                 self.assertEqual(User.objects.count(), 3)  # the administrator, the owner and ORDINARY

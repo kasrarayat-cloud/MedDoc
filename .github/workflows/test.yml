@@ -204,14 +204,19 @@ jobs:
         run: |
           gunicorn quillmd.wsgi:application --bind 127.0.0.1:9130 --workers 1 --timeout 60 > .runtime/browser-server.log 2>&1 &
           browser_server_pid=$!
+          # The console exists on the administration surface only (inventory 7A, F1): a second process, as in production.
+          QUILLMD_ADMIN_SITE=1 gunicorn quillmd.wsgi:application --bind 127.0.0.1:9131 --workers 1 --timeout 60 > .runtime/browser-admin-server.log 2>&1 &
+          browser_admin_server_pid=$!
           python manage.py worker > .runtime/browser-worker.log 2>&1 &
           browser_worker_pid=$!
-          trap 'kill "$browser_server_pid" "$browser_worker_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null; then break; fi
-            sleep 1
+          trap 'kill "$browser_server_pid" "$browser_admin_server_pid" "$browser_worker_pid" 2>/dev/null || true' EXIT
+          for port in 9130 9131; do
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent "http://127.0.0.1:$port/health/" > /dev/null; then break; fi
+              sleep 1
+            done
+            curl --fail --silent "http://127.0.0.1:$port/health/" > /dev/null
           done
-          curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null
           node browser-tests.mjs
           python prepare-wm-browser.py
           node wm-browser-tests.mjs

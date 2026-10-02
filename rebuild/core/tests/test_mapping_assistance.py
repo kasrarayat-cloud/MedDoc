@@ -13,6 +13,7 @@ from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, transaction
 from django.test import TestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from docx import Document
 from core import generation, mapping_assistance as mapping, mapping_jobs, jobs
@@ -29,6 +30,7 @@ SETTINGS={**TEST_SETTINGS,'QUILLMD_WORD_ENGINE':'v3','QUILLMD_MAPPING_ASSISTANCE
 
 @override_settings(**SETTINGS)
 class MappingAssistance(TestCase):
+    client_class = SurfaceClient
     def setUp(self):
         deny=patch('anthropic.Anthropic',side_effect=AssertionError('Unmocked provider construction is forbidden in offline tests.'))
         deny.start();self.addCleanup(deny.stop)

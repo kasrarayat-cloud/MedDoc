@@ -23,9 +23,14 @@ from ops import deployment_profile
 from ops.production_operator import authority, describe_target, private_json, require, OperatorError
 
 
-def validated_context(action):
+def production_context(operation, action):
+    """(profile, declaration) for a declared production operator act, every check before anything is read or written:
+    the committed JSON authority for `operation` naming `action` (ops.production_operator.authority: root, this
+    installed release and profile, unexpired), the reviewed application profile, the pinned CA bundle, the described
+    RDS target and the actual TLS connection as the runtime role. Shared by this command and the declared
+    administrator changes (core.admin_authority), so production has one operator door, not two."""
     profile = deployment_profile.load_production()
-    declaration = authority(profile, 'first_admin')
+    declaration = authority(profile, operation)
     require(action in declaration.get('actions', []), 'declaration_action')
     require(os.environ.get('QUILLMD_DEPLOYMENT_PROFILE') == 'production'
             and not settings.SYNTHETIC_ONLY and settings.QUILLMD_REGISTRATION == 'invite'
@@ -35,6 +40,12 @@ def validated_context(action):
     from ops.service_launcher import verified_ca_bundle
     verified_ca_bundle(profile.ca_bundle, profile.ca_bundle_sha256)
     describe_target(profile, declaration)
+    application_database(profile)
+    return profile, declaration
+
+
+def application_database(profile):
+    """The Django connection is the reviewed RDS target, as the runtime role, over verify-full TLS."""
     db = connection.settings_dict
     require(db['HOST'] == profile.database_host and str(db['PORT']) == str(profile.database_port)
             and db['NAME'] == profile.database_name and db['USER'] == profile.roles['runtime'], 'application_database')
@@ -46,6 +57,10 @@ def validated_context(action):
         cursor.execute('''SELECT current_database(),current_user,current_setting('session_replication_role'),
             (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())''')
         require(cursor.fetchone() == (profile.database_name, profile.roles['runtime'], 'origin', True), 'application_connection')
+
+
+def validated_context(action):
+    profile, declaration = production_context('first_admin', action)
     identity = declaration.get('first_admin', {})
     require(set(identity) == {'id', 'email'}, 'first_admin_identity')
     identifier = uuid.UUID(identity['id'])

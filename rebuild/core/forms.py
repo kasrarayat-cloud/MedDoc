@@ -5,7 +5,7 @@ from django.core.validators import validate_email
 from django.utils import timezone
 import idna
 import ipaddress
-from .models import User, Department, Patient, TemplateVersion, Membership, Invitation, ClinicInvitation, latest_service_date
+from .models import User, Department, Patient, TemplateVersion, Membership, Invitation, ClinicInvitation, Organization, latest_service_date
 from .security import departments
 
 
@@ -278,6 +278,25 @@ class InvitationForm(ScopedForm):
 class DepartmentForm(forms.Form):
     name=forms.CharField(max_length=120)
     organization_pays=forms.BooleanField(required=False,label='Charge this organization after each user’s personal promotional credit')
+    # The organization the department belongs to: one the caller owns a department of (an active owner membership).
+    # It was taken from `.first()` of those memberships, so an owner of two organizations got the department in
+    # whichever one the database returned first (inventory 7A, ISOLATION). One organization needs no choice.
+    organization=forms.ModelChoiceField(queryset=Organization.objects.none(),required=False)
+    def __init__(self,*args,user=None,**kwargs):
+        super().__init__(*args,**kwargs)
+        owned=Organization.objects.filter(department__membership__user=user,department__membership__active=True,
+                                          department__membership__role='owner').distinct().order_by('name','pk') if user else Organization.objects.none()
+        self.fields['organization'].queryset=owned
+        self.owned=list(owned[:2])
+        if len(self.owned)==1:
+            self.fields['organization'].widget=forms.HiddenInput()
+            self.fields['organization'].initial=self.owned[0].pk
+    def clean(self):
+        data=super().clean()
+        if not data.get('organization') and not self.errors.get('organization'):
+            if len(self.owned)==1:data['organization']=self.owned[0]
+            else:self.add_error('organization','Choose the organization the department belongs to.')
+        return data
 class CheckoutForm(forms.Form):
     payer=forms.ChoiceField(choices=[('personal','My personal paid balance')],required=False,initial='personal',label='Balance to fund')
     amount=forms.DecimalField(min_value=5,max_value=500,decimal_places=2,label='One-time top-up (USD)')

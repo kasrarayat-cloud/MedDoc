@@ -15,6 +15,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection, connections
 from django.test import Client, TransactionTestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -77,13 +78,13 @@ class LockFlowFixture(Fixture):
         self.user, self.organization, self.department, self.patient = self.scope[:4]
 
     def doctor(self):
-        client = Client(raise_request_exception=False)
+        client = SurfaceClient(raise_request_exception=False)
         client.force_login(self.user)
         return client
 
     def custodian_client(self):
         device = TOTPDevice.objects.create(user=self.admin, name='Synthetic authenticator', confirmed=True)
-        client = Client(raise_request_exception=False)
+        client = SurfaceClient(raise_request_exception=False)
         client.force_login(self.admin)
         session = client.session
         session['otp_device_id'] = device.persistent_id
@@ -257,7 +258,7 @@ class BatchStopAgainstVoiceUpload(BatchFixture, TransactionTestCase):
     def test_cancelling_a_queued_batch_and_the_same_payers_voice_upload_serialize(self):
         batch = self.admit()
         draft = self.draft()
-        doctor = Client(raise_request_exception=False)
+        doctor = SurfaceClient(raise_request_exception=False)
         doctor.force_login(self.user)
         real = billing.audit
         paused, resume = threading.Event(), threading.Event()
@@ -478,7 +479,7 @@ class HoldCreationAgainstClinicalWrites(LockFlowFixture, TransactionTestCase):
         # Positive control: the same page records the hold when the database accepts it.
         self.assertEqual(custodian.post('/console/retention/', form).status_code, 302)
         hold = RetentionHold.objects.get()
-        second = Client(raise_request_exception=False)
+        second = SurfaceClient(raise_request_exception=False)
         device = TOTPDevice.objects.create(user=self.second, name='Synthetic second authenticator', confirmed=True)
         second.force_login(self.second)
         session = second.session
@@ -523,7 +524,7 @@ class DispositionAgainstClinicianRequests(ExecutionFixture, TransactionTestCase)
         return patch(f'core.views.{name}', side_effect=racing), executed
 
     def clinician(self):
-        client = Client(raise_request_exception=False)
+        client = SurfaceClient(raise_request_exception=False)
         client.force_login(self.scope[0])
         return client
 
@@ -911,7 +912,7 @@ class OrganizationTopUpAgainstRequestsInItsDepartment(LockFlowFixture, Transacti
     def top_up(self):
         from types import SimpleNamespace
         from django.core import signing
-        client = Client(raise_request_exception=False)
+        client = SurfaceClient(raise_request_exception=False)
         client.force_login(self.owner)
         data = {'amount': '10.00', 'consent': 'on', 'payer': f'organization:{self.organization.pk}',
                 'checkout_token': signing.dumps({'user': str(self.owner.pk), 'nonce': 'rfr1-topup'}, salt='checkout-authorization')}
@@ -1062,7 +1063,7 @@ class WelcomeCreditEntryPointsNeverHoldTheAccountForUpdate(LockFlowFixture, Test
         user = User.objects.create_user(username='rfr1-verify@synthetic.invalid', email='rfr1-verify@synthetic.invalid')
         raw = token()
         Verification.objects.create(user=user, token_hash=digest(raw), expires_at=timezone.now() + timedelta(hours=1))
-        response, seen = self.account_locks(lambda: Client().post(f'/verify/{raw}/'))
+        response, seen = self.account_locks(lambda: SurfaceClient().post(f'/verify/{raw}/'))
         self.assert_no_key_only(response, seen)
         self.assertTrue(LedgerEntry.objects.filter(key=f'welcome:{user.pk}').exists())
 

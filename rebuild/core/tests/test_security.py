@@ -17,6 +17,7 @@ from unittest.mock import patch
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import close_old_connections, connection, connections
 from django.test import Client, TestCase, TransactionTestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 
 from core.billing import reserve, settle, welcome_credit
@@ -43,6 +44,7 @@ class SyntheticFixture:
 
 @override_settings(AI_MODE="fixture", ADMIN_SITE=False, STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
 class IsolationAndJobs(SyntheticFixture, TestCase):
+    client_class = SurfaceClient
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.override = override_settings(MEDIA_ROOT=Path(self.directory.name))
@@ -170,7 +172,7 @@ class IsolationAndJobs(SyntheticFixture, TestCase):
         self.assertEqual(response.url, "/mfa/")
 
     def test_state_changes_require_csrf(self):
-        client = Client(enforce_csrf_checks=True)
+        client = SurfaceClient(enforce_csrf_checks=True)
         client.force_login(self.xray[0])
         self.assertEqual(client.post(f"/encounters/{self.xray[5].pk}/generate/").status_code, 403)
 
