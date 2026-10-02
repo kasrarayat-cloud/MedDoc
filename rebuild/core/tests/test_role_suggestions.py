@@ -709,6 +709,18 @@ class RequestInvariant(Legacy, TestCase):
                 self.assertEqual(body.count('data-role-suggestion'), len(offered))  # every stored offer is shown
                 if not asked:
                     self.assertEqual(body_on, body_off)                              # nothing asked: the same bytes
+        with self.subTest(form=name, mode='fixture'):                               # E-2: the fixture (QA) the same way
+            generated = {}
+            for flag in ('0', '1'):
+                with override_settings(QUILLMD_ROLE_SUGGESTIONS=flag):
+                    e = self.generated(notes or self.NOTES)
+                self.assertEqual(Job.objects.filter(encounter=e).get().state, 'succeeded')
+                generated[flag] = e
+            self.assertEqual(plain(generated['1'].answers), generated['0'].answers)
+            self.assertEqual({f['label']: generated['1'].answers[f['key']]['role_suggestion']['text']
+                              for f in self.version.fields if 'role_suggestion' in generated['1'].answers[f['key']]}, offered)
+            body = self.client.get(f'/encounters/{generated["1"].pk}/').content.decode()
+            self.assertEqual(body.count('data-role-suggestion'), len(offered))
 
     def test_an_all_tab_form_asks_the_role_row_and_changes_nothing_else(self):
         self.check(tab_sheet('Troponin (initial)', 'Troponin (repeat)', 'Plan'), 'Synthetic all tab',
@@ -733,6 +745,22 @@ class RequestInvariant(Legacy, TestCase):
         reading is not the request's, so the page would never show it: it is not stored (`role_offered`)."""
         self.check(mixed(('Troponin (initial)', 'tab'), ('Troponin (repeat)', 'cell'), ('Plan', 'tab')),
                    'Synthetic legacy mixed', ['Troponin (initial)'], {})
+
+    def test_a_role_question_that_would_exceed_the_request_limit_is_not_asked(self):
+        """The request limits are request properties too: 100 ordinary questions plus one role question would be 101, a
+        request the request without it never sends - so the role row is not asked, and the ordinary answers stand.
+        (A legacy upload is capped at 100 fields, held ones included; this reaches generate() directly.)"""
+        role = {'key': 'role', 'label': 'Troponin (initial)', 'kind': 'text',
+                'destination_role': {'reason': destination_roles.ROLE_NOT_GENERATED, 'suggest': True}}
+        config = dict(generation.configuration(), role_suggestion_contract=generation.ROLE_SUGGESTION_CONTRACT)
+        for count, asked in ((100, False), (99, True)):
+            ordinary = [{'key': f'q{n:03d}', 'label': f'Question {n:03d}', 'kind': 'text'} for n in range(count)]
+            notes = 'Troponin (initial): 14 ng/L\n' + '\n'.join(f'Question {n:03d}: Documented {n}.' for n in range(count))
+            with self.subTest(ordinary=count):
+                answers = generation.generate(notes, ordinary + [role], config)[0]
+                self.assertEqual(answers['q000']['text'], 'Documented 0.')
+                self.assertEqual('role_suggestion' in answers['role'], asked)
+                self.assertEqual(answers['role']['status'], 'missing')
 
     def test_e2_the_fixture_answers_the_mixed_form_under_1_exactly_as_under_0(self):
         """E-2: fixture mode (QA). The cell role row is not asked, so the job succeeds with the '0' answers."""
