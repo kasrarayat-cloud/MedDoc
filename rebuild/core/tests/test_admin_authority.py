@@ -117,6 +117,35 @@ class DeclaredChangeFixture(TestCase):
             self.perform(operation, relative, target, environ, code_file)
         self.assertEqual(self.state(), before, 'a refused administrator change changed something')
 
+    def assertAbsenceRecorded(self, message, operation, relative, target, environ, code_file, *, reason,
+                              counted=True, approver=None):
+        """Refutation R7-a: a code that does not prove the approver's presence is refused, and the attempt is RECORDED
+        in a transaction of its own — the approver's device throttle counts it and one audit row names the operator,
+        the approver and the command — while the act itself is wholly rolled back. Nothing else changes."""
+        approver = approver or self.approver
+        users, devices, audits = self.state()
+        mine = {row[0] for row in devices if row[1] == approver.pk and row[2]}
+        with self.assertRaisesRegex(Refused, message):
+            self.perform(operation, relative, target, environ, code_file)
+        users_after, devices_after, audits_after = self.state()
+        self.assertEqual(users_after, users, 'a refused administrator change changed an account')
+        for row, after in zip(devices, devices_after):
+            if row[0] in mine and counted:
+                self.assertEqual(after[:5] + (after[5] - 1,), row, 'the failure was not counted on the approver\'s device')
+            else:
+                self.assertEqual(after, row, 'a device the attempt did not use changed')
+        self.assertEqual(audits_after, audits + 1)
+        event = AuditEvent.objects.order_by('-created_at').first()
+        self.assertEqual((event.action, event.actor_id, event.target), ('account.admin_change_refused', None,
+                                                                       str(approver.pk)))
+        details = event.details
+        self.assertEqual((details['command'], details['reason'], details['approver'], details['change_target']),
+                         (operation, reason, str(approver.pk), str(target)))
+        self.assertEqual((details['operator_uid'], details['operator_euid']), (os.getuid(), os.geteuid()))
+        written = Path(code_file).read_text().strip()
+        self.assertNotIn(written, json.dumps(details), 'the presented code reached the audit trail')
+        return event
+
 
 class ElevateAdditionalAdministrator(DeclaredChangeFixture):
     def test_positive_control_elevates_signs_out_and_audits_once(self):
@@ -228,6 +257,16 @@ class ElevateAdditionalAdministrator(DeclaredChangeFixture):
         relative, door = self.declare(self.text(authority.ELEVATE, self.doctor))
         self.perform(authority.ELEVATE, relative, self.doctor.pk, door)
         User.objects.filter(pk=self.doctor.pk).update(is_staff=False)   # demoted later, by whatever means
+        self.assertRefusedUnchanged('already been used', authority.ELEVATE, relative, self.doctor.pk, door)
+
+    def test_a_reformatted_copy_of_a_used_repository_declaration_is_refused(self):
+        """R5-a for the repository door: another file with the same act, laid out differently, is the same act."""
+        relative, door = self.declare(self.text(authority.ELEVATE, self.doctor))
+        self.perform(authority.ELEVATE, relative, self.doctor.pk, door)
+        User.objects.filter(pk=self.doctor.pk).update(is_staff=False)
+        copy = self.text(authority.ELEVATE, self.doctor).replace('# Declaration — synthetic', '# Copy\n\nMore prose.')
+        copy = copy.replace(': ', ':   ')
+        relative, door = self.declare(copy, name='20261001-quillmd-admin-copy.md')
         self.assertRefusedUnchanged('already been used', authority.ELEVATE, relative, self.doctor.pk, door)
 
     def test_template_placeholders_and_missing_lines_refuse(self):
@@ -446,18 +485,61 @@ class ApproverPresence(DeclaredChangeFixture):
         self.assertRefusedUnchanged('approver\'s presence is required', authority.ELEVATE, relative,
                                     self.doctor.pk, door, code_file='')
 
-    def test_a_wrong_code_refuses_and_leaves_no_failure_recorded(self):
+    def unthrottle(self):
+        """The backoff a recorded failure starts has passed (django_otp: 1 s, 2 s, 4 s ... after each failure)."""
+        TOTPDevice.objects.filter(user=self.approver).update(
+            throttling_failure_timestamp=timezone.now() - timedelta(hours=1))
+
+    def test_a_wrong_code_is_refused_recorded_and_the_act_rolled_back(self):
+        """Refutation R7-a. This test asserted the opposite until round 2: a wrong code rolled the device's failure
+        count back with the act, so codes could be guessed with no backoff and no trace (the refuter demonstrated it
+        with this very test). The failure is now counted on the approver's device and recorded, the act is not."""
         relative, door = self.declared()
         wrong = '000000' if code(self.approver_device) != '000000' else '111111'
-        self.assertRefusedUnchanged('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
-                                    code_file=self.code_file(value=wrong))
+        self.assertAbsenceRecorded('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
+                                   self.code_file(value=wrong), reason='approver_code_not_verified')
+        self.assertFalse(User.objects.get(pk=self.doctor.pk).is_staff)
 
     def test_the_targets_or_another_administrators_code_is_not_the_approvers(self):
         relative, door = self.declared()
         for device in (self.doctor_device, self.admin_devices[0]):
             with self.subTest(device=device.name):
-                self.assertRefusedUnchanged('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
-                                            code_file=self.code_file(device=device))
+                self.unthrottle()
+                self.assertAbsenceRecorded('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
+                                           self.code_file(device=device), reason='approver_code_not_verified')
+
+    def test_a_throttled_approver_is_refused_even_with_the_right_code(self):
+        """The device's own throttle is honoured: inside the backoff a correct code is refused (and recorded, without
+        counting again), and the act is not done; once the backoff has passed the same approver is present again."""
+        relative, door = self.declared()
+        wrong = '000000' if code(self.approver_device) != '000000' else '111111'
+        self.assertAbsenceRecorded('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
+                                   self.code_file(value=wrong), reason='approver_code_not_verified')
+        self.assertAbsenceRecorded('throttled', authority.ELEVATE, relative, self.doctor.pk, door, self.code_file(),
+                                   reason='approver_throttled', counted=False)
+        self.assertFalse(User.objects.get(pk=self.doctor.pk).is_staff)
+        self.unthrottle()
+        self.perform(authority.ELEVATE, relative, self.doctor.pk, door)
+        self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
+        self.assertEqual(TOTPDevice.objects.get(pk=self.approver_device.pk).throttling_failure_count, 0)
+
+    def test_the_recorded_failure_survives_the_refusal_in_its_own_transaction(self):
+        """The record is committed on its own: an act transaction that rolls back does not take it with it."""
+        from django.db import connection
+        relative, door = self.declared()
+        wrong = '000000' if code(self.approver_device) != '000000' else '111111'
+        seen = []
+        real = authority.record_absence
+
+        def record(*args, **kwargs):
+            seen.append(len(connection.savepoint_ids))
+            return real(*args, **kwargs)
+        outside = len(connection.savepoint_ids)
+        with patch.object(authority, 'record_absence', record):
+            self.assertAbsenceRecorded('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
+                                       self.code_file(value=wrong), reason='approver_code_not_verified')
+        # Called once the act's own transaction has ended: no transaction of perform()'s is open around it.
+        self.assertEqual(seen, [outside])
 
     def test_a_used_code_is_refused_the_second_time(self):
         relative, door = self.declared()
@@ -467,7 +549,8 @@ class ApproverPresence(DeclaredChangeFixture):
                                          verified_at=timezone.now())
         TOTPDevice.objects.create(user=other, name='Third', confirmed=True)
         relative, door = self.declared(name='20261001-quillmd-admin-third.md', target=other)
-        self.assertRefusedUnchanged('did not verify', authority.ELEVATE, relative, other.pk, door, code_file=used)
+        self.assertAbsenceRecorded('did not verify', authority.ELEVATE, relative, other.pk, door, used,
+                                   reason='approver_code_not_verified')
 
     def test_a_code_file_others_can_read_or_a_link_refuses(self):
         relative, door = self.declared()
@@ -483,6 +566,83 @@ class ApproverPresence(DeclaredChangeFixture):
             with self.subTest(case=label):
                 self.assertRefusedUnchanged('approver code file', authority.ELEVATE, relative, self.doctor.pk, door,
                                             code_file=path)
+
+    def test_a_link_anywhere_in_the_path_is_refused(self):
+        """Refutation R7-b: lstat checked only the last component, so a directory symlink in the path passed."""
+        relative, door = self.declared()
+        real = self.codes / 'real'
+        real.mkdir()
+        self.code_file(name='real/code')
+        (self.codes / 'via').symlink_to(real)
+        (self.codes / 'deeper').mkdir()
+        (self.codes / 'deeper' / 'via').symlink_to(real)
+        for label, path in (('a directory link in the path', str(self.codes / 'via' / 'code')),
+                            ('a link two levels up', str(self.codes / 'deeper' / 'via' / 'code'))):
+            with self.subTest(case=label):
+                self.assertRefusedUnchanged('approver code file', authority.ELEVATE, relative, self.doctor.pk, door,
+                                            code_file=path)
+        # Positive control: the same file by its real path is presence.
+        self.perform(authority.ELEVATE, relative, self.doctor.pk, door, code_file=str(real / 'code'))
+        self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
+
+    def swapped_at_open(self, replacement):
+        """Patch os.open so that the code file is replaced by `replacement` (a path) at the moment it is opened —
+        after any check made on the path beforehand, as a racing writer would."""
+        real_open = os.open
+
+        def swapping_open(path, flags, *args, **kwargs):
+            if os.path.basename(os.fsdecode(path)) == 'code' and os.path.exists(replacement):
+                os.replace(replacement, self.codes / 'code')
+            return real_open(path, flags, *args, **kwargs)
+        return patch.object(authority.os, 'open', swapping_open)
+
+    def test_the_open_descriptor_is_judged_not_the_path_checked_earlier(self):
+        """Refutation R7-b: the file was lstat-ed, then opened by path, and the descriptor never fstat-ed: a swap in
+        between passed the 0600/owner checks."""
+        relative, door = self.declared()
+        path = self.code_file()
+        readable = self.codes / 'readable'
+        readable.write_text(Path(path).read_text())
+        readable.chmod(0o644)
+        with self.swapped_at_open(str(readable)):
+            self.assertRefusedUnchanged('approver code file', authority.ELEVATE, relative, self.doctor.pk, door,
+                                        code_file=path)
+
+    def refused_without_hanging(self, path, fifo_at, swap=None):
+        """approver_code(path) in a thread: it must refuse within 10 s. A blocked open is released by opening the FIFO
+        at `fifo_at` for writing, and reported as the failure it is."""
+        import threading
+        outcome = {}
+
+        def attempt():
+            try:
+                if swap:
+                    with self.swapped_at_open(swap):
+                        authority.approver_code(path)
+                else:
+                    authority.approver_code(path)
+                outcome['result'] = 'accepted'
+            except Refused as exc:
+                outcome['result'] = str(exc)
+        worker = threading.Thread(target=attempt, daemon=True)
+        worker.start()
+        worker.join(10)
+        if worker.is_alive():
+            os.close(os.open(fifo_at, os.O_WRONLY | os.O_NONBLOCK))
+            worker.join(10)
+            self.fail('opening the approver code file blocked on a FIFO')
+        self.assertIn('approver code file', outcome['result'])
+
+    def test_a_fifo_is_refused_without_hanging(self):
+        fifo = self.codes / 'fifo'
+        os.mkfifo(fifo, 0o600)
+        self.refused_without_hanging(str(fifo), fifo)
+
+    def test_a_fifo_swapped_in_at_open_is_refused_without_hanging(self):
+        path = self.code_file()
+        fifo = self.codes / 'pipe'
+        os.mkfifo(fifo, 0o600)
+        self.refused_without_hanging(path, self.codes / 'code', swap=str(fifo))
 
     def test_positive_control_the_approvers_current_code_in_a_0600_file_is_presence(self):
         relative, door = self.declared()
@@ -638,6 +798,29 @@ class ProductionDoor(DeclaredChangeFixture):
         named = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver))
         other = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver), 'other.json')
         self.refused_unchanged('another file than', authority.ELEVATE, other, self.doctor.pk, door_path=named)
+
+    def test_a_reserialized_or_reissued_copy_of_a_used_declaration_is_refused(self):
+        """Refutation R5-a: single use was keyed on the declaration's BYTES, so the same JSON with other whitespace, or
+        its keys in another order, was accepted again. It is keyed on the act now — operation, target, approver and
+        reason, canonically serialized — so a re-serialized copy, or one re-issued with a new expiry, is refused."""
+        from datetime import datetime, timezone as tz
+        declaration = production_declaration(authority.ELEVATE, self.doctor, self.approver)
+        self.act(authority.ELEVATE, self.write(declaration), self.doctor.pk)
+        User.objects.filter(pk=self.doctor.pk).update(is_staff=False)
+        reordered = dict(reversed(list(declaration.items())))
+        later = dict(declaration, expires_at=(datetime.now(tz.utc) + timedelta(hours=2)).isoformat())
+        for index, text in enumerate((json.dumps(declaration, indent=2), json.dumps(reordered, separators=(',', ':')),
+                                      ' ' + json.dumps(declaration) + '\n\n', json.dumps(later))):
+            with self.subTest(copy=index):
+                path = self.codes / f'copy{index}.json'
+                path.write_text(text)
+                self.refused_unchanged('already been used', authority.ELEVATE, path, self.doctor.pk)
+        # Positive control: another act (another reason) is a declaration of its own. The approver's current code was
+        # consumed by the first act; the next one is the next step's code, as it would be half a minute later.
+        TOTPDevice.objects.filter(pk=self.approver_device.pk).update(last_t=-1)
+        self.act(authority.ELEVATE, self.write(dict(declaration, reason='A second synthetic roster change, by phone'),
+                                               'second.json'), self.doctor.pk)
+        self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
 
     def test_a_production_declaration_is_used_once_and_needs_the_approver(self):
         path = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver))

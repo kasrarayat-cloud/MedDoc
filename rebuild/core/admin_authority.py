@@ -19,8 +19,11 @@ the only doors now, and each one:
   (b) requires a DISTINCT APPROVER named in that declaration — an existing, active, verified administrator with a
       confirmed authenticator, who is not the target — to be PRESENT: a current code from the approver's own
       confirmed authenticator, read from a 0600 file passed by path (the door runs the command with standard input
-      detached), verified against that device and consumed (the device records it, so the same code is refused a
-      second time) (refutation R7);
+      detached; the file is reached with no symbolic link in its path and judged on its open descriptor), verified
+      against that device and consumed (the device records it, so the same code is refused a second time)
+      (refutation R7). A code that does not verify is RECORDED in a transaction of its own — the device's throttle
+      counts it and an audit row names the operator, the approver and the command — and a throttled device is not
+      tried at all, while the act itself rolls back whole (round 2, R7-a/R7-b);
   (c) invalidates every session of the target (session_version), in the same transaction as the change;
   (d) writes one audit record. Its actor is the approver ONLY because the code proved the approver's presence; the
       record also names the operating account (uid), the door, the declaration, its commit, its committer and author
@@ -29,8 +32,10 @@ the only doors now, and each one:
       only when the administrator signs in again ON THE ADMINISTRATION SURFACE within ADMIN_REENROLMENT_WINDOW and
       enrols on /mfa/ — shown there to that session only, never printed by the command.
 
-A declaration is used once: its sha256 is recorded with the audit row, and a second run of the same declaration is
-refused before anything changes. Every refusal happens before the first write, inside one transaction.
+A declaration is used once: the act it authorizes (operation, target, approver, reason — act_identity) is recorded
+with the audit row, and any declaration for the same act, however serialized, is refused before anything changes
+(round 2, R5-a). Every refusal happens before the first write, inside one transaction; only the record of an
+approver's code that failed is written, on its own, after the act has rolled back.
 
 The repository declaration (markdown; one line each, each exactly once):
 
@@ -196,22 +201,40 @@ def production_declared(operation, declaration, target):
     return fields, provenance
 
 
+def _open_without_links(path):
+    """A read descriptor for absolute `path`, opened one component at a time from / with O_NOFOLLOW, so a symbolic
+    link ANYWHERE in the path refuses (lstat and O_NOFOLLOW on the full path see only its last component), and with
+    O_NONBLOCK, so a FIFO or device answers at once instead of blocking the command (refutation R7-b)."""
+    common = os.O_CLOEXEC | os.O_NOFOLLOW
+    parts = path.parts
+    directory = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        for part in parts[1:-1]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | common, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        return os.open(parts[-1], os.O_RDONLY | os.O_NONBLOCK | common, dir_fd=directory)
+    finally:
+        os.close(directory)
+
+
 def approver_code(path):
-    """The approver's current authenticator code, from a file only this process's account can read: a regular file
-    (never a link), owned by the effective user, mode 0600 or stricter, holding six digits."""
-    require(path, 'The approver\'s presence is required: pass --approver-code-file, a 0600 file holding the '
-                  'approver\'s current six-digit authenticator code.')
-    path = Path(os.path.abspath(path))
+    """The approver's current authenticator code, from a file only this process's account can read: reached with no
+    symbolic link anywhere in its path, and judged on the OPEN descriptor (fstat) — a regular file owned by the
+    effective user, mode 0600 or stricter, holding six digits — so nothing swapped in between a check and the open is
+    ever read (refutation R7-b)."""
+    require(path and str(path).strip(), 'The approver\'s presence is required: pass --approver-code-file, a 0600 '
+                                        'file holding the approver\'s current six-digit authenticator code.')
     try:
-        info = path.lstat()
+        descriptor = _open_without_links(Path(os.path.abspath(path)))
     except OSError:
-        raise Refused('The approver code file cannot be read.') from None
-    require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.geteuid()
-            and not info.st_mode & 0o077 and info.st_size <= 8,
-            'The approver code file must be a regular file of this account, mode 0600, holding six digits.')
-    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
-    descriptor = os.open(path, flags)
+        raise Refused('The approver code file cannot be read: it must exist and be reached with no symbolic link in '
+                      'its path.') from None
     try:
+        info = os.fstat(descriptor)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.geteuid()
+                and not info.st_mode & 0o077 and info.st_size <= 8,
+                'The approver code file must be a regular file of this account, mode 0600, holding six digits.')
         data = os.read(descriptor, 16)
     finally:
         os.close(descriptor)
@@ -230,6 +253,42 @@ def _confirmed(account):
     return list(TOTPDevice.objects.select_for_update().filter(user=account, confirmed=True).order_by('pk'))
 
 
+class _Absent(Exception):
+    """The approver's code did not prove presence. Raised inside the act's transaction so the act rolls back whole;
+    recorded afterwards, in a transaction of its own (record_absence)."""
+
+    def __init__(self, approver, devices, reason):
+        super().__init__(reason)
+        self.approver, self.devices, self.reason = approver, devices, reason
+
+
+def record_absence(operation, fields, provenance, absent):
+    """Refutation R7-a: a code that does not prove the approver's presence is counted and kept, not rolled back with
+    the act — otherwise codes could be guessed with no backoff and no trace. In its own committed transaction: each of
+    the approver's devices the code was tried against counts one failure (django_otp's own throttle, which the next
+    attempt and the approver's sign-in both honour), and one audit row names the operating account, the approver, the
+    command and the change it was for. Never the code."""
+    with transaction.atomic():
+        for device in TOTPDevice.objects.select_for_update().filter(pk__in=absent.devices, user_id=absent.approver,
+                                                                    confirmed=True):
+            device.throttle_increment(commit=False)
+            device.save(update_fields=['throttling_failure_count', 'throttling_failure_timestamp'])
+        audit(None, 'account.admin_change_refused', absent.approver, command=operation, reason=absent.reason,
+              approver=str(absent.approver), change_target=str(fields['target_account']),
+              operator_uid=os.getuid(), operator_euid=os.geteuid(), **provenance)
+
+
+def act_identity(fields):
+    """The act a declaration authorizes, canonically: operation, target, approver and reason as sorted, compact JSON.
+    A declaration is single-use by THIS, not by its bytes (refutation R5-a), so a re-serialized, re-formatted or
+    re-issued copy of a used declaration is the same act and is refused."""
+    canonical = {'operation': fields['operation'], 'reason': ' '.join(fields['reason'].split()),
+                 'target': [str(fields['target_account']), fields['target_email'].lower()],
+                 'approver': [str(fields['approver_account']), fields['approver_email'].lower()]}
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(',', ':'),
+                                     ensure_ascii=False).encode()).hexdigest()
+
+
 def perform(operation, declaration, target, approver_code_file=None, *, repository=None, environ=None):
     """Perform `operation` under its declaration, with the approver present. Returns a dict with no secret in it."""
     if production():
@@ -237,7 +296,19 @@ def perform(operation, declaration, target, approver_code_file=None, *, reposito
     else:
         fields, provenance = repository_declared(operation, declaration, target, repository=repository,
                                                  environ=environ)
+    provenance['declaration_identity'] = act_identity(fields)
     code = approver_code(approver_code_file)
+    try:
+        return _act(operation, fields, provenance, code)
+    except _Absent as absent:
+        record_absence(operation, fields, provenance, absent)
+        raise Refused('The approver\'s authenticator code did not verify ('
+                      + ('the approver\'s authenticator is throttled after failed codes; wait, then present a new code'
+                         if absent.reason == 'approver_throttled' else 'wrong, expired or already used')
+                      + '). The attempt is recorded; nothing was changed.') from None
+
+
+def _act(operation, fields, provenance, code):
     with transaction.atomic():
         # Both rows, locked in a fixed order: two declared changes on the same pair serialize, never deadlock.
         first, second = sorted([(fields['target_account'], 'target'), (fields['approver_account'], 'approver')],
@@ -252,7 +323,7 @@ def perform(operation, declaration, target, approver_code_file=None, *, reposito
         require(devices, 'The approver has no confirmed authenticator: only an MFA-enrolled administrator approves an '
                          'administrator change.')
         require(not AuditEvent.objects.filter(action__in=ACTIONS.values(),
-                                              details__declaration_sha256=provenance['declaration_sha256']).exists(),
+                                              details__declaration_identity=provenance['declaration_identity']).exists(),
                 'This declaration has already been used; a declaration authorizes one change.')
         if operation == ELEVATE:
             require(account.is_active and not account.is_staff and not account.is_superuser and account.verified_at
@@ -261,11 +332,15 @@ def perform(operation, declaration, target, approver_code_file=None, *, reposito
         else:
             require(account.is_staff and account.is_active, 'The target is not an active administrator; a clinical '
                                                             'account\'s authenticator is reset from the console.')
-        # Presence, last: verify_token records the code on the device (consumed — refused if presented again) and
-        # counts a failure; both roll back with everything else if any check above or below refuses.
-        present = next((device for device in devices if device.verify_token(code)), None)
-        require(present is not None, 'The approver\'s authenticator code did not verify (wrong, expired, already used '
-                                     'or throttled). Nothing was changed.')
+        # Presence, last. The device's own throttle is honoured: inside its backoff no code is tried at all. A code
+        # that verifies is recorded on the device (consumed — refused if presented again); one that does not raises
+        # _Absent, which rolls this whole transaction back and is then recorded on its own (record_absence).
+        allowed = [device for device in devices if device.verify_is_allowed()[0]]
+        if not allowed:
+            raise _Absent(approver.pk, [], 'approver_throttled')
+        present = next((device for device in allowed if device.verify_token(code)), None)
+        if present is None:
+            raise _Absent(approver.pk, [device.pk for device in allowed], 'approver_code_not_verified')
         if operation == ELEVATE:
             account.is_staff = True
             account.session_version += 1   # an existing clinical session cannot become an administrator session
