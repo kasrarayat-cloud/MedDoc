@@ -150,8 +150,10 @@ def changed(before, after):
     return sorted(name for name in before if before[name] != after[name])
 
 
+# QUILLMD_ROLE_SUGGESTIONS='1': with it off, accept_role_suggestion answers 404 to everyone (refutation I-2), which
+# would pass the intruder rows vacuously and fail the owner's positive control.
 @override_settings(AI_MODE='fixture', ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False,
-                   QUILLMD_MAPPING_ASSISTANCE=True, STORAGES=STORAGES)
+                   QUILLMD_MAPPING_ASSISTANCE=True, QUILLMD_ROLE_SUGGESTIONS='1', STORAGES=STORAGES)
 class IsolationMatrix(SyntheticFixture, TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()

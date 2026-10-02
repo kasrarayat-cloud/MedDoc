@@ -268,14 +268,35 @@ def stored_suggestion(answer):
     return offer
 
 
-def current_suggestion(field, answer, row, notes, governance):
+#: The longest value an answer may hold: save_answers refuses a longer one ('Answer too long'), so a longer reading is
+#: never offered - accepting it would store what no later save could keep (refutation L-2).
+SUGGESTION_LIMIT = 20000
+
+
+def derived_from(text, evidence, labels):
+    """Whether every line of an offered value IS what generation derives from one of its cited quotes: the quote itself,
+    or the value its label introduces (core.generation.tab_source_value - the legacy and tab validators' own reading).
+    A value that is merely inside a quote ('1' of '14 ng/L') or not in it at all is not (refutation X1). A corrected
+    quantity is not re-derived here, so it is never offered: this can only withhold."""
+    from .generation import tab_source_value
+    allowed = set()
+    for entry in evidence:
+        allowed.add(entry['quote'])
+        parsed = tab_source_value(entry['quote'], labels)
+        if parsed and parsed[1]:
+            allowed.add(parsed[1])
+    return all(line in allowed for line in text.split('\n'))
+
+
+def current_suggestion(field, answer, row, notes, governance, labels):
     """The suggestion still offered for this field NOW, or None. Read the same way by the page and by the act that
     accepts it, and never trusted from the draft:
 
     - the field is in `suggestion_scope` of the ORIGINAL's roles, read now;
     - the stored answer is still the untouched hold: 'missing', no text, ROLE_NOT_GENERATED (a typed answer, an accepted
       suggestion or "Leave blank - reviewed" ends the offer);
-    - every quote it was read from is still in the notes at its offsets;
+    - every quote it was read from is still in the notes at its offsets, and the value is what those quotes say
+      (`derived_from`, with the form's recognized `labels`), no longer than an answer may be;
     - the reading is not governed by a heading or a sentence of the notes, by the reader finalization applies to a
       `supported` answer (core.generation.governed_supported)."""
     from .generation import governed_supported
@@ -285,6 +306,8 @@ def current_suggestion(field, answer, row, notes, governance):
     if answer.get('status') != 'missing' or str(answer.get('text') or '') or answer.get('reason') != ROLE_NOT_GENERATED:
         return None
     if any(notes[entry['start']:entry['end']] != entry['quote'] for entry in offer['evidence']):
+        return None
+    if len(offer['text']) > SUGGESTION_LIMIT or not derived_from(offer['text'], offer['evidence'], labels):
         return None
     reading = {'status': 'supported', 'text': offer['text'], 'evidence': offer['evidence']}
     if governed_supported(governance, notes, reading, field.get('label'), field_key=field.get('key')) is not None:

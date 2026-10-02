@@ -94,10 +94,12 @@ if QUILLMD_WORD_ENGINE not in ('legacy','v3'):
     raise ImproperlyConfigured("QUILLMD_WORD_ENGINE must be 'legacy' or 'v3'.")
 # Role suggestions on the legacy default path (core.destination_roles.suggestion_scope): '1' asks a field held ONLY
 # because its printed label reads as a signature or initials role as an ordinary question, and offers the reading as
-# an explicit-accept suggestion that is never adopted; '0' (the default) never asks it, exactly as before.
-QUILLMD_ROLE_SUGGESTIONS=os.getenv('QUILLMD_ROLE_SUGGESTIONS','0')
-if QUILLMD_ROLE_SUGGESTIONS not in ('0','1'):
-    raise ImproperlyConfigured("QUILLMD_ROLE_SUGGESTIONS must be '0' or '1'.")
+# an explicit-accept suggestion that is never adopted; '0' (the default) never asks it, exactly as before. Read like
+# every V1 0/1 switch (application_profile.flag): unset or empty is '0', anything but 0/1 refuses to start.
+try:
+    QUILLMD_ROLE_SUGGESTIONS='1' if _profile.flag(os.environ,'QUILLMD_ROLE_SUGGESTIONS','0') else '0'
+except _profile.ProfileError as exc:
+    raise ImproperlyConfigured(str(exc)) from None
 QUILLMD_EMAIL_MODE=os.getenv('QUILLMD_EMAIL_MODE','file')
 EMAIL_BACKEND='core.email_backend.ResendEmailBackend' if QUILLMD_EMAIL_MODE=='resend' else 'core.email_backend.PrivateFileEmailBackend'
 EMAIL_FILE_PATH=STATE_DIR/'mail'

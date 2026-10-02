@@ -492,13 +492,6 @@ def configuration(fields=None):
     if getattr(settings,'V3_GENERATION_BATCHES',False):
         from .generation_batch import CONTRACT
         config['generation_batch_contract']=CONTRACT
-    # Role suggestions (QUILLMD_ROLE_SUGGESTIONS='1'), for a form that is not contract v3 and not the qualified Word form:
-    # recorded in the configuration a job is quoted under, so a queued job asks exactly what it was quoted for. NOT part
-    # of pricing_version: the hold is maximum_cost over EVERY field of the mapping, held fields included, so asking a
-    # held field changes no bound, no rate and no request profile.
-    if (getattr(settings,'QUILLMD_ROLE_SUGGESTIONS','0')=='1'
-            and not (fields is not None and (natural_v3(fields) or qualified_word_form(fields)))):
-        config['role_suggestion_contract']=ROLE_SUGGESTION_CONTRACT
     # The contract is built for the native models only: with any other model (the installed claude-sonnet-4-6 path) the
     # flag leaves the default request, where it used to refuse every ordinary v3 generation before any request. Built is
     # not qualified: the flag stays off until its live qualification on the model actually configured.
@@ -534,13 +527,31 @@ def ordinary_pricing_version(previous,contract):
 
 
 #: Role suggestions on the legacy default path (core.destination_roles.suggestion_scope): a held role field is asked
-#: and its reading is offered, never adopted. Recorded in a job's configuration only when QUILLMD_ROLE_SUGGESTIONS='1'.
+#: and its reading is offered, never adopted.
+#: ⚠️ NEVER PART OF configuration() (refutation G1): every caller - the page's quote, enqueue, the batch plan's
+#: admission, part and adoption checks - must compute the same configuration whatever this setting is. The contract is
+#: decided where a single legacy job is ADMITTED (`admitted_with_role_suggestions`, core.jobs.enqueue) from the setting
+#: at that moment, and the worker asks the held rows only while the setting is still on (core.jobs.run_one): turning
+#: it off stops every queued job asking them. Not part of pricing_version: the hold is maximum_cost over EVERY field of
+#: the mapping, held ones included, so asking a held field changes no bound, rate or request profile.
 ROLE_SUGGESTION_CONTRACT='legacy-role-suggestions-v1'
 
 
 def role_suggestions(config):
-    """Whether THIS job was quoted under the role-suggestion contract."""
+    """Whether THIS job was admitted under the role-suggestion contract."""
     return (config or {}).get('role_suggestion_contract')==ROLE_SUGGESTION_CONTRACT
+
+
+def admitted_with_role_suggestions(config,version):
+    """The configuration a single generation job is admitted with: the role-suggestion contract recorded when the
+    setting is on NOW and the form is a legacy one (never contract v3, never the qualified Word form), and absent
+    otherwise - whatever the quote carried. (A complete-form batch never reaches it: it is admitted by
+    core.batch_jobs.enqueue, for contract v3 only.)"""
+    from . import destination_roles
+    config={k:v for k,v in config.items() if k!='role_suggestion_contract'}
+    if destination_roles.suggestions_enabled() and destination_roles.applies(version) and not natural_v3(version.fields):
+        config['role_suggestion_contract']=ROLE_SUGGESTION_CONTRACT
+    return config
 
 
 def narrative_contract(fields,config):
@@ -4903,32 +4914,61 @@ def role_suggested(fields,config):
                      and f['destination_role'].get('suggest') is True)
 
 
+#: An ordinary question the provider answered twice when it was also asked the suggested rows: neither answer is used.
+ROLE_TWICE_REASON=('Two answers came back for this question when the form\'s signing and initials rows were also asked, '
+                   'and they could not be told apart, so neither was used. Enter the answer yourself if the notes support '
+                   'one.')
+
+
 def role_validated(notes,fields,selections,suggested,plain_context,*,context_labels=(),evidence_contract=None,units=False):
     """The validated answers of a job that ASKED role suggestions (`suggested`), in two readings:
 
-    - every ORDINARY field exactly as a job without suggestions validates it: only its own selections, against the
-      context labels that request would carry (`plain_context`, the held labels included) - so asking a held field can
-      neither change an ordinary answer nor, by a malformed selection of its own, refuse the whole output;
-    - each SUGGESTED field as an ordinary field among all the others (the joint reading, with every governance rule).
-      If that reading cannot be validated at all, no suggestion is offered; the ordinary answers stand.
+    - every ORDINARY field as a job without suggestions validates it: one selection per ordinary key, against the
+      context labels that request would carry (`plain_context`, the held labels included);
+    - each SUGGESTED field as an ordinary field among all the others (the joint reading, with every governance rule,
+      which itself requires exactly one selection per asked key). When that reading cannot be validated, no suggestion
+      is offered.
 
-    A key the form does not have refuses the output, as it always did; the ordinary keys must each come back exactly once
-    (the ordinary reading checks it, as always). A suggested key that is missing or repeated only offers nothing.
-    `units`: the tab contract's unit selections, checked per reading. The suggested readings are never answers:
-    `role_adopted` keeps each field's hold."""
+    ⚠️ A SUGGESTION IS LOST, NEVER THE GENERATION (refutation G2). The extra questions can make the provider return items
+    the request without them never could: a suggested row's answer under another asked key, under a key nobody was asked
+    (a held row's, an invented one), or a suggested key twice. Up to one surplus item per suggested question is set
+    aside: an item under a key not asked is dropped; an ordinary key answered twice keeps the ONE of its items that its
+    own field's validation accepts alone - and if none or both do, that field is held as a conflict with ROLE_TWICE_REASON
+    rather than guessed. A response with more surplus than that, or with an ordinary key missing, is refused exactly as
+    the request without suggestions refuses it. `units`: the tab contract's unit selections, checked per reading. The
+    suggested readings are never answers: `role_adopted` keeps each field's hold."""
     def read(asked,chosen,labels):
         if units:chosen=unit_selections(notes,asked,chosen,context_labels=labels)
         return validate_selections(notes,asked,chosen,context_labels=labels,evidence_contract=evidence_contract)
-    known={f['key'] for f in fields}
-    returned=[item.key for item in selections.fields]
-    if not set(returned)<=known:
+    items=list(selections.fields)
+    ordinary=[f for f in fields if f['key'] not in suggested]
+    count=collections.Counter(item.key for item in items)
+    present=sum(1 for key in suggested if count[key])
+    surplus=len(items)-len(ordinary)-present
+    if any(count[f['key']]==0 for f in ordinary) or surplus>len(suggested):
         raise ValidationError('Provider returned missing, duplicated or unknown fields.')
-    answers=read([f for f in fields if f['key'] not in suggested],
-                 type(selections)(fields=[item for item in selections.fields if item.key not in suggested]),plain_context)
-    joint={}
-    if sorted(key for key in returned if key in suggested)==sorted(suggested):
-        try:joint=read(fields,selections,context_labels)
-        except ValidationError:joint={}
+    chosen,twice={},set()
+    for f in ordinary:
+        candidates=[item for item in items if item.key==f['key']]
+        if len(candidates)>1:
+            labels=list(plain_context)+[o['label'] for o in ordinary if o['key']!=f['key']]
+            fitting=[]
+            for item in candidates:
+                try:read([f],type(selections)(fields=[item]),labels)
+                except ValidationError:continue
+                fitting.append(item)
+            if len(fitting)!=1:
+                twice.add(f['key'])
+                blank={'unit_ids':[]} if hasattr(candidates[0],'unit_ids') else {'quotes':[]}
+                chosen[f['key']]=candidates[0].model_copy(update={**blank,'conflict':True})
+                continue
+            candidates=fitting
+        chosen[f['key']]=candidates[0]
+    answers=read(ordinary,type(selections)(fields=[chosen[f['key']] for f in ordinary]),plain_context)
+    for key in twice:answers[key]={**answers[key],'reason':ROLE_TWICE_REASON}
+    # (a response with any surplus, or a suggested key missing, fails the joint reading's own one-per-key check)
+    try:joint=read(fields,selections,context_labels)
+    except ValidationError:joint={}
     answers.update({key:joint[key] for key in suggested if key in joint})
     return answers
 
@@ -4938,12 +4978,14 @@ def role_adopted(held,answers,suggested=()):
     NEVER the reading. A field in `suggested` whose reading the validator would have adopted (`supported`, with text and
     its own source lines, nothing held, offered or set aside) carries that reading beside the hold as `role_suggestion`
     (its text and the lines it was read from), for the clinician to enter by an explicit act. Any other reading - held,
-    in conflict, missing, a one-click offer, not the patient's - leaves the plain hold."""
+    in conflict, missing, a one-click offer, not the patient's, longer than an answer may be - leaves the plain hold."""
+    from . import destination_roles
     out={}
     for key,record in held.items():
         answer=answers.get(key) if key in suggested else None
         evidence=[] if not isinstance(answer,dict) else (answer.get('own_evidence') or answer.get('evidence') or [])
         if (isinstance(answer,dict) and answer.get('status')=='supported' and str(answer.get('text') or '').strip()
+                and len(answer['text'])<=destination_roles.SUGGESTION_LIMIT
                 and not any(answer.get(flag) for flag in ('held_candidate','suggestion','not_patient','governed_acceptance'))
                 and evidence and all(isinstance(entry,dict) and isinstance(entry.get('quote'),str)
                                      and isinstance(entry.get('start'),int) and isinstance(entry.get('end'),int)
