@@ -410,6 +410,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     config=dict(config or generation.configuration(e.template_version.fields))
     if kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,config)):
         raise ValidationError(refusal)
+    # Role suggestions are decided HERE, from the setting now, never carried from a quote (refutation I-1).
+    if kind=='generation':config=generation.admitted_with_role_suggestions(config,e.template_version)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
@@ -808,7 +810,9 @@ def run_one():
             # mapping (core.destination_roles). An original that cannot be read refuses before anything is sent.
             from . import destination_roles
             from documents import DocumentError
-            try:asked_fields=destination_roles.generation_fields(e.template_version)
+            # (the held rows are asked only while the setting is still on: turning it off stops every queued job asking them)
+            try:asked_fields=destination_roles.generation_fields(e.template_version,suggest=generation.role_suggestions(job.config)
+                                                                and destination_roles.suggestions_enabled())
             except (DocumentError,ValidationError,OSError):raise NoProviderRequest(v3_mapping.GENERATION_SOURCE_REFUSAL)
             if refusal:=destination_roles.generation_refusal(e.template_version,asked_fields,job.config):
                 raise NoProviderRequest(refusal)

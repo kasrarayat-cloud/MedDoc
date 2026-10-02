@@ -820,6 +820,15 @@ def encounter_detail(request,pk):
                         if wm_narrative.active(e.template_version.fields,e.answers) else None)
         rows=[wm_narrative.as_currently_held(row,row,narrative_read) if narrative_read and wm_narrative.has_unit_evidence(row)
               else as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+    from . import destination_roles
+    # Role suggestions are offered on a legacy draft only (never the qualified Word form, contract v3 or a finalized record).
+    # ... and only where THIS request can reach the act: the middleware's own decision (RS3A-1), never the setting again.
+    from .middleware import role_act_routed
+    role_offers=(not is_wm and not is_v3 and e.status!='finalized' and bool(e.answers) and bool(printed_roles)
+                 and role_act_routed(request))
+    # Every offer read again from the current notes at once (core.destination_roles.current_suggestions).
+    role_current=(destination_roles.current_suggestions(e.template_version.fields,e.answers,printed_roles,e.notes,
+                                                        statement_labels) if role_offers else {})
     if is_v3:
         # ⚠️ A QUESTION LABEL THE FORM REPEATS IS SHOWN WITH ITS CONTEXT (counted with generation's own normalizer):
         # two questions reading "Effusion" are told apart only by where they sit on the form.
@@ -856,6 +865,9 @@ def encounter_detail(request,pk):
         # the page so the clinician is told rather than only seeing 'no supporting passage' (demo rehearsal gap).
         row['destination_reason']=(answer.get('reason') if answer.get('status')=='missing'
                                    and answer.get('reason')==role_not_generated else '')
+        # A role suggestion (QUILLMD_ROLE_SUGGESTIONS): shown only while it is still offered, by the same reader the
+        # accepting act applies (core.destination_roles.current_suggestions). It is never the answer: the box stays empty.
+        row['role_offer']=role_current.get(row['key'])
         if is_v3:
             # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
             kind=row.get('kind')
@@ -993,6 +1005,7 @@ def encounter_detail(request,pk):
     return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'hidden_accepted':hidden_accepted,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
+        'role_suggestion_warning':destination_roles.ROLE_SUGGESTION_WARNING,
         'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
         'export_refusal':v3_mapping.export_refusal(e.template_version.template) if is_v3 else ''})
 
@@ -1112,6 +1125,64 @@ def clear_review(request,pk):
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.review_cleared',e.pk,department=e.department,revision=e.revision,cleared=cleared)
     messages.success(request,'Answers and review cleared. The notes and accepted codes are kept. Generate a new draft when ready.')
+    return redirect('encounter_detail',pk=pk)
+
+@require_POST
+@transaction.atomic
+def accept_role_suggestion(request,pk):
+    """"Use this value": a clinician's explicit act that enters a role suggestion (core.destination_roles) as their OWN
+    answer - the record typing it into the box and saving would store for THIS field (save_answers: 'edited', by this
+    clinician, not reviewed, not an accepted suggestion), so the legacy rule that a role row keeps the clinician's own
+    typed value and never generated or accepted text applies to it unchanged. Refused, with nothing written, unless the
+    document is an unfinalized draft at the posted revision, the actor may make clinical decisions, the suggestion is
+    still offered NOW (current_suggestions, the page's own reader) and the posted value is that suggestion. Audited with
+    the field key and the new revision only - nothing derived from the value. Routed only while QUILLMD_ROLE_SUGGESTIONS
+    is on, on the doctor surface (quillmd/urls_doctor_role_suggestions.py): otherwise no request reaches this view.
+
+    RECORDED (refutation round 3, RS3A-2): it is not save_answers in every state. save_answers refuses while ANY role
+    row holds generated text (a draft from before the destination-roles salvage); this act writes only its own row, and
+    the generated_text check below reads only that row, which it has just made the clinician's own - so that check
+    cannot fire. Nothing wrong reaches a record: every later save, and so finalization, is refused until the other row
+    is cleared."""
+    from documents import DocumentError
+    from . import destination_roles
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
+    if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
+    if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version. Nothing was saved.',409)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    refusal='There is no suggestion to use for this answer now. Type your own answer if it belongs here. Nothing was saved.'
+    key=request.POST.get('key','')
+    field=next((f for f in e.template_version.fields if f['key']==key),None)
+    # (applies() is False for the qualified Word form, whose document_backend is set: one arm, not two - refutation F05)
+    if field is None or v3_mapping.is_v3_version(e.template_version) or not destination_roles.applies(e.template_version):
+        return document_refusal(request,e,refusal,400)
+    previous=e.answers.get(key)
+    try:
+        roles=destination_roles.legacy_roles(e.template_version)
+        statement_labels=[row['label'] for row in e.template_version.review_requirements]
+        offer=destination_roles.current_suggestions(e.template_version.fields,e.answers,roles,e.notes,statement_labels,
+                                                    keys={key}).get(key)
+    except (ValidationError,DocumentError) as exc:
+        return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
+    if offer is None:return document_refusal(request,e,refusal,400)
+    posted=request.POST.get('value','').replace('\r\n','\n').replace('\r','\n')
+    if posted!=offer['text'].replace('\r\n','\n').replace('\r','\n'):
+        return document_refusal(request,e,'The value sent is not the suggestion shown for "'+field['label']+'". Reopen the document and try again. Nothing was saved.',400)
+    value=offer['text']
+    answers=dict(e.answers)
+    answers[key]={**previous,'text':value,'reviewed':False,'accepted_suggestion':False,'accepted_by':None,'status':'edited',
+                  'reviewed_by':None,'edited_by':str(request.user.pk)}
+    # save_answers' own role rule, read the same way: generated or accepted text never stays on a role row.
+    if destination_roles.generated_text(answers[key]):return document_refusal(request,e,LEGACY_ROLE_SAVE_REFUSAL+field_list([field['label']])+' Nothing was saved.',400)
+    try:generation_batch.check_answers(e.template_version,answers)
+    except ValidationError as exc:return document_refusal(request,e,error_message(exc),409)
+    e.answers=answers;e.revision+=1;e.status='review';wm_review.invalidate_review(e)
+    e.save(update_fields=['answers','revision','status','template_review'])
+    # ⚠️ IDENTIFIERS ONLY, as encounter.answers_saved (refutation L-1): a digest of a short value - a lab value, a pair of
+    # initials - is the value to anyone who can enumerate it, and this table is append-only and read by platform staff.
+    audit(request.user,'encounter.role_suggestion_accepted',e.pk,department=e.department,field=key,revision=e.revision)
+    messages.success(request,'"'+field['label']+'" now holds the suggested value as your own entry. Review it, tick its review box and save before finalizing.')
     return redirect('encounter_detail',pk=pk)
 def cited_spans(evidence):
     """The source units an answer cites, as (start, end), in order."""

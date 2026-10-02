@@ -186,23 +186,124 @@ def held(version, *, fresh=False):
     return {f['key']: reason for f in version.fields if (reason := legacy_reason(f, roles.get(f['key'])))}
 
 
-def generation_fields(version):
+def generation_fields(version, *, suggest=False):
     """The version's fields as generation must see them: a field on a role place is never asked.
 
     Copies only - nothing is stored. A v3 field is held exactly as a protected area is held (write_protected with its
     reason: never asked, its label kept as a context label, answered 'missing' with the reason); a legacy field carries
-    `destination_role`, which generation's field selection reads the same way."""
+    `destination_role`, which generation's field selection reads the same way.
+
+    `suggest` (a job quoted under core.generation.ROLE_SUGGESTION_CONTRACT): a legacy field in `suggestion_scope` also
+    carries `destination_role['suggest']`. It is still held - answered 'missing' with its reason, never adopted - but it
+    is ASKED, so its reading can be offered as an explicit-accept suggestion. Without `suggest` the copies are exactly
+    as before."""
     fields = [dict(field) for field in version.fields]
     reasons = held(version)
+    v3 = v3_mapping.is_v3_version(version)
+    roles = legacy_roles(version) if suggest and not v3 and reasons else {}
     for field in fields:
         reason = reasons.get(field['key'])
         if not reason:
             continue
-        if v3_mapping.is_v3_version(version):
+        if v3:
             field.update(write_protected=True, review_reason=reason)
         else:
             field['destination_role'] = {'reason': reason}
+            if suggest and suggestion_scope(field, roles.get(field['key'])):
+                field['destination_role']['suggest'] = True
     return fields
+
+
+# ─── role suggestions (QUILLMD_ROLE_SUGGESTIONS) ─────────────────────────────────────────────────────────────────
+#: ⚠️ A SUGGESTION, NEVER AN ANSWER. Seven refutation rounds showed that releasing a held label by reading its wording
+#: or its neighbourhood always leaks a real signing place through a new print channel (V1-DECISIONS 2026-09-30). So no
+#: reader decides here whether a place is really a signing place: the field stays held exactly as before ('missing',
+#: ROLE_NOT_GENERATED), and its reading is only SHOWN beside it, with a warning, for the clinician to enter it by an
+#: explicit act ("Use this value", core.views.accept_role_suggestion) as their own typed answer. The scope is
+#: structural: the hold's own reason, never the label's wording.
+ROLE_SUGGESTION_WARNING = ('The printed form may expect a handwritten signature or initials here, so this value was not '
+                           'filled in. It was read from your notes. Use it only if this place asks for that value and '
+                           'not for somebody\'s signature or initials; otherwise leave it and complete the place by hand.')
+
+
+def suggestions_enabled():
+    """Whether this deployment offers role suggestions at all (QUILLMD_ROLE_SUGGESTIONS='1'). Read by core.middleware,
+    which mounts the accepting act on the doctor surface only while it is on - and the page offers a suggestion only on a
+    request that can reach that act (core.middleware.role_act_routed) - so turning the setting off withdraws every stored
+    suggestion at once; read by admission and the worker for what a job asks (core.generation.role_suggestions)."""
+    from django.conf import settings
+    return getattr(settings, 'QUILLMD_ROLE_SUGGESTIONS', '0') == '1'
+
+
+def suggestion_scope(field, row):
+    """Whether a LEGACY field may carry a role suggestion: it is held ONLY because its printed label's role
+    (documents.word_v3.legacy_role_kind) is set - never an identity row (by its printed OR its mapped label, as identity
+    reads it), never another named person's signature line, never a protected or option field.
+
+    ⚠️ Every arm narrows: a field this does not admit is held exactly as before and nothing about it is asked."""
+    from .tab_review import another_signers_line, clinician_identity
+    if not isinstance(field, dict) or not isinstance(row, dict) or not row.get('role'):
+        return False
+    if legacy_reason(field, row) != ROLE_NOT_GENERATED:
+        return False
+    printed_field = {**field, 'label': row.get('printed_label')}
+    if clinician_identity(field) or clinician_identity(printed_field):
+        return False
+    if another_signers_line(field) or another_signers_line(printed_field):
+        return False
+    if field.get('kind', 'text') not in ('text', 'long_text') or field.get('write_protected'):
+        return False
+    return field.get('answer_policy', 'documented_source_only') == 'documented_source_only'
+
+
+def stored_suggestion(answer):
+    """The role suggestion a stored answer carries, or None: a dict whose evidence is a list of entries each citing a
+    quote - the shape the re-read (current_suggestions) can read without failing. Everything else about it, its text
+    included, is judged by that re-read, which it must equal exactly."""
+    offer = answer.get('role_suggestion') if isinstance(answer, dict) else None
+    if not isinstance(offer, dict):
+        return None
+    evidence = offer.get('evidence')
+    if not isinstance(evidence, list) or not all(isinstance(entry, dict) and isinstance(entry.get('quote'), str)
+                                                 for entry in evidence):
+        return None
+    return offer
+
+
+#: The longest value an answer may hold: save_answers refuses a longer one ('Answer too long'), so a longer reading is
+#: never offered - accepting it would store what no later save could keep (refutation L-2).
+SUGGESTION_LIMIT = 20000
+
+
+def current_suggestions(fields, answers, roles, notes, statement_labels=(), keys=None):
+    """{key: offer} for every suggestion still offered NOW (or only `keys`). Read the same way by the page and by the act
+    that accepts one, and never trusted from the draft (refutation A1: a stored value and its stored evidence come from
+    the same object, so checking one against the other proves nothing):
+
+    - the field is in `suggestion_scope` of the ORIGINAL's roles, read now;
+    - the stored answer is still the untouched hold: 'missing', no text, ROLE_NOT_GENERATED (a typed answer, an accepted
+      suggestion or "Leave blank - reviewed" ends the offer);
+    - the offer is EXACTLY what generation's own validator reads again from the CURRENT notes for this field, given the
+      offer's cited quotes (core.generation.reread_role_suggestions): the same text and the same lines at the same
+      offsets, a line this field may cite (never one labelled for another row), not governed by a heading or a sentence
+      of the notes (the validator's governance is heading_governance, the reader the page and finalization apply to a
+      `supported` answer), no longer than an answer may be. (`keys` only narrows what is read.)"""
+    from .generation import reread_role_suggestions
+    candidates = {}
+    for field in fields:
+        if keys is not None and field['key'] not in keys:
+            continue
+        answer = answers.get(field['key'])
+        offer = stored_suggestion(answer)
+        if offer is None or not suggestion_scope(field, roles.get(field['key'])):
+            continue
+        if answer.get('status') != 'missing' or str(answer.get('text') or '') or answer.get('reason') != ROLE_NOT_GENERATED:
+            continue
+        candidates[field['key']] = offer
+    if not candidates:
+        return {}
+    readings = reread_role_suggestions(notes, fields, candidates, statement_labels)
+    return {key: offer for key, offer in candidates.items() if readings.get(key) == offer}
 
 
 def generation_refusal(version, fields, config):
