@@ -1608,8 +1608,6 @@ class Detector:
             starts_empty = first is not None and self.is_empty_cell(first) and first.info["col"] == 0
             if not (starts_empty and texts and all(c.info["span"] >= 2 for c in texts)):
                 kind = "data"
-        if kind == "label" and self.guidance_answer_row(tbl_slot, r):
-            kind = "data"
         if len(texts) == 1 and texts[0].info["span"] >= max(2, width - 1) and all(
                 c is texts[0] or self.is_empty_cell(c) for c in cells):
             kind = "divider"
@@ -1625,59 +1623,6 @@ class Detector:
             if head is None or head.info["vmerge"] != "continue":
                 return head
         return None
-
-    #: A question row with its instruction: question + guidance pairs to the end of the row ('Q G', 'Q G Q G').
-    GUIDANCE_ROW = re.compile(r"(?:QG)+")
-
-    @staticmethod
-    def white_ink(c) -> bool:
-        """Every visible run of the cell is white or near-white (luminance 0.9 or more, read from the colour value Word
-        writes, a theme colour's included): the ink of a header printed on a fill, whatever the fill and its source."""
-        runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
-        if not runs:
-            return False
-        for r in runs:
-            rpr = r.find(q("w:rPr"))
-            col = rpr.find(q("w:color")) if rpr is not None else None
-            if col is None:
-                return False
-            val = (col.get(q("w:val")) or "").lower()
-            if not re.fullmatch(r"[0-9a-f]{6}", val):
-                return False
-            rr, gg, bb = int(val[0:2], 16), int(val[2:4], 16), int(val[4:6], 16)
-            if (0.299 * rr + 0.587 * gg + 0.114 * bb) / 255 < 0.9:
-                return False
-        return True
-
-    def guidance_answer_row(self, tbl_slot, r) -> bool:
-        """A question row whose answer cell prints the author's instruction in guidance ink ('Reason for visit |
-        Describe the main complaint.'): its printed cells pair up, each question in ordinary ink followed by its own
-        guidance cell (Q G, or Q G Q G). Rule (d) maps that guidance cell as its own row's answer place, so the row is
-        a data row - never a column header naming the rows below it.
-
-        ⚠️ EC4 (engine comparison, SF15): read as a label row, the instruction became the NEXT row's column header and
-        its question was labelled 'Plan — Describe the main complaint.' - another row's instruction is what the model
-        was asked. A header row printed wholly in guidance ink has no ordinary-ink question, so it stays a header row;
-        so does a row whose guidance cell is no question's own ('Drug(s) under Investigation: | IND No.: | Study
-        (Indication)', a dev form; 'Medication | Name and strength | Dose', F05).
-        ⚠️ ROUND 3 (refutations of 8e00df9e and c1cae13d), every added reader removed but one restriction: a question
-        cell merged down from the row above is that row's question, read as row_label reads it (M5, R2F-12); WHITE ink
-        never counts as guidance here (M7: a white header on a dark fill - a cell fill, an accent fill or a table
-        style's first row, which this reader cannot see - paired as question + instruction and the table lost its
-        headers and log rows). Dropped: the numbering-column allowance (WR2H-1: one-letter QUESTION cells 'S' 'O' 'A'
-        'P' read as numbering), the w:tblHeader override (WR2H-3) and the cell-fill reading (WR2H-4, R2F-02). Declared
-        residual: a row with a leading number, letter or section column ('1. | Reason for visit | <guidance>') stays
-        a header row, as on b01e9cfa (the SF15 variant)."""
-        roles = []
-        for c in sorted(self.grid(tbl_slot).get(r, []), key=lambda c: c.info["col"]):
-            source = self.merged_restart(tbl_slot, r, c.info["col"]) if c.info["vmerge"] == "continue" else c
-            if source is None:
-                continue
-            text = self.cell_text(source)
-            if not text or is_blank_text(text):
-                continue
-            roles.append("G" if self.is_guidance_cell(source) and not self.white_ink(source) else "Q")
-        return self.GUIDANCE_ROW.fullmatch("".join(roles)) is not None
 
     def merged_answer_questions(self, tbl_slot, row, cell) -> list:
         """For a vertically merged cell, the printed text of each DISTINCT row it spans (its own row and each row it
@@ -2200,7 +2145,6 @@ class Detector:
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         self.withdraw_shared_merged_answers()
-        self.qualify_numbered()
         self.qualify_sides()
         self.surface_duplicates()
         for a in list(self.areas):
@@ -2277,83 +2221,6 @@ class Detector:
                         "protected area is kept as printed and completed by hand; no answer is mapped there." % (
                             cell.id, len(shared), rows))
             self.notes.append(note)
-
-    #: A numbered slot's whole printed label: '1.', '2)' or '(3)' (digits only, as the legacy tab contract reads them).
-    NUMBERED_SLOT = re.compile(r"(\d{1,3})[.)]|\((\d{1,3})\)")
-
-    def qualify_numbered(self):
-        """A numbered slot carries the section it is printed under ('POSTOPERATIVE FINDINGS — 1', as the legacy tab
-        contract labels the owner form) ONLY when that section is unambiguous (section_heading); in every other case the
-        bare marker is kept and surface_duplicates shows each position. Under-labelling is the safe direction.
-
-        ⚠️ EC5 (engine comparison, the owner colonoscopy form): v3 labelled both sections' slots '1.' '2.' '3.' with
-        the section only in the context - duplicate question labels, which the mapping page asks to rename and
-        generation holds. Newly detected areas only; a stored mapping keeps its labels."""
-        slots = {id(area): self.host_paragraph(area.slot) for area in self.areas
-                 if self.NUMBERED_SLOT.fullmatch(area.label.strip())}
-        lines = {node.id for node in slots.values() if node is not None}
-        holders = {node.id for area in self.areas for node in [self.host_paragraph(area.slot)] if node is not None}
-        for area in self.areas:
-            match = self.NUMBERED_SLOT.fullmatch(area.label.strip())
-            if not match:
-                continue
-            heading = self.section_heading(slots[id(area)], lines, holders)
-            if heading:
-                area.label = "%s — %s" % (heading, match.group(1) or match.group(2))
-
-    def section_heading(self, paragraph, lines, holders) -> str:
-        """The section of a numbered slot's line, or "" - and "" whenever it is not unambiguous: the slot is a BODY
-        paragraph, and walking back through the body only empty paragraphs and other numbered-slot lines come before a
-        Word heading (word_heading) that prints no answer place of its own. Anything else on the way - a table, a block
-        content control, a paragraph holding a text box or a control, any printed line (a question label 'Current
-        medications:', plain text, a heading that holds an answer) - leaves the bare marker.
-
-        ⚠️ ROUND 3 (refutations of 8e00df9e and c1cae13d): a bold question label named the slots under another question
-        (M1), a bold marker the next slot (M8), a header cell to the right a left column's slots (M9); and under the
-        own-container rule a Word heading printed in a table cell, a block control or a text box was stepped over, so
-        slots took an EARLIER section (WR2H-2), a heading-styled line with an underlined answer tab named them (R2F-04).
-        Declared cost: slots under a plain question line, or under a heading inside a table, control or text box, keep
-        the bare marker (legacy names them by the section)."""
-        if paragraph is None or paragraph.parent is not None or paragraph.kind != "p":
-            return ""
-        pool = [x for x in self.index.roots if x.part == paragraph.part and x.seq < paragraph.seq]
-        for node in reversed(pool):
-            if node.kind != "p" or any(x.kind in ("txbx", "sdt", "ff") for x in node.children):
-                return ""
-            if node.id in lines:
-                continue
-            text, pieces = self.ptext(node.el)
-            if not text.strip(" \t\x00"):
-                continue
-            if node.id in holders or self.blank_spans(text, pieces) or "\x00" in text:
-                return ""
-            return clean_label(self.text(node.el)) if self.word_heading(node.el) else ""
-        return ""
-
-    def word_heading(self, p) -> bool:
-        """A Word heading: printed text and a heading outline level (0-8), read where Word reads it - the paragraph's
-        own outline level, else the NEAREST style in its explicit style ancestry that sets one - or, where none sets
-        one, a 'Heading N' style in that ancestry. Never bold or capitals alone, and never the default paragraph style.
-
-        ⚠️ ROUND 3 (refutation of c1cae13d): a style based on Heading 3 that sets body text (outline level 9) was read
-        as a heading (WR2H-7); a default style given an outline level made every unstyled line one (R2F-11 FV)."""
-        if not self.text(p).strip():
-            return False
-        levels = {str(i) for i in range(9)}
-        ppr = p.find(q("w:pPr"))
-        level = ppr.find(q("w:outlineLvl")) if ppr is not None else None
-        if level is not None:
-            return level.get(q("w:val")) in levels
-        style = ppr.find(q("w:pStyle")) if ppr is not None else None
-        name = style.get(q("w:val")) if style is not None else ""
-        if not name:
-            return False
-        chain, _ = self.question_box_style_chain(name, "paragraph")
-        for x in chain:
-            level = x.find("./" + q("w:pPr") + "/" + q("w:outlineLvl"))
-            if level is not None:
-                return level.get(q("w:val")) in levels
-        return any(re.fullmatch(r"Heading[1-9]", x.get(q("w:styleId")) or "", re.I) for x in chain)
 
     def qualify_sides(self):
         """A side printed in another row cell or its heading belongs to the question used for source matching.
