@@ -2684,3 +2684,34 @@ class RoundFive(unittest.TestCase):
             fields = w.inspect(data)["fields"]
         self.assertIn("table_rows", [f["kind"] for f in fields])
         self.assertEqual(calls, [])
+
+    # The round-5 mutation proof's survivors (Z10, Z16), pinned
+    def test_z16_a_withdrawn_cell_holding_a_kept_signing_area_says_so(self):
+        def control_and_signature(cell):
+            paragraph = cell.paragraphs[0]
+            paragraph._p.append(_sdt("text", placeholder="Click here to enter text."))
+            paragraph.add_run("   Signature: ______________")
+        info = assert_ec3_parity(self, RefutationRepairs.merged_rows(self, [["Current medications"], ["Allergies"]],
+                                                                     extra=control_and_signature))
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        self.assertIn("NOT mapped", notes[0])
+        self.assertIn("Its signing or protected area is kept as printed and completed by hand.", notes[0])
+
+    def test_z10_an_area_a_later_check_removed_is_not_withdrawn_again(self):
+        """An area the mapping-limit check removes after the EC3 decision keeps that check's own note; EC3 neither
+        withdraws it again (the role reading stays b01e9cfa's) nor notes its cell for it."""
+        from unittest import mock
+        from . import word_v3 as w
+        data = RefutationRepairs.merged_rows(self, [["Current medications"], ["Allergies"]])
+        real = w.Detector.surface_duplicates
+
+        def and_a_later_removal(detector):
+            real(detector)
+            detector.areas[:] = [a for a in detector.areas if a.slot.path != "b/tbl[0]/tr[0]/tc[1]"]
+        detector = w.Detector(w.open_package(data))
+        with mock.patch.object(w.Detector, "surface_duplicates", and_a_later_removal):
+            areas, notes = detector.detect()
+        self.assertEqual(detector.withdrawn_areas, [])
+        self.assertFalse([n for n in notes if "merged" in n], notes)
+        self.assertNotIn("b/tbl[0]/tr[0]/tc[1]", [a.slot.path for a in areas])
