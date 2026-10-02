@@ -1096,11 +1096,15 @@ def cited_spans(evidence):
     return sorted((item.get('start'),item.get('end')) for item in evidence if isinstance(item,dict) and item.get('kind','unit')=='unit')
 
 
+#: Generations one user may request per window. The standing QA runner reads these two names to pace its sends
+#: (ops/sonnet5_stages.generation_headroom), so a change here moves both.
+GENERATION_RATE_LIMIT=30
+GENERATION_RATE_WINDOW_SECONDS=600
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     try:
-        if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
+        if not rate_limit('generate:'+str(request.user.pk),limit=GENERATION_RATE_LIMIT,seconds=GENERATION_RATE_WINDOW_SECONDS):raise ValidationError('Generation rate limit reached.')
         # (a finalized record says so first: the advice below names an action it refuses — refutation R2)
         if e.status=='finalized':raise ValidationError('Finalized documents are immutable.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')

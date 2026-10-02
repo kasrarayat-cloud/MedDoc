@@ -83,6 +83,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from decimal import Decimal
 from pathlib import Path
 
@@ -144,6 +145,30 @@ class StageStop(Exception):
 
 class SendDeadline(Exception):
     """The per-send deadline passed while the one provider request could be in flight."""
+
+
+def generation_headroom(user):
+    """{'left', 'resets_in', 'limit', 'window'}: how many more Generate requests core.views.generate_view admits for
+    `user` now, and the seconds until its window resets — read (never written) from the LoginAttempt row
+    core.security.rate_limit keeps for 'generate:<user pk>', at the application's own limit and window."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from core import security, views
+    from core.models import LoginAttempt
+    limit, window = views.GENERATION_RATE_LIMIT, views.GENERATION_RATE_WINDOW_SECONDS
+    now = timezone.now()
+    row = LoginAttempt.objects.filter(key=security.digest('generate:' + str(user.pk))).first()
+    if row is None or row.window_start < now - timedelta(seconds=window):     # (rate_limit's own reset test)
+        return {'left': limit, 'resets_in': 0.0, 'limit': limit, 'window': window}
+    return {'left': max(0, limit - row.count), 'limit': limit, 'window': window,
+            'resets_in': (row.window_start + timedelta(seconds=window) - now).total_seconds()}
+
+
+def page_said(response):
+    """The messages the application flashed for a request (what the doctor would have been told), for a stop's reason."""
+    from django.contrib.messages import get_messages
+    request = getattr(response, 'wsgi_request', None)
+    return [] if request is None else [str(message) for message in get_messages(request)]
 
 
 # ── the fixed plan ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -789,6 +814,31 @@ class Run:
     def admit(self, maximum):
         return self.campaign.admit(self.stage, maximum, runner_commit=self.provenance.get('runner_commit'))
 
+    def require_not_stopped(self):
+        check = getattr(self.campaign, 'require_not_stopped', None)       # (the standing campaign's Stop file)
+        if check is not None:
+            check()
+        require(self.ledger.campaign_stop() is None, 'The campaign is stopped.')
+
+    def pace_generation(self):
+        """Waits, sending nothing, until the application's per-user generation rate limit admits one more Generate
+        (generation_headroom), and returns the seconds waited. Without it a long run's next Generate is refused — on
+        2026-10-02 a campaign's 31st generation inside ten minutes stopped its stage — and in the transcription stage
+        the refusal strands a transcript whose generation is never made (each send is made once). The Stop file is
+        honoured every second; a window that does not reset when the application says it will is a stop."""
+        state = generation_headroom(self.world.user)
+        waited = 0.0
+        while state['left'] < 1:
+            self.require_not_stopped()
+            require(waited <= state['window'] + 5 and 0 <= state['resets_in'] <= state['window'],
+                    'The generation rate-limit window did not reset when the application says it would; nothing was '
+                    'sent.')
+            step = min(1.0, state['resets_in'] + 0.05)
+            time.sleep(step)
+            waited += step
+            state = generation_headroom(self.world.user)
+        return round(waited, 3)
+
     def attempt(self, send, job, maximum, bound, held, shown, extra):
         declaration = self.declaration
         number = len(self.ledger.rows()) + 1
@@ -1279,6 +1329,9 @@ class Run:
         from django.utils import timezone
         from core import generation
         from core.models import Encounter, Job, Reservation
+        paced = self.pace_generation()                   # (before anything is created for this send)
+        if paced:
+            extra = {**extra, 'generation_paced_seconds': paced}
         before = set(Encounter.objects.values_list('pk', flat=True))
         response = steps.create_encounter(self.world.client, self.world.patient.pk, version.pk, notes,
                                           timezone.localdate().isoformat())
@@ -1294,11 +1347,13 @@ class Run:
         if not (response.status_code == 302 and len(jobs) == 1 and jobs[0].kind == 'generation'
                 and jobs[0].state == 'queued' and jobs[0].encounter_id == encounter.pk):
             from core.jobs import cancel
-            for extra in jobs:
-                if extra.state == 'queued':
-                    cancel(extra, self.world.user)          # (nothing was sent: whatever was queued is released)
-            raise StageStop('Generate did not queue exactly one generation job (a batch would make more than one '
-                            'request); nothing was sent')
+            said = page_said(response)
+            for other in jobs:
+                if other.state == 'queued':
+                    cancel(other, self.world.user)          # (nothing was sent: whatever was queued is released)
+            raise StageStop('Generate did not queue exactly one generation job (status '
+                            f'{response.status_code}, {len(jobs)} job(s); the page said: '
+                            f'{" | ".join(said) or "nothing"}); nothing was sent')
         job = jobs[0]
         if list(Job.objects.filter(state='queued').values_list('pk', flat=True)) != [job.pk]:
             self.refuse_job(job, 'another queued job would run first')
