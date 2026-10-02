@@ -357,7 +357,9 @@ network denied (MIG-R-1):
 - **Never reverse a migration to make an older release work.** 0020, 0021, 0022, 0025 to 0028, 0030
   and 0031 refuse to reverse while their evidence exists (live payments or Stripe events; v3 mapping
   confirmations, contracts or corrections; mapping jobs; retention holds and preserved records;
-  generation batches; disposition rows; for 0031, the same v3 mapping evidence as 0021). A refusal is
+  generation batches; disposition rows; for 0031, the same v3 mapping evidence as 0021; for 0033,
+  redaction requests or tombstones; for 0034, any code suggestion carrying a release identity or a
+  re-review mark, which every suggestion V1 writes carries). A refusal is
   atomic for that one migration only: every later migration has already been reversed and committed,
   so the database is left at an intermediate node (the refusals of 0020, 0021 and 0031 say so: "has
   already been reversed and stays reversed"; the database-side refusals of 0022, 0025 to 0028 and 0030
@@ -374,7 +376,9 @@ network denied (MIG-R-1):
   committed while its message said "Nothing was changed."; 0031's gate was gone, dedac162 started a
   draft on a never-confirmed v3 mapping, re-applying 0031 did not look at that draft, and V1 finalized
   and exported it (R1). A migration added after 0031 is reversed before 0031 is reached; if it drops
-  anything a rollback cannot give back, it needs its own guard.
+  anything a rollback cannot give back, it needs its own guard. 0032, 0033 and 0034 each refuse first,
+  at the leaf, with 0031's message while v3 mapping evidence exists, so such a rollback reverses none
+  of them either.
 - **Why 0031 exists.** 0021 and 0022 added `core_templateversion.contract`, `corrections` and
   `assistance` NOT NULL with no database default. On a 0030 schema dedac162's template upload and
   mapping edit therefore failed with IntegrityError (a 500), and every failed upload left its stored
@@ -406,7 +410,23 @@ network denied (MIG-R-1):
   2. starting a document on a contract v3 mapping that no clinician has confirmed. dedac162 has no
      confirmation gate; `quillmd_encounter_guard` refuses it. Without this guard the draft dedac162
      started was saved, finalized and exported after V1 was re-installed, with the mapping still
-     unconfirmed (V1 checked confirmation only when a document was started).
+     unconfirmed (V1 checked confirmation only when a document was started);
+  3. appending a transcription to a document that holds an **accepted** code (0034,
+     `quillmd_coding_guard`: an accepted code is never deleted). dedac162's and ac43e379's worker
+     (`core/jobs.py`, the non-review transcription append) delete every code suggestion of the
+     document; the guard refuses, so the adoption fails and the job ends as a platform failure: the
+     settled charge is reversed (absorbed, not charged to the doctor), the notes are **not** appended
+     and the accepted code is kept. Measured by the 7A refutation (P10: ac43e379's code on the
+     dc33e094 schema, synthetic). Their notes save is not refused: it clears the acceptance first and
+     then deletes the codes, as before 0034 (the re-review mark is V1's, not theirs). Before an image
+     rollback, count the documents this would affect:
+
+         SELECT count(DISTINCT encounter_id) FROM core_codesuggestion WHERE accepted_by_id IS NOT NULL
+          AND encounter_id IN (SELECT id FROM core_encounter WHERE status <> 'finalized');
+
+  4. any edit of a **redacted** document (0033, `quillmd_redaction_guard`), which the older releases
+     neither hide nor know: they would show its emptied page and the database refuses any content
+     written to it. None exists unless redaction was used (`SELECT count(*) FROM core_redactiontombstone`).
 - **A document on an unconfirmed v3 mapping is held, never finalized.** The same guard refuses any
   move to `finalized` of a document whose mapping is contract v3 with no confirmation, whoever writes
   it, and V1's finalize refuses it first with a message naming the mapping version ("has not been
