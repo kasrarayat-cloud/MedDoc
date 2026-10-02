@@ -249,6 +249,12 @@ class SupersessionFloor(Worst):
             with self.subTest(tail=tail):
                 self.assert_adopted(clinic + ' ' + tail, ('Clinic attendance', 'Plan'), 'Clinic attendance', clinic)
 
+    def test_a_supersession_conjunct_shares_no_subject(self):
+        # (the withdrawal holds for supersessions too: what a conjunct superseded is never read from its head's subject)
+        self.assert_cases_held(((WARFARIN, 'The dose was reviewed and switched to apixaban.'),
+                                (WARFARIN, 'Her INR was checked and withheld.'),
+                                ('Medications: warfarin 5 mg daily.', '\nPlan: INR was 6.2 and withheld.')))
+
     def test_an_agent_switching_names_nothing_it_ended(self):
         # A person subject of an active supersession is its agent, never its theme: what it ended is unnamed (bare).
         self.assert_cases_held(((WARFARIN, 'The cardiologist switched to apixaban.'),
