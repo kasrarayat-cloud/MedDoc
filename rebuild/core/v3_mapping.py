@@ -122,6 +122,10 @@ def admission_refusals(version):
     request runs as before: a verifier lost later costs the true cost and keeps the draft, and export asks the verifier
     itself (word_v3.fill), so the draft can be exported when it answers again.
     """
+    # Legacy also needs import coverage/processor verification before any job
+    # or reservation; its source-role path otherwise returns before this gate.
+    from .import_binding import verify
+    verify(version)
     refusal, inspection = _source_refusal(version)
     if refusal or not counted_tab_column(inspection):
         return refusal, ''

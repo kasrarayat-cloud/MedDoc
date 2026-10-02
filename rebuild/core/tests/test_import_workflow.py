@@ -15,7 +15,7 @@ from django.db import DatabaseError, transaction
 from docx import Document
 from core import import_binding
 from core.jobs import enqueue, run_one
-from core.models import Encounter, TemplateVersion
+from core.models import Encounter, TemplateVersion, Job, Reservation
 from core.security import private_path
 from .test_word_v3_workflow import V3Fixture, part_text
 from .test_workflow import TEST_SETTINGS
@@ -172,3 +172,15 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         from core import destination_roles
         with self.assertRaisesMessage(ValidationError,'No generation or charge'):
             destination_roles.generation_fields(self.version)
+
+    def test_real_legacy_enqueue_refuses_omissions_before_job_or_reservation(self):
+        with override_settings(QUILLMD_WORD_ENGINE='legacy'):
+            template,version=self.uploaded(name='Synthetic legacy omission',data=ordinary_form())
+            self.assertNotEqual(version.contract,'v3')
+            self.assertTrue(version.import_manifest['coverage']['block_generation'])
+            self.assertEqual(self.new_encounter(version,'Reason for visit: Knee pain').status_code,302)
+            encounter=Encounter.objects.get(template_version=version)
+            with self.assertRaisesMessage(ValidationError,'No generation or charge'):
+                enqueue(encounter,self.user)
+        self.assertEqual(Job.objects.count(),0)
+        self.assertEqual(Reservation.objects.count(),0)
