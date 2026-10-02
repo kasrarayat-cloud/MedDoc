@@ -1238,15 +1238,13 @@ class SuggestingCodesDoesNotHoldTheDocument(OrdinaryDraft, TransactionTestCase):
     LOCK_BOUND = 5.0          # seconds the encounter row may stay locked by one Suggest codes request
     REQUEST_BOUND = 30.0      # seconds the whole request may take on this input
 
-    def suggested(self, separator):
+    def suggested(self, notes):
         today = timezone.localdate()
         release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-review-guards-cost', sha256='0' * 64,
                                          effective_from=today - timedelta(days=1), effective_until=today + timedelta(days=1),
                                          source_url='https://synthetic.invalid/codes')
         Code.objects.bulk_create([Code(release=release, code=code, description='Synthetic fixture; no clinical use')
                                   for code in MANY_CODES])
-        notes = separator.join(MANY_CODES)
-        self.assertEqual(len(notes), 47999)                                          # (the control: the refuter's size)
         _template, version = self.upload(self.make_docx(), 'docx')
         encounter = self.create_encounter(version, notes)
         self.client.force_login(self.member('guards-cost-employee', 'employee'))
@@ -1279,22 +1277,45 @@ class SuggestingCodesDoesNotHoldTheDocument(OrdinaryDraft, TransactionTestCase):
         return (response.status_code, CodeSuggestion.objects.filter(encounter=encounter).count(),
                 held, round(measured.get('other_waited', -1), 1), round(answered - started, 1))
 
-    def within_bounds(self, separator):
-        status, count, held, waited, took = self.suggested(separator)
-        # A document holds at most 100 suggestions: the first 100 the notes document, and the other 11,900 said and audited.
+    # ⚠️ Refutation C10 of 4cfa4301: a three-character code is suggested only where a code label names it, so the refuter's
+    # 12,000 bare tokens are now the read path alone (looked up, quoted, label-checked, counted and said, nothing written),
+    # and the write path is measured on labelled forms of the same size: one label over a list of all 12,000 on one line,
+    # and 4,000 labelled lines (a label per line fits 4,000 codes in the same 48,000 characters). The bounds are unchanged
+    # and now include the label scan.
+    def within_bounds(self, notes, documented):
+        status, count, held, waited, took = self.suggested(notes)
+        # A document holds at most 100 suggestions: the first 100 the notes document, and the rest said and audited.
         details = last_event('coding.suggest', self.encounter)
-        self.assertEqual((status, count, details.get('count'), details.get('not_suggested_over_limit')), (302, 100, 100, 11900))
+        self.assertEqual((status, count, details.get('count'), details.get('not_suggested_over_limit')),
+                         (302, 100, 100, documented - 100))
         self.assertEqual(set(CodeSuggestion.objects.filter(encounter=self.encounter).values_list('terminology__code', flat=True)),
                          set(MANY_CODES[:100]))
-        self.assertIn('11900 further documented codes were not suggested: a document holds at most 100 code suggestions.', self.said)
+        self.assertIn(f'{documented - 100} further documented codes were not suggested: a document holds at most 100 code '
+                      'suggestions.', self.said)
+        self.bounded(held, waited, took)
+
+    def bounded(self, held, waited, took):
         self.assertTrue(held < self.LOCK_BOUND and waited < self.LOCK_BOUND and took < self.REQUEST_BOUND,
                         f'lock held {held} s, another request waited {waited} s, the request took {took} s')
 
     def test_codes_one_per_line(self):
-        self.within_bounds('\n')
+        notes = '\n'.join(MANY_CODES)
+        self.assertEqual(len(notes), 47999)                                          # (the control: the refuter's size)
+        status, count, held, waited, took = self.suggested(notes)
+        details = last_event('coding.suggest', self.encounter)
+        self.assertEqual((status, count, details.get('count'), details.get('three_character_unlabelled')), (302, 0, 0, 12000))
+        self.assertIn('12000 three-character entries in the notes match a diagnosis code but are not labelled', self.said)
+        self.bounded(held, waited, took)
 
     def test_codes_on_one_line(self):
-        self.within_bounds(' ')
+        notes = 'Dx codes: ' + ','.join(MANY_CODES)       # (not 'ICD-10: ': ICD is one of the 12,000 synthetic codes)
+        self.assertEqual(len(notes), 48009)                                          # (the control: the refuter's size)
+        self.within_bounds(notes, 12000)
+
+    def test_labelled_codes_one_per_line(self):
+        notes = '\n'.join('Dx code ' + code for code in MANY_CODES[:4000])
+        self.assertEqual(len(notes), 47999)
+        self.within_bounds(notes, 4000)
 
 
 def searched_line_by_line(notes, wanted):

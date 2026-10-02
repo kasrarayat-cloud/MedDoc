@@ -743,7 +743,8 @@ def encounter_detail(request,pk):
         hidden=cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID) if cpt_licensed() else cpt
         # An acceptance of a hidden code (CPT is locked, or another licence) can still be withdrawn, without showing the
         # code or its descriptor: it would otherwise block finalizing once marked for re-review (refutation F7).
-        hidden_accepted=list(visible_codes.filter(hidden,accepted_by__isnull=False).values('pk','review_required'))
+        hidden_accepted=[{'pk':row.pk,'review_required':row.review_required,'acceptance':row.acceptance}
+                         for row in visible_codes.filter(hidden,accepted_by__isnull=False)]
         codes=list(visible_codes.exclude(hidden))
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
@@ -1884,7 +1885,11 @@ def coding(request,pk):
     dotless=(f' {result.dotless} entr{"y" if result.dotless==1 else "ies"} in the notes {"looks" if result.dotless==1 else "look"} like a '
              'code written without a dot; not looked up. Type a diagnosis code with its dot (R07.9, not R079) to have it '
              'suggested.' if result.dotless else '')
-    over+=unmatched+dotless+withheld
+    one=result.unlabelled==1
+    unlabelled=(f' {result.unlabelled} three-character entr{"y" if one else "ies"} in the notes match{"es" if one else ""} a diagnosis '
+                f'code but {"is" if one else "are"} not labelled as one; not suggested (p53 or B12 can name a lab test or a gene). '
+                'Write the code after a code label, such as "ICD-10: I10", to have it suggested.' if result.unlabelled else '')
+    over+=unmatched+dotless+unlabelled+withheld
     if result.covered:
         messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
@@ -1955,6 +1960,11 @@ def withdraw_code(request,pk,code_pk):
                                           'was withdrawn. Reopen it to see the current notes and codes.',409)
     item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e,accepted_by__isnull=False).first()
     if item is None:return document_refusal(request,e,'This accepted code is unavailable. Nothing was withdrawn.',409)
+    # ⚠️ THE ACCEPTANCE THE PAGE SHOWED, not only its revision: accepting does not renumber the revision, so a withdraw from
+    # a page loaded before another clinician accepted again deleted that newer acceptance (refutation C5 of 4cfa4301).
+    if request.POST.get('accepted')!=item.acceptance:
+        return document_refusal(request,e,'This code was accepted again after you opened the page. Nothing was withdrawn. '
+                                          'Reopen the document to see who accepted it.',409)
     previous,release=item.accepted_by_id,item.terminology.release
     CodeSuggestion.objects.filter(pk=item.pk).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(pk=item.pk).delete()

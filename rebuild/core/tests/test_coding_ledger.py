@@ -146,7 +146,7 @@ class CodingLedger(TestCase):
         self.assertIn('marked for re-review', self.text(refused))
         encounter.refresh_from_db()
         self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{stored.pk}/withdraw/',
-                                          {'revision': encounter.revision}).status_code, 302)
+                                          {'revision': encounter.revision, 'accepted': self.acceptance(stored)}).status_code, 302)
         self.assertFalse(CodeSuggestion.objects.filter(pk=stored.pk).exists())
         encounter.refresh_from_db()
         self.finalize(encounter)  # nothing blocks it any more
@@ -162,12 +162,14 @@ class CodingLedger(TestCase):
         from django.test import Client
         other = Client(); other.force_login(employee)
         self.assertEqual(other.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
-                                    {'revision': encounter.revision}).status_code, 403)
-        stale = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/', {'revision': encounter.revision - 1})
+                                    {'revision': encounter.revision, 'accepted': self.acceptance(code)}).status_code, 403)
+        stale = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
+                                 {'revision': encounter.revision - 1, 'accepted': self.acceptance(code)})
         self.assertEqual(stale.status_code, 409)
         self.assertTrue(CodeSuggestion.objects.filter(pk=code.pk, accepted_by__isnull=False).exists())
         self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
-                                          {'revision': encounter.revision}).status_code, 302)  # the control
+                                          {'revision': encounter.revision, 'accepted': self.acceptance(code)}).status_code,
+                         302)  # the control
 
     def test_reversing_0034_refuses_while_ledger_evidence_exists(self):
         import importlib
@@ -182,7 +184,8 @@ class CodingLedger(TestCase):
         encounter = self.document(); self.suggest(encounter)
         code = CodeSuggestion.objects.get(encounter=encounter); self.accept(encounter, code)
         encounter.refresh_from_db()
-        response = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/', {'revision': encounter.revision})
+        response = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
+                                    {'revision': encounter.revision, 'accepted': self.acceptance(code)})
         self.assertEqual(response.status_code, 302)
         self.assertFalse(CodeSuggestion.objects.filter(pk=code.pk).exists())
         event = AuditEvent.objects.get(action='coding.withdraw', target=str(code.pk))
@@ -236,6 +239,150 @@ class CodingLedger(TestCase):
         text = self.text(response)
         self.assertIn('1 entry in the notes written like a diagnosis code is not a code in that release', text)
         self.assertIn('1 CPT code named in the notes was not looked up: CPT content is not licensed for use in this product', text)
+
+    # Refutation round 2 of 4cfa4301, coding lens (C1-C5, C10, FG-6, FG-7, FG-8).
+    UNLABELLED_SAID = 'not labelled as one; not suggested'
+
+    def suggested(self, encounter):
+        return sorted(CodeSuggestion.objects.filter(encounter=encounter).values_list('terminology__code', flat=True))
+
+    def another(self, notes):
+        """A further document on one uploaded template (uploading the same synthetic form twice is refused)."""
+        if not hasattr(self, '_version'):
+            _template, self._version = self.upload(self.make_docx(), 'docx')
+        response = self.client.post('/encounters/new/', {'patient': self.patient.pk, 'template_version': self._version.pk,
+                                    'notes': notes, 'service_date': timezone.localdate().isoformat(), 'synthetic_only': 'on'})
+        self.assertEqual(response.status_code, 302)
+        return Encounter.objects.filter(template_version=self._version).order_by('-created_at').first()
+
+    def test_C1_a_dotless_code_whose_third_character_is_a_letter_is_said(self):
+        """aa3eead4 required two digits after the letter, so Z3A20, O9A211 and M1A0710 (categories Z3A, O9A, M1A) fell
+        through every path: nothing suggested, said or audited. They are said like R079, and never looked up."""
+        icd_release({'Z3A.20': 'Synthetic 20 weeks gestation', 'O9A.211': 'Synthetic injury complicating pregnancy',
+                     'M1A.0710': 'Synthetic chronic gout right ankle', 'R07.9': 'Synthetic chest pain code'})
+        encounter = self.another('Assessment: 20 weeks gestation, Z3A20; injury in pregnancy O9A211; gout M1A0710.')
+        response = self.suggest(encounter)
+        self.assertEqual(self.suggested(encounter), [])
+        self.assertIn('3 entries in the notes look like a code ' + self.DOTLESS_SAID, self.text(response))  # 4cfa4301: silent
+        self.assertEqual(AuditEvent.objects.filter(action='coding.suggest').latest('created_at').details['written_without_dot'], 3)
+
+    def test_C3_a_dotless_shape_whose_category_no_release_holds_is_not_counted(self):
+        """A gene variant or a dose (C282Y, H63D, q12h) has the dotless shape too; it is counted only when its first three
+        characters are a category of the release in effect. G6PD and H1N1 name no category, R079's R07 does."""
+        icd_release({'R07.9': 'Synthetic chest pain code'})
+        notes = ('Plan: vancomycin q12h.\nLabs: HFE C282Y homozygous, H63D negative; G6PD normal, H1N1 negative.\n'
+                 'Assessment: R07.9.')
+        encounter = self.another(notes)
+        response = self.suggest(encounter)
+        self.assertEqual(self.suggested(encounter), ['R07.9'])
+        self.assertNotIn(self.DOTLESS_SAID, self.text(response))  # 4cfa4301: "3 entries ... without a dot"
+        control = self.suggest(self.another('Symptoms: chest pain, r079 written in lower case.\nAssessment: R07.9.'))
+        self.assertIn('1 entry in the notes looks like a code ' + self.DOTLESS_SAID, self.text(control))  # FG-7: case-folded
+
+    def test_C2_words_joined_by_a_dot_are_not_told_as_diagnosis_codes(self):
+        icd_release({'R07.9': 'Synthetic chest pain code'})
+        response = self.suggest(self.another('Denies SOB.Has cough.\nVit.D low; Labs: CBC.BMP pending.\nAssessment: R07.9.'))
+        self.assertNotIn('not a code in that release', self.text(response))  # 4cfa4301: "3 entries ... not a code"
+        control = self.suggest(self.another('Assessment: R07.99 and R07.9.'))
+        self.assertIn('1 entry in the notes written like a diagnosis code is not a code in that release', self.text(control))
+
+    def test_C4_FG6_every_named_cpt_code_is_counted_in_every_labelled_form(self):
+        icd_release({'R07.9': 'Synthetic chest pain code'})
+        for notes, count in (('Plan: CPT 99213, 99214 and 36415.', 3),        # 4cfa4301: 1
+                             ('Plan: CPT® 99213; CPT-4 99214.', 2),      # 4cfa4301: nothing said
+                             ('Plan: office visit, CPT code 99213.', 1), ('Plan: office visit, CPT: 99213.', 1),
+                             ('Plan: CPT 99213, heparin 10000 units.', 1), ('Plan: CPT 49000.', 1)):
+            with self.subTest(notes=notes):
+                text = self.text(self.suggest(self.another(notes + '\nAssessment: R07.9.')))
+                said = (f'{count} CPT code{"" if count == 1 else "s"} named in the notes '
+                        f'{"was" if count == 1 else "were"} not looked up: CPT content')
+                self.assertIn(said, text)
+
+    def test_C10_a_three_character_entry_is_suggested_only_where_a_code_label_names_it(self):
+        """4cfa4301 looked up every three-character token of the case-folded notes, so 'p53 wild-type' (an immunostain)
+        was suggested as P53, hemorrhagic disease of newborn, 'explicitly documented', and accepted. A three-character code
+        is suggested only where the line that first documents it labels it as a code ('ICD-10: I10'); otherwise it is
+        counted and said, never suggested (fail closed: lab and gene names such as p53, B12, A1C and CO2 have this shape)."""
+        icd_release({'P53': 'Synthetic hemorrhagic disease of newborn', 'B12': 'Synthetic three-character code',
+                     'A1C': 'Synthetic three-character code', 'CO2': 'Synthetic three-character code',
+                     'R51': 'Synthetic headache', 'I10': 'Synthetic essential hypertension',
+                     'C18.7': 'Synthetic malignant neoplasm of sigmoid colon'})
+        notes = ('Pathology: sigmoid adenocarcinoma, C18.7. Immunostains: p53 wild-type pattern, MMR proficient.\n'
+                 'Labs: CO2 24, B12 normal, A1C 6.1, G6PD normal.\n'
+                 'Assessment: headache and hypertension, ICD-10: R51, I10.')
+        encounter = self.another(notes)
+        response = self.suggest(encounter)
+        self.assertEqual(self.suggested(encounter), ['C18.7', 'I10', 'R51'])  # 4cfa4301: P53, CO2, B12 and A1C too
+        self.assertIn('4 three-character entries in the notes match a diagnosis code but are ' + self.UNLABELLED_SAID,
+                      self.text(response))
+        evidence = dict(CodeSuggestion.objects.filter(encounter=encounter).values_list('terminology__code', 'evidence'))
+        self.assertIn('ICD-10: R51, I10', evidence['I10'])
+        self.assertEqual(AuditEvent.objects.filter(action='coding.suggest').latest('created_at').details[
+            'three_character_unlabelled'], 4)
+        for written, labelled in (('Assessment: hypertension I10.', False), ('Assessment: hypertension (I10).', False),
+                                  ('Assessment: ICD-10-CM code: I10.', True), ('Assessment: Dx code I10.', True),
+                                  ('Assessment: ICD10 I10 and R51.', True), ('Assessment: diagnosis codes R51; I10', True),
+                                  ('Assessment: icd-10: i10.', True)):
+            with self.subTest(written=written):
+                again = self.another(written)
+                text = self.text(self.suggest(again))
+                self.assertEqual('I10' in self.suggested(again), labelled)
+                self.assertEqual('1 three-character entry in the notes matches a diagnosis code but is ' + self.UNLABELLED_SAID
+                                 in text, not labelled)
+        # The line that FIRST documents the code decides: a later label does not turn an earlier unlabelled mention into one.
+        first = self.another('Immunostains: P53 positive.\nICD-10: P53.')
+        self.suggest(first)
+        self.assertEqual(self.suggested(first), [])
+
+    def test_C10_the_label_scan_is_linear(self):
+        import time
+        icd_release({'I10': 'Synthetic essential hypertension'})
+        encounter = self.another('Assessment: ' + ('ICD-10' + ' ' * 5000) * 8 + 'I10.')
+        started = time.monotonic()
+        planned = coding.plan(encounter)
+        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertEqual([code.code for code, _line in planned.found], ['I10'])
+
+    def acceptance(self, code):
+        code.refresh_from_db()
+        return code.acceptance
+
+    def test_C5_a_withdraw_from_a_page_older_than_another_acceptance_is_refused(self):
+        """Accepting does not renumber the revision, so a withdraw from a page loaded before clinician B accepted again
+        deleted B's fresh acceptance (4cfa4301: 302, suggestion gone). The form posts the acceptance it showed."""
+        icd_release()
+        encounter = self.another(self.NOTES); self.suggest(encounter)
+        code = CodeSuggestion.objects.get(encounter=encounter); self.accept(encounter, code)
+        self.save_notes(encounter, self.NOTES + '\nPlan: follow up.')
+        encounter.refresh_from_db()
+        shown = self.acceptance(code)  # what A's page shows: accepted by A, needs re-review
+        page = self.client.get(f'/encounters/{encounter.pk}/?tab=coding').content.decode()
+        self.assertIn(f'name="accepted" value="{shown}"', page)
+        b = m.User.objects.create_user(username='coding-b', email='coding-b@synthetic.invalid', verified_at=timezone.now())
+        m.Membership.objects.create(user=b, department=self.department, role='clinician')
+        from django.test import Client
+        b_client = Client(); b_client.force_login(b)
+        self.assertEqual(b_client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/accept/',
+                                       {'revision': encounter.revision}).status_code, 302)
+        stale = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
+                                 {'revision': encounter.revision, 'accepted': shown})
+        self.assertEqual(stale.status_code, 409)
+        self.assertTrue(CodeSuggestion.objects.filter(pk=code.pk, accepted_by=b).exists())  # B's acceptance stands
+        missing = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/', {'revision': encounter.revision})
+        self.assertEqual(missing.status_code, 409)
+        current = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
+                                   {'revision': encounter.revision, 'accepted': self.acceptance(code)})
+        self.assertEqual(current.status_code, 302)  # the control: the page showing B's acceptance withdraws it
+        self.assertFalse(CodeSuggestion.objects.filter(pk=code.pk).exists())
+
+    def test_FG8_an_unaccepted_hidden_cpt_suggestion_is_not_offered_for_withdrawal(self):
+        icd_release(); cpt = cpt_release()
+        encounter = self.another('Symptoms: No chest pain, CPT 99213.\nExamination: Normal gait.')
+        CodeSuggestion.objects.create(encounter=encounter, terminology=Code.objects.get(release=cpt, code='99213'),
+                                      evidence='Symptoms: No chest pain, CPT 99213.', explanation='Stored CPT')
+        page = self.client.get(f'/encounters/{encounter.pk}/?tab=coding').content.decode()
+        self.assertNotIn('data-hidden-cpt', page); self.assertNotIn('/withdraw/', page)
+        self.assertIn('No code suggestions yet', page)
 
     def test_no_cpt_code_is_imported_suggested_shown_accepted_or_exported_in_any_mode(self):
         icd_release(); cpt = cpt_release()

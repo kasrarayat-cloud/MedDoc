@@ -572,6 +572,12 @@ class CodeSuggestion(Entity):
     def code(self): return self.terminology.code
     @property
     def description(self): return self.terminology.description
+    @property
+    def acceptance(self):
+        """The acceptance a page shows, posted back by its withdraw form: who accepted the code and when. Accepting does not
+        renumber the revision, so a withdraw from a page older than another clinician's acceptance is told apart only by
+        this (refutation C5 of 4cfa4301: it deleted that newer acceptance)."""
+        return f'{self.accepted_by_id}@{self.accepted_at.isoformat()}' if self.accepted_at else ''
     class Meta: constraints=[models.UniqueConstraint(fields=['encounter','terminology'],name='suggestion_once')]
 class AuditEvent(Entity):
     actor=models.ForeignKey(User,on_delete=models.PROTECT,null=True)

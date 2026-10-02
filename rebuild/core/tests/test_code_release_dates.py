@@ -218,8 +218,11 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
         every following dot instead, as the code did before this pass, drops BOTH codes silently,
         because each ends its sentence.
         """
+        # The category code is written after a code label: a three-character code is suggested only where one names it
+        # (refutation C10 of 4cfa4301). The label is on ITS line only, so the lookahead below still decides which line
+        # quotes it: read from the wrist line, the code would be unlabelled and not suggested at all.
         notes = ('Assessment: synthetic right wrist finding documented as M25.532.\n'
-                 'Assessment: synthetic general joint finding documented as M25.')
+                 'Assessment: synthetic general joint finding documented as ICD-10 M25.')
         # THE INPUT THESE ASSERTIONS DEPEND ON, and the reason two earlier versions of this test were
         # empty: the evidence lookahead only ever runs on codes the TOKEN regex extracted. Neither
         # earlier version checked that, and in both the shorter code was never a token — so the
