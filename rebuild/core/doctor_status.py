@@ -6,8 +6,11 @@ words ('reconciliation', 'staged', 'validating', 'not_adopted') and administrato
 administrator, such as 'Resolved by administrator: ...') never reach the doctor; the billing classifications they are
 owed (core.jobs.public_error's doctor-facing reasons) do.
 
-Wording only. Whether a request is charged is read from billing's own predicate (core.jobs.billable_outcome) and the
-batch's recorded state, never inferred from text; no amount, settlement or ledger rule is decided here.
+Wording only, and true of the ledger (refutation F5 of dc33e094). Whether a request is charged is read from the ledger
+itself (net_charge: its entries for the request's jobs), never inferred from its state or text: a job the worker settled
+and the sweep then held for review IS charged. A sentence that says "not charged" is said only while the ledger shows no
+net charge; with one, the sentence says it was charged and that Billing shows it. No amount, settlement or ledger rule is
+decided here.
 """
 from collections import namedtuple
 
@@ -38,9 +41,34 @@ BATCH_PREPARING = 'The complete form is being prepared. Answers appear together 
 PENDING = ('waiting', 'in_progress', 'held')
 
 
-def _status(key, explanation=None, charged=False):
+#: The sentence for each status when the ledger shows a net charge for the request. Never "not charged".
+CHARGED_EXPLANATIONS = {
+    'waiting': 'Queued. A charge is already recorded for this request; Billing shows it.',
+    'in_progress': 'Processing. A charge is already recorded for this request; Billing shows it, and the charge never exceeds '
+                   'the maximum you approved.',
+    'held': 'This request was charged, and an administrator is reviewing it. Billing shows the charge; any correction is made '
+            'there and never exceeds the maximum you approved.',
+    'not_completed': 'This request did not complete, but a charge is recorded for it; Billing shows it.',
+    'cancelled': 'Cancelled, but a charge is recorded for this request; Billing shows it.',
+    'unknown': 'This request\'s status could not be read. A charge is recorded for it; Billing shows it. Contact your '
+               'administrator before resubmitting.',
+}
+
+
+def net_charge(jobs):
+    """What the ledger has charged for these jobs, net of any reversal (absorbed failures, reconciliations): the negated sum
+    of their ledger entries. Zero for a job that was never settled or whose charge was reversed."""
+    from django.db.models import Sum
+    from .models import LedgerEntry
+    total = LedgerEntry.objects.filter(job_id__in=[job.pk for job in jobs]).aggregate(total=Sum('amount'))['total']
+    return -(total or 0)
+
+
+def _status(key, explanation=None, charge=0):
     label, tone = LABELS[key]
-    return Status(key, label, tone, explanation or EXPLANATIONS[key], key in PENDING, charged)
+    if charge > 0 and key in CHARGED_EXPLANATIONS:
+        explanation = CHARGED_EXPLANATIONS[key]
+    return Status(key, label, tone, explanation or EXPLANATIONS[key], key in PENDING, charge > 0)
 
 
 def _batch(job):
@@ -54,37 +82,41 @@ def _batch(job):
 
 def doctor_status(job):
     """The doctor's words for one request. A complete-form part speaks for its whole batch."""
-    from .jobs import CANCELLED_ERROR, NOT_ADOPTED, PLATFORM_FAILURE, billable_outcome
+    from .jobs import CANCELLED_ERROR, NOT_ADOPTED, PLATFORM_FAILURE
     batch = _batch(job)
     if batch is False:
-        return _status('unknown')
+        return _status('unknown', charge=net_charge([job]))
     if batch is not None:
+        charge = net_charge([part.job for part in batch.parts.select_related('job')])
         state = batch.state
-        if state == 'queued':return _status('waiting', BATCH_PREPARING)
-        if state in ('running', 'validating'):return _status('in_progress', BATCH_PREPARING)
-        if state == 'reconciliation':return _status('held')
-        if state == 'succeeded':return _status('completed', charged=True)
+        if state == 'queued':return _status('waiting', BATCH_PREPARING, charge)
+        if state in ('running', 'validating'):return _status('in_progress', BATCH_PREPARING, charge)
+        if state == 'reconciliation':return _status('held', charge=charge)
+        if state == 'succeeded':return _status('completed', charge=charge)
         if state == 'not_adopted':
             return _status('completed_not_applied', 'The complete form was processed but not applied to this document. '
-                                                    'The provider completed it, so it remains charged.', charged=True)
-        if state == 'failed':return _status('not_completed')
-        if state == 'cancelled':return _status('cancelled')
-        return _status('unknown')
+                           + ('The provider completed it, so it remains charged; Billing shows it.' if charge > 0
+                              else 'No charge is recorded for it.'), charge)
+        if state == 'failed':return _status('not_completed', charge=charge)
+        if state == 'cancelled':return _status('cancelled', charge=charge)
+        return _status('unknown', charge=charge)
+    charge = net_charge([job])
     state, error = job.state, job.error or ''
-    if state == 'queued':return _status('waiting')
-    if state in ('running', 'staged', 'validating'):return _status('in_progress')
-    if state == 'reconciliation':return _status('held')
-    if state == 'succeeded':return _status('completed', charged=billable_outcome(job))
-    if state == 'cancelled' or error == CANCELLED_ERROR:return _status('cancelled')
+    if state == 'queued':return _status('waiting', charge=charge)
+    if state in ('running', 'staged', 'validating'):return _status('in_progress', charge=charge)
+    if state == 'reconciliation':return _status('held', charge=charge)
+    if state == 'succeeded':return _status('completed', charge=charge)
+    if state == 'cancelled' or error == CANCELLED_ERROR:return _status('cancelled', charge=charge)
     if state == 'failed':
         if error.startswith(NOT_ADOPTED):
-            return _status('completed_not_applied', error[len(NOT_ADOPTED):] + ' The provider completed this request, so '
-                                                    'it remains charged.', charged=billable_outcome(job))
+            return _status('completed_not_applied', error[len(NOT_ADOPTED):] + (
+                ' The provider completed this request, so it remains charged; Billing shows it.' if charge > 0
+                else ' No charge is recorded for it.'), charge)
         if error.startswith(PLATFORM_FAILURE):
             return _status('not_completed', error[len(PLATFORM_FAILURE):] + ' This was a platform failure; it is not '
-                                            'charged to you.')
-        return _status('not_completed')
-    return _status('unknown')
+                                            'charged to you.', charge)
+        return _status('not_completed', charge=charge)
+    return _status('unknown', charge=charge)
 
 
 ENCOUNTER_LABELS = {'draft': 'Draft', 'review': 'Answers ready for review', 'finalized': 'Finalized', 'redacted': 'Redacted'}

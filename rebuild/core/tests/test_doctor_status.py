@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core import doctor_status as ds
-from core.jobs import CANCELLED_ERROR, LATE_RECEIPT, NOT_ADOPTED, PLATFORM_FAILURE, billable_outcome
+from core.jobs import CANCELLED_ERROR, LATE_RECEIPT, NOT_ADOPTED, PLATFORM_FAILURE
 from core.models import Job, LedgerEntry, Reservation, Usage, Wallet
 from . import test_workflow
 from .test_workflow import TEST_SETTINGS
@@ -40,7 +40,9 @@ class Mapping(TestCase):
                 self.assertIn(status.key, ds.LABELS)
                 self.assertIsNone(INTERNAL.search(status.label + ' ' + status.explanation), status)
                 self.assertNotEqual(status.key, 'unknown')
-                self.assertEqual(status.charged, billable_outcome(self.job(state, error)))  # billing's predicate, not wording
+                # Refutation F5: `charged` is what the ledger shows (core.tests.test_doctor_status_ledger), not a reading of
+                # the state; these unsaved jobs have no ledger entries, so none is charged.
+                self.assertFalse(status.charged)
 
     def test_pending_held_and_ended_states_say_what_happens_to_the_money(self):
         self.assertEqual(ds.doctor_status(self.job('queued')).label, 'Waiting to start')
@@ -48,7 +50,7 @@ class Mapping(TestCase):
         held = ds.doctor_status(self.job('reconciliation', LATE_RECEIPT))
         self.assertEqual((held.label, held.pending), ('On hold for review', True))
         self.assertIn('within the maximum you approved', held.explanation)
-        self.assertIn('remains charged', ds.doctor_status(self.job('failed', NOT_ADOPTED + 'Changed.')).explanation)
+        self.assertIn('No charge is recorded', ds.doctor_status(self.job('failed', NOT_ADOPTED + 'Changed.')).explanation)
         self.assertIn('not charged to you', ds.doctor_status(self.job('failed', PLATFORM_FAILURE + 'Error.')).explanation)
         self.assertEqual(ds.doctor_status(self.job('cancelled', CANCELLED_ERROR)).explanation,
                          'Cancelled before any provider request; nothing was charged.')
