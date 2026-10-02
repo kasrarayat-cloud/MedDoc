@@ -4963,9 +4963,7 @@ def role_reading(answer):
     if not isinstance(text,str) or not text.strip() or len(text)>destination_roles.SUGGESTION_LIMIT:return None
     if any(answer.get(flag) for flag in ('held_candidate','suggestion','not_patient','governed_acceptance')):return None
     evidence=answer.get('own_evidence') or answer.get('evidence') or []
-    if not evidence or not all(isinstance(entry,dict) and isinstance(entry.get('quote'),str) and isinstance(entry.get('start'),int)
-                               and isinstance(entry.get('end'),int) for entry in evidence):
-        return None
+    if not evidence:return None
     return {'text':text,'evidence':[{'quote':entry['quote'],'start':entry['start'],'end':entry['end']} for entry in evidence]}
 
 

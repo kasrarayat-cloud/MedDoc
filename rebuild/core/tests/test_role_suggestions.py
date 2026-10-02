@@ -847,6 +847,23 @@ class Review(Legacy, TestCase):
                 self.unchanged(fresh, self.accept(fresh, key=target, value=value), 400)
         self.assertEqual(self.accept(e).status_code, 302)        # positive control: the untouched offer is accepted
 
+    def test_one_bad_stored_offer_withholds_only_itself(self):
+        """The page and the act read every offer again together; one that cannot be read withholds only itself."""
+        self.version = self.uploaded(data=legacy_rows('Troponin (initial)', 'Lactate (initial)', 'Plan'),
+                                     name='Synthetic two role rows')[1]
+        self.by = self.by_label(self.version)
+        notes = 'Troponin (initial): 14 ng/L\nLactate (initial): 2.1 mmol/L\nPlan: Rest.'
+        e = self.generated(notes)
+        lactate = self.key('Lactate (initial)')
+        self.assertEqual(self.client.get(f'/encounters/{e.pk}/').content.decode().count('data-role-suggestion'), 2)
+        broken = {**e.answers[lactate], 'role_suggestion': {'text': '2.1', 'evidence': [
+            {'quote': '2.1', 'start': notes.index('2.1'), 'end': notes.index('2.1') + 3}]}}
+        Encounter.objects.filter(pk=e.pk).update(answers={**e.answers, lactate: broken})
+        e.refresh_from_db()
+        self.assertEqual(self.client.get(f'/encounters/{e.pk}/').content.decode().count('data-role-suggestion'), 1)
+        self.unchanged(e, self.accept(e, key=lactate, value='2.1'), 400)
+        self.assertEqual(self.accept(e).status_code, 302)
+
     def test_the_act_refuses_a_stored_suggestion_on_a_contract_v3_or_qualified_word_version(self):
         """F05: the act's own form checks are the only barrier for stored state on those versions."""
         for name, extra in (('qualified Word form', {'document_backend': {'backend': 'synthetic-qualified'}}),
