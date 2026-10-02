@@ -832,6 +832,7 @@ class Review(Legacy, TestCase):
                 'text': '14 ng/L', 'evidence': [{'start': 20, 'end': 27}]}}}, key, '14 ng/L'),
             ('evidence not a list', NOTES, {key: {**e.answers[key], 'role_suggestion': {
                 'text': '14 ng/L', 'evidence': '14 ng/L'}}}, key, '14 ng/L'),
+            ('no evidence at all', NOTES, {key: {**e.answers[key], 'role_suggestion': {'text': '14 ng/L'}}}, key, '14 ng/L'),
             ('evidence entry not a dict', NOTES, {key: {**e.answers[key], 'role_suggestion': {
                 'text': '14 ng/L', 'evidence': ['14 ng/L']}}}, key, '14 ng/L'),
             ('quote not text', NOTES, {key: {**e.answers[key], 'role_suggestion': {
