@@ -384,6 +384,122 @@ class CodingLedger(TestCase):
         self.assertNotIn('data-hidden-cpt', page); self.assertNotIn('/withdraw/', page)
         self.assertIn('No code suggestions yet', page)
 
+    # Refutation round 3 of 75d11c09, coding lens (R3C-1..R3C-5) and its false greens (R3F-7, R3F-8, R3F-12..R3F-14).
+    def said_unlabelled(self, text):
+        return 'not labelled as one; not suggested' in text
+
+    def test_R3C1_a_labelled_list_reads_only_items_written_as_codes(self):
+        """75d11c09: CODE_LIST took any code-shaped token after a separator, so a label followed by a synoptic line absorbed
+        the stain or gene name next to it ('ICD-10 C18.7, p53 wild-type' suggested P53, hemorrhagic disease of newborn, as
+        explicitly documented, and it was accepted). The code right after a label is labelled; each LATER item of its list
+        must be written in capitals and end its item (a separator, a closing mark or the end of the line)."""
+        icd_release({'C18.7': 'Synthetic sigmoid colon', 'P53': 'Synthetic hemorrhagic disease of newborn',
+                     'L45': 'Synthetic papulosquamous disorder', 'M51.26': 'Synthetic lumbar disc', 'I10': 'Synthetic hypertension',
+                     'R51': 'Synthetic headache'})
+        for notes, suggested in (
+                ('Pathology: sigmoid adenocarcinoma, ICD-10 C18.7, p53 wild-type pattern, MMR proficient.', ['C18.7']),
+                ('Diagnosis codes: C18.7; p53 wild-type; MMR proficient.', ['C18.7']),
+                ('ICD-10: TBD, p53 wild-type, MMR intact.', []),
+                ('ICD-10: M51.26; L45 herniation with radiculopathy.', ['M51.26']),
+                ('Assessment: ICD-10: I10 and p53 wild-type on the biopsy.', ['I10']),
+                ('ICD-10: C18.7, p53, MMR proficient.', ['C18.7']),                # a later item in lower case
+                ('ICD-10: R51, I10 hypertension.', ['R51']),                        # the cost: an item followed by words
+                ('ICD-10: R51, I10.', ['I10', 'R51']), ('ICD-10: R51, and I10', ['I10', 'R51']),
+                ('ICD-10: R51 or I10', ['I10', 'R51']), ('ICD-10: R51 & I10', ['I10', 'R51']),     # R3C-5, R3F-13
+                ('ICD: R51/I10', ['I10', 'R51']), ('ICD: I10.', ['I10'])):                      # R3F-13, R3F-14
+            with self.subTest(notes=notes):
+                encounter = self.another(notes)
+                text = self.text(self.suggest(encounter))
+                self.assertEqual(self.suggested(encounter), suggested)          # 75d11c09: P53 and L45 suggested
+                three = [code for code in ('P53', 'L45', 'I10', 'R51') if code.lower() in notes.lower()]
+                self.assertEqual(self.said_unlabelled(text), bool(set(three) - set(suggested)), text)
+
+    def test_R3C2_a_code_written_touching_other_characters_is_said(self):
+        """75d11c09 (and before): a code the release holds, written '1.R07.9' or 'R07.9.Plan', was found by the lookup but
+        refused by the evidence reading, which reached no counter: nothing suggested, nothing said."""
+        icd_release({'R07.9': 'Synthetic chest pain code', 'I10': 'Synthetic hypertension', 'E11.9': 'Synthetic diabetes'})
+        for notes, said in (('Assessment:\n1.R07.9 Chest pain\n2.ICD-10 I10 Hypertension\n3.E11.9 Type 2 diabetes\nPlan: follow up.',
+                             '2 codes from the release in effect are written touching'),
+                            ('Assessment: chest pain R07.9.Plan: follow up.', '1 code from the release in effect is written touching'),
+                            ('Assessment: chest pain.R07.9 noted.', '1 code from the release in effect is written touching')):
+            with self.subTest(notes=notes):
+                encounter = self.another(notes)
+                text = self.text(self.suggest(encounter))
+                self.assertIn(said, text)                                         # 75d11c09: nothing said
+                self.assertEqual(AuditEvent.objects.filter(action='coding.suggest').latest('created_at').details[
+                    'written_touching'], int(said[0]))
+        control = self.another('Assessment:\n1. R07.9 Chest pain\n2. ICD-10 I10 Hypertension\n3. E11.9 Type 2 diabetes')
+        self.assertNotIn('written touching', self.text(self.suggest(control)))
+        self.assertEqual(self.suggested(control), ['E11.9', 'I10', 'R07.9'])
+
+    def test_R3C3_a_category_with_a_letter_second_is_counted_with_or_without_its_dot(self):
+        """FY2026 holds QA0.* (a letter second). C2's 'digit second' made a mistyped QA0 code silent."""
+        icd_release({'QA0.0101': 'Synthetic FY2026 code', 'QA0.8': 'Synthetic FY2026 code', 'R07.9': 'Synthetic chest pain code'})
+        for notes, said in (('Assessment: QA0.019 documented.', '1 entry in the notes written like a diagnosis code is not a code'),
+                            ('Assessment: QA00101 documented.', '1 entry in the notes looks like a code written without a dot')):
+            with self.subTest(notes=notes):
+                encounter = self.another(notes)
+                self.assertIn(said, self.text(self.suggest(encounter)))          # 75d11c09: nothing said
+                self.assertEqual(self.suggested(encounter), [])
+        control = self.another('Assessment: QA0.0101 documented; denies SOB.Has cough.')
+        text = self.text(self.suggest(control))
+        self.assertEqual(self.suggested(control), ['QA0.0101'])
+        self.assertNotIn('not a code in that release', text)                      # C2 still holds for words joined by a dot
+
+    def test_R3C5_R3F12_R3F13_every_labelled_cpt_form_and_separator_is_counted(self):
+        icd_release({'R07.9': 'Synthetic chest pain code'})
+        for notes, count in (('Plan: CPT 99213 & 36415.', 2), ('Plan: CPT 99213, 99214 & 36415.', 3),   # 75d11c09: 1, 2
+                             ('Plan: CPT 99213 + 36415.', 2), ('Plan: office visit, CPT(R) 99213.', 1),
+                             ('Plan: CPT 99213/36415.', 2), ('Plan: CPT 99213 or 36415.', 2), ('Plan: CPT 99213, and 36415.', 2)):
+            with self.subTest(notes=notes):
+                text = self.text(self.suggest(self.another(notes + '\nAssessment: R07.9.')))
+                self.assertIn(f'{count} CPT code{"" if count == 1 else "s"} named in the notes '
+                              f'{"was" if count == 1 else "were"} not looked up: CPT content', text)
+
+    def hidden_cpt_acceptance(self):
+        icd_release(); cpt = cpt_release()
+        encounter = self.another('Symptoms: No chest pain, CPT 99213.\nExamination: Normal gait.')
+        stored = CodeSuggestion.objects.create(encounter=encounter, terminology=Code.objects.get(release=cpt, code='99213'),
+            evidence='Symptoms: No chest pain, CPT 99213.', explanation='Stored CPT', accepted_by=self.user, accepted_at=timezone.now())
+        return encounter, stored
+
+    def test_R3C4_withdrawing_a_hidden_cpt_acceptance_never_records_its_code(self):
+        encounter, stored = self.hidden_cpt_acceptance()
+        encounter.refresh_from_db()
+        response = self.client.post(f'/encounters/{encounter.pk}/coding/{stored.pk}/withdraw/',
+                                    {'revision': encounter.revision, 'accepted': self.acceptance(stored)})
+        self.assertEqual(response.status_code, 302)
+        event = AuditEvent.objects.get(action='coding.withdraw', target=str(stored.pk))
+        self.assertNotIn('99213', json.dumps(event.details))                      # 75d11c09: {'code': '99213', ...}
+        self.assertEqual(event.details['system'], 'CPT')
+
+    def test_R3F7_the_hidden_form_posts_the_acceptance_it_renders(self):
+        import re
+        encounter, stored = self.hidden_cpt_acceptance()
+        self.save_notes(encounter, 'Symptoms: No chest pain, CPT 99213.\nExamination: Normal gait, steady.')
+        page = self.client.get(f'/encounters/{encounter.pk}/?tab=coding').content.decode()
+        section = re.search(r'<section class="answer" data-hidden-cpt>.*?</section>', page, re.S).group()
+        action = re.search(r'<form method="post" action="([^"]+)"', section).group(1)
+        fields = dict(re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)"', section))
+        self.assertEqual(self.client.post(action, fields).status_code, 302)       # without 'accepted': 409 for good
+        self.assertFalse(CodeSuggestion.objects.filter(pk=stored.pk).exists())
+
+    def test_R3F8_a_withdraw_from_a_page_older_than_the_same_clinicians_re_acceptance_is_refused(self):
+        icd_release()
+        encounter = self.another(self.NOTES); self.suggest(encounter)
+        code = CodeSuggestion.objects.get(encounter=encounter); self.accept(encounter, code)
+        self.save_notes(encounter, self.NOTES + '\nPlan: follow up.')
+        shown = self.acceptance(code)                                            # B's page shows A's acceptance
+        b = m.User.objects.create_user(username='coding-b2', email='coding-b2@synthetic.invalid', verified_at=timezone.now())
+        m.Membership.objects.create(user=b, department=self.department, role='clinician')
+        from django.test import Client
+        b_client = Client(); b_client.force_login(b)
+        self.assertEqual(self.accept(encounter, code).status_code, 302)          # A accepts again: same clinician
+        encounter.refresh_from_db()
+        self.assertEqual(b_client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
+                                       {'revision': encounter.revision, 'accepted': shown}).status_code, 409)
+        self.assertTrue(CodeSuggestion.objects.filter(pk=code.pk, accepted_by=self.user).exists())
+
     def test_no_cpt_code_is_imported_suggested_shown_accepted_or_exported_in_any_mode(self):
         icd_release(); cpt = cpt_release()
         encounter = self.document('Symptoms: No chest pain.\nExamination: Normal gait.\nPlan: visit documented as CPT 99213 and R07.9.')

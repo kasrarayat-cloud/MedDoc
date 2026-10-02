@@ -1893,7 +1893,11 @@ def coding(request,pk):
     unlabelled=(f' {result.unlabelled} three-character entr{"y" if one else "ies"} in the notes match{"es" if one else ""} a diagnosis '
                 f'code but {"is" if one else "are"} not labelled as one; not suggested (p53 or B12 can name a lab test or a gene). '
                 'Write the code after a code label, such as "ICD-10: I10", to have it suggested.' if result.unlabelled else '')
-    over+=unmatched+dotless+unlabelled+withheld
+    two=result.touching!=1
+    touching=(f' {result.touching} code{"s" if two else ""} from the release in effect {"are" if two else "is"} written touching '
+              f'other characters (as in "1.R07.9" or "R07.9.Plan") and {"were" if two else "was"} not suggested; leave a space '
+              'before and after a code to have it suggested.' if result.touching else '')
+    over+=unmatched+dotless+unlabelled+touching+withheld
     if result.covered:
         messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
@@ -1972,8 +1976,13 @@ def withdraw_code(request,pk,code_pk):
     previous,release=item.accepted_by_id,item.terminology.release
     CodeSuggestion.objects.filter(pk=item.pk).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(pk=item.pk).delete()
-    audit(request.user,'coding.withdraw',item.pk,department=e.department,code=item.code,release=release.version,
-          release_sha256=release.sha256,previously_accepted_by=str(previous),review_required=item.review_required)
+    # ⚠️ A CPT CODE IS NEVER DISPLAYED WHILE CPT IS LOCKED, and the audit console renders every detail: a hidden CPT
+    # acceptance's withdrawal records its system, never its code (refutation R3C-4 of 75d11c09: '99213' was rendered).
+    from .coding import cpt_licensed
+    shown=item.system!='CPT' or (cpt_licensed() and release.license_reference==settings.CPT_LICENSE_ID)
+    audit(request.user,'coding.withdraw',item.pk,department=e.department,**({'code':item.code} if shown else {'system':'CPT'}),
+          release=release.version,release_sha256=release.sha256,previously_accepted_by=str(previous),
+          review_required=item.review_required)
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 def billing(request):
