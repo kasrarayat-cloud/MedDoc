@@ -142,6 +142,11 @@ class DeclaredChangeFixture(TestCase):
         self.assertEqual((details['command'], details['reason'], details['approver'], details['change_target']),
                          (operation, reason, str(approver.pk), str(target)))
         self.assertEqual((details['operator_uid'], details['operator_euid']), (os.getuid(), os.geteuid()))
+        # The record names the declaration it was for (round-3 m4: a record without it passed).
+        for key in ('door', 'declaration', 'declaration_commit', 'declaration_sha256', 'declaration_key',
+                    'act_identity'):
+            self.assertTrue(details.get(key), f'the refusal record does not name {key}')
+        self.assertEqual(details['declaration'], relative)
         written = Path(code_file).read_text().strip()
         self.assertNotIn(written, json.dumps(details), 'the presented code reached the audit trail')
         return event
@@ -263,11 +268,29 @@ class ElevateAdditionalAdministrator(DeclaredChangeFixture):
         """R5-a for the repository door: another file with the same act, laid out differently, is the same act."""
         relative, door = self.declare(self.text(authority.ELEVATE, self.doctor))
         self.perform(authority.ELEVATE, relative, self.doctor.pk, door)
-        User.objects.filter(pk=self.doctor.pk).update(is_staff=False)
         copy = self.text(authority.ELEVATE, self.doctor).replace('# Declaration — synthetic', '# Copy\n\nMore prose.')
         copy = copy.replace(': ', ':   ')
         relative, door = self.declare(copy, name='20261001-quillmd-admin-copy.md')
-        self.assertRefusedUnchanged('already been used', authority.ELEVATE, relative, self.doctor.pk, door)
+        self.assertRefusedUnchanged('same act was already performed', authority.ELEVATE, relative, self.doctor.pk, door)
+
+    def test_the_reason_is_compared_after_unicode_and_whitespace_normalisation(self):
+        """Round-3 m2 and R3-3: a copy whose reason differs only in internal whitespace, Unicode composition (NFD
+        against NFC) or invisible format characters (a zero-width space) is the same act."""
+        reason = 'Synthetic second administrator, Zoë checked the roster'
+        relative, door = self.declare(self.text(authority.ELEVATE, self.doctor, reason=reason))
+        self.perform(authority.ELEVATE, relative, self.doctor.pk, door)
+        import unicodedata
+        variants = {'doubled spaces': reason.replace(' ', '  '),
+                    'decomposed (NFD)': unicodedata.normalize('NFD', reason),
+                    'a zero-width space': reason.replace('second', 'sec\u200bond'),
+                    'a soft hyphen and a tab': reason.replace('administrator', 'admin\u00adistrator').replace(' ', '\t', 1)}
+        for index, (label, variant) in enumerate(variants.items()):
+            with self.subTest(variant=label):
+                self.assertNotEqual(variant, reason)
+                relative, door = self.declare(self.text(authority.ELEVATE, self.doctor, reason=variant),
+                                              name=f'20261001-quillmd-admin-variant{index}.md')
+                self.assertRefusedUnchanged('same act was already performed', authority.ELEVATE, relative,
+                                            self.doctor.pk, door)
 
     def test_template_placeholders_and_missing_lines_refuse(self):
         relative, door = self.declare(self.text(authority.ELEVATE, self.doctor, reason='<FILL why>'))
@@ -644,11 +667,170 @@ class ApproverPresence(DeclaredChangeFixture):
         os.mkfifo(fifo, 0o600)
         self.refused_without_hanging(path, self.codes / 'code', swap=str(fifo))
 
+    def second_phone(self):
+        return TOTPDevice.objects.create(user=self.approver, name='Approver second phone', confirmed=True)
+
+    def test_approvals_with_the_second_device_never_count_against_the_first(self):
+        """Round-3 R3-1, a real lockout: with two confirmed authenticators, an approval with the SECOND device's code
+        tried the first device too, and its failed verify_token committed a failure inside the successful act — five
+        approvals left the first phone throttled for 16 s and sign-in (which uses the first device) refused its
+        correct code. A successful act leaves every device but the one that verified exactly as it was."""
+        second = self.second_phone()
+        first_before = TOTPDevice.objects.filter(pk=self.approver_device.pk).values(
+            'throttling_failure_count', 'throttling_failure_timestamp', 'last_t').get()
+        for round_ in range(3):
+            target = User.objects.create_user(username=f'roster-{round_}', email=f'roster-{round_}@synthetic.invalid',
+                                              password=PASSWORD, verified_at=timezone.now())
+            TOTPDevice.objects.create(user=target, name='Target', confirmed=True)
+            relative, door = self.declare(self.text(authority.ELEVATE, target),
+                                          name=f'20261001-quillmd-admin-round{round_}.md')
+            TOTPDevice.objects.filter(pk=second.pk).update(last_t=-1)   # the next step's code, as half a minute later
+            result = self.perform(authority.ELEVATE, relative, target.pk, door, code_file=self.code_file(device=second))
+            self.assertEqual(result['approver_presence'], 'verified')
+            self.assertTrue(User.objects.get(pk=target.pk).is_staff)
+        self.assertEqual(TOTPDevice.objects.filter(pk=self.approver_device.pk).values(
+            'throttling_failure_count', 'throttling_failure_timestamp', 'last_t').get(), first_before)
+        events = AuditEvent.objects.filter(action='account.admin_elevated').values_list('details__approver_device',
+                                                                                         flat=True)
+        self.assertEqual(set(events), {second.persistent_id})
+        # And the approver signs in with the FIRST phone's correct code, as sign-in (views.login_view) checks it.
+        with override_settings(ADMIN_SITE=True, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES):
+            self.approver_device.refresh_from_db()
+            response = Client().post('/login/', {'email': self.approver.email, 'password': PASSWORD,
+                                                 'otp': code(self.approver_device)})
+        self.assertEqual((response.status_code, response.url), (302, '/console/'))
+
+    def test_a_wrong_code_counts_on_every_device_it_was_tried_against(self):
+        """Round-3 m5: with one device, counting only the first passed. Two devices, both counted."""
+        second = self.second_phone()
+        relative, door = self.declared()
+        wrong = next(value for value in ('000000', '111111', '222222')
+                     if value not in (code(self.approver_device), code(second)))
+        self.assertAbsenceRecorded('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
+                                   self.code_file(value=wrong), reason='approver_code_not_verified')
+
+    def test_a_file_swapped_after_the_open_is_judged_by_what_was_opened(self):
+        """Round-3 m1: with the swap made BEFORE the open, a check of the path after the open still saw the bad file.
+        Here the path is replaced AFTER the descriptor is opened: the descriptor holds a mode-0644 file, the path a
+        0600 one. Only a check of the open descriptor refuses."""
+        relative, door = self.declared()
+        good = Path(self.code_file())
+        readable, spare = self.codes / 'readable', self.codes / 'spare'
+        readable.write_text(good.read_text())
+        readable.chmod(0o644)
+        spare.write_text(good.read_text())
+        spare.chmod(0o600)
+        os.replace(readable, good)
+        real_open = os.open
+
+        def open_then_swap(path, flags, *args, **kwargs):
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if os.path.basename(os.fsdecode(path)) == 'code' and spare.exists():
+                os.replace(spare, good)
+            return descriptor
+        with patch.object(authority.os, 'open', open_then_swap):
+            self.assertRefusedUnchanged('approver code file', authority.ELEVATE, relative, self.doctor.pk, door,
+                                        code_file=str(good))
+        self.assertEqual(good.stat().st_mode & 0o777, 0o600, 'the swap did not happen; the test proves nothing')
+
+    def test_a_search_only_directory_is_enough_and_refusals_name_their_cause(self):
+        """Round-3 R3-4: the walk opened each directory for READING, which the kernel does not need to reach a file:
+        a 0600 file in a 0300 (search-only) directory was refused, with a message blaming links. The walk opens
+        directories by path only (O_PATH), and each refusal names its cause."""
+        relative, door = self.declared()
+        hidden = self.codes / 'search-only'
+        hidden.mkdir()
+        path = self.code_file(name='search-only/code')
+        hidden.chmod(0o300)
+        self.addCleanup(hidden.chmod, 0o700)
+        closed = self.codes / 'closed'
+        closed.mkdir()
+        self.code_file(name='closed/code')
+        closed.chmod(0o600)
+        self.addCleanup(closed.chmod, 0o700)
+        (self.codes / 'via').symlink_to(self.codes / 'closed')
+        for label, given, cause in (('missing', str(self.codes / 'absent'), 'does not exist'),
+                                    ('a link in the path', str(self.codes / 'via' / 'code'), 'symbolic link'),
+                                    ('a directory without search permission', str(closed / 'code'), 'permission')):
+            with self.subTest(case=label):
+                self.assertRefusedUnchanged(cause, authority.ELEVATE, relative, self.doctor.pk, door, code_file=given)
+        self.perform(authority.ELEVATE, relative, self.doctor.pk, door, code_file=path)
+        self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
+
     def test_positive_control_the_approvers_current_code_in_a_0600_file_is_presence(self):
         relative, door = self.declared()
         result = self.perform(authority.ELEVATE, relative, self.doctor.pk, door)
         self.assertEqual(result['approver_presence'], 'verified')
         self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
+
+
+@override_settings(QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES)
+class RepeatsAreNotCopies(DeclaredChangeFixture):
+    """Round-3 R3-2: keyed on the act alone, a legitimate repeat — the same administrator reset again by the same
+    approver after re-enrolling, with the same templated reason — was refused forever, naming the new declaration.
+    Single use now binds the act to the target state it left: the SAME declaration is always refused; another
+    declaration for the same act is refused as a copy while the target is still as that act left it, and performed once
+    the target has changed (re-enrolment). The message says which."""
+
+    REASON = 'Lost phone; identity checked on a video call by the approver'
+
+    def reset(self, name):
+        relative, door = self.declare(self.text(authority.RESET, self.admin, reason=self.REASON), name=name)
+        TOTPDevice.objects.filter(pk=self.approver_device.pk).update(last_t=-1)   # a fresh code each time
+        return relative, door
+
+    def reenrol(self):
+        """The administrator re-enrols through the real pages: password-only sign-in in the window, /mfa/."""
+        import html
+        import re
+        from base64 import b32decode
+        from urllib.parse import parse_qs, urlsplit
+        client = Client()
+        with override_settings(ADMIN_SITE=True):
+            self.assertEqual(client.post('/login/', {'email': self.admin.email, 'password': PASSWORD,
+                                                     'otp': ''}).url, '/mfa/')
+            page = client.get('/mfa/').content.decode()
+            uri = html.unescape(re.search(r'<textarea id="mfa-uri"[^>]*>(.*?)</textarea>', page).group(1))
+            secret = parse_qs(urlsplit(uri).query)['secret'][0]
+            key = b32decode(secret + '=' * (-len(secret) % 8))
+            self.assertEqual(client.post('/mfa/', {'code': str(totp(key, step=30, t0=0, digits=6)).zfill(6)}).url,
+                             '/console/')
+
+    def test_a_copy_is_refused_and_a_genuine_repeat_after_reenrolment_is_performed(self):
+        first, door = self.reset('20261001-quillmd-admin-reset-1.md')
+        self.perform(authority.RESET, first, self.admin.pk, door)
+        second, second_door = self.reset('20261001-quillmd-admin-reset-2.md')
+        refused = None
+        try:
+            self.perform(authority.RESET, second, self.admin.pk, second_door)
+        except Refused as exc:
+            refused = str(exc)
+        self.assertIsNotNone(refused, 'a copy made before anything changed was performed')
+        self.assertIn('same act was already performed', refused)
+        self.assertIn(first, refused, 'the copy refusal names the declaration that performed the act')
+        self.assertNotIn(second, refused, 'the copy refusal names the new declaration as if it had been used')
+        self.reenrol()
+        # The very same first declaration stays used, whatever has changed since.
+        self.assertRefusedUnchanged('already been used', authority.RESET, first, self.admin.pk, door)
+        # A new declaration for the same act, after re-enrolment: a genuine repeat.
+        TOTPDevice.objects.filter(pk=self.approver_device.pk).update(last_t=-1)
+        result = self.perform(authority.RESET, second, self.admin.pk, second_door)
+        self.assertEqual(result['devices_removed'], 1)
+        self.assertEqual(AuditEvent.objects.filter(action='account.admin_mfa_reset').count(), 2)
+
+    def test_the_approver_is_part_of_the_act(self):
+        """Round-3 m3: the same reset approved by ANOTHER administrator, with her own present code, is a decision of
+        its own and is performed; dropping the approver from the act would refuse it as a copy."""
+        other = User.objects.create_user(username='approver-two', email='approver-two@synthetic.invalid',
+                                         password=PASSWORD, verified_at=timezone.now(), is_staff=True)
+        other_device = TOTPDevice.objects.create(user=other, name='Approver two', confirmed=True)
+        first, door = self.reset('20261001-quillmd-admin-reset-1.md')
+        self.perform(authority.RESET, first, self.admin.pk, door)
+        relative, door = self.declare(self.text(authority.RESET, self.admin, approver=other, reason=self.REASON),
+                                      name='20261001-quillmd-admin-reset-other.md')
+        result = self.perform(authority.RESET, relative, self.admin.pk, door,
+                              code_file=self.code_file(device=other_device))
+        self.assertEqual(result['approver'], str(other.pk))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -806,20 +988,25 @@ class ProductionDoor(DeclaredChangeFixture):
         from datetime import datetime, timezone as tz
         declaration = production_declaration(authority.ELEVATE, self.doctor, self.approver)
         self.act(authority.ELEVATE, self.write(declaration), self.doctor.pk)
-        User.objects.filter(pk=self.doctor.pk).update(is_staff=False)
         reordered = dict(reversed(list(declaration.items())))
         later = dict(declaration, expires_at=(datetime.now(tz.utc) + timedelta(hours=2)).isoformat())
+        # The same declaration, however serialized, is the same declaration: refused whatever happens later.
         for index, text in enumerate((json.dumps(declaration, indent=2), json.dumps(reordered, separators=(',', ':')),
-                                      ' ' + json.dumps(declaration) + '\n\n', json.dumps(later))):
+                                      ' ' + json.dumps(declaration) + '\n\n')):
             with self.subTest(copy=index):
                 path = self.codes / f'copy{index}.json'
                 path.write_text(text)
                 self.refused_unchanged('already been used', authority.ELEVATE, path, self.doctor.pk)
-        # Positive control: another act (another reason) is a declaration of its own. The approver's current code was
-        # consumed by the first act; the next one is the next step's code, as it would be half a minute later.
+        # A re-issued declaration (new expiry) for the same act, while the target is as that act left it: a copy.
+        self.refused_unchanged('same act was already performed', authority.ELEVATE, self.write(later, 'later.json'),
+                               self.doctor.pk)
+        # Round-3 R3-2, the positive control: once the target's state has changed (demoted, by whatever means), the
+        # re-issued declaration is a genuine repeat and is performed; the original one stays used. The approver's
+        # current code was consumed by the first act; the next one is the next step's, as half a minute later.
+        User.objects.filter(pk=self.doctor.pk).update(is_staff=False)
         TOTPDevice.objects.filter(pk=self.approver_device.pk).update(last_t=-1)
-        self.act(authority.ELEVATE, self.write(dict(declaration, reason='A second synthetic roster change, by phone'),
-                                               'second.json'), self.doctor.pk)
+        self.refused_unchanged('already been used', authority.ELEVATE, self.codes / 'copy0.json', self.doctor.pk)
+        self.act(authority.ELEVATE, self.codes / 'later.json', self.doctor.pk)
         self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
 
     def test_a_production_declaration_is_used_once_and_needs_the_approver(self):

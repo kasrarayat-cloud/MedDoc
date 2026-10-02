@@ -54,7 +54,10 @@ import hashlib
 import json
 import os
 import re
+import errno
 import stat
+import time
+import unicodedata
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -159,6 +162,9 @@ def repository_declared(operation, declaration, target, *, repository=None, envi
     provenance = {'door': 'repository', 'declaration': relative, 'declaration_commit': commit,
                   'declaration_committed_at': commit_time, 'declaration_author': author,
                   'declaration_committer': committer, 'declaration_sha256': hashlib.sha256(data).hexdigest(),
+                  # the declaration itself: this file, these bytes
+                  'declaration_key': hashlib.sha256(canonical({'path': relative,
+                                                               'sha256': hashlib.sha256(data).hexdigest()}).encode()).hexdigest(),
                   'door_commit': door['commit']}
     return fields, provenance
 
@@ -197,23 +203,49 @@ def production_declared(operation, declaration, target):
     provenance = {'door': 'production', 'declaration': Path(named).name,
                   'declaration_commit': os.environ.get('RULED_MUTATION_DECL_COMMIT', ''),
                   'declaration_sha256': hashlib.sha256(data).hexdigest(), 'release_sha': authority['release_sha'],
+                  # the declaration itself, however serialized: its canonical content
+                  'declaration_key': hashlib.sha256(canonical(authority).encode()).hexdigest(),
                   'profile_sha256': profile.sha256}
     return fields, provenance
 
 
+#: What an open of the code file can meet, in words an operator can act on (errno -> cause).
+OPEN_CAUSES = {errno.ENOENT: 'it does not exist', errno.EACCES: 'permission denied (a directory on its path needs '
+               'search permission, the file read permission, for this account)', errno.ELOOP: 'a symbolic link is in '
+               'its path', errno.ENOTDIR: 'a component of its path is not a directory'}
+
+
+class _Unreachable(Exception):
+    def __init__(self, component, cause):
+        super().__init__(cause)
+        self.component, self.cause = component, cause
+
+
 def _open_without_links(path):
-    """A read descriptor for absolute `path`, opened one component at a time from / with O_NOFOLLOW, so a symbolic
-    link ANYWHERE in the path refuses (lstat and O_NOFOLLOW on the full path see only its last component), and with
-    O_NONBLOCK, so a FIFO or device answers at once instead of blocking the command (refutation R7-b)."""
-    common = os.O_CLOEXEC | os.O_NOFOLLOW
+    """A read descriptor for absolute `path`, reached one component at a time from / with O_NOFOLLOW, so a symbolic
+    link ANYWHERE in the path refuses (lstat and O_NOFOLLOW on the full path see only its last component). Directories
+    are opened by PATH only (O_PATH), which needs search permission and not read permission, as the kernel itself does
+    to reach a file (round-3 R3-4), and each is confirmed to BE a directory; the file is opened with O_NONBLOCK, so a
+    FIFO or device answers at once instead of blocking the command (refutation R7-b)."""
+    walk = os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
     parts = path.parts
-    directory = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    directory = os.open('/', walk)
     try:
-        for part in parts[1:-1]:
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | common, dir_fd=directory)
+        for index, part in enumerate(parts[1:-1], start=1):
+            try:
+                child = os.open(part, walk, dir_fd=directory)
+            except OSError as exc:
+                raise _Unreachable(part, 'a symbolic link is in its path' if exc.errno in (errno.ELOOP, errno.ENOTDIR)
+                                   and os.path.islink(os.path.join('/', *parts[1:index + 1]))
+                                   else OPEN_CAUSES.get(exc.errno, os.strerror(exc.errno or 0))) from None
             os.close(directory)
             directory = child
-        return os.open(parts[-1], os.O_RDONLY | os.O_NONBLOCK | common, dir_fd=directory)
+            if not stat.S_ISDIR(os.fstat(directory).st_mode):
+                raise _Unreachable(part, 'a symbolic link is in its path')
+        try:
+            return os.open(parts[-1], os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+        except OSError as exc:
+            raise _Unreachable(parts[-1], OPEN_CAUSES.get(exc.errno, os.strerror(exc.errno or 0))) from None
     finally:
         os.close(directory)
 
@@ -227,9 +259,10 @@ def approver_code(path):
                                         'file holding the approver\'s current six-digit authenticator code.')
     try:
         descriptor = _open_without_links(Path(os.path.abspath(path)))
-    except OSError:
-        raise Refused('The approver code file cannot be read: it must exist and be reached with no symbolic link in '
-                      'its path.') from None
+    except _Unreachable as exc:
+        raise Refused(f'The approver code file cannot be read: {exc.cause} (at {exc.component!r}).') from None
+    except OSError as exc:
+        raise Refused(f'The approver code file cannot be read: {os.strerror(exc.errno or 0)}.') from None
     try:
         info = os.fstat(descriptor)
         require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.geteuid()
@@ -278,15 +311,49 @@ def record_absence(operation, fields, provenance, absent):
               operator_uid=os.getuid(), operator_euid=os.geteuid(), **provenance)
 
 
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+
+
+def normalised_reason(reason):
+    """The reason as compared (round-3 m2, R3-3): Unicode NFC, invisible format characters (Cf: zero-width space,
+    soft hyphen, direction marks) removed, every run of whitespace one space. Letter case is kept: it is wording."""
+    text = unicodedata.normalize('NFC', reason)
+    text = ''.join(character for character in text if unicodedata.category(character) != 'Cf')
+    return ' '.join(text.split())
+
+
+def target_state(account):
+    """The state of the target an act changes, as a digest: administrator flag, active flag, session version and the
+    set of confirmed authenticators. An act records the state it LEFT; while the target is still in it, another
+    declaration for the same act is a copy of it (round-3 R3-2)."""
+    devices = sorted(str(pk) for pk in TOTPDevice.objects.filter(user=account, confirmed=True).values_list('pk', flat=True))
+    return hashlib.sha256(canonical({'is_staff': account.is_staff, 'is_active': account.is_active,
+                                     'session_version': account.session_version, 'devices': devices}).encode()).hexdigest()
+
+
+def _matches(device, code):
+    """Whether `code` is `device`'s current code, WITHOUT recording anything on it: verify_token counts a failure on
+    every device it is asked about, so an approval with the second of two authenticators used to throttle the first,
+    inside the act, and lock its holder out of sign-in (round-3 R3-1). Only the device that matches is then verified."""
+    from django_otp.oath import TOTP
+    try:
+        token = int(code)
+    except ValueError:
+        return False
+    totp = TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift)
+    totp.time = time.time()
+    return totp.verify(token, device.tolerance, device.last_t + 1)
+
+
 def act_identity(fields):
     """The act a declaration authorizes, canonically: operation, target, approver and reason as sorted, compact JSON.
     A declaration is single-use by THIS, not by its bytes (refutation R5-a), so a re-serialized, re-formatted or
     re-issued copy of a used declaration is the same act and is refused."""
-    canonical = {'operation': fields['operation'], 'reason': ' '.join(fields['reason'].split()),
-                 'target': [str(fields['target_account']), fields['target_email'].lower()],
-                 'approver': [str(fields['approver_account']), fields['approver_email'].lower()]}
-    return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(',', ':'),
-                                     ensure_ascii=False).encode()).hexdigest()
+    act = {'operation': fields['operation'], 'reason': normalised_reason(fields['reason']),
+           'target': [str(fields['target_account']), fields['target_email'].lower()],
+           'approver': [str(fields['approver_account']), fields['approver_email'].lower()]}
+    return hashlib.sha256(canonical(act).encode()).hexdigest()
 
 
 def perform(operation, declaration, target, approver_code_file=None, *, repository=None, environ=None):
@@ -296,7 +363,7 @@ def perform(operation, declaration, target, approver_code_file=None, *, reposito
     else:
         fields, provenance = repository_declared(operation, declaration, target, repository=repository,
                                                  environ=environ)
-    provenance['declaration_identity'] = act_identity(fields)
+    provenance['act_identity'] = act_identity(fields)
     code = approver_code(approver_code_file)
     try:
         return _act(operation, fields, provenance, code)
@@ -322,9 +389,20 @@ def _act(operation, fields, provenance, code):
         devices = _confirmed(approver)
         require(devices, 'The approver has no confirmed authenticator: only an MFA-enrolled administrator approves an '
                          'administrator change.')
-        require(not AuditEvent.objects.filter(action__in=ACTIONS.values(),
-                                              details__declaration_identity=provenance['declaration_identity']).exists(),
-                'This declaration has already been used; a declaration authorizes one change.')
+        # Single use, two rules (round-3 R3-2). The SAME declaration (production: its canonical content; repository:
+        # its path and bytes) is used once, whatever happens later. ANOTHER declaration for the same act (act_identity)
+        # is a copy while the target is still in the state that act left, and a genuine repeat once it has changed.
+        used = AuditEvent.objects.filter(action__in=ACTIONS.values(),
+                                         details__declaration_key=provenance['declaration_key']).first()
+        require(used is None, f'This declaration has already been used (audit {used and used.pk}): a declaration '
+                              'authorizes one change; a genuine repeat needs a new declaration.')
+        before = AuditEvent.objects.filter(action__in=ACTIONS.values(), details__act_identity=provenance['act_identity'],
+                                           target=str(account.pk)).order_by('-created_at').first()
+        require(before is None or before.details.get('target_state_after') != target_state(account),
+                f'The same act was already performed under {before and before.details.get("declaration")} '
+                f'(audit {before and before.pk}) and the target is still in the state that act left: this declaration '
+                'is a copy of it. A genuine repeat can be declared once the target has changed (for example after '
+                'it re-enrols an authenticator).')
         if operation == ELEVATE:
             require(account.is_active and not account.is_staff and not account.is_superuser and account.verified_at
                     and account.has_usable_password(), 'The target is not an active, verified, non-administrator account.')
@@ -338,7 +416,7 @@ def _act(operation, fields, provenance, code):
         allowed = [device for device in devices if device.verify_is_allowed()[0]]
         if not allowed:
             raise _Absent(approver.pk, [], 'approver_throttled')
-        present = next((device for device in allowed if device.verify_token(code)), None)
+        present = next((device for device in allowed if _matches(device, code) and device.verify_token(code)), None)
         if present is None:
             raise _Absent(approver.pk, [device.pk for device in allowed], 'approver_code_not_verified')
         if operation == ELEVATE:
@@ -358,7 +436,7 @@ def _act(operation, fields, provenance, code):
         audit(approver, ACTIONS[operation], account.pk, operation=operation, approver=str(approver.pk),
               approver_presence='authenticator code verified', approver_device=present.persistent_id,
               reason=fields['reason'].replace('\x00', ''), sessions_invalidated=True, operator_uid=os.getuid(),
-              operator_euid=os.geteuid(), **counts, **provenance)
+              operator_euid=os.geteuid(), target_state_after=target_state(account), **counts, **provenance)
     return {'operation': operation, 'target': str(account.pk), 'approver': str(approver.pk),
             'approver_presence': 'verified', 'sessions_invalidated': True, **result, **provenance}
 
