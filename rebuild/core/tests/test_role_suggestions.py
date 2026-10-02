@@ -529,6 +529,7 @@ class RoundTwoTolerance(Legacy, TestCase):
                 self.assertEqual(e.answers, {})
         e, job, _ = self.live(notes, flag='1', provider=provider)              # positive control: the honest response
         self.assertEqual(job.state, 'succeeded')
+        self.assertTrue(self.offered(e))                                       # ... asks and offers the role row
         return e
 
     def units(self, payload, *quotes):
@@ -551,7 +552,6 @@ class RoundTwoTolerance(Legacy, TestCase):
             u = self.units(payload, *lines)
             want = {self.key('Troponin (initial)'): [u[0]], repeat: [u[1]], plan: [u[2]]}
             return [dict(f, unit_ids=want[f['key']]) for f in fields]
-        sent = []
         self.refused_under_both(notes, shifted, shifted, lambda sent_, rewrite: unit_provider(sent_, rewrite or honest))
 
     def test_t2_a_malformed_own_item_beside_a_misfiled_reading_is_refused(self):
