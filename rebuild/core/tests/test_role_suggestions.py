@@ -42,9 +42,13 @@ def labelled_provider(sent, forced=None):
             label = generation.question_key(question['label'])
             quotes = [line.split(':', 1)[1].strip() for line in payload['notes'].splitlines()
                       if ':' in line and generation.question_key(line.split(':', 1)[0]) == label]
-            if question['key'] in (forced or {}):
+            if (forced or {}).get(question['key']) == '<omit>':
+                continue
+            if question['key'] in (forced or {}) and forced[question['key']] != '<duplicate>':
                 quotes = [forced[question['key']]]
             fields.append({'key': question['key'], 'quotes': [q for q in quotes if q], 'conflict': False})
+            if (forced or {}).get(question['key']) == '<duplicate>':
+                fields.append(dict(fields[-1]))
         return SimpleNamespace(usage=SimpleNamespace(input_tokens=1, output_tokens=1, cache_read_input_tokens=0,
                                                      cache_creation_input_tokens=0),
                                stop_reason='end_turn', model='claude-sonnet-4-6', id='msg_synthetic',
@@ -169,21 +173,34 @@ class Generation(Legacy, TestCase):
         self.assertTrue(self.offered(e))
         key = self.key('Troponin (initial)')
         results = {}
-        for flag, bad in (('0', None), ('1', None), ('1', 'not a line of the notes')):
+        bad_cases = ('not a line of the notes', '<omit>', '<duplicate>')
+        for flag, bad in (('0', None), ('1', None)) + tuple(('1', case) for case in bad_cases):
             sent = []
             with override_settings(**dict(LIVE, QUILLMD_ROLE_SUGGESTIONS=flag)), labelled_provider(sent, {key: bad} if bad else {}):
                 config = generation.configuration(self.version.fields)
                 fields = destination_roles.generation_fields(self.version, suggest=generation.role_suggestions(config))
                 results[(flag, bad)] = generation.validated(generation.generate(e.notes, fields, config)[0])
         plain = {k: v for k, v in results[('0', None)].items()}
-        for case in (('1', None), ('1', 'not a line of the notes')):
+        for case in (('1', None),) + tuple(('1', bad) for bad in bad_cases):
             with self.subTest(case=case):
                 answers = results[case]
                 self.assertEqual({k: v for k, v in answers.items() if k != key}, {k: v for k, v in plain.items() if k != key})
                 self.assertEqual({k: v for k, v in answers[key].items() if k != 'role_suggestion'}, plain[key])
         self.assertEqual(results[('1', None)][key]['role_suggestion']['text'], '14 ng/L')
-        self.assertNotIn('role_suggestion', results[('1', 'not a line of the notes')][key])
-        self.assertEqual(results[('1', 'not a line of the notes')][self.key('Plan')]['text'], 'Rest.')
+        for bad in bad_cases:
+            with self.subTest(bad=bad):
+                self.assertNotIn('role_suggestion', results[('1', bad)][key])
+                self.assertEqual(results[('1', bad)][self.key('Plan')]['text'], 'Rest.')
+        # a key the form does not have still refuses the whole output, as it always did
+        sent = []
+        with override_settings(**dict(LIVE, QUILLMD_ROLE_SUGGESTIONS='1')), labelled_provider(sent, {key: '<duplicate>'}):
+            config = generation.configuration(self.version.fields)
+            raw = generation.generate(e.notes, destination_roles.generation_fields(self.version, suggest=True), config)[0]
+        body = json.loads(raw['anthropic_response'].content[0].text)
+        body['fields'][-1]['key'] = 'no-such-field'
+        raw['anthropic_response'].content[0].text = json.dumps(body)
+        with self.assertRaises(generation.ValidationError):
+            generation.validated(raw)
 
     def test_the_hold_is_the_shown_maximum_and_covers_the_extra_question(self):
         """maximum_cost bounds every field of the mapping, held ones included: asking a held field moves neither the

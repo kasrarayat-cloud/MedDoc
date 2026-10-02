@@ -4912,18 +4912,23 @@ def role_validated(notes,fields,selections,suggested,plain_context,*,context_lab
     - each SUGGESTED field as an ordinary field among all the others (the joint reading, with every governance rule).
       If that reading cannot be validated at all, no suggestion is offered; the ordinary answers stand.
 
-    The provider must still return exactly the asked keys. `units`: the tab contract's unit selections, checked per
-    reading. The suggested readings are never answers: `role_adopted` keeps each field's hold."""
+    A key the form does not have refuses the output, as it always did; the ordinary keys must each come back exactly once
+    (the ordinary reading checks it, as always). A suggested key that is missing or repeated only offers nothing.
+    `units`: the tab contract's unit selections, checked per reading. The suggested readings are never answers:
+    `role_adopted` keeps each field's hold."""
     def read(asked,chosen,labels):
         if units:chosen=unit_selections(notes,asked,chosen,context_labels=labels)
         return validate_selections(notes,asked,chosen,context_labels=labels,evidence_contract=evidence_contract)
     known={f['key'] for f in fields}
-    if {item.key for item in selections.fields}!=known or len(selections.fields)!=len(known):
+    returned=[item.key for item in selections.fields]
+    if not set(returned)<=known:
         raise ValidationError('Provider returned missing, duplicated or unknown fields.')
     answers=read([f for f in fields if f['key'] not in suggested],
                  type(selections)(fields=[item for item in selections.fields if item.key not in suggested]),plain_context)
-    try:joint=read(fields,selections,context_labels)
-    except ValidationError:joint={}
+    joint={}
+    if sorted(key for key in returned if key in suggested)==sorted(suggested):
+        try:joint=read(fields,selections,context_labels)
+        except ValidationError:joint={}
     answers.update({key:joint[key] for key in suggested if key in joint})
     return answers
 
