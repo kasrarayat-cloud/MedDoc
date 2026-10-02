@@ -123,6 +123,7 @@ def provider_refused(error):
       error's own request;
     - the innermost frame is the SDK's own request loop (SyncAPIClient.request), where it raises a status error for a
       response it received - so the provider answered, and nothing else raised it;
+    - the request was the Messages call itself (POST /v1/messages), never another endpoint;
     - that request was the FIRST and only attempt: the SDK's own x-stainless-retry-count header is '0'. Every QuillMD
       client is built with max_retries=0; a 400 answering a retry would prove nothing about the attempt before it.
     A 400 or 413 is the provider's refusal to process the request at all: no tokens are processed and nothing is billed.
@@ -140,6 +141,9 @@ def provider_refused(error):
     if (request is None or response.status_code!=status or getattr(error,'status_code',None)!=status
             or getattr(error,'request',None) is not request
             or request.headers.get('x-stainless-retry-count')!='0'): return None
+    # Only the one call a job makes: POST /v1/messages (refutation of 9c2ffa92, T4 - a refused count_tokens, models or
+    # batches call must never release the hold of a messages request the provider did process).
+    if request.method!='POST' or request.url.path!='/v1/messages': return None
     error_type=getattr(error,'type',None)
     if status==400 and error_type!='invalid_request_error': return None
     trace=error.__traceback__

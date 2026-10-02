@@ -71,6 +71,9 @@ class RefusalAssertions:
         refused = AuditEvent.objects.filter(action='provider.refused', target=str(job.pk)).get()
         self.assertEqual((refused.details['request_id'], refused.details['status'], refused.details['error_type']),
                          (request_id, status, error_type))
+        # Exactly these members and never the provider's own words (refutation of 9c2ffa92, T1).
+        self.assertEqual(set(refused.details), {'kind', 'status', 'error_type', 'request_id', 'job_action'})
+        self.assertNotIn('Schema is too complex', json.dumps([row.details, refused.details]))
         self.assertTrue(all(w.reserved == 0 for w in Wallet.objects.filter(user=job.user)))
         from core.management.commands.audit_billing import audit_report
         report = audit_report()
@@ -203,6 +206,33 @@ class RefusedGeneration(RefusalAssertions, DeniedNetwork, V3EncounterFixture, Te
             client.return_value.messages.create.side_effect = error
             self.assertTrue(run_job())
         self.assert_uncertain_with_its_hold(job)
+
+    def test_control_a_refused_call_to_another_endpoint_is_never_a_refusal_of_the_job(self):
+        """Refutation of 9c2ffa92, T4: only the job's own Messages call proves a refusal. The same SDK error raised by the
+        SDK's own request loop for count_tokens, models.retrieve or batches.create - real calls over a mock transport -
+        is not classified, so a refused second call could never release the hold of a processed first one."""
+        from core.jobs import provider_refused
+        sent = []
+        client = REAL_ANTHROPIC(api_key='synthetic-not-a-key', max_retries=0, http_client=httpx.Client(
+            transport=httpx.MockTransport(answering(400, TOO_COMPLEX, 'req_synthetic_other_endpoint', sent))))
+        calls = {'count_tokens': lambda: client.messages.count_tokens(
+                     model='claude-sonnet-5-5', messages=[{'role': 'user', 'content': 'x'}]),
+                 'models.retrieve': lambda: client.models.retrieve('claude-sonnet-5-5'),
+                 'batches.create': lambda: client.messages.batches.create(requests=[]),
+                 'messages.create': lambda: client.messages.create(
+                     model='claude-sonnet-5-5', max_tokens=16, messages=[{'role': 'user', 'content': 'x'}])}
+        verdicts = {}
+        for name, call in calls.items():
+            # (try/except, not assertRaises: assertRaises strips the traceback the classifier reads)
+            try:
+                call()
+            except anthropic.BadRequestError as error:
+                verdicts[name] = provider_refused(error) is not None
+            else:
+                self.fail(f'{name} was not refused')
+        self.assertEqual(verdicts, {'count_tokens': False, 'models.retrieve': False, 'batches.create': False,
+                                    'messages.create': True})          # (positive control: the job's own call)
+        self.assertEqual(len(sent), 4)
 
     def test_control_a_400_after_a_retried_attempt_stays_an_unknown_outcome(self):
         """A 400 answering a RETRY proves nothing about the attempt before it, which may have been processed: only a
@@ -338,6 +368,8 @@ class RefusedBatchPart(RefusalAssertions, BatchFixture, TestCase):
                           'error_type': 'invalid_request_error' if status == 400 else 'request_too_large'})
         refused = AuditEvent.objects.filter(action='provider.refused', target=str(job.pk)).get()
         self.assertEqual((refused.details['request_id'], refused.details['status']), (request_id, status))
+        self.assertEqual(set(refused.details), {'kind', 'status', 'error_type', 'request_id', 'job_action'})
+        self.assertNotIn('Schema is too complex', json.dumps(refused.details))
 
     def assert_closed_out(self, batch):
         from core.management.commands.audit_billing import audit_report

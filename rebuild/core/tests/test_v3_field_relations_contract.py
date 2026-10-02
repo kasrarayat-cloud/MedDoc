@@ -172,6 +172,20 @@ class PositionalSchema(SimpleTestCase):
             r.compile_request('History:', [field('f', 'History')], g.configuration())
 
 
+class InstructionsDescribeTheWire(SimpleTestCase):
+    """Refutation of cf8cbe6a, T2: the instructions tell the model the v3 shape the schema and parser require, and none
+    of v2's (an object keyed by field, a context object keyed by unit ID). A model told the old shape would be refused
+    whole on every request."""
+    def test_the_instructions_name_the_list_shapes_and_not_the_object_shapes(self):
+        from core import v3_field_relations as r
+        text = r.INSTRUCTIONS
+        for phrase in ('fields as a list', 'context as a list', 'exactly one entry per source unit',
+                       'naming that unit ID as unit', 'each naming its key once'):
+            self.assertIn(phrase, text)
+        for v2 in ('as an object', 'one member per requested field key', 'named by its unit ID'):
+            self.assertNotIn(v2, text)
+
+
 @override_settings(**RELATIONS)
 class StrictParser(SimpleTestCase):
     def setUp(self):
