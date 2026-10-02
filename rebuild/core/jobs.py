@@ -411,7 +411,10 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,config)):
         raise ValidationError(refusal)
     # Role suggestions are decided HERE, from the setting now, never carried from a quote (refutation I-1).
-    if kind=='generation':config=generation.admitted_with_role_suggestions(config,e.template_version)
+    if kind=='generation':
+        config=generation.admitted_with_role_suggestions(config,e.template_version)
+        from . import transcript_context
+        config=transcript_context.admitted(config,e)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.

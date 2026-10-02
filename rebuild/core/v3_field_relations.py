@@ -279,10 +279,15 @@ def compile_request(notes, catalogue, config, *, context_labels=(), requirements
                'context_labels': context, 'requirements': list(requirements), 'form_constraints': constraints,
                'notes': notes, 'source_units': list(units), 'context_order': [u['id'] for u in units],
                'requested_field_ids': wanted}
+    instructions=INSTRUCTIONS
+    if config.get('patient_default_context'):
+        from . import transcript_context
+        payload['patient_default_context']=transcript_context.payload(notes,config['patient_default_context'])
+        instructions+=transcript_context.INSTRUCTIONS
     # Stable both before and after JSONB serialization; source/list order stays.
     payload = json.loads(json.dumps(payload, sort_keys=True))
     schema = response_schema(requested, units)
-    wire = g.anthropic_request(config['model'], profile, INSTRUCTIONS, payload, schema)
+    wire = g.anthropic_request(config['model'], profile, instructions, payload, schema)
     if wire['output_config']['format']['schema'] != schema:
         raise ValidationError('The closed ordinary answer schema would not reach the provider unchanged; nothing was sent.')
     if len(json.dumps(wire).encode()) > MAX_REQUEST_BYTES:
@@ -324,7 +329,7 @@ def claimed(item, units):
             if u['id'] in selected or relation in ('answer', 'qualifier')]
 
 
-def records(notes, catalogue, context, units, selections, model):
+def records(notes, catalogue, context, units, selections, model, *, patient_context=''):
     """One signed record per field. Structure (every field once, a context per unit, known unit and option IDs, none
     repeated) refuses the WHOLE response; a field whose selection disagrees with its relations (`disagrees`) is
     recorded as returned and held by `read`, never adopted, and no other field changes. `competing_output` carries
@@ -348,6 +353,11 @@ def records(notes, catalogue, context, units, selections, model):
                    'competing_output': {key: claimed(all_selections[key], units) for key in competitors(catalogue, field)
                                         if key in all_selections},
                    'selection': item.model_dump()}
+        if patient_context:
+            from . import transcript_context
+            if not transcript_context.verified(notes,patient_context):
+                raise ValidationError('Reviewed transcript context is no longer valid.')
+            payload['patient_default_context']=patient_context
         result[item.key] = signing.dumps(payload, salt=SALT, compress=True)
     return result
 
@@ -549,8 +559,12 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             break
         if value is None:
             return refused
-        if not isinstance(value, dict) or set(value) != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:
+        if not isinstance(value, dict) or set(value)-{'patient_default_context'} != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:
             return refused
+        if 'patient_default_context' in value:
+            from . import transcript_context
+            if not transcript_context.verified(reading['source']['quote'],value['patient_default_context']):return refused
+            reading=transcript_context.apply(reading,value['patient_default_context'])
         catalogue = reading.get('catalogue', reading['fields'])
         field = next((f for f in catalogue if f['key'] == value['key']), None)
         if (value['contract'] not in READABLE or value['model'] not in g.NATIVE_MODELS or not enabled(value['model'])
@@ -602,6 +616,7 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         def evidenced(u):
             own = reading['parsed'][u['id']]
             return bool(own or reading['patients'].get(u['id']) or policy_patient
+                        or u['id'] in reading.get('confirmed_patient',())
                         or predicate_polarity(field, u) is not None
                         or (destination_temporal_scopes(field) and explicit_patient_report(u['quote']))
                         or u['id'] in reading['syntax_complete'] or u['id'] in reading['actor_relations']['units']
@@ -625,6 +640,7 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         # A single-patient unit read as one complete current clause ('She attends the clinic every week.') is complete
         # without the finite-verb list (`v3_actors._sole_reading` 'current').
         literal_ids = set(literal_ids) | {uid for uid in sole_ids if reading['actors'][uid]['sole']['current']}
+        literal_ids |= chosen & reading.get('confirmed_patient',frozenset())
         values = [reading['parsed'][u['id']][1] if reading['parsed'][u['id']] else u['quote'] for u in ordered]
         answer = '\n'.join(values)
         choices = options(field); selected_options = set(item.option_ids)
@@ -669,6 +685,7 @@ def generate(notes, fields, config, *, context_labels=(), requirements=()):
     raw = {'anthropic_response': response, 'ordinary_field_contract': CONTRACT,
            'notes': notes, 'fields': compiled['asked'], 'full_catalogue': fields,
            'context_labels': compiled['context'], 'requested_model': config['model']}
+    if config.get('patient_default_context'):raw['patient_default_context']=config['patient_default_context']
     return raw, cost, units, recorded, f"anthropic:{config['model']}", getattr(response, '_request_id', None) or '', False
 
 
@@ -683,7 +700,8 @@ def validated(result):
     notes, catalogue, context = result['notes'], result['full_catalogue'], result['context_labels']
     units = g.source_units(notes, result['fields'], context_labels=context)[0]
     selections = parse(''.join(b.text for b in response.content if b.type == 'text'), result['fields'], units)
-    retained = records(notes, catalogue, context, units, selections, response.model)
+    retained = records(notes, catalogue, context, units, selections, response.model,
+                       patient_context=result.get('patient_default_context',''))
     g.unit_selections(notes, result['fields'], selections, context_labels=context)
     answers = g.validate_selections(notes, result['fields'], selections, context_labels=context,
         evidence_contract=g.TAB_CONTRACT, ordinary_records=retained, catalogue=catalogue)

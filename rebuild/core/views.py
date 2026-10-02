@@ -998,7 +998,9 @@ def encounter_detail(request,pk):
         if generation_batch.needed(e.template_version.fields, e.notes, quote_config):
             quote_config,maximum_charge=batch_jobs.quote(e,quote_config)
         else:
-            maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
+            from . import transcript_context
+            context_config=transcript_context.admitted(quote_config,e)
+            maximum_charge=maximum_cost(e.notes,e.template_version.fields,config=context_config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
     except ValidationError as exc:
         maximum_charge=None
         generation_quote_error=error_message(exc)
@@ -1034,6 +1036,8 @@ def encounter_detail(request,pk):
         visible_jobs.append(job)
     jobs=visible_jobs
     transcript_reviews=[]
+    from . import transcript_context
+    patient_context_current=bool(transcript_context.current(e))
     applied=set(AuditEvent.objects.filter(action='transcription.applied',target__in=[str(job.pk) for job in jobs]).values_list('target',flat=True))
     for job in jobs:
         if (job.kind=='transcription' and job.config.get('transcript_review_required')
@@ -1045,6 +1049,15 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
+    if is_v3 and can_finalize and not patient_context_current and e.notes:
+        from .models import TranscriptReview
+        previous_review=TranscriptReview.objects.filter(encounter=e,patient_context=True).select_related('job').order_by('-created_at').first()
+        if previous_review:
+            try:
+                raw,_=review_transcript(previous_review.job)
+                transcript_reviews.append({'job':previous_review.job,'raw':raw,'text':e.notes,'rereview':True,'empty':False})
+            except (ValidationError,OSError,ValueError):pass
+    e.patient_context_current=patient_context_current
     from . import wm_narrative
     return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'hidden_accepted':hidden_accepted,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
@@ -2545,7 +2558,16 @@ def encounter_notes(request,pk):
         try:transcript_id=UUID(request.POST['transcript_job'])
         except (ValueError,TypeError):return document_refusal(request,e,'Invalid transcript reference.',400)
         transcript_job=get_object_or_404(Job,pk=transcript_id,encounter=e,kind='transcription',state='succeeded')
-        if not transcript_job.config.get('transcript_review_required') or AuditEvent.objects.filter(action='transcription.applied',target=str(transcript_job.pk)).exists():
+        from .models import TranscriptReview
+        reconfirm=request.POST.get('transcript_reconfirm')=='on'
+        was_applied=AuditEvent.objects.filter(action='transcription.applied',target=str(transcript_job.pk)).exists()
+        if reconfirm:
+            membership(request.user,e.department,roles=['owner','clinician'])
+            if (not was_applied or request.POST.get('transcript_patient_context')!='on'
+                    or request.POST.get('transcript_mode')!='replace'
+                    or not TranscriptReview.objects.filter(encounter=e,job=transcript_job).exists()):
+                return document_refusal(request,e,'Re-review the revised transcript and explicitly confirm its patient context.',400)
+        if not transcript_job.config.get('transcript_review_required') or (was_applied and not reconfirm):
             return document_refusal(request,e,'This transcript has already been applied or is not awaiting review.',409)
         if request.POST.get('transcript_reviewed')!='on' or request.POST.get('transcript_mode') not in ['append','replace']:
             return document_refusal(request,e,'Review the transcript and choose how to add it to the source notes.',400)
@@ -2571,9 +2593,21 @@ def encounter_notes(request,pk):
     audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared,
           codes_marked_for_review=marked)
     if transcript_job:
+        from .models import TranscriptReview
+        from . import transcript_context
+        confirm_context=request.POST.get('transcript_patient_context')=='on'
+        if confirm_context:membership(request.user,e.department,roles=['owner','clinician'])
+        start=len(notes)-len(corrected)
+        review=TranscriptReview(encounter=e,job=transcript_job,reviewed_by=request.user,source_revision=e.revision,
+            source_sha256=transcript_context.digest(notes),raw_sha256=transcript_context.digest(raw_transcript),
+            result_sha256=transcript_job.result_sha256,reviewed_sha256=transcript_context.digest(corrected),
+            reviewed_text=corrected,span_start=start,span_end=len(notes),patient_context=confirm_context)
+        if confirm_context:review.context_token=transcript_context.token_for(review)
+        review.save()
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
-              corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
+              corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'),
+              review=str(review.pk),patient_default_context=confirm_context)
     # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
     # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
     messages.success(request,'Notes saved. '+cleared_sentence(cleared)+marked_sentence(marked)+'Generate and review a new answer draft.')
