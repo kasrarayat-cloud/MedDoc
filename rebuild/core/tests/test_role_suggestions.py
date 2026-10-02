@@ -31,9 +31,9 @@ NOTES = ('Troponin (initial): 14 ng/L\nElectronically signed by: Dr Other\nSigna
          'Plan: Rest.')
 
 
-def labelled_provider(sent):
+def labelled_provider(sent, forced=None):
     """A mocked Anthropic client answering each asked question with the values its own label introduces in the notes
-    (the legacy contract's `Label: value` selection), recording every request."""
+    (the legacy contract's `Label: value` selection), recording every request. `forced`: {key: quote} sent instead."""
     def create(**request):
         sent.append(request)
         payload = json.loads(request['messages'][0]['content'])
@@ -42,6 +42,8 @@ def labelled_provider(sent):
             label = generation.question_key(question['label'])
             quotes = [line.split(':', 1)[1].strip() for line in payload['notes'].splitlines()
                       if ':' in line and generation.question_key(line.split(':', 1)[0]) == label]
+            if question['key'] in (forced or {}):
+                quotes = [forced[question['key']]]
             fields.append({'key': question['key'], 'quotes': [q for q in quotes if q], 'conflict': False})
         return SimpleNamespace(usage=SimpleNamespace(input_tokens=1, output_tokens=1, cache_read_input_tokens=0,
                                                      cache_creation_input_tokens=0),
@@ -159,6 +161,29 @@ class Generation(Legacy, TestCase):
         self.assertEqual((answer['status'], answer['text'], answer['role_suggestion']['text']), ('missing', '', '14 ng/L'))
         self.assertEqual(answers[self.key('Plan')]['text'], 'Rest.')
         self.assertNotIn('role_suggestion', answers[self.key('Electronically signed by')])
+
+    def test_a_malformed_selection_for_a_suggested_row_never_refuses_or_changes_the_ordinary_answers(self):
+        """A suggested row is read apart from the ordinary ones: its invalid selection offers nothing, and the ordinary
+        answers are exactly those of the same request without it."""
+        e = self.generated()
+        self.assertTrue(self.offered(e))
+        key = self.key('Troponin (initial)')
+        results = {}
+        for flag, bad in (('0', None), ('1', None), ('1', 'not a line of the notes')):
+            sent = []
+            with override_settings(**dict(LIVE, QUILLMD_ROLE_SUGGESTIONS=flag)), labelled_provider(sent, {key: bad} if bad else {}):
+                config = generation.configuration(self.version.fields)
+                fields = destination_roles.generation_fields(self.version, suggest=generation.role_suggestions(config))
+                results[(flag, bad)] = generation.validated(generation.generate(e.notes, fields, config)[0])
+        plain = {k: v for k, v in results[('0', None)].items()}
+        for case in (('1', None), ('1', 'not a line of the notes')):
+            with self.subTest(case=case):
+                answers = results[case]
+                self.assertEqual({k: v for k, v in answers.items() if k != key}, {k: v for k, v in plain.items() if k != key})
+                self.assertEqual({k: v for k, v in answers[key].items() if k != 'role_suggestion'}, plain[key])
+        self.assertEqual(results[('1', None)][key]['role_suggestion']['text'], '14 ng/L')
+        self.assertNotIn('role_suggestion', results[('1', 'not a line of the notes')][key])
+        self.assertEqual(results[('1', 'not a line of the notes')][self.key('Plan')]['text'], 'Rest.')
 
     def test_the_hold_is_the_shown_maximum_and_covers_the_extra_question(self):
         """maximum_cost bounds every field of the mapping, held ones included: asking a held field moves neither the

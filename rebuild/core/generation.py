@@ -4721,6 +4721,8 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     # A job quoted under the role-suggestion contract also ASKS the held fields core.destination_roles marked `suggest`;
     # each is still answered by its hold (`role_adopted`). Any other job: nothing is asked that was not asked before.
     suggested=role_suggested(fields,config)
+    # (and the context labels the request would carry without them: the ordinary answers are validated against exactly that)
+    plain_context=v3_generation_fields(fields,context_labels)[1] if suggested else None
     fields,context_labels,v3_fields=v3_generation_fields(fields,context_labels,suggested)
     # ⚠️ CONTRACT v3: NOTHING BEFORE THE PROVIDER CALL MAY LEAVE A HOLD STRANDED (R8). A refusal raised here after enqueue
     # held funds (1,001 source units, a limit, rates) ended the job in 'reconciliation' with the hold never released. It
@@ -4731,7 +4733,9 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
         v3_natural=v3_fields is not None and v3_natural_contract(config)
         if config['mode']!='live':
             contract=None if config.get('prompt_version') in TAB_PROMPT_VERSIONS and (v3_fields is None or v3_natural) else 'legacy'
-            answers=validate_selections(notes,fields,fixture(notes,fields,context_labels=context_labels,evidence_contract=contract),context_labels=context_labels,evidence_contract=contract)
+            selections=fixture(notes,fields,context_labels=context_labels,evidence_contract=contract)
+            answers=(role_validated(notes,fields,selections,suggested,plain_context,context_labels=context_labels,evidence_contract=contract)
+                     if suggested else validate_selections(notes,fields,selections,context_labels=context_labels,evidence_contract=contract))
             if v3_fields is not None:answers=v3_adopted(v3_fields,answers,notes,fields,context_labels)
             answers.update(role_adopted(role_held,answers,suggested))
             return answers,Decimal('0'),{}, {},'synthetic-extractive-fixture','',True
@@ -4809,7 +4813,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
         if v3_fields is not None:raw['v3_fields']=v3_fields
         if role_held:raw['role_held']=role_held
-        if suggested:raw['role_suggested']=sorted(suggested)
+        if suggested:raw.update(role_suggested=sorted(suggested),plain_context_labels=plain_context)
         if history_targets:raw['history_context_contract']=history.CONTRACT
         # claude-sonnet-5-5: the answer is adopted only from the model the request named (`validated`). Set for that model
         # only, so the result of every earlier model's request — and what its validation reads — is exactly as before.
@@ -4828,7 +4832,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
          'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
     if v3_fields is not None:raw['v3_fields']=v3_fields
     if role_held:raw['role_held']=role_held
-    if suggested:raw['role_suggested']=sorted(suggested)
+    if suggested:raw.update(role_suggested=sorted(suggested),plain_context_labels=plain_context)
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
@@ -4853,6 +4857,10 @@ def validated(result):
                 raise ValidationError('Unknown history context contract; no answers adopted.')
             schema = history.HistorySelections
         selections=schema.model_validate_json(content)
+        if result.get('role_suggested'):
+            return v3_result(result,role_validated(result['notes'],result['fields'],selections,frozenset(result['role_suggested']),
+                result['plain_context_labels'],context_labels=result.get('context_labels',()),
+                evidence_contract=result.get('evidence_contract','legacy'),units=result.get('evidence_contract')==TAB_CONTRACT))
         if result.get('evidence_contract') == TAB_CONTRACT:
             selections=unit_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()))
         if result.get('history_context_contract'):
@@ -4863,6 +4871,10 @@ def validated(result):
         response=result['response']
         if response.status!='completed' or response.output_parsed is None: raise ValidationError('Provider output was incomplete or refused. No answers were adopted.')
         selections=response.output_parsed
+        if result.get('role_suggested'):
+            return v3_result(result,role_validated(result['notes'],result['fields'],selections,frozenset(result['role_suggested']),
+                result['plain_context_labels'],context_labels=result.get('context_labels',()),
+                evidence_contract=result.get('evidence_contract','legacy'),units=result.get('evidence_contract')==TAB_CONTRACT))
         if result.get('evidence_contract')==TAB_CONTRACT:
             selections=unit_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()))
         return v3_result(result,validate_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()),evidence_contract=result.get('evidence_contract','legacy')))
@@ -4889,6 +4901,31 @@ def role_suggested(fields,config):
     if not role_suggestions(config):return frozenset()
     return frozenset(f['key'] for f in fields if isinstance(f,dict) and isinstance(f.get('destination_role'),dict)
                      and f['destination_role'].get('suggest') is True)
+
+
+def role_validated(notes,fields,selections,suggested,plain_context,*,context_labels=(),evidence_contract=None,units=False):
+    """The validated answers of a job that ASKED role suggestions (`suggested`), in two readings:
+
+    - every ORDINARY field exactly as a job without suggestions validates it: only its own selections, against the
+      context labels that request would carry (`plain_context`, the held labels included) - so asking a held field can
+      neither change an ordinary answer nor, by a malformed selection of its own, refuse the whole output;
+    - each SUGGESTED field as an ordinary field among all the others (the joint reading, with every governance rule).
+      If that reading cannot be validated at all, no suggestion is offered; the ordinary answers stand.
+
+    The provider must still return exactly the asked keys. `units`: the tab contract's unit selections, checked per
+    reading. The suggested readings are never answers: `role_adopted` keeps each field's hold."""
+    def read(asked,chosen,labels):
+        if units:chosen=unit_selections(notes,asked,chosen,context_labels=labels)
+        return validate_selections(notes,asked,chosen,context_labels=labels,evidence_contract=evidence_contract)
+    known={f['key'] for f in fields}
+    if {item.key for item in selections.fields}!=known or len(selections.fields)!=len(known):
+        raise ValidationError('Provider returned missing, duplicated or unknown fields.')
+    answers=read([f for f in fields if f['key'] not in suggested],
+                 type(selections)(fields=[item for item in selections.fields if item.key not in suggested]),plain_context)
+    try:joint=read(fields,selections,context_labels)
+    except ValidationError:joint={}
+    answers.update({key:joint[key] for key in suggested if key in joint})
+    return answers
 
 
 def role_adopted(held,answers,suggested=()):
