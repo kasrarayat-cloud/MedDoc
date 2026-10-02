@@ -4862,8 +4862,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
                                             extractive_request(notes,fields,context_labels,config,v3_fields),candidates)
                                if candidates else (frozenset(),fields,None))
             selections=fixture(notes,asked,context_labels=context_labels,evidence_contract=contract)
-            answers=(role_validated(notes,asked,selections,suggested,context_labels,
-                                    context_labels=v3_generation_fields(form,form_context,suggested)[1],evidence_contract=contract)
+            answers=(role_validated(notes,asked,selections,suggested,context_labels,evidence_contract=contract)
                      if suggested else validate_selections(notes,fields,selections,context_labels=context_labels,evidence_contract=contract))
             if v3_fields is not None:answers=v3_adopted(v3_fields,answers,notes,fields,context_labels)
             answers.update(role_offered(role_adopted(role_held,answers,suggested),notes,form,form_context))
@@ -4891,8 +4890,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
         if v3_fields is not None:raw['v3_fields']=v3_fields
         if role_held:raw['role_held']=role_held
-        if suggested:raw.update(role_suggested=sorted(suggested),role_context_labels=v3_generation_fields(form,form_context,suggested)[1],
-                                role_form=(form,list(form_context)))
+        if suggested:raw.update(role_suggested=sorted(suggested),role_form=(form,list(form_context)))
         if history_targets:
             from . import v3_history_context as history
             raw['history_context_contract']=history.CONTRACT
@@ -4913,8 +4911,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
          'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
     if v3_fields is not None:raw['v3_fields']=v3_fields
     if role_held:raw['role_held']=role_held
-    if suggested:raw.update(role_suggested=sorted(suggested),role_context_labels=v3_generation_fields(form,form_context,suggested)[1],
-                            role_form=(form,list(form_context)))
+    if suggested:raw.update(role_suggested=sorted(suggested),role_form=(form,list(form_context)))
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
@@ -4941,8 +4938,8 @@ def validated(result):
         selections=schema.model_validate_json(content)
         if result.get('role_suggested'):
             return v3_result(result,role_validated(result['notes'],result['fields'],selections,frozenset(result['role_suggested']),
-                result['context_labels'],context_labels=result['role_context_labels'],
-                evidence_contract=result.get('evidence_contract','legacy'),units=result.get('evidence_contract')==TAB_CONTRACT))
+                result['context_labels'],evidence_contract=result.get('evidence_contract','legacy'),
+                units=result.get('evidence_contract')==TAB_CONTRACT))
         if result.get('evidence_contract') == TAB_CONTRACT:
             selections=unit_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()))
         if result.get('history_context_contract'):
@@ -4955,8 +4952,8 @@ def validated(result):
         selections=response.output_parsed
         if result.get('role_suggested'):
             return v3_result(result,role_validated(result['notes'],result['fields'],selections,frozenset(result['role_suggested']),
-                result['context_labels'],context_labels=result['role_context_labels'],
-                evidence_contract=result.get('evidence_contract','legacy'),units=result.get('evidence_contract')==TAB_CONTRACT))
+                result['context_labels'],evidence_contract=result.get('evidence_contract','legacy'),
+                units=result.get('evidence_contract')==TAB_CONTRACT))
         if result.get('evidence_contract')==TAB_CONTRACT:
             selections=unit_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()))
         return v3_result(result,validate_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()),evidence_contract=result.get('evidence_contract','legacy')))
@@ -4987,36 +4984,35 @@ def role_suggested(fields,config):
                      and f['destination_role'].get('suggest') is True)
 
 
-def role_validated(notes,fields,selections,suggested,plain_context,*,context_labels=(),evidence_contract=None,units=False):
+def role_validated(notes,fields,selections,suggested,context_labels,*,evidence_contract=None,units=False):
     """The validated answers of a job that ASKED role suggestions (`suggested`).
 
     ⚠️ THE ORDINARY ANSWERS ARE THE REQUEST-WITHOUT-SUGGESTIONS' ANSWERS, OR NOTHING (refutation round 2, T-1..T-3: a
     tolerance that re-homed or set aside items across keys adopted one row's value into another and finalized it). So:
     the items under the suggested keys are taken out - at most one per suggested key, by that exact key - and the
     REMAINDER is validated exactly as the request without suggestions validates its response: the ordinary keys once
-    each, the same validator, against the context labels that request carries (`plain_context` - which the request
-    asking them carries too, `role_request`; so does every other request property). Any irregularity in
-    the remainder - a key nobody was asked, an ordinary key twice or missing, a second item under a suggested key, a
-    malformed selection - refuses the whole output, as it always did. Nothing is resolved, chosen between or re-homed.
+    each, the same validator, against the same context labels (`context_labels`: the request's, which are the request
+    without suggestions' - `role_request` - and carry every role row's label). Any irregularity in the remainder - a key
+    nobody was asked, an ordinary key twice or missing, a second item under a suggested key, a malformed selection -
+    refuses the whole output, as it always did. Nothing is resolved, chosen between or re-homed.
 
     Each suggested item taken out is then read as an ordinary field among all the others (the joint reading, every
-    governance rule); if that cannot be validated, each is read on its own beside the ordinary fields, so a missing or
-    unreadable suggested item loses only its own suggestion. `context_labels`: what a reading sees besides the other
-    suggested fields' labels - the request's, without the suggested fields' own. `units`: the tab contract's unit
-    selections, checked per reading. The readings are never answers: `role_adopted` keeps each field's hold."""
-    def read(asked,chosen,labels):
-        if units:chosen=unit_selections(notes,asked,chosen,context_labels=labels)
-        return validate_selections(notes,asked,chosen,context_labels=labels,evidence_contract=evidence_contract)
+    governance rule), against those same context labels; if that cannot be validated, each is read on its own beside
+    the ordinary fields, so a missing or unreadable suggested item loses only its own suggestion. `units`: the tab
+    contract's unit selections, checked per reading. The readings are never answers: `role_adopted` keeps each field's
+    hold."""
+    def read(asked,chosen):
+        if units:chosen=unit_selections(notes,asked,chosen,context_labels=context_labels)
+        return validate_selections(notes,asked,chosen,context_labels=context_labels,evidence_contract=evidence_contract)
     taken,remainder={},[]
     for item in selections.fields:
         if item.key in suggested and item.key not in taken:taken[item.key]=item
         else:remainder.append(item)
     ordinary=[f for f in fields if f['key'] not in suggested]
-    answers=read(ordinary,type(selections)(fields=remainder),plain_context)
+    answers=read(ordinary,type(selections)(fields=remainder))
     def reading(keys):
         asked=[f for f in fields if f['key'] not in suggested or f['key'] in keys]
-        labels=list(context_labels)+[f['label'] for f in fields if f['key'] in suggested and f['key'] not in keys]
-        found=read(asked,type(selections)(fields=remainder+[taken[key] for key in keys]),labels)
+        found=read(asked,type(selections)(fields=remainder+[taken[key] for key in keys]))
         return {key:found[key] for key in keys}
     if taken:
         try:answers.update(reading(list(taken)))

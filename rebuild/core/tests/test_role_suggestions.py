@@ -9,7 +9,9 @@ live-mode tests run the real worker (enqueue, run_one) against a mocked client.
 
 Each test carries its own positive control (a suggestion offered, or an acceptance that succeeds), so none of them can
 pass on a tree without the feature. Refutation of afdf7bfe: G1, G2, I-1, I-2, I-3, L-1, L-2, X1, F01, F02, F05, F06, F07,
-F08, F12 are each pinned below by name.
+F08, F12 are each pinned below by name; of 2aa618fb: T-1, T-2, T-3, A1, PIN-MA6; of b831936c: E-1 and E-2
+(RequestInvariant, MixedTabAndCell, RelationsRequest, BatchRequest - the '1' request is the '0' request plus the role
+questions, byte for byte) and RS3A-1 (the page offers the act exactly where it is routed).
 """
 import io
 import json
@@ -675,10 +677,10 @@ class RequestInvariant(Legacy, TestCase):
         return {f['key'] for f in destination_roles.generation_fields(self.version, suggest=True)
                 if (f.get('destination_role') or {}).get('suggest')}
 
-    def worker(self, flag, base, model, notes=None):
+    def worker(self, flag, base, model, notes=None, answer=None):
         """(encounter, job, the one request body) through the real worker, live, a real SDK client in process."""
         e = self.encounter(notes or self.NOTES)
-        sdk = wire(model)
+        sdk = wire(model, answer)
         with override_settings(**dict(base, QUILLMD_ROLE_SUGGESTIONS=flag)):
             job = enqueue(Encounter.objects.get(pk=e.pk), self.user)
             with sdk.patched():
@@ -745,6 +747,27 @@ class RequestInvariant(Legacy, TestCase):
         reading is not the request's, so the page would never show it: it is not stored (`role_offered`)."""
         self.check(mixed(('Troponin (initial)', 'tab'), ('Troponin (repeat)', 'cell'), ('Plan', 'tab')),
                    'Synthetic legacy mixed', ['Troponin (initial)'], {})
+
+    def test_the_same_form_offers_the_reading_the_page_reads_the_same_way(self):
+        """The other half of `role_offered`: cited as its whole labelled line, the tab role row's reading on that legacy
+        contract form is exactly the one the page reads again on its own field - so it is stored, shown and accepted."""
+        self.use(mixed(('Troponin (initial)', 'tab'), ('Troponin (repeat)', 'cell'), ('Plan', 'tab')), 'Synthetic lines')
+        role = self.key('Troponin (initial)')
+
+        def whole_line(payload):
+            return {'fields': [dict(item, quotes=['Troponin (initial): 14 ng/L']) if item['key'] == role else item
+                               for item in honest(payload)]}
+        for model, base in MODELS:
+            with self.subTest(model=model):
+                off = self.worker('0', base, model)[0]
+                e = self.worker('1', base, model, answer=whole_line)[0]
+                self.assertEqual(plain(e.answers), off.answers)
+                self.assertEqual(e.answers[role]['role_suggestion'], {'text': '14 ng/L', 'evidence': [
+                    {'quote': 'Troponin (initial): 14 ng/L', 'start': 0, 'end': 27}]})
+                self.assertEqual(self.client.get(f'/encounters/{e.pk}/').content.decode().count('data-role-suggestion'), 1)
+                self.assertEqual(self.accept(e).status_code, 302)
+                e.refresh_from_db()
+                self.assertEqual((e.answers[role]['text'], e.answers[role]['status']), ('14 ng/L', 'edited'))
 
     def test_a_role_question_that_would_exceed_the_request_limit_is_not_asked(self):
         """The request limits are request properties too: 100 ordinary questions plus one role question would be 101, a
