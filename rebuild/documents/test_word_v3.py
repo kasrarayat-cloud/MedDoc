@@ -2319,3 +2319,29 @@ class RefutationRepairs(unittest.TestCase):
         info = self.inspect(docx_bytes(doc))
         self.assertIn("Primary event (diagnosis)", [f["label"] for f in info["fields"]])
         self.assertFalse([n for n in info["notes"] if "merged" in n], info["notes"])
+
+    def test_ec5_a_slot_line_styled_as_a_heading_is_never_the_next_slots_section(self):
+        """Legacy reads a heading only on a line without an answer tab; so does section_heading."""
+        doc = Document()
+        for section in ("FINDINGS", "PLAN"):
+            doc.add_heading(section, 2)
+            for mark in ("1.", "2."):
+                _tab_line(doc, mark).style = doc.styles["Heading 3"]
+        self.assertEqual(self.labels(docx_bytes(doc)), ["FINDINGS — 1", "FINDINGS — 2", "PLAN — 1", "PLAN — 2"])
+
+    def test_ec3_control_a_signing_area_in_a_shared_merged_cell_keeps_its_role(self):
+        """A merged blank beside two signature rows stays a signing place (never withdrawn: its role depends on it)."""
+        from . import word_v3 as w
+        data = self.merged_rows([["Patient signature"], ["Witness signature"]])
+        fields = w.inspect(data)["fields"]
+        self.assertIn("signature", [f["kind"] for f in fields], [(f["label"], f["kind"]) for f in fields])
+        self.assertIn("signing_area", {r["source"] for r in w.destination_roles(data, fields)["roles"]})
+
+    def test_m7_a_repeated_header_row_stays_a_header_whatever_its_ink(self):
+        doc = Document()
+        table = doc.add_table(rows=4, cols=2)
+        table.cell(0, 0).text = "Medication"
+        _grey(table.cell(0, 1).paragraphs[0], "Dose and frequency")
+        table.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
+        fields = self.inspect(docx_bytes(doc))["fields"]
+        self.assertIn("table_rows", [f["kind"] for f in fields], [(f["label"], f["kind"]) for f in fields])
