@@ -2468,6 +2468,50 @@ class RoundFour(unittest.TestCase):
                 notes = [n for n in info["notes"] if "merged" in n]
                 self.assertEqual(len(notes), 1, info["notes"])
 
+    # The round-4 mutation proof's survivors (Y02, Y05, Y20, Y22), pinned
+    def test_y02_a_place_in_the_continuation_of_a_merge_under_a_plain_cell_is_withdrawn(self):
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        self.assert_unmapped(_knees(control, merge="plain", place="continuation"), (0, 1), 1,
+                             names=("Right knee", "Left knee"))
+
+    def test_y05_an_option_area_whose_box_lies_in_a_shared_merged_cell_is_withdrawn(self):
+        doc = Document()
+        table = doc.add_table(rows=3, cols=3)
+        table.cell(0, 0).text = "Smoker"
+        table.cell(1, 0).text = "Alcohol"
+        table.cell(0, 1).text = "Yes"
+        table.cell(1, 1).text = "Yes"
+        table.cell(0, 2).merge(table.cell(1, 2)).text = "No"
+        table.cell(2, 0).text = "Plan"
+        info = self.inspect(docx_bytes(doc))
+        self.assertFalse([f["label"] for f in info["fields"] if f["label"] in ("Smoker", "Alcohol")],
+                         [(f["label"], f["locator"]["slot"]) for f in info["fields"]])
+        self.assertEqual(len([n for n in info["notes"] if "merged" in n]), 1, info["notes"])
+
+    def test_y20_a_place_in_a_table_nested_in_a_shared_merged_cell_is_withdrawn(self):
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Right knee"
+        table.cell(1, 0).text = "Left knee"
+        inner = table.cell(0, 1).merge(table.cell(1, 1)).add_table(rows=1, cols=2)
+        inner.cell(0, 0).text = "Effusion"
+        self.assert_unmapped(docx_bytes(doc), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    def test_y22_a_tab_column_proposal_in_a_shared_merged_cell_is_no_layout_candidate(self):
+        from . import word_v3 as w
+        from .test_structural_columns import stopped_form
+        stops = (2880, 4320)
+        for merged in (True, False):
+            with self.subTest(merged=merged):
+                doc = stopped_form([[["Right knee"], ["Findings", ("\tNormal\tAbnormal", stops), ("\t1 ☐\t2 ☐", stops)]],
+                                    [["Left knee"], [""]]], (2880, 6480), control="glyph")
+                if merged:
+                    doc.tables[0].cell(0, 1).merge(doc.tables[0].cell(1, 1))
+                detector = w.Detector(w.open_package(docx_bytes(doc)), layout_proposal=True)
+                detector.detect()
+                self.assertEqual([a.label for _, _, a in detector.layout_candidates], [] if merged else ["Right knee"])
+
     # R3P-M5 ─ two rows printing the same words are two rows (identity is the cell, not its text)
     def test_r3pm5_two_rows_printing_the_same_words_share_the_cell(self):
         self.assert_shared(self.merged_rows([["Comments"], ["Comments"]]), names=("Comments",))
