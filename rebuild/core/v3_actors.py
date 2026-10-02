@@ -317,6 +317,19 @@ SET_APART_WORDS = frozenset(('other', 'else', 'further', 'additional', 'more', '
 CESSATION_VERBS = frozenset(('stop', 'discontinue', 'cease', 'withdraw', 'quit', 'halt', 'suspend', 'resolve', 'subside',
                              'abate', 'disappear', 'wean'))
 CESSATION_PARTICLES = {'come': 'off', 'give': 'up'}
+#: (2026-10-02, RV4H-2) Verbs by which a statement SUPERSEDES what it names - switches, replaces, substitutes, swaps,
+#: changes to (or from), withholds or holds it ('Warfarin has been switched to apixaban.', 'Warfarin was replaced by
+#: apixaban.', 'The warfarin was changed to apixaban.', 'Warfarin was withheld today.') - and 'on hold' by its
+#: preposition ('The warfarin is on hold for surgery.'). A supersession ENDS what it supersedes for the relation floors
+#: exactly as a cessation does; WHAT it supersedes is read from the parse (`_superseded`), never from a phrase. A verb
+#: missing here leaves the model's relation to decide, as on ab58c98f. HOLD-ONLY.
+SUPERSESSION_VERBS = frozenset(('switch', 'replace', 'substitute', 'swap', 'change', 'withhold', 'hold'))
+#: Their participles, read by spelling whatever the tagger calls them ('Withheld today.' is tagged a proper noun).
+SUPERSESSION_FORMS = {'switched': 'switch', 'replaced': 'replace', 'substituted': 'substitute', 'swapped': 'swap',
+                      'changed': 'change', 'withheld': 'withhold', 'held': 'hold'}
+#: The prepositions that name what a supersession ENDS ('switched from warfarin', 'substituted for warfarin'), by verb;
+#: every other one ('to', 'with', 'by', 'for' after swap) names what replaced it, which is not ended.
+SUPERSEDED_PREPOSITIONS = {'switch': ('from',), 'change': ('from',), 'swap': ('from',), 'substitute': ('for',)}
 #: What makes a statement an intention, plan, need, request or refusal rather than what is so now (the PLAN/intention
 #: floor, for a question that is not a Plan): a future modal, 'going to', one of these words ('needs', 'declines', 'is
 #: due', 'is a candidate for', 'is planned', 'is booked'), or a phrase of pending status ('on hold', 'on the waiting list',
@@ -456,6 +469,102 @@ def _denied(words, root):
     return keys(found - {'patient'})
 
 
+def _shared_subjects(token, inside):
+    """(2026-10-02) The subjects a CONJOINED predicate with none of its own shares with the predicate it is conjoined
+    to: up its conjunct chain to the first predicate with a subject ('Warfarin was started and stopped.': 'stopped'
+    shares 'warfarin'), and a predicate complement of a linking verb shares that verb's subject ('The scope was advanced
+    to the terminal ileum and withdrawn slowly.': the parser reads 'advanced' as the copula's adjective and 'withdrawn'
+    as its conjunct, so 'withdrawn' shares 'scope'). [(subject, passive)], subjects inside the read words only; one
+    reached through a linking verb's complement reads as passive ('was advanced and withdrawn'). Empty for a predicate
+    that is not a conjunct or whose chain reaches a noun or no subject; a shared subject may be the patient or a pronoun
+    ('The patient started warfarin and then stopped.' names nothing it stopped). Read only by the relation floors."""
+    if token.dep_ != 'conj':
+        return []
+    head = token
+    while head.dep_ == 'conj' and head.head.i != head.i:
+        head = head.head
+        if head.pos_ not in ('VERB', 'AUX', 'ADJ'):
+            return []
+        found = [(c, c.dep_ == 'nsubjpass') for c in head.children if c.dep_ in ('nsubj', 'nsubjpass') and c.i in inside]
+        if found:
+            return found
+    if head.dep_ == 'acomp' and head.head.i != head.i and head.head.pos_ in ('VERB', 'AUX'):
+        return [(c, True) for c in head.head.children if c.dep_ in ('nsubj', 'nsubjpass') and c.i in inside]
+    return []
+
+
+def _subjects(token, inside):
+    """A predicate's own subjects inside the read words, or, a conjunct with none, the ones it shares
+    (`_shared_subjects`): [(subject, passive)]."""
+    own = [(c, c.dep_ == 'nsubjpass') for c in token.children if c.dep_ in ('nsubj', 'nsubjpass') and c.i in inside]
+    return own or _shared_subjects(token, inside)
+
+
+def _phrase_lemmas(tokens, inside, skip=frozenset()):
+    return {_lemma(x) for token in tokens for x in token.subtree
+            if x.pos_ in CONTENT and x.i in inside and x.i not in skip}
+
+
+def _superseded(t, lem, txt, inside):
+    """(2026-10-02, RV4H-2) What a supersession verb (`SUPERSESSION_VERBS`) ends, read from the parse: (ended lemmas,
+    whether it may hold as a bare cessation), or None when `t` is not one. It ends
+      - what its OLD-value preposition names (`SUPERSEDED_PREPOSITIONS`: 'The patient was switched from warfarin to
+        apixaban.', 'Apixaban was substituted for warfarin.'), when that names something; otherwise
+      - its THEME: a passive subject or an object ('Warfarin has been switched to apixaban.', 'Switch warfarin to
+        apixaban.', 'Apixaban replaced warfarin.', 'Warfarin was withheld today.'), or an active subject when it has no
+        object (a reduced passive: 'Warfarin switched to apixaban.', 'Warfarin withheld.', 'Warfarin held for
+        surgery.').
+    A replacer, an agent and what a replacement preposition names ('to apixaban', 'by apixaban', 'with apixaban') are
+    never ended: 'Warfarin was switched from aspirin.' ends aspirin, not warfarin. 'change' is one only with 'to' or
+    'from' ('The warfarin was changed to apixaban.', never 'Dressing changed daily.'; a noun, 'no change in symptoms',
+    is never one); switching, swapping or changing 'between' alternates and ends nothing ('She switches between two
+    inhalers.'); 'switch' with the particle 'on' starts something; 'hold' is one only without both an active subject
+    and an object ('The patient held her breath.') and never bare ('The patient was held overnight.'). Any other one
+    naming nothing but the patient or a pronoun holds as a bare cessation, as a cessation does ('She was switched to
+    apixaban.', 'Withheld today.'). A participle's spelling is read whatever the tagger calls it ('Withheld today.' is
+    tagged a proper noun); a noun is never one. Only HOLDS."""
+    if t.pos_ not in ('VERB', 'ADJ') and txt[t.i] not in SUPERSESSION_FORMS:
+        return None
+    verb = lem[t.i] if lem[t.i] in SUPERSESSION_VERBS else SUPERSESSION_FORMS.get(txt[t.i])
+    if verb is None:
+        return None
+    preps = {}
+    for child in t.children:
+        if child.dep_ in ('prep', 'agent'):
+            preps.setdefault(_fold(child.text), []).extend(g for g in child.children if g.dep_ in ('pobj', 'pcomp'))
+    if (verb == 'change' and not {'to', 'from'} & set(preps)) or (verb in ('switch', 'swap', 'change')
+                                                                   and 'between' in preps):
+        return None
+    if verb == 'switch' and any(c.dep_ == 'prt' and _fold(c.text) == 'on' for c in t.children):
+        return None
+    subjects = _subjects(t, inside)
+    objects = [c for c in t.children if c.dep_ in ('dobj', 'obj') and c.i in inside]
+    passive = [s for s, is_passive in subjects if is_passive]
+    active = [s for s, is_passive in subjects if not is_passive]
+    if verb == 'hold' and active and objects:
+        return None
+    theme = passive + objects + ([] if objects else active)
+    old = _phrase_lemmas([o for word in SUPERSEDED_PREPOSITIONS.get(verb, ()) for o in preps.get(word, ())], inside)
+    ended = old if keys(old - {'patient'}) else _phrase_lemmas(theme, inside)
+    return ended, verb != 'hold'
+
+
+def _on_hold(prep, inside):
+    """(2026-10-02, RV4H-2) What an 'on hold' preposition ends: the noun it modifies ('Warfarin on hold.'), or the theme
+    of the verb it completes - a passive subject, an object, else a subject ('The warfarin is on hold for surgery.',
+    'Put warfarin on hold.', 'Warfarin was put on hold.'). Empty when it names nothing (a bare cessation). Only HOLDS."""
+    head = prep.head
+    if head.i == prep.i:
+        return set()
+    if head.pos_ in ('NOUN', 'PROPN'):
+        return _phrase_lemmas([head], inside, skip={x.i for x in prep.subtree})
+    subjects = _subjects(head, inside)
+    objects = [c for c in head.children if c.dep_ in ('dobj', 'obj') and c.i in inside]
+    theme = [s for s, is_passive in subjects if is_passive] + objects + (
+        [] if objects else [s for s, is_passive in subjects if not is_passive])
+    return _phrase_lemmas(theme, inside)
+
+
 def _floor_reading(words, root, lem=None, txt=None):
     """The rest of what the relation floors read of one parsed unit (`generation.v3_relation_causes`); each only HOLDS.
 
@@ -465,7 +574,12 @@ def _floor_reading(words, root, lem=None, txt=None):
       'ceased_keys': what a cessation ends ('Methadone was stopped.', 'She stopped the methadone.', 'The pain resolved
           yesterday.', 'The patient came off warfarin.'); 'bare_cessation': a cessation naming nothing but the patient or
           a pronoun ('The patient quit five years ago.', 'Stopped last month.', 'It was stopped.'), which leans on another
-          line for what it ends (DEPENDS);
+          line for what it ends (DEPENDS). (2026-10-02) A conjoined cessation with no subject of its own ends what the
+          predicate it is conjoined to has as subject ('The scope was advanced to the terminal ileum and withdrawn
+          slowly.' ends scope: `_shared_subjects`), and a SUPERSESSION ends what it supersedes exactly as a cessation
+          does ('Warfarin has been switched to apixaban.', 'The warfarin is on hold for surgery.': `_superseded`,
+          `_on_hold`); one naming nothing is bare only where the whole statement ends nothing, so it never makes a
+          bare cessation less bare;
       'topic_denial_keys': the modifiers of what a negated clause denies having when nothing more specific follows
           ('She has never had an allergic reaction.': allergic), read against a labelled answer's label;
       'surface_keys': every word of the value by its spelling and lemma but light verbs and 'patient' (which printed
@@ -479,8 +593,20 @@ def _floor_reading(words, root, lem=None, txt=None):
     # each word's lemma and folded spelling, read once (`lem`, `txt`: the caller's, by token index)
     lem = lem if lem is not None else {t.i: _lemma(t) for t in words}
     txt = txt if txt is not None else {t.i: _fold(t.text) for t in words}
+    inside = {t.i for t in words}
     cessation, ended = False, set()
+    # (2026-10-02, RV4H-2) what a SUPERSESSION ends, and whether one of them names nothing it ended
+    superseded, supersession_bare = set(), False
     for t in words:
+        found = _superseded(t, lem, txt, inside)
+        if found is not None:
+            superseded |= found[0]
+            supersession_bare = supersession_bare or (found[1] and not keys(found[0] - {'patient'}))
+        if t.dep_ == 'prep' and txt[t.i] == 'on' and any(g.dep_ == 'pobj' and _fold(g.text) == 'hold'
+                                                          for g in t.children):
+            held = _on_hold(t, inside)
+            superseded |= held
+            supersession_bare = supersession_bare or not keys(held - {'patient'})
         phrasal = CESSATION_PARTICLES.get(lem[t.i]) if t.pos_ in ('VERB', 'AUX') else None
         particle = [c for c in t.children if c.dep_ in ('prt', 'prep') and _fold(c.text) == phrasal] if phrasal else []
         if not ((t.pos_ in ('VERB', 'ADJ', 'AUX') and lem[t.i] in CESSATION_VERBS) or particle):
@@ -489,10 +615,15 @@ def _floor_reading(words, root, lem=None, txt=None):
         for child in t.children:
             if child.dep_ in ('nsubj', 'nsubjpass', 'dobj', 'obj', 'xcomp', 'ccomp'):
                 ended |= {_lemma(x) for x in child.subtree if x.pos_ in CONTENT}
+        # (2026-10-02) a conjoined cessation with no subject of its own ends its head's ('... advanced to the terminal
+        # ileum and withdrawn slowly.' ends scope); the same reading a repeated subject would give it
+        if not any(c.dep_ in ('nsubj', 'nsubjpass') for c in t.children):
+            ended |= _phrase_lemmas([subject for subject, _ in _shared_subjects(t, inside)], inside)
         for child in particle:
             ended |= {_lemma(x) for grand in child.children if grand.dep_ == 'pobj' for x in grand.subtree
                       if x.pos_ in CONTENT}
     ended -= {'patient'}
+    superseded -= {'patient'}
     # A CLASS denial denies by a quantifier ('takes no anticoagulants', 'has had no pain', 'has never smoked', 'none',
     # 'nothing'), unless the quantified thing is set apart from what was already said ('no other medication', 'nothing
     # else', 'no further pain'); a plain 'not' denies its own predicate, which OPPOSED reads with its object, time and
@@ -551,7 +682,8 @@ def _floor_reading(words, root, lem=None, txt=None):
     intention = any(intended(h) for h in clauses)
     return {'quantified_denial': quantified, 'reattribution': reattribution,
             'denial_nouns': keys(denial_nouns), 'denial_heads': keys(denial_heads) | frozenset(denial_heads),
-            'ceased_keys': keys(ended), 'bare_cessation': cessation and not keys(ended),
+            'ceased_keys': keys(ended | superseded),
+            'bare_cessation': (cessation and not keys(ended)) or (supersession_bare and not keys(ended | superseded)),
             'topic_denial_keys': (keys({_lemma(m) for c in root.children if c.dep_ in ('dobj', 'attr')
                                         and not any(g.dep_ == 'prep' for g in c.children)
                                         for m in c.children if m.dep_ in ('amod', 'compound')})
