@@ -5,6 +5,10 @@ through scripts/run-ruled-mutation.sh with a committed declaration, like every o
         --request-key <uuid>
     manage.py redaction execute --custodian <second custodian email> --request <request id> \
         --checkpoint <signed checkpoint JSON file>
+    manage.py redaction journal-releases --custodian <email> --document <encounter id>
+
+'journal-releases' clears the 'hold_release_not_journaled' refusal: it journals, from each release's own recorded evidence,
+every committed release of a hold in the document's scope that the independent journal lacks (any active custodian).
 
 Output carries ids, digests and counts only; never clinical text, file paths or the reason itself.
 """
@@ -22,7 +26,7 @@ class Command(BaseCommand):
     help = 'Request (first custodian) or execute (second custodian) the redaction of one unfinalized document.'
 
     def add_arguments(self, parser):
-        parser.add_argument('action', choices=('request', 'execute'))
+        parser.add_argument('action', choices=('request', 'execute', 'journal-releases'))
         parser.add_argument('--custodian', required=True, help='Email of the verified administrator acting.')
         parser.add_argument('--document')
         parser.add_argument('--reason-sha256')
@@ -33,7 +37,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         actor = User.objects.filter(email__iexact=options['custodian']).first()
         try:
-            if options['action'] == 'request':
+            if options['action'] == 'journal-releases':
+                if not options['document']:
+                    raise CommandError('journal-releases needs --document.')
+                result = {'journaled_releases': redaction.journal_pending_releases(actor, options['document'])}
+            elif options['action'] == 'request':
                 if not (options['document'] and options['reason_sha256'] and options['request_key']):
                     raise CommandError('request needs --document, --reason-sha256 and --request-key.')
                 row = redaction.request(actor, options['document'], options['reason_sha256'], options['request_key'])

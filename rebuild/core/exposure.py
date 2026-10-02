@@ -49,8 +49,10 @@ def commit_evidence():
     - a disposition counts only once the document's row is gone: replay imports the tombstone of a disposition into an
       older restore and keeps a restored row whose content conflicts (X1), and later backups then hold that row;
     - a redaction counts only while none of its bytes is left on this volume, and from the later of its tombstone and the
-      last removal of its bytes (redaction.files_removed): a failed unlink leaves the recording after the commit, and
-      volume snapshots taken meanwhile hold it (X2)."""
+      last removal of its bytes, by its sweep ('redaction.swept' with files removed) or by the worker's reaper of an
+      unapproved dictation ('voice.over_limit_upload_removed', refutation R4S-2 of b3d8111d: the reaper can remove it first,
+      and only the sweep's removals were read): a failed unlink leaves the recording after the commit, and volume snapshots
+      taken meanwhile hold it (X2)."""
     from .models import AuditEvent, DispositionTombstone, Encounter, RedactionTombstone
     from . import redaction
     found = {}
@@ -60,7 +62,12 @@ def commit_evidence():
         if target not in present:
             found[str(ident)] = moment
     removed = {}
-    for target, moment in AuditEvent.objects.filter(action='redaction.files_removed').values_list('target', 'created_at'):
+    targets = [str(target) for target in RedactionTombstone.objects.values_list('target_id', flat=True)]
+    for action, target, moment, details in AuditEvent.objects.filter(
+            action__in=('redaction.swept', 'voice.over_limit_upload_removed'), target__in=targets).values_list(
+            'action', 'target', 'created_at', 'details'):
+        if action == 'redaction.swept' and not (details or {}).get('removed'):
+            continue
         removed[target] = max(moment, removed.get(target, moment))
     for ident, moment, target in RedactionTombstone.objects.values_list('id', 'created_at', 'target_id'):
         if not redaction.files_left(target):

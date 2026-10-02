@@ -105,11 +105,13 @@ class Redaction(RedactionFixture, TestCase):
         self.assertEqual(sorted(f['storage_key'] for f in body['files']), sorted(files))
         self.assertEqual([e['body']['redaction'] for e in j.redaction_entries(j.verified(self.fresh()))], [body])
         self.assertEqual(tombstone.entry_sha256, p.digest(tombstone.journal_entry))
-        # Round 2 (R2D-X2): the removal of the bytes is audited too, a count and no path, so the exposure ledger knows when
-        # they left this volume (core.exposure.commit_evidence).
+        # Round 2 (R2D-X2): the removal of the bytes is audited too, counts and no path, so the exposure ledger knows when
+        # they left this volume (core.exposure.commit_evidence); round 4 (R4S-4) names it 'redaction.swept' and records the
+        # whole outcome, which also tells the worker whether to come back (redaction.sweep_left).
         self.assertEqual(sorted(m.AuditEvent.objects.filter(action__startswith='redaction.').values_list('action', flat=True)),
-                         ['redaction.executed', 'redaction.files_removed', 'redaction.requested'])
-        self.assertEqual(m.AuditEvent.objects.get(action='redaction.files_removed').details, {'files': len(files)})
+                         ['redaction.executed', 'redaction.requested', 'redaction.swept'])
+        self.assertEqual(m.AuditEvent.objects.get(action='redaction.swept').details,
+                         {'removed': len(files), 'retryable': 0, 'refused': 0, 'sequence': 1})
         for text in (self.path.read_text(), json.dumps(list(m.AuditEvent.objects.values('details'))), json.dumps(tombstone.files)):
             for private in ('SYNTHETIC REDACTABLE', 'chest pain', self.scope[3].display_name):
                 self.assertNotIn(private, text)
@@ -747,3 +749,258 @@ class RoundThreeRepairs(RedactionFixture, TestCase):
         self.assertFalse(m.RedactionTombstone.objects.exists())
         self.assertTrue(redaction.withheld(row.pk))              # journaled only: withheld
         self.assertFalse(redaction.withheld(self.scope[5].pk))   # another document: never
+
+
+@override_settings(**ISOLATED)
+class RoundFourRepairs(RedactionFixture, TestCase):
+    """Refutation round 4 of b3d8111d: the sweep lens (R4S-1..R4S-4, R4S-6) and the restore half of its false greens
+    (R4F-A, R4F-1..R4F-6, R4F-14)."""
+    def setUp(self): self.setup_journal()
+
+    refusing = RoundTwoRepairs.refusing
+    link = RoundThreeRepairs.link
+
+    def overlimit(self, row):
+        """What core.views.voice leaves after an over-limit quote: the stored upload and its audit row, no job yet."""
+        from core.security import audit
+        upload = f'audio/{uuid.uuid4().hex}{"a" * 16}.wav'
+        self.write(upload, b'SYNTHETIC OVER-LIMIT DICTATION BYTES')
+        audit(self.scope[0], 'voice.over_limit_quoted', row.pk, department=row.department, seconds='900',
+              charge_limit='1.00', standard_limit='0.40', path=upload)
+        return upload
+
+    def at(self, minutes):
+        return patch('django.utils.timezone.now', return_value=self.base + timedelta(minutes=minutes))
+
+    def test_R4S1_the_reaper_removing_a_pending_dictation_never_strands_a_redaction(self):
+        """b3d8111d: the dictation was part of the content fingerprint, and the reaper deletes it on its own 40-minute timer:
+        a pending redaction's execute, or a journaled one's exact retry, then refused for good ('content changed'). The
+        fingerprint covers what the document's own rows hold; a pending dictation is swept with them, never fingerprinted."""
+        from core import jobs
+        for journaled_first in (False, True):
+            with self.subTest(journaled_first=journaled_first):
+                row, _job, (audio, result) = self.worked_draft()
+                upload = self.overlimit(row)
+                requested = redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+                if journaled_first:                                    # journaled, then its commit failed (F3's state)
+                    with patch('core.redaction.apply', side_effect=DatabaseError('SYNTHETIC lost connection')):
+                        with self.assertRaises(DatabaseError):
+                            redaction.execute(self.second, requested.pk, self.fresh())
+                with self.at(41):
+                    self.assertEqual(jobs.reap_abandoned_voice_uploads(), 1)   # the worker's reaper, on its own timer
+                self.assertFalse(private_path(upload).exists())
+                with self.captureOnCommitCallbacks(execute=True):
+                    redaction.execute(self.second, requested.pk, self.fresh())  # b3d8111d: CONTENT_CHANGED for good
+                self.assertEqual(m.Encounter.objects.get(pk=row.pk).status, 'redacted')
+                self.assertFalse(private_path(audio).exists() or private_path(result).exists())
+        # The dictation is still removed with the document when the reaper has not run yet.
+        row, _job, _files = self.worked_draft()
+        upload = self.overlimit(row)
+        self.redact(row)
+        self.assertFalse(private_path(upload).exists())
+
+    def test_R4S2_the_reapers_removal_of_a_redacted_dictation_dates_the_exposure(self):
+        """The reaper and the sweep both remove a redacted document's dictation, and the ledger dated byte removal by the
+        sweep's audit only: a dictation the reaper removed two hours on was counted as gone at the commit."""
+        from core import exposure, jobs
+        row, _job, _files = self.worked_draft()
+        upload = self.overlimit(row)
+        with self.at(1), self.refusing(upload), self.assertLogs('core.redaction', 'ERROR'):
+            _requested, tomb = self.redact(row)
+        self.assertIsNone(exposure.commit_evidence().get(str(tomb.pk)))      # bytes left: no evidence yet
+        with self.at(120):
+            self.assertEqual(jobs.reap_abandoned_voice_uploads(), 1)         # the reaper removes it first
+        evidence = exposure.commit_evidence()[str(tomb.pk)]
+        self.assertEqual(evidence, self.base + timedelta(minutes=120))      # b3d8111d: the commit time, T+1m
+
+    def pending_release(self, scope_patient=None):
+        """A hold the journal never took, released here while the release's journal copy fails."""
+        with patch('core.disposition_journal.append_hold', side_effect=ValidationError('SYNTHETIC journal outage')), \
+                self.assertLogs('core.retention', 'ERROR'):
+            hold = self.committed(lambda: retention.create_hold(self.admin, 'patient', scope_patient or self.scope[3].pk,
+                                                                'a' * 64, uuid.uuid4()))
+        with patch('core.disposition_journal.append_release', side_effect=ValidationError('SYNTHETIC journal outage')), \
+                self.assertLogs('core.retention', 'ERROR'):
+            self.committed(lambda: retention.release_hold(self.second, hold.pk, 'b' * 64))
+        return hold
+
+    def test_R4FA_R4S3_any_active_custodian_journals_a_committed_release_from_its_own_evidence(self):
+        """b3d8111d: only the releasing custodian's exact retry could journal a pending release; once that custodian left,
+        every redaction in the hold's scope was refused for good. Any active verified custodian journals the committed
+        release as it was recorded (its id, authority and releasing custodian), audited under the one who does it."""
+        row, _job, _files = self.worked_draft()
+        hold = self.pending_release()
+        m.User.objects.filter(pk=self.second.pk).update(is_active=False)    # the releasing custodian has left
+        self.assertEqual(redaction.refusals(row), ['hold_release_not_journaled'])
+        third = self.custodian('custodian3')
+        with self.assertRaises(PermissionDenied):
+            retention.release_hold(self.second, hold.pk, 'b' * 64)           # (the control: the old path is closed)
+        entry = retention.journal_committed_release(third, hold.pk)
+        release = m.RetentionHoldRelease.objects.get(hold=hold)
+        self.assertEqual(entry['body']['release'], {'id': str(release.pk), 'hold_id': str(hold.pk),
+                                                    'authority_sha256': 'b' * 64, 'created_by': str(self.second.pk)})
+        self.assertEqual(m.AuditEvent.objects.get(action='retention.release_journaled').actor_id, third.pk)
+        self.assertEqual(retention.journal_committed_release(third, hold.pk), entry)   # idempotent: nothing appended
+        self.assertEqual([j.kind(e) for e in j.verified()].count('release'), 1)
+        self.assertEqual(redaction.refusals(row), [])
+        self.redact(row, approver=third)                                     # (the releasing custodian has left)
+        with self.assertRaises(PermissionDenied):
+            retention.journal_committed_release(m.User.objects.get(pk=self.second.pk), hold.pk)   # not by a departed one
+
+    def test_R4FA_the_command_journals_every_pending_release_in_a_documents_scope(self):
+        import io
+        from django.core.management import call_command
+        row, _job, _files = self.worked_draft()
+        self.pending_release()
+        third = self.custodian('custodian3')
+        out = io.StringIO()
+        call_command('redaction', 'journal-releases', '--custodian', third.email, '--document', str(row.pk), stdout=out)
+        self.assertEqual(json.loads(out.getvalue()), {'journaled_releases': 1})
+        self.assertEqual(redaction.refusals(row), [])
+
+    def test_R4F5_a_pending_release_outside_the_documents_scope_refuses_nothing(self):
+        row, _job, _files = self.worked_draft()
+        self.pending_release(scope_patient=self.other[3].pk)                 # another organization's patient
+        self.assertEqual(redaction.refusals(row), [])
+        redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+
+    def test_R4S4_the_steady_state_sweep_costs_the_same_however_many_redactions_exist(self):
+        """b3d8111d ran files_left (about 14 queries, an unindexed audit scan among them) for every tombstone every minute.
+        A document whose last sweep left nothing retryable is not visited again."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        def pass_cost():
+            with CaptureQueriesContext(connection) as queries:
+                self.assertEqual(redaction.sweep_left(), 0)
+            return len(queries.captured_queries)
+        self.redact(self.worked_draft()[0])
+        one = pass_cost()
+        gone, _job, files = self.worked_draft()
+        for key in files: private_path(key).unlink()                         # a redaction whose sweep finds nothing to remove
+        self.redact(gone)
+        for _ in range(3):
+            self.redact(self.worked_draft()[0])
+        self.assertEqual(pass_cost(), one)                                   # b3d8111d: grows by ~14 per redaction
+        self.assertLessEqual(one, 3)
+
+    def test_R4S4_the_dictation_read_is_narrowed_by_the_documents_department(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        row, _job, _files = self.worked_draft()
+        upload = self.overlimit(row)
+        with CaptureQueriesContext(connection) as queries:
+            self.assertEqual(redaction.pending_uploads(row.pk), [upload])
+        audit_reads = [q['sql'] for q in queries.captured_queries if 'core_auditevent' in q['sql']]
+        self.assertTrue(audit_reads and all('"department_id" =' in sql for sql in audit_reads), audit_reads)
+
+    def test_R4F2_R4F3_R4F4_one_unreadable_record_stops_neither_the_sweep_nor_the_worker(self):
+        from django.core.management import call_command
+        first, _j1, (audio1, _r1) = self.worked_draft()
+        second, _j2, (audio2, _r2) = self.worked_draft()
+        third, _j3, (audio3, _r3) = self.worked_draft()
+        with self.refusing(audio1, audio2, audio3), self.assertLogs('core.redaction', 'ERROR'):
+            self.redact(first); self.redact(second); self.redact(third)
+        real = redaction.sweep
+        def unreadable(target_id, *args, **kwargs):
+            if str(target_id) == str(first.pk): raise ValidationError('SYNTHETIC unreadable record')
+            return real(target_id, *args, **kwargs)
+        with patch('core.redaction.sweep', side_effect=unreadable), self.assertLogs('core.redaction', 'ERROR'):
+            self.assertEqual(redaction.sweep_left(), 2)                      # every other document is swept (R4F-3, R4F-4)
+        self.assertTrue(private_path(audio1).exists())
+        self.assertFalse(private_path(audio2).exists() or private_path(audio3).exists())
+        with patch('core.redaction.sweep', side_effect=unreadable), \
+                patch('core.management.commands.worker.run_one', return_value=False) as ran, \
+                patch('core.management.commands.worker.mark_stale'), \
+                patch('core.management.commands.worker.reap_abandoned_voice_uploads'), \
+                self.assertLogs('core.redaction', 'ERROR'):
+            call_command('worker', once=True)                                # R4F-2: the queue is still served
+        ran.assert_called_once_with()
+
+    def test_R4F1_a_key_reached_through_a_linked_directory_is_refused(self):
+        from django.conf import settings
+        row, job, (audio, _result) = self.worked_draft()
+        name = f'{uuid.uuid4().hex}{"b" * 16}.docx'                         # a production-shaped key (the journal's pattern)
+        original = self.write(f'originals/{name}', b'SYNTHETIC ANOTHER DEPARTMENT ORIGINAL')
+        m.Template.objects.filter(pk=self.other[4].pk).update(original_path=f'originals/{name}')
+        root = settings.MEDIA_ROOT.resolve()
+        (root / 'lnk').symlink_to(original.parent, target_is_directory=True)
+        m.Job.objects.filter(pk=job.pk).update(input_path=f'lnk/{name}')     # the key resolves into another record's file
+        with self.assertLogs('core.redaction', 'ERROR'):
+            self.redact(row)
+        self.assertTrue(original.exists())                                   # b3d8111d without its second half: unlinked
+
+    def test_R4F6_a_state_directory_behind_a_symbolic_link_is_still_swept(self):
+        import tempfile
+        from django.conf import settings
+        row, _job, (audio, _result) = self.worked_draft()
+        import os
+        holder = tempfile.mkdtemp()
+        linked = Path(holder) / 'media'; linked.symlink_to(settings.MEDIA_ROOT.resolve(), target_is_directory=True)
+        self.addCleanup(os.rmdir, holder); self.addCleanup(linked.unlink)
+        with override_settings(MEDIA_ROOT=linked):
+            self.assertEqual(redaction.remove_files([{'storage_key': audio, 'sha256': ''}], row.pk), 1)
+        self.assertFalse(private_path(audio).exists())
+
+    def test_R4S6_R4F14_a_link_at_a_redacted_key_is_reported_once_and_never_promised_away(self):
+        row, _job, (audio, result) = self.worked_draft()
+        self.redact(row)
+        original = private_path(self.scope[4].original_path)
+        self.link(result, original)
+        with self.assertLogs('core.redaction', 'ERROR') as logged:
+            self.assertEqual(redaction.sweep(row.pk), 0)
+        self.assertNotIn('removes it', ' '.join(logged.output))             # b3d8111d: a promise nothing keeps
+        self.assertIn('operator', ' '.join(logged.output))
+        with self.assertNoLogs('core.redaction', 'ERROR'):
+            for _ in range(3):
+                self.assertEqual(redaction.sweep_left(), 0)                  # b3d8111d: one error per minute, forever
+        self.assertTrue(original.exists())
+
+    def test_R4S6_the_newest_sweep_decides_a_retry_whatever_the_clock_says(self):
+        """The round-4 repair read a document's latest 'redaction.swept' by time; a sweep on the same timestamp as the one
+        before it, or after a clock stepped back, was read as the OLDER one, so a document whose newest sweep left bytes
+        retryable was taken as clean and its bytes were never retried. Found by the repair's own mutant (links counted as
+        retryable survived: the frozen fixture clock tied the two rows)."""
+        for minutes in (5, 10):                                          # stepped back; the same timestamp
+            with self.subTest(newest_sweep_at=minutes):
+                row, _job, (audio, result) = self.worked_draft()
+                with self.at(10):
+                    self.redact(row)                                     # clean: {'removed': 2}
+                restored = self.write(result, b'SYNTHETIC BYTES A RESTORE PUT BACK')
+                with self.at(minutes), self.refusing(result), self.assertLogs('core.redaction', 'ERROR'):
+                    self.assertEqual(redaction.sweep(row.pk), 0)         # newest: one retryable
+                with self.at(11):
+                    self.assertEqual(redaction.sweep_left(), 1)          # before: read as clean, never retried
+                self.assertFalse(restored.exists())
+
+    def test_R4S6_between_two_sweeps_of_one_number_the_later_decides(self):
+        """Two sweeps running at once both number their outcome one past the last; then the later in time is the newer
+        state of the document. Both insertion orders, so the reading never rests on the order rows come back in."""
+        from core.security import audit
+        clean, retry = {'removed': 1, 'retryable': 0, 'refused': 0, 'sequence': 2}, {'removed': 0, 'retryable': 1, 'refused': 0, 'sequence': 2}
+        for later in ('clean', 'retryable'):
+            with self.subTest(later=later):
+                row, _job, _files = self.worked_draft()
+                self.redact(row)                                         # sequence 1, at the fixture time
+                rows = [(5, retry), (10, clean)] if later == 'clean' else [(5, clean), (10, retry)]
+                for minutes, details in rows:
+                    with self.at(minutes):
+                        audit(None, 'redaction.swept', row.pk, **details)
+                latest = redaction.latest_outcomes(m.AuditEvent.objects.filter(action='redaction.swept', target=str(row.pk)))
+                self.assertEqual(latest[str(row.pk)], rows[-1][1])
+
+    def test_R4S4_a_retry_that_changes_nothing_records_nothing(self):
+        """A failure the worker retries every minute (a permission the operator has not fixed yet) is recorded when it
+        appears and when it changes, never once a minute: the audit table is append-only."""
+        row, _job, (audio, result) = self.worked_draft()
+        with self.at(1), self.refusing(result), self.assertLogs('core.redaction', 'ERROR'):
+            self.redact(row)
+        swept = lambda: m.AuditEvent.objects.filter(action='redaction.swept', target=str(row.pk)).count()
+        recorded = swept()
+        for minute in (2, 3, 4):
+            with self.at(minute), self.refusing(result), self.assertLogs('core.redaction', 'ERROR'):
+                self.assertEqual(redaction.sweep_left(), 0)              # retried: still refused
+        self.assertEqual(swept(), recorded)
+        with self.at(5):
+            self.assertEqual(redaction.sweep_left(), 1)                  # the permission fixed: removed, and recorded
+        self.assertEqual(swept(), recorded + 1)
+        self.assertFalse(private_path(result).exists())

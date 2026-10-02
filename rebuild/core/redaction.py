@@ -52,7 +52,30 @@ def referenced_files(encounter_id):
     """{storage_key: recorded sha256 or ''} for every private file this document's own rows reference, and every dictation
     an over-limit quote stored for it (refutation R3R-T19 of 75d11c09: until a doctor approves it, an over-limit upload is
     referenced only by its 'voice.over_limit_quoted' audit row, so a redaction left it on the volume, uncounted, until the
-    reaper removed it 40 minutes later)."""
+    reaper removed it 40 minutes later). Swept, counted and refused-if-shared like the rest; never fingerprinted (content)."""
+    keys = own_files(encounter_id)
+    for key in pending_uploads(encounter_id):
+        keys.setdefault(key, '')
+    return keys
+
+
+def pending_uploads(encounter_id):
+    """The dictations an over-limit quote stored for this document, which no row references until a doctor approves them.
+    The audit read is narrowed by the document's department (an indexed column; refutation R4S-4 of b3d8111d: the action and
+    target filter alone scanned the whole audit table for every redacted document, every minute)."""
+    department = m.Encounter.objects.filter(pk=encounter_id).values_list('department_id', flat=True).first()
+    events = m.AuditEvent.objects.filter(action='voice.over_limit_quoted', target=str(encounter_id))
+    if department:
+        events = events.filter(department_id=department)
+    return [key for key in (str((details or {}).get('path') or '') for details in events.values_list('details', flat=True)) if key]
+
+
+def own_files(encounter_id):
+    """{storage_key: recorded sha256 or ''} for every private file this document's own rows reference: what its content
+    fingerprint covers. ⚠️ NOT a pending over-limit dictation (refutation R4S-1 of b3d8111d): the worker's reaper deletes that
+    file on its own 40-minute timer, so with it in the fingerprint a requested redaction's execute, or a journaled one's
+    exact retry, was refused ('content changed') for good once the reaper had run. The dictation is a system-managed upload
+    that the redaction sweeps anyway; the custodians approve the content the document's rows hold."""
     jobs = m.Job.objects.filter(encounter_id=encounter_id)
     keys = {}
     def add(path, sha=''):
@@ -66,9 +89,6 @@ def referenced_files(encounter_id):
         add(row['result_path'], row['result_sha256'])
     row = m.Encounter.objects.filter(pk=encounter_id).values('export_path', 'export_sha256').first()
     if row: add(row['export_path'], row['export_sha256'])
-    for details in m.AuditEvent.objects.filter(action='voice.over_limit_quoted', target=str(encounter_id)).values_list(
-            'details', flat=True):
-        add(str((details or {}).get('path') or ''))
     return keys
 
 
@@ -89,7 +109,7 @@ def content(encounter):
     """The exact clinical content redaction removes, as digests: never stored, only hashed."""
     codes = sorted(m.CodeSuggestion.objects.filter(encounter=encounter).values_list(
         'terminology_id', 'explanation', 'evidence', 'accepted_by_id'), key=lambda row: str(row[0]))
-    files = [file_record(key) for key in sorted(referenced_files(encounter.pk))]
+    files = [file_record(key) for key in sorted(own_files(encounter.pk))]
     batches = sorted(m.GenerationBatch.objects.filter(encounter=encounter).values_list('plan_sha256', flat=True))
     value = {'notes': encounter.notes, 'answers': encounter.answers, 'template_review': encounter.template_review,
              'revision': encounter.revision, 'status': encounter.status,
@@ -165,9 +185,20 @@ def journal_only_holds(encounter_id):
     return {hold_id for hold_id in scoped if records.get(hold_id, {}).get('release') is None}
 
 
+def journal_pending_releases(actor, encounter_id):
+    """Clear 'hold_release_not_journaled' for one document: every hold in its scope released here whose release the journal
+    lacks is journaled from its own recorded evidence (retention.journal_committed_release), by any active verified
+    custodian. Returns how many were journaled."""
+    retention.custodian(actor)
+    pending = unjournaled_releases(encounter_id)
+    for hold_id in sorted(pending):
+        retention.journal_committed_release(actor, hold_id)
+    return len(pending)
+
+
 def unjournaled_releases(encounter_id):
     """Holds in this document's scope released in THIS database for which the independent journal holds no release (the
-    copy is pending: retention._journal_release_after_commit logs and leaves it for the custodian's exact retry). A
+    copy is pending: retention._journal_release_after_commit logs it; any active custodian journals it, R4F-A). A
     restore older than that release keeps the hold active, and a redaction journaled before any release of the hold would
     then replay into a held document and be refused for good: every recovery point taken under the hold stayed
     quarantined (refutation R3R-T3 of 75d11c09). So the redaction waits until a release of the hold precedes it in the
@@ -263,6 +294,11 @@ def apply(entry):
 
 
 def remove_files(files, target_id):
+    """How many of these files' bytes were removed (removal(): the whole outcome)."""
+    return removal(files, target_id)[0]
+
+
+def removal(files, target_id):
     """Remove the bytes of each file of the redacted document `target_id`, whatever they hold now, except a key another
     record references (shared_keys): those bytes are that record's.
 
@@ -270,21 +306,23 @@ def remove_files(files, target_id):
     redaction ran is journaled as empty (sha256 of nothing, 0 bytes), so after a restore of an older recovery point its
     bytes never matched, every sweep logged 'digest changed' and kept the redacted recording, and the restore could never
     be admitted. A redacted document's storage keys are its own (a key is never reused: retention.file_creation), so the
-    bytes at them are its content, journaled or not. Never raises: the redaction is committed; bytes left behind are logged
-    (no path, no content), keep restore admission refused (unapplied) and are removed by the exact retry or the next
-    replay."""
+    bytes at them are its content, journaled or not. Never raises: the redaction is committed. Returns (removed, retryable,
+    refused): bytes a failed unlink left (retryable: the worker's next sweep, the exact retry or the next replay tries
+    again) and keys refused for good (another record references them, or a symbolic link sits on the way: an operator's
+    matter, said once, never promised away; refutation R4S-6 of b3d8111d). Both keep restore admission refused."""
     log = logging.getLogger(__name__)
     keys = [record['storage_key'] for record in files]
     try:
         shared = shared_keys(keys, target_id)
     except Exception:  # noqa: BLE001 - unknown sharing removes nothing; the worker's next sweep tries again
         log.error('Whether a redacted file is shared could not be read; nothing was removed.')
-        return 0
-    removed = 0
+        return 0, len(keys), 0
+    removed = retryable = refused = 0
     root = settings.MEDIA_ROOT.resolve()
     for key in keys:
         if key in shared:
             log.error('A redacted file is referenced by another record and was kept.')
+            refused += 1
             continue
         try:
             # ⚠️ THE LINK ITSELF, NOT WHAT IT POINTS TO (refutation R3R-T1 of 75d11c09): private_path() resolves, so a check
@@ -292,13 +330,18 @@ def remove_files(files, target_id):
             # (a template's original), leaving the link. As retention._cleanup_file does: refuse a link at the key, and a
             # key whose resolved path is not the key itself (a linked directory on the way).
             candidate = root / key
-            if candidate.is_symlink() or private_path(key) != candidate:raise ValidationError('symbolic link')
+            if candidate.is_symlink() or private_path(key) != candidate:
+                log.error('A redacted key reaches its bytes through a symbolic link; nothing was removed. An operator must '
+                          'remove the link: what it points to may be another record\'s.')
+                refused += 1
+                continue
             if not candidate.exists():continue
             candidate.unlink(); removed += 1
         except (OSError, ValidationError):
             log.error('A redacted file was not removed; the worker\'s next sweep, the exact retry or the next replay '
                       'removes it.')
-    return removed
+            retryable += 1
+    return removed, retryable, refused
 
 
 def redacted_files(target_id):
@@ -315,13 +358,32 @@ def redacted_files(target_id):
 
 
 def sweep(target_id):
-    """Remove the bytes of every file of a redacted document (after its commit, at a retry and at every replay). Returns
-    how many were removed; a removal is audited (a count, no path), and that time is when the bytes left this volume
-    (core.exposure.commit_evidence)."""
-    removed = remove_files(redacted_files(target_id), target_id)
-    if removed:
-        audit(None, 'redaction.files_removed', target_id, files=removed)
+    """Remove the bytes of every file of a redacted document (after its commit, at a retry, at every replay, and by the
+    worker while a retryable failure is outstanding). Returns how many were removed. Its outcome is audited as
+    'redaction.swept' (counts, no path) whenever it differs from the last one recorded: a removal's time is when those bytes
+    left this volume (core.exposure.commit_evidence), and the last outcome tells the worker whether to come back
+    (sweep_left)."""
+    removed, retryable, refused = removal(redacted_files(target_id), target_id)
+    outcome = {'removed': removed, 'retryable': retryable, 'refused': refused}
+    last = latest_outcomes(m.AuditEvent.objects.filter(action='redaction.swept', target=str(target_id))).get(str(target_id))
+    # Recorded when bytes were removed, and when what is left changed: a retry that removed nothing and left the same is
+    # not, or a failure the worker retries every minute would add an append-only audit row every minute.
+    if removed or any((last or {}).get(key) != outcome[key] for key in ('retryable', 'refused')):
+        audit(None, 'redaction.swept', target_id, **outcome, sequence=((last or {}).get('sequence') or 0) + 1)
     return removed
+
+
+def latest_outcomes(events):
+    """{target: the details of its latest 'redaction.swept'}: the latest by the sweep's own sequence number, the time only
+    between equal ones. By time alone, two sweeps sharing a timestamp (a coarse or a stepped-back clock) made 'the latest'
+    either of them, and a document whose newest sweep left bytes retryable could be read as clean and never retried."""
+    latest, order = {}, {}
+    for target, details, created in events.values_list('target', 'details', 'created_at'):
+        details = details or {}
+        rank = (details.get('sequence') or 0, created)
+        if target not in order or rank > order[target]:
+            latest[target], order[target] = details, rank
+    return latest
 
 
 def withheld(encounter_id):
@@ -355,12 +417,22 @@ def sweep_left():
     """The automatic retry of a failed removal (refutation R3R-T5 of 75d11c09): the worker runs this every minute. A
     redaction whose bytes a failed unlink left on a SERVING instance no longer quarantines it (R2D-Q1), and a redaction
     applied there by replay has no request row for an exact retry, nor a replay once admitted; so every redacted document
-    whose files still have bytes here is swept again. Returns how many files were removed."""
+    whose last sweep left a retryable failure, or that was never swept here, is swept again. Returns how many files were
+    removed.
+
+    ⚠️ THE STEADY STATE COSTS TWO QUERIES, HOWEVER MANY REDACTIONS EXIST (refutation R4S-4 of b3d8111d: every tombstone's
+    files were re-read every minute, about 14 queries each and an audit-table scan among them, 6 s a pass at 100 redactions).
+    A document whose last sweep left nothing retryable is not visited again; one whose bytes were refused for good (a
+    symbolic link, another record's key) is an operator's matter and is not retried, so it is not logged every minute
+    either."""
+    last = latest_outcomes(m.AuditEvent.objects.filter(action='redaction.swept'))
     removed = 0
     for target_id in m.RedactionTombstone.objects.values_list('target_id', flat=True):
+        outcome = last.get(str(target_id))
+        if outcome is not None and not (outcome or {}).get('retryable'):
+            continue
         try:
-            if files_left(target_id):
-                removed += sweep(target_id)
+            removed += sweep(target_id)
         except Exception:  # noqa: BLE001 - one unreadable record never stops the worker; the next pass tries again
             logging.getLogger(__name__).error('A redacted document could not be swept; the next pass tries again.')
     return removed

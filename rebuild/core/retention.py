@@ -176,8 +176,32 @@ def _journal_release_after_commit(row,hold):
         except Exception:  # noqa: BLE001 - after the commit, a failure here must never read as "not recorded"
             # The release stands here. Until its copy is journaled a restore older than it keeps the hold active (the
             # conservative side); the custodian's exact retry journals it. A fixed message: no PHI, no row content.
-            logging.getLogger(__name__).error('Preservation release recorded; its independent journal copy is pending.')
+            logging.getLogger(__name__).error('Preservation release recorded; its independent journal copy is pending '
+                                              '(any active custodian journals it: retention.journal_committed_release).')
     transaction.on_commit(append)
+
+
+def journal_committed_release(actor,hold_id):
+    """Journal a release this database committed but the independent journal does not hold (its copy failed and is
+    pending, or the release predates the journal), from the release row's own evidence: its id, authority hash and
+    releasing custodian, exactly what _journal_release_after_commit would have appended (the hold first, if the journal
+    lacks it). Any active verified custodian may do it; the entry names the custodian who RELEASED, and this act is audited
+    under the custodian who journaled it, so nobody acts as anyone else (refutation R4F-A / R4S-3 of b3d8111d: only the
+    releasing custodian's exact retry could journal it, and once that custodian left, every redaction in the hold's scope
+    was refused for good). Idempotent: an already journaled release returns its entry and appends nothing."""
+    custodian(actor)
+    if not journal_configured():raise ValidationError('No independent journal is configured.')
+    from . import disposition_journal as journal
+    with transaction.atomic():
+        lock_preservation()
+        try:hold=RetentionHold.objects.get(pk=hold_id)
+        except (ValueError,ValidationError,RetentionHold.DoesNotExist):raise ValidationError('Unknown preservation instruction.')
+        row=RetentionHoldRelease.objects.filter(hold=hold).first()
+        if row is None:raise ValidationError('This preservation instruction has no committed release.')
+        release={'id':str(row.pk),'hold_id':str(hold.pk),'authority_sha256':row.authority_sha256,'created_by':str(row.created_by_id)}
+        entry=journal.append_release(release,hold_record(hold))
+        audit(actor,'retention.release_journaled',hold.pk,release=str(row.pk))
+    return entry
 
 
 def journal_configured():
