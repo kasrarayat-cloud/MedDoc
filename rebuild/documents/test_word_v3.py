@@ -1847,3 +1847,893 @@ class SourceBoundGlyphWrites(unittest.TestCase):
         result = w.fill(raw, fields, {'c': ['Before', 'After'], 't': 'literal ☐ symbol retained'})
         root = etree.fromstring(ZipFile(io.BytesIO(result)).read('word/document.xml'))
         self.assertEqual(''.join(root.itertext()), 'Choices? ☒ Before: literal ☐ symbol retained ☒ After')
+
+
+# ─── the engine switch, narrowed to EC3: a merged answer cell shared by two rows is mapped for none of them ────────────
+# EC4 (another row's instruction) and EC5 (numbered slots' section) are WITHDRAWN (refutation of be743e94): each of their
+# three repairs mislabelled a new shape, so v3 reads both as b01e9cfa does and both are declared residuals below.
+
+OWNER_FORM = Path(__file__).with_name("__fixtures__") / "Colonoscopy_Operative_Template.docx"
+
+
+def _underlined_tab(paragraph):
+    """'Label:' + an underlined tab, the legacy tab-line shape (python-docx paragraph)."""
+    run = paragraph.add_run("\t")
+    run.font.underline = True
+
+
+def merged_answer_bytes(*, label_merged=False, second_label="Allergies"):
+    """SF03: a section row, then a vertically merged answer cell beside two questions (or beside one question whose
+    label cell is merged the same way), then a plain row."""
+    doc = Document()
+    doc.add_heading("Synthetic merged form", 1)
+    table = doc.add_table(rows=4, cols=2)
+    top = table.cell(0, 0).merge(table.cell(0, 1))
+    top.text = "History"
+    table.cell(1, 0).text = "Reason for visit"
+    table.cell(2, 0).text = "Current medications"
+    if label_merged:
+        table.cell(2, 0).merge(table.cell(3, 0))
+    elif second_label:
+        table.cell(3, 0).text = second_label
+    table.cell(2, 1).merge(table.cell(3, 1))
+    plain = doc.add_table(rows=1, cols=2)
+    plain.cell(0, 0).text = "Plan"
+    return docx_bytes(doc)
+
+
+def instruction_cell_bytes():
+    """SF15: a two-column table whose FIRST answer cell prints a grey instruction ('Reason for visit | Describe the main
+    complaint.') above a plain question row ('Plan')."""
+    from docx.shared import RGBColor
+    doc = Document()
+    doc.add_heading("Synthetic instruction form", 1)
+    table = doc.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Reason for visit"
+    table.cell(1, 0).text = "Plan"
+    table.cell(0, 1).paragraphs[0].add_run("Describe the main complaint.").font.color.rgb = RGBColor.from_string("808080")
+    return docx_bytes(doc)
+
+
+def numbered_slots_bytes(*, heading=True, marks=("1.", "2.", "3.")):
+    """D02's numbered slots: under two section headings, lines '1.' '2.' '3.' each with an underlined tab."""
+    doc = Document()
+    for section in ("POSTOPERATIVE FINDINGS", "RECOMMENDATIONS"):
+        if heading:
+            doc.add_heading(section, 2)
+        else:
+            doc.add_paragraph(section + " (plain text, not a heading)")
+        for mark in marks:
+            _underlined_tab(doc.add_paragraph(mark))
+    return docx_bytes(doc)
+
+
+class EngineSwitchShapes(unittest.TestCase):
+    """EC3 through the sandboxed worker, and the engine comparison's declared residuals (EC1, EC4, EC5), each pinned at
+    the behaviour v3 keeps (b01e9cfa's)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def inspect(self, data, name="form.docx"):
+        path = self.dir / name
+        path.write_bytes(data)
+        return inspect_template(path, engine="v3"), path
+
+    # EC3 ─ a vertically merged answer cell shared by two questions is never given to one of them silently
+    def test_ec3_a_merged_answer_cell_shared_by_two_questions_is_mapped_for_neither_and_said(self):
+        info, _ = self.inspect(merged_answer_bytes())
+        slots = {f["locator"]["slot"]: f["label"] for f in info["fields"]}
+        self.assertNotIn("b/tbl[0]/tr[2]/tc[1]", slots, "the shared merged cell was given to one question")
+        self.assertNotIn("Current medications", slots.values())
+        self.assertNotIn("Allergies", slots.values())
+        notes = [n for n in info["warnings"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["warnings"])
+        self.assertIn("Current medications", notes[0])
+        self.assertIn("Allergies", notes[0])
+        # Everything else on the form is still mapped.
+        self.assertEqual(sorted(slots.values()), ["Plan", "Reason for visit"])
+
+    def test_ec3_control_a_merged_answer_cell_of_one_question_is_still_mapped(self):
+        for kwargs in ({"label_merged": True}, {"second_label": ""}):
+            with self.subTest(**kwargs):
+                info, _ = self.inspect(merged_answer_bytes(**kwargs))
+                by = fields_by_label(info["fields"])
+                self.assertIn("Current medications", by)
+                self.assertEqual(by["Current medications"]["locator"]["slot"], "b/tbl[0]/tr[2]/tc[1]")
+                self.assertFalse([n for n in info["warnings"] if "merged" in n], info["warnings"])
+
+    # EC4 ─ WITHDRAWN: declared residual at b01e9cfa's behaviour
+    def test_declared_residual_ec4_another_rows_instruction_still_heads_the_next_question(self):
+        """SF15: the grey instruction in 'Reason for visit's answer cell is read as the column header of the row below,
+        so the next question is labelled 'Plan — Describe the main complaint.' (legacy: 'Plan'). Declared residual: the
+        three repairs of this reading (rounds 1-3) each mislabelled or dropped another shape, so v3 keeps b01e9cfa's."""
+        info, _ = self.inspect(instruction_cell_bytes())
+        self.assertEqual([f["label"] for f in info["fields"]], ["Reason for visit", "Plan — Describe the main complaint."])
+        self.assertEqual(fields_by_label(info["fields"])["Reason for visit"]["locator"]["target"]["type"], "cell_append")
+
+    # EC5 ─ WITHDRAWN: declared residual at b01e9cfa's behaviour
+    def test_declared_residual_ec5_numbered_slots_keep_the_bare_marker(self):
+        """D02's numbered slots are labelled '1.' '2.' '3.' in each section (legacy: 'POSTOPERATIVE FINDINGS — 1'), the
+        section only in the context: duplicate labels the mapping page shows by position. Declared residual: the three
+        repairs of the slot's section (rounds 1-3) each named slots by another question or a hidden heading."""
+        info, _ = self.inspect(numbered_slots_bytes())
+        self.assertEqual([f["label"] for f in info["fields"]], ["1.", "2.", "3.", "1.", "2.", "3."])
+        self.assertEqual([f["context"].split(" · ")[0] for f in info["fields"]],
+                         ["POSTOPERATIVE FINDINGS"] * 3 + ["RECOMMENDATIONS"] * 3)
+        labels = [f["label"] for f in inspect_template(OWNER_FORM, engine="v3")["fields"]]
+        for mark in ("1.", "2.", "3."):
+            self.assertEqual(labels.count(mark), 2, labels)
+        self.assertFalse([label for label in labels if label.startswith(("POSTOPERATIVE FINDINGS —", "RECOMMENDATIONS —"))])
+
+    def test_declared_residual_ec1_the_finalizers_own_signer_row_stays_hand_signed_on_v3(self):
+        """EC1 withdrawn (refutation of 358cb5b0): on contract v3 the owner colonoscopy form's 'Electronically signed by'
+        line is a Signature area signed by hand, never filled - not even with the finalizer's own name, which the legacy
+        engine accepts there (core.tests.test_destination_roles test_pc14). Declared residual, owner-routed."""
+        info = inspect_template(OWNER_FORM, engine="v3")
+        signer = fields_by_label(info["fields"])["Electronically signed by"]
+        self.assertEqual(signer["kind"], "signature")
+        self.assertNotIn("answer_policy", signer)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(DocumentError) as refused:
+                fill_template(OWNER_FORM, info["fields"], {signer["key"]: "Synthetic Alpha Clinician"},
+                              Path(directory) / "out.docx")
+        self.assertEqual(refused.exception.code, "invalid_answer")
+
+
+def _grey(paragraph, text):
+    from docx.shared import RGBColor
+    paragraph.add_run(text).font.color.rgb = RGBColor.from_string("808080")
+
+
+def assert_ec3_parity(test, data):
+    """Every area EC3 does not withdraw reads exactly as with the EC3 pass switched off - b01e9cfa's reading: the same
+    locator, label, context, kind, options, policy, capacity and protection, and the same notes besides EC3's own. A
+    kept signing, initials or protected area keeps its locator and kind; its label and context are the one declared
+    exception (never side-qualified from one row of a shared cell).
+
+    ⚠️ WEC3P-1 / WE3-m-1 (refutation of d9afcf2f, HIGH): removing a withdrawn area BEFORE qualify_sides freed its cell,
+    so the cell's printed 'Left knee: ____' became the side of the right knee's answer beside it."""
+    import contextlib
+    import json
+    from unittest import mock
+    from . import word_v3 as w
+    full = w.inspect(data)
+    with contextlib.ExitStack() as stack:
+        for name in ("shared_merged_answers", "withdraw_shared_merged_answers"):
+            if hasattr(w.Detector, name):
+                stack.enter_context(mock.patch.object(
+                    w.Detector, name, (lambda self, *a, **k: []) if name == "shared_merged_answers" else (lambda self, *a, **k: None)))
+        plain = w.inspect(data)
+    key = lambda f: (f["locator"]["part"], f["locator"]["slot"], json.dumps(f["locator"]["target"], sort_keys=True))
+    before = {key(f): f for f in plain["fields"]}
+    for f in full["fields"]:
+        test.assertIn(key(f), before, "a field EC3 added or moved: %r" % ((f["label"], key(f)),))
+        g = before[key(f)]
+        kept = f["kind"] in ("signature", "initials") or f.get("write_protected")
+        for attr in ("kind", "options", "answer_policy", "max_chars", "write_protected") + (() if kept else ("label", "context")):
+            test.assertEqual(f.get(attr), g.get(attr), "%s of %r changed by EC3" % (attr, (g["label"], key(f)[1])))
+    test.assertEqual([n for n in full["notes"] if "one vertically merged cell" not in n], plain["notes"])
+    return full
+
+
+class RefutationRepairs(unittest.TestCase):
+    """EC3, as the refutation of 8e00df9e pinned it: a merged answer cell beside two printed questions is mapped for
+    none of them, whatever fills it."""
+
+    def inspect(self, data):
+        from . import word_v3 as w
+        return w.inspect(data)
+
+    def labels(self, data):
+        return [f["label"] for f in self.inspect(data)["fields"]]
+
+    def merged_rows(self, rows, *, extra=None, header=None):
+        """`rows`: [[left cells...]] beside one answer column merged over all of them (under an optional `header`
+        row); then a separate Plan table."""
+        doc = Document()
+        width = max(len(r) for r in rows) + 1
+        top = 1 if header else 0
+        table = doc.add_table(rows=len(rows) + top, cols=width)
+        for c, text in enumerate(header or ()):
+            table.cell(0, c).text = text
+        for r, cells in enumerate(rows):
+            for c, text in enumerate(cells):
+                if text:
+                    table.cell(r + top, c).text = text
+        merged = table.cell(top, width - 1).merge(table.cell(top + len(rows) - 1, width - 1))
+        if extra:
+            extra(merged)
+        plan = doc.add_table(rows=1, cols=2)
+        plan.cell(0, 0).text = "Plan"
+        return docx_bytes(doc)
+
+    def assert_shared(self, data, *, names=()):
+        info = assert_ec3_parity(self, data)
+        # Only the separate Plan table's own answer cell is mapped. (Its label may carry the header of the table it
+        # continues, 'Plan — Effusion findings': pre-existing on b01e9cfa, not EC3.)
+        self.assertEqual([f["locator"]["slot"] for f in info["fields"]], ["b/tbl[1]/tr[0]/tc[1]"],
+                         [(f["label"], f["locator"]["slot"]) for f in info["fields"]])
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        for name in names:
+            self.assertIn(name, notes[0])
+
+    def test_m2_rows_with_the_same_last_label_but_different_items_share_the_cell(self):
+        self.assert_shared(self.merged_rows([["Right eye", "Visual acuity"], ["Left eye", "Visual acuity"]]),
+                           names=("Right eye", "Left eye"))
+        self.assert_shared(self.merged_rows([["Pre-procedure", "Blood pressure:"], ["Post-procedure", "Blood pressure"]]),
+                           names=("Pre-procedure", "Post-procedure"))
+
+    def test_m3_option_words_beside_a_merged_cell_are_still_two_questions(self):
+        self.assert_shared(self.merged_rows([["Left"], ["Right"]], header=("Knee", "Effusion findings")),
+                           names=("Left", "Right"))
+
+    def test_f04_m10_a_shared_merged_cell_is_mapped_for_none_whatever_fills_it(self):
+        def underscores(cell):
+            cell.paragraphs[0].add_run("____________________")
+
+        def tab(cell):
+            _underlined_tab(cell.paragraphs[0])
+
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        for name, fill in (("underscores", underscores), ("tab", tab), ("control", control)):
+            with self.subTest(fill=name):
+                data = self.merged_rows([["Current medications"], ["Allergies"]], extra=fill)
+                info = self.inspect(data)
+                inside = [f for f in info["fields"] if f["locator"]["slot"].startswith("b/tbl[0]/tr[0]/tc[1]")]
+                self.assertEqual(inside, [], [(f["label"], f["locator"]["slot"]) for f in inside])
+                self.assert_shared(data, names=("Current medications", "Allergies"))
+
+    def test_f02_a_second_merge_lower_in_the_column_is_its_own_cell(self):
+        doc = Document()
+        table = doc.add_table(rows=6, cols=2)
+        for row, text in ((0, "Current medications"), (2, "Plan"), (3, "Allergies"), (4, "Social history"), (5, "Follow-up")):
+            table.cell(row, 0).text = text
+        table.cell(0, 1).merge(table.cell(1, 1))
+        table.cell(3, 1).merge(table.cell(4, 1))
+        info = self.inspect(docx_bytes(doc))
+        by = fields_by_label(info["fields"])
+        self.assertEqual(by["Current medications"]["locator"]["slot"], "b/tbl[0]/tr[0]/tc[1]")
+        self.assertNotIn("Allergies", by)
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        self.assertIn("Social history", notes[0])
+        self.assertNotIn("Current medications", notes[0])
+
+    def test_ec3_declared_cost_a_question_printed_inside_a_shared_merged_cell_is_withdrawn_too(self):
+        """Round 3: no exemption. A merged cell that prints its own question ('Primary event (diagnosis): ____') beside
+        rows of other questions is withdrawn with the note (declared cost, the D35 shape)."""
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        for row, text in enumerate(("Onset date: ____", "Onset time: ____", "Occurred at: ____")):
+            table.cell(row, 0).text = text
+        table.cell(0, 1).merge(table.cell(2, 1)).text = "Primary event (diagnosis): ____________"
+        info = self.inspect(docx_bytes(doc))
+        self.assertNotIn("Primary event (diagnosis)", [f["label"] for f in info["fields"]])
+        self.assertEqual(len([n for n in info["notes"] if "merged" in n]), 1, info["notes"])
+
+    def test_ec3_control_a_signing_area_in_a_shared_merged_cell_keeps_its_role(self):
+        """A merged blank beside two signature rows stays a signing place (never withdrawn: its role depends on it)."""
+        from . import word_v3 as w
+        data = self.merged_rows([["Patient signature"], ["Witness signature"]])
+        fields = w.inspect(data)["fields"]
+        self.assertIn("signature", [f["kind"] for f in fields], [(f["label"], f["kind"]) for f in fields])
+        self.assertIn("signing_area", {r["source"] for r in w.destination_roles(data, fields)["roles"]})
+
+
+class RoundThree(unittest.TestCase):
+    """EC3, as the refutation of c1cae13d pinned it: every answer area in a shared merged cell is withdrawn (no
+    exemption); signing, initials and protected areas are kept with their roles, never side-qualified."""
+    inspect = RefutationRepairs.inspect
+    labels = RefutationRepairs.labels
+    merged_rows = RefutationRepairs.merged_rows
+    assert_shared = RefutationRepairs.assert_shared
+
+    def shared_guidance(self, rows, guidance):
+        def fill(cell):
+            _grey(cell.paragraphs[0], guidance)
+        return self.merged_rows(rows, extra=fill)
+
+    def test_r2f01_guidance_mentioning_the_first_question_never_keeps_the_shared_cell(self):
+        for rows, guidance in (([["Current medications"], ["Allergies"]], "List current medications and allergies."),
+                               ([["Pain"], ["Swelling"]], "Note any painful movement or swelling."),
+                               ([["Rate"], ["Rhythm"]], "Record separately."),
+                               ([["Plan"], ["Follow-up"]], "Describe the plan and the follow-up interval."),
+                               ([["Right eye", "Visual acuity"], ["Left eye", "Visual acuity"]],
+                                "Record the visual acuity of each eye.")):
+            with self.subTest(guidance=guidance):
+                self.assert_shared(self.shared_guidance(rows, guidance))
+
+    def test_m2_a_continued_label_counts_as_its_question(self):
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        table.cell(0, 0).text = "Current medications"
+        table.cell(0, 0).merge(table.cell(1, 0))
+        table.cell(0, 1).text = "Name, dose and frequency of each:"
+        table.cell(1, 1).merge(table.cell(2, 1))
+        table.cell(2, 0).text = "Allergies"
+        plan = doc.add_table(rows=1, cols=2)
+        plan.cell(0, 0).text = "Plan"
+        info = self.inspect(docx_bytes(doc))
+        self.assertFalse([f for f in info["fields"] if f["locator"]["slot"].startswith("b/tbl[0]/tr[1]/tc[1]")],
+                         [(f["label"], f["locator"]["slot"]) for f in info["fields"]])
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        self.assertIn("Current medications", notes[0])
+        self.assertIn("Allergies", notes[0])
+
+    def test_m3_a_question_printed_in_a_cell_shared_by_two_sides_is_withdrawn(self):
+        for content in ("Effusion: ____________", "Effusion:  ☐ Yes   ☐ No"):
+            with self.subTest(content=content):
+                def fill(cell, content=content):
+                    cell.paragraphs[0].add_run(content)
+                data = self.merged_rows([["Right knee"], ["Left knee"]], extra=fill)
+                labels = [f["label"] for f in self.inspect(data)["fields"]]
+                self.assertFalse([label for label in labels if "knee" in label], labels)
+                self.assert_shared(data, names=("Right knee", "Left knee"))
+
+    def test_m5_a_signing_only_shared_cell_is_noted_and_keeps_its_role(self):
+        from . import word_v3 as w
+        data = self.merged_rows([["Clinician signature"], ["Comments to the GP"]])
+        info = w.inspect(data)
+        self.assertEqual(len([n for n in info["notes"] if "merged" in n]), 1, info["notes"])
+        self.assertIn("signing_area", {r["source"] for r in w.destination_roles(data, info["fields"])["roles"]})
+
+    def test_r2f10_fa_a_column_to_the_right_of_a_tall_answer_cell_is_no_second_question(self):
+        doc = Document()
+        table = doc.add_table(rows=2, cols=3)
+        table.cell(0, 0).text = "Current medications"
+        table.cell(0, 2).text = "Reviewed"
+        table.cell(1, 2).text = "Date"
+        table.cell(0, 1).merge(table.cell(1, 1))
+        info = self.inspect(docx_bytes(doc))
+        self.assertIn("b/tbl[0]/tr[0]/tc[1]", [f["locator"]["slot"] for f in info["fields"]], [(f["label"], f["locator"]["slot"]) for f in info["fields"]])
+        self.assertFalse([n for n in info["notes"] if "merged" in n], info["notes"])
+
+    def test_r2f05_initials_in_a_shared_cell_keep_their_signing_role(self):
+        from . import word_v3 as w
+        data = self.merged_rows([["Nurse initials"], ["Doctor initials"]])
+        fields = w.inspect(data)["fields"]
+        self.assertIn("initials", [f["kind"] for f in fields])
+        self.assertIn("signing_area", {r["source"] for r in w.destination_roles(data, fields)["roles"]})
+
+    def test_r2f10_fg_a_locked_control_in_a_shared_cell_keeps_its_protected_role(self):
+        from . import word_v3 as w
+
+        def locked(cell):
+            sdt = _sdt("text", placeholder="Click here to enter text.")
+            lock = OxmlElement("w:lock")
+            lock.set(qn("w:val"), "sdtContentLocked")
+            sdt.find(qn("w:sdtPr")).append(lock)
+            cell.paragraphs[0]._p.append(sdt)
+        data = self.merged_rows([["Current medications"], ["Allergies"]], extra=locked)
+        fields = w.inspect(data)["fields"]
+        sources = {r["source"] for r in w.destination_roles(data, fields)["roles"]}
+        self.assertIn("protected_area", sources, sources)
+        # the protected field itself is kept in the mapping (shown as protected), not withdrawn
+        self.assertTrue([f for f in fields if f.get("write_protected") and f["locator"]["slot"].startswith("b/tbl[0]/tr[0]/tc[1]")],
+                        [(f["label"], f["locator"]["slot"], f.get("write_protected")) for f in fields])
+
+    def test_r2f10_fb_we3m2_a_format_hint_row_holding_its_own_answer_shares_the_cell(self):
+        """Round 3 kept 'Date of injury' here. WE3-m-2 (refutation of d9afcf2f): the 'dd/mm/yyyy' row holds its own
+        answer place (the engine maps that cell), so it is an answer row whatever hint it prints, and the tall cell beside
+        both rows is withdrawn with the note."""
+        info = assert_ec3_parity(self, self.merged_rows([["Date of injury"], ["dd/mm/yyyy"]]))
+        self.assertNotIn("Date of injury", [f["label"] for f in info["fields"]])
+        self.assertEqual(len([n for n in info["notes"] if "merged" in n]), 1, info["notes"])
+
+    def test_r2f11_fw_one_note_per_shared_cell(self):
+        def two(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+            cell.add_paragraph()._p.append(_sdt("text", placeholder="Click here to enter text."))
+        info = self.inspect(self.merged_rows([["Current medications"], ["Allergies"]], extra=two))
+        self.assertEqual(len([n for n in info["notes"] if "merged" in n]), 1, info["notes"])
+
+    def test_p1_a_withdrawn_control_stays_an_ordinary_place_beside_a_signature(self):
+        def control_and_signature(cell):
+            paragraph = cell.paragraphs[0]
+            paragraph._p.append(_sdt("text", placeholder="Click here to enter text."))
+            paragraph.add_run("   Signature: ______________")
+        data = self.merged_rows([["Current medications"], ["Allergies"]], extra=control_and_signature)
+        path = Path(tempfile.mkdtemp()) / "p1.docx"
+        path.write_bytes(data)
+        slot = next(r["slot"] for r in outline_template(path)["slots"] if r["kind"] == "sdt")
+        added = locate_fields(path, [{"slot": slot, "kind": "text", "label": "Current medications"}])["fields"]
+        self.assertEqual(len(added), 1)
+        path.unlink()
+
+    def test_a_signing_area_kept_in_a_cell_beside_two_sides_is_never_side_qualified(self):
+        def signature(cell):
+            cell.paragraphs[0].add_run("Signature: ____________")
+        data = self.merged_rows([["Right knee"], ["Left knee"]], extra=signature)
+        fields = self.inspect(data)["fields"]
+        kept = [f for f in fields if f["kind"] == "signature" and f["locator"]["slot"].startswith("b/tbl[0]/")]
+        self.assertEqual([f["label"] for f in kept], ["Signature"], [(f["label"], f["kind"], f["locator"]["slot"]) for f in fields])
+
+
+# ─── round 4: the refutation of be743e94 (refute-wec-r3) - EC4 and EC5 withdrawn, EC3 extended fail-closed ────────────
+
+def _vmerge(cell, val=None):
+    """Mark python-docx cell `cell` as a vertical-merge continuation (or `val`, e.g. 'restart'), as raw XML."""
+    element = OxmlElement("w:vMerge")
+    if val:
+        element.set(qn("w:val"), val)
+    cell._tc.get_or_add_tcPr().append(element)
+
+
+def _raw_cell(table, row, col):
+    """The cell at XML position (row, col): python-docx's own lookup refuses a first-row continuation."""
+    from docx.table import _Cell
+    return _Cell(table._tbl.tr_lst[row].tc_lst[col], table)
+
+
+def _knees(answer=None, *, merge="restart", place="restart"):
+    """'Right knee' / 'Left knee' beside ONE vertically merged answer cell, then a separate Plan table. `merge`: 'restart'
+    (Word's own shape), 'plain' (a plain cell continued below, no restart) or 'continue' (both cells continuations, no
+    restart anywhere). `answer(cell)` fills the merge's first cell, or its continuation with place='continuation'."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee form")
+    table = doc.add_table(rows=2, cols=2)
+    table.style = doc.styles["Table Grid"]
+    table.cell(0, 0).text = "Right knee"
+    table.cell(1, 0).text = "Left knee"
+    if merge != "plain":
+        _vmerge(_raw_cell(table, 0, 1), None if merge == "continue" else merge)
+    _vmerge(_raw_cell(table, 1, 1))
+    if answer:
+        answer(_raw_cell(table, 0 if place == "restart" else 1, 1))
+    plan = doc.add_table(rows=1, cols=2)
+    plan.cell(0, 0).text = "Plan"
+    return docx_bytes(doc)
+
+
+def _log(heads, rows, col, first, last, prompt=None):
+    """A blank log under the header row `heads` with `rows` data rows, the cells of column `col` merged from data row
+    `first` to `last` (Word's restart + continuation; printing `prompt` if given), then a separate Plan table."""
+    doc = Document()
+    doc.add_paragraph("Synthetic chart")
+    table = doc.add_table(rows=rows + 1, cols=len(heads))
+    table.style = doc.styles["Table Grid"]
+    for c, text in enumerate(heads):
+        table.cell(0, c).text = text
+    merged = table.cell(first, col).merge(table.cell(last, col))
+    if prompt:
+        merged.paragraphs[0].add_run(prompt)
+    plan = doc.add_table(rows=1, cols=2)
+    plan.cell(0, 0).text = "Plan"
+    return docx_bytes(doc)
+
+
+class RoundFour(unittest.TestCase):
+    """The refutation of be743e94. EC4 and EC5 are withdrawn: their finding inputs read as on b01e9cfa. EC3 is extended
+    in the fail-closed direction: a merge with no explicit restart is one merge (WEC3-m-2, m-4); an answer place in a
+    merge's continuation is in the merged cell (m-3); a merged cell across two answer rows of a log or of blank rows is
+    shared too, and a log that writes into it is withdrawn (m-1); a header copy is a place of its area (R3P-2)."""
+    inspect = RefutationRepairs.inspect
+    labels = RefutationRepairs.labels
+    merged_rows = RefutationRepairs.merged_rows
+    assert_shared = RefutationRepairs.assert_shared
+
+    def assert_unmapped(self, data, rows, col, *, names=(), table=0):
+        """No area writes into the merged cell (rows x col of table `table`), the inspection says so once, and no other
+        area reads differently (assert_ec3_parity)."""
+        info = assert_ec3_parity(self, data)
+        cells = ["b/tbl[%d]/tr[%d]/tc[%d]" % (table, r, col) for r in rows]
+        for f in info["fields"]:
+            target = f["locator"]["target"]
+            if target.get("type") == "table_rows":
+                self.assertFalse(target["table"] == "b/tbl[%d]" % table and set(target["rows"]) & set(rows)
+                                 and col in target["columns"], (f["label"], target))
+            else:
+                places = [f["locator"]["slot"]] + [c["slot"] for c in target.get("copies", [])]
+                self.assertFalse([p for p in places for cell in cells if p == cell or p.startswith(cell + "/")],
+                                 (f["label"], places))
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        for name in names:
+            self.assertIn(name, notes[0])
+        return info
+
+    # EC4 / EC5 withdrawn ─ the round-3 finding inputs read as on b01e9cfa
+    def test_wr3s1_inline_numbered_blanks_keep_their_bare_markers(self):
+        doc = Document()
+        doc.add_heading("Synthetic clinic letter", 1)
+        doc.add_heading("CURRENT MEDICATIONS", 2)
+        doc.add_paragraph("Drug allergies:  1. ____________  2. ____________  3. ____________")
+        self.assertEqual(self.labels(docx_bytes(doc)), ["Drug allergies: 1.", "2.", "3."])
+
+    def test_r3p1_a_grey_column_title_over_log_rows_keeps_the_log(self):
+        from docx.shared import RGBColor
+        doc = Document()
+        doc.add_paragraph("Synthetic medication log")
+        table = doc.add_table(rows=5, cols=2)
+        table.cell(0, 0).text = "Medication"
+        table.cell(0, 1).paragraphs[0].add_run("Name, dose, route and frequency").font.color.rgb = RGBColor.from_string("808080")
+        fields = self.inspect(docx_bytes(doc))["fields"]
+        logs = [f for f in fields if f["kind"] == "table_rows"]
+        self.assertEqual([f["locator"]["target"]["rows"] for f in logs], [[1, 2, 3, 4]], [(f["label"], f["kind"]) for f in fields])
+
+    # WEC3-m-1 ─ a merged cell across two answer rows of a log is mapped for neither, and the log writing into it is not
+    def test_wec3_m1_a_merged_cell_across_log_rows_is_mapped_for_no_row(self):
+        for name, heads, rows, col, first, last, log in (
+                ("comments rows 2-3", ("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3, True),
+                ("dose rows 1-2", ("Date", "Drug", "Dose"), 6, 2, 1, 2, False),
+                ("drug rows 2-3", ("Date", "Drug", "Dose"), 6, 1, 2, 3, True),
+                ("dose rows 2-4", ("Date", "Drug", "Dose"), 6, 2, 2, 4, True),
+                ("dose, last two rows", ("Date", "Drug", "Dose"), 4, 2, 3, 4, True),
+                ("date (first column) rows 2-3", ("Date", "Drug", "Dose"), 6, 0, 2, 3, True)):
+            with self.subTest(name):
+                info = self.assert_unmapped(_log(heads, rows, col, first, last), range(first, last + 1), col)
+                note = [n for n in info["notes"] if "merged" in n][0]
+                self.assertEqual("log rows" in note, log, note)
+
+    def test_wec3_m1_a_prompt_printed_in_the_merged_cell_still_shares_it(self):
+        """The merged cell's own printed words never make its rows printed rows: two blank answer rows beside 'Comments:
+        ____' share it."""
+        self.assert_unmapped(_log(("Date", "Drug", "Notes"), 6, 2, 1, 2, prompt="Comments: ____________"), (1, 2), 2)
+
+    def test_wec3_m1_control_a_row_printing_its_own_question_beside_a_tall_cell_is_no_answer_row(self):
+        """'Current medications' with a tall answer cell, beside a row that prints its own question ('Date') with its own
+        answer cell to the right: the tall cell stays the medications answer (R2F-10 FA, with an answer to the right)."""
+        doc = Document()
+        table = doc.add_table(rows=2, cols=4)
+        table.cell(0, 0).text = "Current medications"
+        table.cell(0, 2).text = "Reviewed"
+        table.cell(1, 2).text = "Date"
+        table.cell(0, 1).merge(table.cell(1, 1))
+        info = self.inspect(docx_bytes(doc))
+        self.assertEqual(fields_by_label(info["fields"])["Current medications"]["locator"]["slot"], "b/tbl[0]/tr[0]/tc[1]")
+        self.assertFalse([n for n in info["notes"] if "merged" in n], info["notes"])
+
+    def test_wec3_m1_control_the_log_rows_clear_of_the_merge_stay_a_log(self):
+        info = self.inspect(_log(("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3))
+        self.assertIn([4, 5, 6], [f["locator"]["target"]["rows"] for f in info["fields"] if f["kind"] == "table_rows"])
+
+    # WEC3-m-2 ─ a merge with no explicit restart is one merge, as merged_restart reads it
+    def test_wec3_m2_a_merge_without_a_restart_is_still_one_shared_cell(self):
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+
+        def underscores(cell):
+            cell.paragraphs[0].add_run("Effusion: ________________")
+
+        def glyphs(cell):
+            cell.paragraphs[0].add_run("☐ Effusion   ☐ Swelling")
+        for merge in ("plain", "continue"):
+            for name, answer in (("empty", None), ("control", control), ("underscores", underscores), ("glyphs", glyphs)):
+                if merge == "continue" and answer is None:
+                    continue   # no area at all: rule (d) never maps a continuation (b01e9cfa); see the control below
+                with self.subTest(merge=merge, answer=name):
+                    self.assert_unmapped(_knees(answer, merge=merge), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    def test_wec3_m2_control_an_empty_merge_of_continuations_maps_nothing(self):
+        info = self.inspect(_knees(None, merge="continue"))
+        self.assertFalse([f for f in info["fields"] if "knee" in f["label"]], [f["label"] for f in info["fields"]])
+
+    # WEC3-m-3 ─ an answer place in the merge's continuation is in the merged cell
+    def test_wec3_m3_an_answer_place_in_the_continuation_is_withdrawn(self):
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+
+        def underscores(cell):
+            cell.paragraphs[0].add_run("Effusion: ________________")
+
+        def glyphs(cell):
+            cell.paragraphs[0].add_run("☐ Yes   ☐ No")
+
+        def form_field(cell):
+            ff_text_field(cell.paragraphs[0], name="Effusion")
+        for name, answer in (("control", control), ("underscores", underscores), ("glyphs", glyphs),
+                             ("form field", form_field)):
+            with self.subTest(answer=name):
+                self.assert_unmapped(_knees(answer, place="continuation"), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    def test_wec3_m3_a_place_in_the_continuation_beside_one_question_and_a_blank_row_is_withdrawn(self):
+        """A tall cell beside ONE question whose answer place is in the continuation, on a row printing nothing: the
+        place is that row's own (Word shows a merge's restart content only), so the cell is withdrawn too."""
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Comments"
+        table.cell(0, 1).merge(table.cell(1, 1))
+        _raw_cell(table, 1, 1).paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        plan = doc.add_table(rows=1, cols=2)
+        plan.cell(0, 0).text = "Plan"
+        self.assert_unmapped(docx_bytes(doc), (0, 1), 1, names=("Comments",))
+
+    def test_wec3_m3_a_printed_restart_with_a_control_in_the_continuation_is_withdrawn(self):
+        def printed(cell):
+            cell.paragraphs[0].add_run("Effusion")
+        doc = Document()
+        doc.add_paragraph("Synthetic knee form")
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Right knee"
+        table.cell(1, 0).text = "Left knee"
+        table.cell(0, 1).merge(table.cell(1, 1))
+        printed(_raw_cell(table, 0, 1))
+        _raw_cell(table, 1, 1).paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        self.assert_unmapped(docx_bytes(doc), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    # WEC3-m-4 ─ a continued label with no restart above is its merge's first cell's question
+    def test_wec3_m4_a_continued_label_without_a_restart_counts_as_its_question(self):
+        for answer in ("control",):
+            with self.subTest(answer=answer):
+                doc = Document()
+                doc.add_paragraph("Synthetic knee form")
+                table = doc.add_table(rows=3, cols=2)
+                table.style = doc.styles["Table Grid"]
+                table.cell(2, 0).text = "Left knee"
+                _vmerge(_raw_cell(table, 0, 0))
+                _raw_cell(table, 0, 0).paragraphs[0].add_run("Right knee")
+                _vmerge(_raw_cell(table, 1, 0))
+                _vmerge(_raw_cell(table, 1, 1), "restart")
+                _vmerge(_raw_cell(table, 2, 1))
+                if answer == "control":
+                    _raw_cell(table, 1, 1).paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+                plan = doc.add_table(rows=1, cols=2)
+                plan.cell(0, 0).text = "Plan"
+                info = self.assert_unmapped(docx_bytes(doc), (1, 2), 1, names=("Right knee", "Left knee"))
+                # the first row's own answer cell is not part of the merge and stays mapped
+                self.assertIn("b/tbl[0]/tr[0]/tc[1]", [f["locator"]["slot"] for f in info["fields"]])
+
+    # R3P-2 ─ a header copy is a place of its area: the outcome never depends on which header part comes first
+    def test_r3p2_a_header_copy_in_a_shared_merged_cell_withdraws_the_answer_in_either_order(self):
+        for merged_header in ("first page", "default"):
+            with self.subTest(merged_header=merged_header):
+                doc = Document()
+                section = doc.sections[0]
+                section.different_first_page_header_footer = True
+                for header, merge in ((section.header, merged_header == "default"),
+                                      (section.first_page_header, merged_header == "first page")):
+                    header.is_linked_to_previous = False
+                    table = header.add_table(rows=2, cols=2, width=section.page_width - section.left_margin - section.right_margin)
+                    table.cell(0, 0).text = "Patient name"
+                    table.cell(1, 0).text = "Date of birth"
+                    if merge:
+                        table.cell(0, 1).merge(table.cell(1, 1))
+                _underlined_tab(doc.add_paragraph("Reason for visit:"))
+                info = self.inspect(docx_bytes(doc))
+                self.assertNotIn("Patient name", [f["label"] for f in info["fields"]],
+                                 [(f["label"], f["locator"]["part"], f["locator"]["slot"], f["locator"]["target"].get("copies"))
+                                  for f in info["fields"]])
+                notes = [n for n in info["notes"] if "merged" in n]
+                self.assertEqual(len(notes), 1, info["notes"])
+
+    # The round-4 mutation proof's survivors (Y02, Y05, Y20, Y22), pinned
+    def test_y02_a_place_in_the_continuation_of_a_merge_under_a_plain_cell_is_withdrawn(self):
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        self.assert_unmapped(_knees(control, merge="plain", place="continuation"), (0, 1), 1,
+                             names=("Right knee", "Left knee"))
+
+    def test_y05_an_option_area_whose_box_lies_in_a_shared_merged_cell_is_withdrawn(self):
+        doc = Document()
+        table = doc.add_table(rows=3, cols=3)
+        table.cell(0, 0).text = "Smoker"
+        table.cell(1, 0).text = "Alcohol"
+        table.cell(0, 1).text = "Yes"
+        table.cell(1, 1).text = "Yes"
+        table.cell(0, 2).merge(table.cell(1, 2)).text = "No"
+        table.cell(2, 0).text = "Plan"
+        info = self.inspect(docx_bytes(doc))
+        self.assertFalse([f["label"] for f in info["fields"] if f["label"] in ("Smoker", "Alcohol")],
+                         [(f["label"], f["locator"]["slot"]) for f in info["fields"]])
+        self.assertEqual(len([n for n in info["notes"] if "merged" in n]), 1, info["notes"])
+
+    def test_y20_a_place_in_a_table_nested_in_a_shared_merged_cell_is_withdrawn(self):
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Right knee"
+        table.cell(1, 0).text = "Left knee"
+        inner = table.cell(0, 1).merge(table.cell(1, 1)).add_table(rows=1, cols=2)
+        inner.cell(0, 0).text = "Effusion"
+        self.assert_unmapped(docx_bytes(doc), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    def test_y22_a_tab_column_proposal_in_a_shared_merged_cell_is_no_layout_candidate(self):
+        from . import word_v3 as w
+        from .test_structural_columns import stopped_form
+        stops = (2880, 4320)
+        for merged in (True, False):
+            with self.subTest(merged=merged):
+                doc = stopped_form([[["Right knee"], ["Findings", ("\tNormal\tAbnormal", stops), ("\t1 ☐\t2 ☐", stops)]],
+                                    [["Left knee"], [""]]], (2880, 6480), control="glyph")
+                if merged:
+                    doc.tables[0].cell(0, 1).merge(doc.tables[0].cell(1, 1))
+                detector = w.Detector(w.open_package(docx_bytes(doc)), layout_proposal=True)
+                detector.detect()
+                self.assertEqual([a.label for _, _, a in detector.layout_candidates], [] if merged else ["Right knee"])
+
+    # R3P-M5 ─ two rows printing the same words are two rows (identity is the cell, not its text)
+    def test_r3pm5_two_rows_printing_the_same_words_share_the_cell(self):
+        self.assert_shared(self.merged_rows([["Comments"], ["Comments"]]), names=("Comments",))
+
+
+# ─── round 5: the refutation of d9afcf2f (refute-wec3only) ───────────────────────────────────────────────────────────
+
+def _side_in_shared_cell(words, rows=("Effusion", "Swelling"), heading="Right knee:"):
+    """Rows `rows` each with an ordinary answer cell, beside a third column merged over both rows that prints `words`
+    (Word's restart + continuation); an optional side heading paragraph above; then a Plan table."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee examination")
+    if heading:
+        doc.add_paragraph(heading)
+    table = doc.add_table(rows=2, cols=3)
+    table.style = doc.styles["Table Grid"]
+    table.cell(0, 0).text = rows[0]
+    table.cell(1, 0).text = rows[1]
+    table.cell(0, 2).merge(table.cell(1, 2)).paragraphs[0].add_run(words)
+    plan = doc.add_table(rows=1, cols=2)
+    plan.cell(0, 0).text = "Plan"
+    return docx_bytes(doc)
+
+
+def _eye_grid(words):
+    """'' | 'Right eye' | 'Left eye' over 'Visual acuity' and 'Intraocular pressure'; the Left eye cells merged and
+    printing `words`."""
+    doc = Document()
+    doc.add_heading("Synthetic eye examination", 1)
+    table = doc.add_table(rows=3, cols=3)
+    table.style = doc.styles["Table Grid"]
+    for c, text in enumerate(("", "Right eye", "Left eye")):
+        table.cell(0, c).text = text
+    table.cell(1, 0).text = "Visual acuity"
+    table.cell(2, 0).text = "Intraocular pressure"
+    table.cell(1, 2).merge(table.cell(2, 2)).text = words
+    return docx_bytes(doc)
+
+
+def _hinted_rows(kind):
+    """A chart whose rows hold their own answer places but print a format hint, a box or a control's placeholder, with
+    one merged cell across two of them. Returns (data, merged rows, merged column)."""
+    doc = Document()
+    doc.add_paragraph("Synthetic chart")
+    heads, rows, col, first, last = {"dmy": (("Date", "Drug", "Dose"), 6, 2, 2, 3),
+                                     "box": (("Given", "Time", "Dose"), 4, 2, 1, 2),
+                                     "control": (("Medication", "Dose"), 3, 1, 1, 2)}[kind]
+    table = doc.add_table(rows=rows + 1, cols=len(heads))
+    table.style = doc.styles["Table Grid"]
+    for c, text in enumerate(heads):
+        table.cell(0, c).text = text
+    for r in range(1, rows + 1):
+        if kind == "dmy":
+            table.cell(r, 0).text = "dd/mm/yyyy"
+        elif kind == "box":
+            table.cell(r, 0).text = "☐"
+        else:
+            table.cell(r, 0).paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+    table.cell(first, col).merge(table.cell(last, col))
+    plan = doc.add_table(rows=1, cols=2)
+    plan.cell(0, 0).text = "Plan"
+    return docx_bytes(doc), range(first, last + 1), col
+
+
+class RoundFive(unittest.TestCase):
+    """The refutation of d9afcf2f. A withdrawal changes no other area (WEC3P-1 / WE3-m-1): the EC3 decision is made
+    early, but withdrawn areas leave only after every labelling pass, so they keep owning their cells. A row holding its
+    own answer place is an answer row whatever hint, box or placeholder it prints (WE3-m-2). A table without a vertical
+    merge costs the pass no merge reading (WE3-m-3)."""
+    inspect = RefutationRepairs.inspect
+    assert_unmapped = RoundFour.assert_unmapped
+
+    # WEC3P-1 / WE3-m-1 HIGH ─ a side printed in a withdrawn cell never qualifies another row's question
+    def test_wec3p1_a_side_printed_in_a_withdrawn_cell_never_qualifies_another_row(self):
+        for name, data, slot, label in (
+                ("'Left knee: ____' under a 'Right knee:' heading",
+                 _side_in_shared_cell("Left knee: ________________"), "b/tbl[0]/tr[0]/tc[1]", "Right knee — Effusion"),
+                ("'If bilateral, second site and dose: ____'",
+                 _side_in_shared_cell("If bilateral, second site and dose: ________________", ("Injection site", "Dose"),
+                                      None), "b/tbl[0]/tr[0]/tc[1]", "Injection site"),
+                ("'Lt knee notes: ____'", _side_in_shared_cell("Lt knee notes: ________________",
+                                                               ("Effusion", "Range of motion"), None),
+                 "b/tbl[0]/tr[0]/tc[1]", "Effusion"),
+                ("eye grid, 'Left: ____'", _eye_grid("Left: ____________"), "b/tbl[0]/tr[1]/tc[1]", "Visual acuity"),
+                ("eye grid, 'L ____'", _eye_grid("L ____"), "b/tbl[0]/tr[1]/tc[1]", "Visual acuity")):
+            with self.subTest(name):
+                info = assert_ec3_parity(self, data)
+                by_slot = {f["locator"]["slot"]: f for f in info["fields"]}
+                self.assertEqual(by_slot[slot]["label"], label, [(f["label"], f["locator"]["slot"]) for f in info["fields"]])
+                self.assertEqual(len([n for n in info["notes"] if "merged" in n]), 1, info["notes"])
+
+    def test_wec3p1_control_without_a_side_word_the_labels_were_already_right(self):
+        info = assert_ec3_parity(self, _side_in_shared_cell("Comments: ________________"))
+        self.assertEqual({f["locator"]["slot"]: f["label"] for f in info["fields"]}["b/tbl[0]/tr[0]/tc[1]"],
+                         "Right knee — Effusion")
+
+    def test_wec3p1_a_surviving_duplicate_keeps_its_occurrence_context(self):
+        """A withdrawn twin still counts for the position a surviving duplicate label shows (as on b01e9cfa)."""
+        info = assert_ec3_parity(self, _log(("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3))
+        contexts = [f["context"] for f in info["fields"] if f["kind"] == "table_rows"]
+        self.assertTrue(contexts and all("occurrence" in c for c in contexts), contexts)
+
+    # WE3-m-2 ─ a row holding its own answer place is an answer row, whatever hint, box or placeholder it prints
+    def test_we3m2_rows_printing_a_hint_a_box_or_a_placeholder_share_a_merged_cell(self):
+        for kind in ("dmy", "box", "control"):
+            with self.subTest(kind=kind):
+                data, rows, col = _hinted_rows(kind)
+                self.assert_unmapped(data, rows, col)
+
+    # (Its control - a row printing its own question with its own answer is still no answer row - is RoundFour's
+    # test_wec3_m1_control_a_row_printing_its_own_question_beside_a_tall_cell_is_no_answer_row.)
+
+    # WE3-m-3 ─ a table without a vertical merge costs the pass no merge reading
+    def test_we3m3_a_table_without_a_vertical_merge_is_never_read_for_merges(self):
+        from unittest import mock
+        from . import word_v3 as w
+        doc = Document()
+        doc.add_paragraph("Synthetic observation chart")
+        table = doc.add_table(rows=61, cols=6)
+        for c, text in enumerate(("Date", "Time", "BP", "Pulse", "SpO2", "Initials")):
+            table.cell(0, c).text = text
+        data = docx_bytes(doc)
+        calls = []
+        real_rows, real_head = w.Detector.merge_rows, w.Detector.merge_head
+
+        def rows(self, *a, **k):
+            calls.append("merge_rows")
+            return real_rows(self, *a, **k)
+
+        def head(self, *a, **k):
+            calls.append("merge_head")
+            return real_head(self, *a, **k)
+        with mock.patch.object(w.Detector, "merge_rows", rows), mock.patch.object(w.Detector, "merge_head", head):
+            fields = w.inspect(data)["fields"]
+        self.assertIn("table_rows", [f["kind"] for f in fields])
+        self.assertEqual(calls, [])
+
+    # The round-5 mutation proof's survivors (Z10, Z16), pinned
+    def test_z16_a_withdrawn_cell_holding_a_kept_signing_area_says_so(self):
+        def control_and_signature(cell):
+            paragraph = cell.paragraphs[0]
+            paragraph._p.append(_sdt("text", placeholder="Click here to enter text."))
+            paragraph.add_run("   Signature: ______________")
+        info = assert_ec3_parity(self, RefutationRepairs.merged_rows(self, [["Current medications"], ["Allergies"]],
+                                                                     extra=control_and_signature))
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        self.assertIn("NOT mapped", notes[0])
+        self.assertIn("Its signing or protected area is kept as printed and completed by hand.", notes[0])
+
+    def test_z10_an_area_a_later_check_removed_is_not_withdrawn_again(self):
+        """An area the mapping-limit check removes after the EC3 decision keeps that check's own note; EC3 neither
+        withdraws it again (the role reading stays b01e9cfa's) nor notes its cell for it."""
+        from unittest import mock
+        from . import word_v3 as w
+        data = RefutationRepairs.merged_rows(self, [["Current medications"], ["Allergies"]])
+        real = w.Detector.surface_duplicates
+
+        def and_a_later_removal(detector):
+            real(detector)
+            detector.areas[:] = [a for a in detector.areas if a.slot.path != "b/tbl[0]/tr[0]/tc[1]"]
+        detector = w.Detector(w.open_package(data))
+        with mock.patch.object(w.Detector, "surface_duplicates", and_a_later_removal):
+            areas, notes = detector.detect()
+        self.assertEqual(detector.withdrawn_areas, [])
+        self.assertFalse([n for n in notes if "merged" in n], notes)
+        self.assertNotIn("b/tbl[0]/tr[0]/tc[1]", [a.slot.path for a in areas])
+
+    def test_we3m3_a_table_with_one_merge_reads_rows_only_for_that_merge(self):
+        """Only a merge spanning two or more rows is read for its rows (shared_rows), once - never each of a log's
+        cells, which made the pass grow with rows x cells (the answer rows of a table are gathered once too)."""
+        from unittest import mock
+        from . import word_v3 as w
+        doc = Document()
+        doc.add_paragraph("Synthetic observation chart")
+        table = doc.add_table(rows=61, cols=6)
+        for c, text in enumerate(("Date", "Time", "BP", "Pulse", "SpO2", "Initials")):
+            table.cell(0, c).text = text
+        table.cell(1, 5).merge(table.cell(2, 5))
+        data = docx_bytes(doc)
+        calls = []
+        real = w.Detector.shared_rows
+
+        def rows(self, *a, **k):
+            calls.append(a[1].id)
+            return real(self, *a, **k)
+        with mock.patch.object(w.Detector, "shared_rows", rows):
+            w.inspect(data)
+        self.assertEqual(calls, ["word/document.xml#b/tbl[0]/tr[1]/tc[5]"])
