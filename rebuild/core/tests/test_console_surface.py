@@ -334,3 +334,39 @@ class DoctorHostIngress(TestCase):
 
     def test_the_admin_host_still_proxies_the_console(self):
         self.assertIn('proxy_pass http://127.0.0.1:9141;', nginx_location(self.blocks['admin.quillmd.com'], '/console/'))
+
+
+@override_settings(QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES)
+class PublicHostMatchesTheProcess(TestCase):
+    """A valid Host for the other surface cannot relabel an admin process as the doctor host."""
+    def setUp(self):
+        self.admin = User.objects.create_user(username='host-surface-admin', email='host-admin@synthetic.invalid',
+                                              verified_at=timezone.now(), is_staff=True)
+        device = TOTPDevice.objects.create(user=self.admin, name='Synthetic authenticator', confirmed=True)
+        self.client.force_login(self.admin)
+        session = self.client.session; session['otp_device_id'] = device.persistent_id; session.save()
+
+    @override_settings(ADMIN_SITE=True)
+    def test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator(self):
+        paths = ['/console', '/console/', '/console/usage.csv', '/login/', '/recovery/', '/health/']
+        for host in ['app.quillmd.com', 'app.quillmd.com:9141', 'APP.QUILLMD.COM', 'app.quillmd.com.']:
+            for path in paths:
+                with self.subTest(host=host, path=path), Spy() as spy:
+                    response = self.client.get(path, HTTP_HOST=host)
+                    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+                    self.assertEqual(spy.reached, [])
+
+    @override_settings(ADMIN_SITE=False)
+    def test_doctor_process_refuses_admin_host(self):
+        for host in ['admin.quillmd.com', 'admin.quillmd.com:9140', 'ADMIN.QUILLMD.COM', 'admin.quillmd.com.']:
+            with self.subTest(host=host), Spy() as spy:
+                response = self.client.get('/billing/', HTTP_HOST=host)
+                self.assertEqual((response.status_code, response.get('Location')), (404, None))
+                self.assertEqual(spy.reached, [])
+
+    @override_settings(ADMIN_SITE=True)
+    def test_correct_admin_host_and_loopback_tunnel_still_reach_the_console(self):
+        for host in ['admin.quillmd.com', 'admin.quillmd.com:9141', 'localhost:9141', '127.0.0.1:9141', 'testserver']:
+            with self.subTest(host=host), Spy() as spy:
+                self.assertEqual(self.client.get('/console/', HTTP_HOST=host).status_code, 299)
+                self.assertEqual(spy.reached, ['console/'])

@@ -1,0 +1,852 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_baseline
+Creating test database for alias 'default'...
+EEEEEEE/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFFFFFFFFFFFFFFFFFFFFFFF.FFFF
+======================================================================
+ERROR: test_a_second_explicit_department_owner_membership_is_an_authorized_positive (core.tests.test_department_billing_isolation.DepartmentBillingIsolation.test_a_second_explicit_department_owner_membership_is_an_authorized_positive)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_department_billing_isolation.py", line 44, in setUp
+    job = Job.objects.create(**scope, user=author, kind=kind, payer='organization:'+str(self.organization.pk),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+======================================================================
+ERROR: test_alternate_admin_surface_denies_the_department_owner (core.tests.test_department_billing_isolation.DepartmentBillingIsolation.test_alternate_admin_surface_denies_the_department_owner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_department_billing_isolation.py", line 44, in setUp
+    job = Job.objects.create(**scope, user=author, kind=kind, payer='organization:'+str(self.organization.pk),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+======================================================================
+ERROR: test_detail_is_authorized_by_the_actual_encounter_or_mapping_department (core.tests.test_department_billing_isolation.DepartmentBillingIsolation.test_detail_is_authorized_by_the_actual_encounter_or_mapping_department)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_department_billing_isolation.py", line 44, in setUp
+    job = Job.objects.create(**scope, user=author, kind=kind, payer='organization:'+str(self.organization.pk),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+======================================================================
+ERROR: test_financial_scope_does_not_open_other_departments_clinical_api_or_result_export (core.tests.test_department_billing_isolation.DepartmentBillingIsolation.test_financial_scope_does_not_open_other_departments_clinical_api_or_result_export)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_department_billing_isolation.py", line 44, in setUp
+    job = Job.objects.create(**scope, user=author, kind=kind, payer='organization:'+str(self.organization.pk),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+======================================================================
+ERROR: test_list_search_pagination_totals_and_ledger_never_disclose_foreign_requests (core.tests.test_department_billing_isolation.DepartmentBillingIsolation.test_list_search_pagination_totals_and_ledger_never_disclose_foreign_requests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_department_billing_isolation.py", line 44, in setUp
+    job = Job.objects.create(**scope, user=author, kind=kind, payer='organization:'+str(self.organization.pk),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+======================================================================
+ERROR: test_owner_role_revocation_removes_other_users_financial_access (core.tests.test_department_billing_isolation.DepartmentBillingIsolation.test_owner_role_revocation_removes_other_users_financial_access)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_department_billing_isolation.py", line 44, in setUp
+    job = Job.objects.create(**scope, user=author, kind=kind, payer='organization:'+str(self.organization.pk),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+======================================================================
+ERROR: test_personal_financial_history_survives_department_membership_revocation (core.tests.test_department_billing_isolation.DepartmentBillingIsolation.test_personal_financial_history_survives_department_membership_revocation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.RaiseException: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_department_billing_isolation.py", line 44, in setUp
+    job = Job.objects.create(**scope, user=author, kind=kind, payer='organization:'+str(self.organization.pk),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: Mapping job source and tenant binding mismatch
+CONTEXT:  PL/pgSQL function quillmd_mapping_job_scope_guard() line 13 at RAISE
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com', path='/console/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com', path='/console/usage.csv')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com', path='/login/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com', path='/recovery/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com', path='/health/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com:9141', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com:9141', path='/console/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com:9141', path='/console/usage.csv')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com:9141', path='/login/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com:9141', path='/recovery/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com:9141', path='/health/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='APP.QUILLMD.COM', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='APP.QUILLMD.COM', path='/console/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='APP.QUILLMD.COM', path='/console/usage.csv')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='APP.QUILLMD.COM', path='/login/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='APP.QUILLMD.COM', path='/recovery/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='APP.QUILLMD.COM', path='/health/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com.', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com.', path='/console/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com.', path='/console/usage.csv')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com.', path='/login/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com.', path='/recovery/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com.', path='/health/')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_doctor_process_refuses_admin_host (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_doctor_process_refuses_admin_host) (host='admin.quillmd.com')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 364, in test_doctor_process_refuses_admin_host
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_doctor_process_refuses_admin_host (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_doctor_process_refuses_admin_host) (host='admin.quillmd.com:9140')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 364, in test_doctor_process_refuses_admin_host
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_doctor_process_refuses_admin_host (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_doctor_process_refuses_admin_host) (host='ADMIN.QUILLMD.COM')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 364, in test_doctor_process_refuses_admin_host
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+======================================================================
+FAIL: test_doctor_process_refuses_admin_host (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_doctor_process_refuses_admin_host) (host='admin.quillmd.com.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 364, in test_doctor_process_refuses_admin_host
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (299, None) != (404, None)
+
+First differing element 0:
+299
+404
+
+- (299, None)
++ (404, None)
+
+----------------------------------------------------------------------
+Ran 10 tests in 1.004s
+
+FAILED (failures=28, errors=7)
+Destroying test database for alias 'default'...
+Found 10 test(s).
+System check identified no issues (0 silenced).

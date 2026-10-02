@@ -2107,11 +2107,11 @@ def billing(request):
     from .billing import checkout_form
     from .admin_queries import page_for,searched
     query=request.GET.get('q','').strip()[:100]
-    owned_orgs=owned_organizations(request.user)
-    wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
-    usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
+    wallets=Wallet.objects.filter(user=request.user)
+    jobs=Job.objects.filter(billed_jobs(request.user))
+    usage=searched(Usage.objects.filter(job__in=jobs).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
     held=held_requests(request.user)
-    ledger=searched(LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
+    ledger=searched(LedgerEntry.objects.filter(models.Q(wallet__in=wallets)|models.Q(job__in=jobs)).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
     payments=searched(Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at','pk'),query,['status','stripe_session','stripe_intent'])
     up=page_for(request,usage,'usage_page','usage');lp=page_for(request,ledger,'ledger_page','ledger');pp=page_for(request,payments,'payments_page','payments')
     return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'held_requests':held,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
@@ -2120,17 +2120,21 @@ def billing(request):
 REQUEST_LABELS={'generation':'Generation','generation_part':'Generation','transcription':'Transcription','mapping':'Form mapping'}
 MAX_HELD_ROWS=500
 
-def owned_organizations(user):
-    """The organizations whose billing a viewer reads: those in which the viewer holds an active owner membership (the
-    Organization owner role, held through any of its departments). ONE answer for the wallet strip, the list of requests
-    holding funds and the charge page (refutation M1 of 4cfa4301: the list asked which DEPARTMENTS the viewer owns while
-    the other two asked this, so the owner of another department of the paying organization saw that wallet's funds
-    reserved beside "No request is holding funds", and still opened the request's charge page)."""
-    return set(Membership.objects.filter(user=user,active=True,role='owner').values_list('department__organization_id',flat=True))
-
 def billed_jobs(user):
-    """The requests whose charges a viewer reads: their own, and those an organization the viewer owns pays for."""
-    return models.Q(user=user)|models.Q(payer__in=[f'organization:{org}' for org in owned_organizations(user)])
+    """Own financial history, plus organization-paid requests in departments the viewer actively owns.
+
+    An owner membership is held in one department. Shared payer identity never grants another department's request,
+    requester, totals or financial evidence. Use actual foreign keys for both encounter and mapping jobs; never their
+    user-supplied config. Own requested history remains readable after clinical membership revocation.
+    """
+    owners=Membership.objects.filter(user=user,active=True,role='owner',user__is_active=True,
+                                    user__verified_at__isnull=False).values('department_id')
+    from django.db.models.functions import Cast,Concat
+    paid_encounters=models.Q(encounter__department_id__in=owners,
+        payer=Concat(models.Value('organization:'),Cast('encounter__department__organization_id',models.CharField())))
+    paid_mappings=models.Q(mapping_version__template__department_id__in=owners,
+        payer=Concat(models.Value('organization:'),Cast('mapping_version__template__department__organization_id',models.CharField())))
+    return models.Q(user=user)|paid_encounters|paid_mappings
 
 def held_requests(user):
     """Requests holding funds, newest first: exactly those whose charge page the viewer opens (billed_jobs; refutation F11
@@ -2318,12 +2322,12 @@ def admin_job_detail(request,pk):
 def billing_job_detail(request,pk):
     from .admin_queries import financial_context
     # Personal billing history remains available after clinical membership revocation.
-    # Organization owners can inspect organization-paid charges without clinical access.
-    owned=owned_organizations(request.user)
+    # Department owners can inspect that department's organization-paid charges only.
     job=get_object_or_404(Job.objects.filter(billed_jobs(request.user)).select_related('user','encounter__department'),pk=pk)
-    visible=set(Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned)).values_list('pk',flat=True))
+    # A shared organization's global balances include other departments: only personal overall balances are visible.
+    visible=set(Wallet.objects.filter(user=request.user).values_list('pk',flat=True))
     context=financial_context(job,visible);context.pop('audit_targets')
-    context['doctor_status']=doctor_status(job)
+    context['doctor_status']=doctor_status(job) if job.user_id==request.user.pk else for_others(doctor_status(job))
     context['request_label']=REQUEST_LABELS.get(job.kind,'Request')
     if job.kind=='generation_part':
         # The held list's one row of a complete form links here (part 1): the page names the part and the whole request's

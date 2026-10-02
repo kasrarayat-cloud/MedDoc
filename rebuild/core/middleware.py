@@ -23,6 +23,14 @@ class AccessMiddleware:
         # SCRIPT_NAME is a client header gunicorn honours: '/x' made '/x/console/' of a console request and the doctor
         # surface served the console (refutation R1).
         path=request.path_info
+        # Both public hostnames are allowed at Django's syntax boundary, but each belongs to one process. A forged
+        # doctor Host on the loopback admin listener must never serve the console. Local SSH tunnel hosts remain valid.
+        host=request.get_host().split(':',1)[0].lower().rstrip('.')
+        wrong_host='app.quillmd.com' if settings.ADMIN_SITE else 'admin.quillmd.com'
+        if host==wrong_host:
+            # CommonMiddleware must not turn this refusal into a slash redirect naming a route on the other surface.
+            request.urlconf=()
+            return self.secured(request,response_for_exception(request,Http404()))
         if not settings.ADMIN_SITE:
             from .destination_roles import suggestions_enabled
             request.urlconf=ROLE_SUGGESTIONS_URLCONF if suggestions_enabled() else DOCTOR_URLCONF

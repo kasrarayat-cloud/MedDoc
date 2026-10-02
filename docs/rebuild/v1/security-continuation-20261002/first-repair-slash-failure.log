@@ -1,0 +1,72 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_focused
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.......FFFF...
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com:9141', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='APP.QUILLMD.COM', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+======================================================================
+FAIL: test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator (core.tests.test_console_surface.PublicHostMatchesTheProcess.test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator) (host='app.quillmd.com.', path='/console')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/core/tests/test_console_surface.py", line 356, in test_admin_process_refuses_doctor_host_even_for_an_mfa_administrator
+    self.assertEqual((response.status_code, response.get('Location')), (404, None))
+AssertionError: Tuples differ: (301, '/console/') != (404, None)
+
+First differing element 0:
+301
+404
+
+- (301, '/console/')
++ (404, None)
+
+----------------------------------------------------------------------
+Ran 11 tests in 5.469s
+
+FAILED (failures=4)
+Destroying test database for alias 'default'...
+Found 11 test(s).
+System check identified no issues (0 silenced).

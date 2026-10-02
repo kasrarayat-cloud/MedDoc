@@ -1,0 +1,20 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_affected
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............................../opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+........................................Forbidden (CSRF cookie not set.): /encounters/57002ec9-d12c-4852-81d4-7c8a4eb00504/generate/
+..........Forbidden (CSRF cookie not set.): /recovery/
+Forbidden (CSRF cookie not set.): /verification/resend/
+.........Forbidden (CSRF cookie not set.): /console/accounts/d99cab85-be89-4d08-9d40-c646ae5209c4/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/354f755a-a1d0-4bfc-bfb1-e07737156084/
+Forbidden (CSRF cookie not set.): /console/departments/5ce14d6a-5cbb-4ae2-a7b0-05f1a18c30f3/payer/
+.....................
+----------------------------------------------------------------------
+Ran 110 tests in 106.728s
+
+OK
+Destroying test database for alias 'default'...
+Found 110 test(s).
+System check identified no issues (0 silenced).

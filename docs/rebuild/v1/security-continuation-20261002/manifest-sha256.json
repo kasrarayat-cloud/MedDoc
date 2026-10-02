@@ -1,0 +1,8 @@
+{
+  "affected-green.log": "f8e9bc6a54f5227aaa549a5008e8eb74bc70508134042748c0cfa3e96b8f994d",
+  "baseline-financial-red.log": "e33d095e52cf2c3fea1ba27379e34fae6bfe1ac4f586f36973b5fe569a068a10",
+  "baseline-instrument-error.log": "aaba5d2f07306e75b6bece131a11038928456bf88e10aaa684e71cfb8aec471c",
+  "first-repair-slash-failure.log": "115805db30774f0d17181e639d0b2c590c9775528237b0db4169a8ac8be0b893",
+  "focused-green.log": "4be04546fb31e33edf1d6c20c33f180de2f4418370428fa5f5590e171163ed15",
+  "served-before-host.json": "b369c6c84036e9c63cfe1072306c51b5143b3bac8fd181d9b3fdeb67a294ae97"
+}
