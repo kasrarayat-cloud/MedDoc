@@ -1657,10 +1657,11 @@ class Detector:
         or an answer's own row, when there are two or more; else []. A row is
           - what its printed cells LEFT of the merge say (where rule (d) reads a row's question), a continued cell read
             as its merge's first cell (merge_head); two rows that read through the same cells are one row; or
-          - when it prints nothing at all outside the merge (unprinted), an ANSWER row: a row where another engine
-            area (a field, or a log's table_rows) has a place outside this merge (`answer_rows`) - two entries of a
-            log, or two rows of blank answer cells, beside one merged cell (WEC3-m-1). A row printing only a format
-            hint ('dd/mm/yyyy') under a question is neither: the tall cell stays that question's (R2F-10 FB).
+          - when it prints nothing at all outside the merge (unprinted), an ANSWER row: a row where an engine area (a
+            field, or a log's table_rows) has a place (`answer_rows`) - two entries of a log, or two rows of blank
+            answer cells, beside one merged cell (WEC3-m-1); or a row printing nothing whose only answer place is
+            the merge's own continuation, which Word does not show (WEC3-m-3). A row printing only a format hint
+            ('dd/mm/yyyy') under a question is neither: the tall cell stays that question's (R2F-10 FB).
         A tall answer cell beside ONE question (the continued rows print nothing and answer nothing, or a label merged
         the same way) is that question's own place.
 
@@ -1691,7 +1692,7 @@ class Detector:
                 description = "'%s'" % " — ".join(text for _, text in sources)[:80]
             elif r in answer_rows and all(self.unprinted(self.cell_text(c)) for c in rows[r]
                                           if c.info["vmerge"] != "continue" and c.info["col"] != low):
-                identity, description = ("answers", r), "table row %d (answer cells only)" % (r + 1)
+                identity, description = ("answers", r), "table row %d (an answer place, nothing printed)" % (r + 1)
             else:
                 continue
             if identity not in seen:
@@ -2240,10 +2241,7 @@ class Detector:
                 spanned = self.merge_rows(table, head)
                 shared = []
                 if len(spanned) >= 2:
-                    rows = self.grid(table)
-                    group = {c.id for r in spanned for c in rows.get(r, []) if c.info["col"] == head.info["col"]}
-                    answer_rows = {r for r, ids in held.get(id(table), {}).items() if ids - group}
-                    shared = self.shared_rows(table, head, answer_rows)
+                    shared = self.shared_rows(table, head, set(held.get(id(table), {})))
                 verdicts[head.id] = (head, shared)
             return verdicts[head.id]
 

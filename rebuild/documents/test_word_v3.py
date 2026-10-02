@@ -2258,16 +2258,18 @@ def _knees(answer=None, *, merge="restart", place="restart"):
     return docx_bytes(doc)
 
 
-def _log(heads, rows, col, first, last):
+def _log(heads, rows, col, first, last, prompt=None):
     """A blank log under the header row `heads` with `rows` data rows, the cells of column `col` merged from data row
-    `first` to `last` (Word's restart + continuation), then a separate Plan table."""
+    `first` to `last` (Word's restart + continuation; printing `prompt` if given), then a separate Plan table."""
     doc = Document()
     doc.add_paragraph("Synthetic chart")
     table = doc.add_table(rows=rows + 1, cols=len(heads))
     table.style = doc.styles["Table Grid"]
     for c, text in enumerate(heads):
         table.cell(0, c).text = text
-    table.cell(first, col).merge(table.cell(last, col))
+    merged = table.cell(first, col).merge(table.cell(last, col))
+    if prompt:
+        merged.paragraphs[0].add_run(prompt)
     plan = doc.add_table(rows=1, cols=2)
     plan.cell(0, 0).text = "Plan"
     return docx_bytes(doc)
@@ -2323,15 +2325,35 @@ class RoundFour(unittest.TestCase):
 
     # WEC3-m-1 ─ a merged cell across two answer rows of a log is mapped for neither, and the log writing into it is not
     def test_wec3_m1_a_merged_cell_across_log_rows_is_mapped_for_no_row(self):
-        for name, heads, rows, col, first, last in (
-                ("comments rows 2-3", ("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3),
-                ("dose rows 1-2", ("Date", "Drug", "Dose"), 6, 2, 1, 2),
-                ("drug rows 2-3", ("Date", "Drug", "Dose"), 6, 1, 2, 3),
-                ("dose rows 2-4", ("Date", "Drug", "Dose"), 6, 2, 2, 4),
-                ("dose, last two rows", ("Date", "Drug", "Dose"), 4, 2, 3, 4),
-                ("date (first column) rows 2-3", ("Date", "Drug", "Dose"), 6, 0, 2, 3)):
+        for name, heads, rows, col, first, last, log in (
+                ("comments rows 2-3", ("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3, True),
+                ("dose rows 1-2", ("Date", "Drug", "Dose"), 6, 2, 1, 2, False),
+                ("drug rows 2-3", ("Date", "Drug", "Dose"), 6, 1, 2, 3, True),
+                ("dose rows 2-4", ("Date", "Drug", "Dose"), 6, 2, 2, 4, True),
+                ("dose, last two rows", ("Date", "Drug", "Dose"), 4, 2, 3, 4, True),
+                ("date (first column) rows 2-3", ("Date", "Drug", "Dose"), 6, 0, 2, 3, True)):
             with self.subTest(name):
-                self.assert_unmapped(_log(heads, rows, col, first, last), range(first, last + 1), col)
+                info = self.assert_unmapped(_log(heads, rows, col, first, last), range(first, last + 1), col)
+                note = [n for n in info["notes"] if "merged" in n][0]
+                self.assertEqual("log rows" in note, log, note)
+
+    def test_wec3_m1_a_prompt_printed_in_the_merged_cell_still_shares_it(self):
+        """The merged cell's own printed words never make its rows printed rows: two blank answer rows beside 'Comments:
+        ____' share it."""
+        self.assert_unmapped(_log(("Date", "Drug", "Notes"), 6, 2, 1, 2, prompt="Comments: ____________"), (1, 2), 2)
+
+    def test_wec3_m1_control_a_row_printing_its_own_question_beside_a_tall_cell_is_no_answer_row(self):
+        """'Current medications' with a tall answer cell, beside a row that prints its own question ('Date') with its own
+        answer cell to the right: the tall cell stays the medications answer (R2F-10 FA, with an answer to the right)."""
+        doc = Document()
+        table = doc.add_table(rows=2, cols=4)
+        table.cell(0, 0).text = "Current medications"
+        table.cell(0, 2).text = "Reviewed"
+        table.cell(1, 2).text = "Date"
+        table.cell(0, 1).merge(table.cell(1, 1))
+        info = self.inspect(docx_bytes(doc))
+        self.assertEqual(fields_by_label(info["fields"])["Current medications"]["locator"]["slot"], "b/tbl[0]/tr[0]/tc[1]")
+        self.assertFalse([n for n in info["notes"] if "merged" in n], info["notes"])
 
     def test_wec3_m1_control_the_log_rows_clear_of_the_merge_stay_a_log(self):
         info = self.inspect(_log(("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3))
@@ -2375,6 +2397,18 @@ class RoundFour(unittest.TestCase):
                              ("form field", form_field)):
             with self.subTest(answer=name):
                 self.assert_unmapped(_knees(answer, place="continuation"), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    def test_wec3_m3_a_place_in_the_continuation_beside_one_question_and_a_blank_row_is_withdrawn(self):
+        """A tall cell beside ONE question whose answer place is in the continuation, on a row printing nothing: the
+        place is that row's own (Word shows a merge's restart content only), so the cell is withdrawn too."""
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Comments"
+        table.cell(0, 1).merge(table.cell(1, 1))
+        _raw_cell(table, 1, 1).paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        plan = doc.add_table(rows=1, cols=2)
+        plan.cell(0, 0).text = "Plan"
+        self.assert_unmapped(docx_bytes(doc), (0, 1), 1, names=("Comments",))
 
     def test_wec3_m3_a_printed_restart_with_a_control_in_the_continuation_is_withdrawn(self):
         def printed(cell):
