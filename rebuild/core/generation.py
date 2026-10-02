@@ -3858,9 +3858,12 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
-    from .source_scope import bare_affects
+    from .source_scope import bare_affects,elliptical_dependencies
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
+    # An elliptical other-person attribution or topicless temporal modifier
+    # cannot become independent merely because the model called it so.
+    causes.extend((other,None) for other in elliptical_dependencies(reading).get(uid,()))
     # OPPOSED SAME TOPIC (only the units an arm can meet by its own kind of key: `v3_opposed_candidates`)
     mine_claim, mine_negated = reading['claim_keys'][uid], reading['negated_keys'][uid]
     mine = reading['predicates'][uid]

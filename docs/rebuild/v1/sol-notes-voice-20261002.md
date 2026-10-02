@@ -1,11 +1,23 @@
 # Notes and reviewed voice repair, Sol continuation 20261002
 
-**REFUTED CANDIDATE — DO NOT INTEGRATE AS QUALIFIED.** Independent security refutation
+**REFUTED CANDIDATES — DO NOT INTEGRATE AS QUALIFIED.** Independent security refutation
 after the small-batch measurements found two unsafe reviewed-context releases:
 “Takes warfarin 5 mg daily. Only her father does.” and “Takes warfarin 5 mg daily.
 Not today.” for today's medication question. First failures are retained; repair and
 a fresh independent finished-diff refutation are required. The 45-case numbers below
 remain their original measured result and do not claim these two extra cases passed.
+
+The first hold-only dependency repair is also **unqualified**. Its affected 181 tests
+passed in 218.776 seconds and the exposed 60 diagnostic vectors measured 58 correct,
+zero unsafe releases and two unnecessary parser holds, versus 49 correct, nine unsafe
+and two holds under the original172 behavior. Fresh independent finished-source
+refutation then found two additional unsafe releases through final governance:
+“Takes warfarin 5 mg daily. Not since Monday.” for current medications, and
+“Takes warfarin 5 mg daily. Only her father takes warfarin.” for medications.
+These original failures remain retained in security/refute-notes-repaired-governance-1.*.
+The 60-vector result does not include these extra failures or qualify the feature.
+`repair-affected-01.log`, `qualification-repair.py/.log`, `refutation-local-before.log`
+and `repeated-ellipsis-before.log` retain the first repair's exact measurements.
 
 Private, synthetic-only component work on `fix/v1-sol-notes-voice-20261002`, based on
 `d49ece788c058c9e733e895910a81c8aad94c6a3`. Sonnet 5.5 stays the application model;

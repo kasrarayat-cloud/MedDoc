@@ -55,3 +55,43 @@ def bare_affects(reading,change,claim):
     classes=sole.get('classes',frozenset())
     if not classes or sole.get('unknown') or 'global' in sole.get('reach',()):return True
     return bool(classes & {'medication','therapy','test','care'})
+
+
+def elliptical_dependencies(reading):
+    """Hold the adjacent claim an incomplete predicate/modifier can change.
+
+    A do/have/modal operator without its own predicate is verbal ellipsis:
+    "Only her father does" cannot be independent of the omitted action. A
+    topicless, positively read fragment such as "Not today"/"Except today"
+    likewise supplies no standalone claim. No inferred replacement value is
+    adopted. Complete other-person clauses remain separate. These dependencies
+    attach to the preceding nonfragment (or the following one at source start),
+    rather than every field or the whole note.
+    """
+    key='_elliptical_dependencies'
+    if key in reading:return reading[key]
+    from . import v3_syntax,v3_actors as a
+    units=reading['units'];docs=v3_syntax.docs(u['quote'] for u in units)
+    causes={};previous=None;leading=[]
+    for unit,doc in zip(units,docs or [None]*len(units)):
+        uid=unit['id'];info=reading['actors'][uid];sole=info.get('sole') or {}
+        fragment=False
+        if doc is not None and not reading['parsed'].get(uid):
+            roots=[t for t in doc if t.dep_=='ROOT']
+            if len(roots)==1:
+                root=roots[0];lemma=a._lemma(root)
+                complements={'dobj','obj','ccomp','xcomp','attr','oprd'}
+                if lemma=='be':complements=complements|{'prep','acomp'}
+                operator=bool((lemma in ('do','have') or root.pos_=='AUX')
+                    and not any(t.dep_ in complements for t in root.children))
+                topicless=bool(not any(t.pos_ in ('VERB','AUX') for t in doc)
+                    and not info.get('named_keys') and not sole.get('unknown'))
+                fragment=operator or topicless
+        if fragment:
+            if previous is not None:causes.setdefault(previous,[]).append(unit)
+            else:leading.append(unit)
+        else:
+            if leading:causes.setdefault(uid,[]).extend(leading);leading=[]
+            previous=uid
+    reading[key]=causes
+    return causes

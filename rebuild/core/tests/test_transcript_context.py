@@ -119,6 +119,26 @@ class PatientDefault(SimpleTestCase):
         self.check('Reports left ankle pain.', 'Chief complaint', ['Reports left ankle pain.'], 'conflict')
         self.check('Mild swelling over the left ankle.', 'Examination', ['Mild swelling over the left ankle.'], 'conflict')
 
+    def test_independent_refutation_ellipses_cannot_retract_a_patient_claim_silently(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail,label in [('Only her father does.','Medications'),('Not today.','Medications taken today'),
+                           ('Except today.','Medications taken today'),('Her father does not.','Medications'),
+                           ('Not this week.','Medications taken this week'),
+                           ('Only her father actually takes.','Medications'),
+                           ('Only her father takes it.','Medications')]:
+            with self.subTest(tail=tail):self.check(source+' '+tail,label,[source],'conflict')
+        # A modifier before the first claim still cannot be declared independent.
+        self.check('Not today. '+source,'Medications taken today',[source],'conflict')
+
+    def test_elliptical_dependency_is_local_and_complete_other_person_claims_are_distinct(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['Her father takes apixaban.','Her father has diabetes.','Her father reports cough.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source])
+        # The elliptical substitution points to the intervening cough statement;
+        # it does not undo every earlier independent statement in the document.
+        self.check(source+' Reports cough. Only her father does.','Medications',[source])
+        self.check(source+' Reports cough. Only her father does.','Symptoms',['Reports cough.'],'conflict')
+
     @override_settings(V3_GENERATION_BATCHES=True)
     def test_whole_form_plan_keeps_context_in_request_digest_and_field_records(self):
         from core import generation_batch as b
