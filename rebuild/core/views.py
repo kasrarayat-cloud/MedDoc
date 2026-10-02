@@ -1969,19 +1969,39 @@ def billing(request):
     owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
     usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
-    held=held_requests(wallets)
+    held=held_requests(request.user)
     ledger=searched(LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
     payments=searched(Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at','pk'),query,['status','stripe_session','stripe_intent'])
     up=page_for(request,usage,'usage_page','usage');lp=page_for(request,ledger,'ledger_page','ledger');pp=page_for(request,payments,'payments_page','payments')
     return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'held_requests':held,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
 
-def held_requests(wallets):
-    """Requests holding funds on these wallets, newest first: what is held, for what, in the doctor's words. Read-only:
-    the reservations themselves decide every amount (core.billing)."""
+#: What a request is called on the doctor's pages: a complete-form part is part of one generation (refutation F11).
+REQUEST_LABELS={'generation':'Generation','generation_part':'Generation','transcription':'Transcription','mapping':'Form mapping'}
+
+def held_requests(user):
+    """Requests holding funds, newest first: the viewer's own, and those of departments the viewer owns (refutation F11 of
+    dc33e094: every held reservation on the viewer's wallets showed another department's requests and hid the viewer's own
+    on an organization wallet). A complete-form generation is one row, its parts' holds summed. Read-only: the reservations
+    themselves decide every amount (core.billing)."""
+    owned=list(Membership.objects.filter(user=user,active=True,role='owner').values_list('department_id',flat=True))
+    owned_orgs=set(Membership.objects.filter(user=user,active=True,role='owner').values_list('department__organization_id',flat=True))
+    scope=(models.Q(job__user=user)|models.Q(job__encounter__department_id__in=owned)
+           |models.Q(job__mapping_version__template__department_id__in=owned))
     rows={}
-    for reservation in Reservation.objects.filter(wallet__in=wallets,state='held').select_related('job','wallet').order_by('-created_at','pk')[:200]:
-        row=rows.setdefault(reservation.job_id,{'job':reservation.job,'amount':Decimal('0'),'status':doctor_status(reservation.job)})
-        row['amount']+=reservation.amount
+    for reservation in Reservation.objects.filter(scope,state='held').select_related('job').order_by('-created_at','pk')[:500]:
+        job=reservation.job
+        if job.kind=='generation_part':
+            part=job.generation_part
+            key=('batch',part.batch_id)
+            first=part.batch.parts.order_by('ordinal').first().job
+        else:
+            key=('job',job.pk);first=job
+        if key not in rows:
+            # The charge page opens for the requester and for an owner of the paying organization (billing_job_detail).
+            linked=first.user_id==user.pk or first.payer in {f'organization:{org}' for org in owned_orgs}
+            rows[key]={'job':first,'label':REQUEST_LABELS.get(first.kind,'Request'),'amount':Decimal('0'),
+                       'status':doctor_status(first),'linked':linked}
+        rows[key]['amount']+=reservation.amount
     return list(rows.values())
 
 def usage_rows(usage):

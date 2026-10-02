@@ -118,3 +118,53 @@ class Pages(TestCase):
         self.assertEqual(self.money(), before)  # read-only
         detail = self.client.get(f'/billing/jobs/{job.pk}/').content.decode()
         self.assertIn('data-request-status="held">On hold for review</span>', detail)
+
+
+@override_settings(**TEST_SETTINGS)
+class HeldListScope(TestCase):
+    """Refutation F11 (dc33e094): the list of requests holding funds was every held reservation on the viewer's wallets. A
+    clinician whose request held funds on the organization's wallet saw nothing, and the owner of ANOTHER department of the
+    same organization saw it. It is now the viewer's own requests and those of departments the viewer owns."""
+    workflow = test_workflow.DocumentWorkflow
+    setUp, make_docx, upload, create_encounter = workflow.setUp, workflow.make_docx, workflow.upload, workflow.create_encounter
+
+    def held(self, client):
+        return [(row['job'].pk, row['amount'], row['label']) for row in client.get('/billing/').context['held_requests']]
+
+    def test_the_requester_and_the_departments_owner_see_it_and_nobody_else_does(self):
+        from django.test import Client
+        from core.models import Department, Membership, Organization, User
+        _t, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, 'Symptoms: no chest pain.\nExamination: Normal gait.')
+        org_wallet = Wallet.objects.create(organization=self.organization, kind='paid', balance=Decimal('5'), reserved=Decimal('0.4'))
+        mine = Job.objects.create(encounter=encounter, user=self.user, request_key='f11:mine', state='queued',
+                                  payer=f'organization:{self.organization.pk}')
+        Reservation.objects.create(job=mine, wallet=org_wallet, amount=Decimal('0.40'), state='held')
+        self.assertEqual(self.held(self.client), [(mine.pk, Decimal('0.40'), 'Generation')])  # dc33e094: []
+        def member(name, department, role):
+            user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now())
+            Membership.objects.create(user=user, department=department, role=role)
+            client = Client(); client.force_login(user)
+            return client
+        other_department = Department.objects.create(organization=self.organization, name='Other department, same org')
+        self.assertEqual(self.held(member('f11-other-owner', other_department, 'owner')), [])  # dc33e094: saw it
+        self.assertEqual(self.held(member('f11-owner', self.department, 'owner')), [(mine.pk, Decimal('0.40'), 'Generation')])
+        self.assertEqual(self.held(member('f11-colleague', self.department, 'clinician')), [])  # not theirs, not owned
+        outsider_org = Organization.objects.create(name='Synthetic outsider')
+        self.assertEqual(self.held(member('f11-outsider', Department.objects.create(organization=outsider_org, name='X'), 'owner')), [])
+
+
+from core.tests.test_generation_batch import BatchFixture, SETTINGS as BATCH_SETTINGS  # noqa: E402
+
+
+@override_settings(**BATCH_SETTINGS)
+class HeldListOneRowPerRequest(BatchFixture, TestCase):
+    def test_a_complete_form_request_is_one_row_named_for_the_doctor(self):
+        batch = self.admit()
+        rows = self.client.get('/billing/').context['held_requests']
+        parts = list(Reservation.objects.filter(job__generation_part__batch=batch, state='held').values_list('amount', flat=True))
+        self.assertGreater(len(parts), 1)
+        self.assertEqual([(row['label'], row['amount'], row['status'].key) for row in rows],
+                         [('Generation', sum(parts), 'waiting')])  # dc33e094: one row per part, 'Generation_Part'
+        page = self.client.get('/billing/').content.decode()
+        self.assertNotIn('Generation_Part', page); self.assertNotIn('generation_part', page)
