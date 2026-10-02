@@ -1606,11 +1606,46 @@ class Detector:
             starts_empty = first is not None and self.is_empty_cell(first) and first.info["col"] == 0
             if not (starts_empty and texts and all(c.info["span"] >= 2 for c in texts)):
                 kind = "data"
+        if kind == "label" and self.guidance_answer_row(cells):
+            kind = "data"
         if len(texts) == 1 and texts[0].info["span"] >= max(2, width - 1) and all(
                 c is texts[0] or self.is_empty_cell(c) for c in cells):
             kind = "divider"
         self._grid[key] = kind
         return kind
+
+    def guidance_answer_row(self, cells) -> bool:
+        """A question row whose answer cell prints the author's instruction in guidance ink ('Reason for visit |
+        Describe the main complaint.'): its printed cells pair up, each question in ordinary ink followed by its own
+        guidance cell (Q G, or Q G Q G). Rule (d) maps that guidance cell as its own row's answer place, so the row is
+        a data row - never a column header naming the rows below it.
+
+        ⚠️ EC4 (engine comparison, SF15): read as a label row, the instruction became the NEXT row's column header and
+        its question was labelled 'Plan — Describe the main complaint.' - another row's instruction is what the model
+        was asked. A header row printed wholly in guidance ink (grey, or white on a dark fill) has no ordinary-ink
+        question, so it stays a header row; so does a row of headers with a guidance cell that is no question's own
+        ('Drug(s) under Investigation: | IND No.: | Study (Indication)' over its answer row, measured on a dev form)."""
+        printed = [c for c in sorted(cells, key=lambda c: c.info["col"])
+                   if self.cell_text(c) and not is_blank_text(self.cell_text(c))]
+        if not printed or len(printed) % 2:
+            return False
+        return all(not self.is_guidance_cell(question) and self.is_label_cell(question) and self.is_guidance_cell(answer)
+                   for question, answer in zip(printed[0::2], printed[1::2]))
+
+    def merged_answer_questions(self, tbl_slot, row, cell) -> list:
+        """The distinct printed questions of every row a vertically merged answer cell spans (its own row and each row
+        it continues into), when there are two or more of them; else []. A tall answer cell beside ONE question (the
+        continued rows print no question, or a label cell merged the same way) is that question's own place."""
+        if cell.info["vmerge"] != "restart":
+            return []
+        rows = self.grid(tbl_slot)
+        spanned = [row]
+        for later in sorted(r for r in rows if r > row):
+            if not any(c.info["col"] == cell.info["col"] and c.info["vmerge"] == "continue" for c in rows[later]):
+                break
+            spanned.append(later)
+        labels = [label for label in dict.fromkeys(self.row_label(tbl_slot, r, cell.info["col"]) for r in spanned) if label]
+        return labels if len(labels) >= 2 else []
 
     def header_rows(self, tbl_slot):
         key = ("headers", id(tbl_slot))
@@ -2092,6 +2127,7 @@ class Detector:
         self.rule_inline_initial_boxes()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
+        self.qualify_numbered()
         self.qualify_sides()
         self.surface_duplicates()
         for a in list(self.areas):
@@ -2106,6 +2142,26 @@ class Detector:
             a.capacity = self.capacity_for(a)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    #: A numbered slot's whole printed label: '1.', '2)' or '(3)' (digits only, as the legacy tab contract reads them).
+    NUMBERED_SLOT = re.compile(r"(\d{1,3})[.)]|\((\d{1,3})\)")
+
+    def qualify_numbered(self):
+        """A numbered slot is a question only within its section: it carries the section heading it is printed under,
+        exactly as the legacy tab contract labels it ('POSTOPERATIVE FINDINGS — 1'), so two sections' '1.' are two
+        questions rather than one repeated label.
+
+        ⚠️ EC5 (engine comparison, the owner colonoscopy form): v3 labelled both sections' slots '1.' '2.' '3.' with
+        the section only in the context - duplicate question labels, which the mapping page asks to rename and
+        generation holds. Without a section heading the marker is kept, and surface_duplicates shows each position.
+        Newly detected areas only; a stored mapping keeps its labels."""
+        for area in self.areas:
+            match = self.NUMBERED_SLOT.fullmatch(area.label.strip())
+            if not match:
+                continue
+            heading = clean_label(self.heading_before(area.slot))
+            if heading:
+                area.label = "%s — %s" % (heading, match.group(1) or match.group(2))
 
     def qualify_sides(self):
         """A side printed in another row cell or its heading belongs to the question used for source matching.
@@ -4590,6 +4646,18 @@ class Detector:
                             continue
                     instructed = bool(txt) and not placeholder and not guidance and self.instructed_answer_cell(tslot, r, c)
                     if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance or instructed):
+                        continue
+                    shared = self.merged_answer_questions(tslot, r, c)
+                    if shared:
+                        # ⚠️ EC3 (engine comparison, SF03): one vertically merged answer cell beside two printed
+                        # questions was mapped for the first and the second was dropped without a word. Neither is
+                        # mapped, and the inspection says so (the legacy engine's behaviour for the same rows).
+                        self.claimed.update(id(node) for node in c.el.iter())
+                        self.notes.append(
+                            "The answer cell at %s is one vertically merged cell beside %d questions (%s), so it was NOT "
+                            "mapped: the merge hides which answer belongs to which question. Unmerge the answer cell, "
+                            "or add a field for it by hand on this page." % (
+                                c.id, len(shared), "; ".join("'%s'" % label[:80] for label in shared[:6])))
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
                     if instructed:

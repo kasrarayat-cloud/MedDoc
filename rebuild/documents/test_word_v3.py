@@ -1847,3 +1847,145 @@ class SourceBoundGlyphWrites(unittest.TestCase):
         result = w.fill(raw, fields, {'c': ['Before', 'After'], 't': 'literal ☐ symbol retained'})
         root = etree.fromstring(ZipFile(io.BytesIO(result)).read('word/document.xml'))
         self.assertEqual(''.join(root.itertext()), 'Choices? ☒ Before: literal ☐ symbol retained ☒ After')
+
+
+# ─── the engine switch (EC3 / EC4 / EC5): every legacy-acceptable shape at least as good on v3 ────────────────────
+
+OWNER_FORM = Path(__file__).with_name("__fixtures__") / "Colonoscopy_Operative_Template.docx"
+
+
+def _underlined_tab(paragraph):
+    """'Label:' + an underlined tab, the legacy tab-line shape (python-docx paragraph)."""
+    run = paragraph.add_run("\t")
+    run.font.underline = True
+
+
+def merged_answer_bytes(*, label_merged=False, second_label="Allergies"):
+    """SF03: a section row, then a vertically merged answer cell beside two questions (or beside one question whose
+    label cell is merged the same way), then a plain row."""
+    doc = Document()
+    doc.add_heading("Synthetic merged form", 1)
+    table = doc.add_table(rows=4, cols=2)
+    top = table.cell(0, 0).merge(table.cell(0, 1))
+    top.text = "History"
+    table.cell(1, 0).text = "Reason for visit"
+    table.cell(2, 0).text = "Current medications"
+    if label_merged:
+        table.cell(2, 0).merge(table.cell(3, 0))
+    elif second_label:
+        table.cell(3, 0).text = second_label
+    table.cell(2, 1).merge(table.cell(3, 1))
+    plain = doc.add_table(rows=1, cols=2)
+    plain.cell(0, 0).text = "Plan"
+    return docx_bytes(doc)
+
+
+def instruction_cell_bytes(*, header=False, grey_header=False):
+    """SF15: a two-column table whose FIRST answer cell prints a grey instruction; with header=True a printed header
+    row ('Question | Answer') above (in grey ink with grey_header=True), the control for a real column header."""
+    from docx.shared import RGBColor
+    doc = Document()
+    doc.add_heading("Synthetic instruction form", 1)
+    rows = 3 if header else 2
+    table = doc.add_table(rows=rows, cols=2)
+    first = 1 if header else 0
+    if header:
+        for col, text in enumerate(("Question", "Answer")):
+            run = table.cell(0, col).paragraphs[0].add_run(text)
+            if grey_header:
+                run.font.color.rgb = RGBColor.from_string("808080")
+    table.cell(first, 0).text = "Reason for visit"
+    table.cell(first + 1, 0).text = "Plan"
+    table.cell(first, 1).paragraphs[0].add_run("Describe the main complaint.").font.color.rgb = RGBColor.from_string("808080")
+    return docx_bytes(doc)
+
+
+def numbered_slots_bytes(*, heading=True, marks=("1.", "2.", "3.")):
+    """D02's numbered slots: under two section headings, lines '1.' '2.' '3.' each with an underlined tab."""
+    doc = Document()
+    for section in ("POSTOPERATIVE FINDINGS", "RECOMMENDATIONS"):
+        if heading:
+            doc.add_heading(section, 2)
+        else:
+            doc.add_paragraph(section + " (plain text, not a heading)")
+        for mark in marks:
+            _underlined_tab(doc.add_paragraph(mark))
+    return docx_bytes(doc)
+
+
+class EngineSwitchShapes(unittest.TestCase):
+    """The blocking differences the legacy-vs-v3 comparison measured (EC3, EC4, EC5), through the sandboxed worker."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def inspect(self, data, name="form.docx"):
+        path = self.dir / name
+        path.write_bytes(data)
+        return inspect_template(path, engine="v3"), path
+
+    # EC3 ─ a vertically merged answer cell shared by two questions is never given to one of them silently
+    def test_ec3_a_merged_answer_cell_shared_by_two_questions_is_mapped_for_neither_and_said(self):
+        info, _ = self.inspect(merged_answer_bytes())
+        slots = {f["locator"]["slot"]: f["label"] for f in info["fields"]}
+        self.assertNotIn("b/tbl[0]/tr[2]/tc[1]", slots, "the shared merged cell was given to one question")
+        self.assertNotIn("Current medications", slots.values())
+        self.assertNotIn("Allergies", slots.values())
+        notes = [n for n in info["warnings"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["warnings"])
+        self.assertIn("Current medications", notes[0])
+        self.assertIn("Allergies", notes[0])
+        # Everything else on the form is still mapped.
+        self.assertEqual(sorted(slots.values()), ["Plan", "Reason for visit"])
+
+    def test_ec3_control_a_merged_answer_cell_of_one_question_is_still_mapped(self):
+        for kwargs in ({"label_merged": True}, {"second_label": ""}):
+            with self.subTest(**kwargs):
+                info, _ = self.inspect(merged_answer_bytes(**kwargs))
+                by = fields_by_label(info["fields"])
+                self.assertIn("Current medications", by)
+                self.assertEqual(by["Current medications"]["locator"]["slot"], "b/tbl[0]/tr[2]/tc[1]")
+                self.assertFalse([n for n in info["warnings"] if "merged" in n], info["warnings"])
+
+    # EC4 ─ an instruction printed in another row's answer cell is never this row's column header
+    def test_ec4_another_rows_instruction_is_not_this_questions_label_or_context(self):
+        info, path = self.inspect(instruction_cell_bytes())
+        by = fields_by_label(info["fields"])
+        self.assertIn("Plan", by, [f["label"] for f in info["fields"]])
+        self.assertNotIn("Describe", by["Plan"]["context"])
+        # The instruction cell is still the first question's own answer place (the gain over legacy is kept).
+        self.assertEqual(by["Reason for visit"]["locator"]["target"]["type"], "cell_append")
+        out = self.dir / "out.docx"
+        fill_template(path, info["fields"], {by["Plan"]["key"]: "Rest.", by["Reason for visit"]["key"]: "Knee."}, out)
+        self.assertIn("Rest.", part_text(out))
+
+    def test_ec4_control_a_printed_header_row_still_names_the_column(self):
+        for grey in (False, True):
+            with self.subTest(grey_header=grey):
+                info, _ = self.inspect(instruction_cell_bytes(header=True, grey_header=grey))
+                labels = [f["label"] for f in info["fields"]]
+                self.assertIn("Plan — Answer", labels)
+
+    # EC5 ─ numbered slots carry their section, so two sections' '1.' are different questions
+    def test_ec5_numbered_slots_carry_their_section(self):
+        info, _ = self.inspect(numbered_slots_bytes())
+        labels = [f["label"] for f in info["fields"]]
+        self.assertEqual(labels, ["POSTOPERATIVE FINDINGS — %d" % n for n in (1, 2, 3)]
+                         + ["RECOMMENDATIONS — %d" % n for n in (1, 2, 3)])
+        self.assertEqual(len(set(labels)), len(labels))
+
+    def test_ec5_the_owner_colonoscopy_form_has_unique_labels_as_on_legacy(self):
+        info = inspect_template(OWNER_FORM, engine="v3")
+        labels = [f["label"] for f in info["fields"]]
+        self.assertEqual(len(set(labels)), len(labels), labels)
+        for section in ("POSTOPERATIVE FINDINGS", "RECOMMENDATIONS"):
+            for n in (1, 2, 3):
+                self.assertIn("%s — %d" % (section, n), labels)
+
+    def test_ec5_control_without_a_section_heading_the_marker_is_kept(self):
+        info, _ = self.inspect(numbered_slots_bytes(heading=False))
+        self.assertFalse([f for f in info["fields"] if "—" in f["label"]], [f["label"] for f in info["fields"]])
