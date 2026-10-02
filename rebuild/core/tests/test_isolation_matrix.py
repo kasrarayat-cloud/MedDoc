@@ -21,7 +21,7 @@ from pathlib import Path
 
 from django.apps import apps
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -58,6 +58,56 @@ OBJECT = {
     'membership_update': ('membership', {'GET': 405, 'POST': 403}),
 }
 
+#: Each classified route by its URL PATTERN as the resolver holds it, and its name (refutation R9: keyed by the name
+#: alone, a new unscoped pattern reusing a classified name passed the gate). A new pattern is a new (route, name)
+#: pair, so it fails test_every_route_is_classified until it is given an isolation decision here.
+ROUTES = {
+    'preview_sign_in': 'preview/sign-in/',
+    'preview_sign_out': 'preview/sign-out/',
+    'mapping_assistance': 'templates/<uuid:pk>/assistance/',
+    'recovery_request': 'recovery/',
+    'recovery_confirm': 'recovery/confirm/<uidb64>/<token>/',
+    'recovery_complete': 'recovery/complete/',
+    'verification_resend': 'verification/resend/',
+    'health': 'health/',
+    'login': 'login/',
+    'logout': 'logout/',
+    'register': 'register/',
+    'mfa_setup': 'mfa/',
+    'verify': 'verify/<str:raw>/',
+    'invite_accept': 'invite/<str:raw>/',
+    'webhook': 'billing/webhook/',
+    'dashboard': '',
+    'template_upload': 'templates/upload/',
+    'template_detail': 'templates/<uuid:pk>/',
+    'template_original': 'templates/<uuid:pk>/original/',
+    'encounter_new': 'encounters/new/',
+    'encounter_detail': 'encounters/<uuid:pk>/',
+    'generate': 'encounters/<uuid:pk>/generate/',
+    'save_answers': 'encounters/<uuid:pk>/save/',
+    'finalize': 'encounters/<uuid:pk>/finalize/',
+    'export': 'encounters/<uuid:pk>/export/',
+    'voice': 'encounters/<uuid:pk>/voice/',
+    'voice_approve': 'encounters/<uuid:pk>/voice/approve/',
+    'coding': 'encounters/<uuid:pk>/coding/',
+    'accept_code': 'encounters/<uuid:pk>/coding/<uuid:code_pk>/accept/',
+    'patients': 'patients/',
+    'team': 'team/',
+    'create_department': 'team/departments/',
+    'membership_update': 'team/membership/<uuid:pk>/',
+    'billing': 'billing/',
+    'checkout': 'billing/checkout/',
+    'api_patients': 'api/patients/',
+    'api_encounter': 'api/encounters/<uuid:pk>/',
+    'encounter_notes': 'encounters/<uuid:pk>/notes/',
+    'clear_review': 'encounters/<uuid:pk>/clear-review/',
+    'job_cancel': 'encounters/<uuid:pk>/jobs/<uuid:job_pk>/cancel/',
+    'job_result': 'jobs/<uuid:pk>/result/',
+    'invitation_revoke': 'team/invitations/<uuid:pk>/revoke/',
+    'billing_job_detail': 'billing/jobs/<uuid:pk>/',
+    'clinic_invite_accept': 'invite/clinic/<str:raw>/',
+}
+
 
 def all_patterns(resolver=None, prefix=''):
     resolver = resolver or get_resolver()
@@ -67,6 +117,22 @@ def all_patterns(resolver=None, prefix=''):
         elif isinstance(entry, URLPattern):
             yield prefix + str(entry.pattern), entry
 
+
+def classification_problems():
+    """Every way the mounted routes and the classification disagree, by route PATTERN and name; [] when they agree."""
+    problems = []
+    mounted = [(route, pattern.name) for route, pattern in all_patterns() if not route.startswith('console/')]
+    if len(mounted) <= 30 or not any(route.startswith('console/') for route, _ in all_patterns()):
+        problems.append(('the resolver walk found almost nothing', len(mounted)))
+    problems += [('mounted twice', pair) for pair in sorted(set(mounted)) if mounted.count(pair) > 1]
+    expected = {(route, name) for name, route in ROUTES.items()}
+    problems += [('no isolation decision', pair) for pair in sorted(set(mounted) - expected)]
+    problems += [('classified but not mounted', pair) for pair in sorted(expected - set(mounted))]
+    groups = (PUBLIC, OWN, CREATE, set(OBJECT))
+    problems += [('classified twice', name) for name in sorted(ROUTES)
+                 if sum(name in group for group in groups) != 1]
+    problems += [('in a class but not in ROUTES', name) for name in sorted(set().union(*groups) - set(ROUTES))]
+    return problems
 
 def database_state():
     """Every row of every core model, hashed per model: any write anywhere in the application's tables shows."""
@@ -167,13 +233,7 @@ class IsolationMatrix(SyntheticFixture, TestCase):
         return client
 
     def test_every_route_is_classified(self):
-        names = {pattern.name for route, pattern in all_patterns() if not route.startswith('console/')}
-        console = [route for route, _ in all_patterns() if route.startswith('console/')]
-        self.assertGreater(len(names), 30, 'the resolver walk found almost nothing')
-        self.assertTrue(console, 'the resolver walk found no console route')
-        classified = PUBLIC | OWN | CREATE | set(OBJECT)
-        self.assertEqual(sorted(names - classified), [], 'routes with no isolation decision')
-        self.assertEqual(sorted(classified - names), [], 'classified names that no longer exist')
+        self.assertEqual(classification_problems(), [])
         for group in (PUBLIC & OWN, PUBLIC & CREATE, OWN & CREATE, set(OBJECT) & (PUBLIC | OWN | CREATE)):
             self.assertEqual(group, set(), 'a route classified twice')
 
@@ -357,3 +417,21 @@ class DepartmentInvitationIsADoctorSurfacePage(SyntheticFixture, TestCase):
     @override_settings(ADMIN_SITE=False)
     def test_positive_control_the_doctor_surface_still_shows_the_invitation(self):
         self.assertEqual(Client().get(f'/invite/{self.raw}/').status_code, 200)
+
+
+class ClassificationIsByPattern(SimpleTestCase):
+    def test_a_new_pattern_under_a_classified_name_is_unclassified(self):
+        """Refutation R9, the refuter's probe as a regression: an unscoped object route mounted under the classified
+        name 'api_patients' passed a gate keyed by name. It is a new (pattern, name) pair now, and is reported."""
+        from django.http import JsonResponse
+        from django.urls import path
+        self.assertEqual(classification_problems(), [], 'positive control: the routes as mounted are classified')
+        resolver = get_resolver()
+        resolver.url_patterns.append(path('api/encounters/<uuid:pk>/raw/', lambda request, pk: JsonResponse({}),
+                                          name='api_patients'))
+        try:
+            problems = classification_problems()
+        finally:
+            resolver.url_patterns.pop()
+        self.assertIn(('no isolation decision', ('api/encounters/<uuid:pk>/raw/', 'api_patients')), problems)
+        self.assertEqual(classification_problems(), [])
