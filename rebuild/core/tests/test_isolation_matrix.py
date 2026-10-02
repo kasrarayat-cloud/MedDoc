@@ -36,8 +36,8 @@ STORAGES = {'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'
 
 #: Reachable without a session, or only for the caller's own credentials / tokens; no department object by id.
 PUBLIC = {'preview_sign_in', 'preview_sign_out', 'recovery_request', 'recovery_confirm', 'recovery_complete',
-          'verification_resend', 'health', 'login', 'register', 'verify', 'invite_accept', 'clinic_invite_accept',
-          'webhook'}
+          'verification_resend', 'health', 'health_ready', 'login', 'register', 'verify', 'invite_accept',
+          'clinic_invite_accept', 'webhook'}
 #: The signed-in account's own pages: lists scoped to its memberships, its own wallet and session.
 OWN = {'logout', 'mfa_setup', 'dashboard', 'billing', 'checkout', 'api_patients'}
 #: Creations that name the department (or its patient/template) they write into.
@@ -51,6 +51,7 @@ OBJECT = {
     'encounter_detail': ('encounter', G404), 'generate': ('encounter', P404), 'save_answers': ('encounter', P404),
     'finalize': ('encounter', P404), 'export': ('final', G404), 'voice': ('encounter', P404),
     'voice_approve': ('encounter', P404), 'coding': ('encounter', P404), 'accept_code': ('code', P404),
+    'withdraw_code': ('code', P404),
     'api_encounter': ('encounter', G404), 'encounter_notes': ('encounter', P404),
     'clear_review': ('encounter', P404), 'job_cancel': ('queued_job', P404), 'job_result': ('result_job', G404),
     'billing_job_detail': ('result_job', G404), 'invitation_revoke': ('invitation', P404),
@@ -70,6 +71,7 @@ ROUTES = {
     'recovery_complete': 'recovery/complete/',
     'verification_resend': 'verification/resend/',
     'health': 'health/',
+    'health_ready': 'health/ready/',
     'login': 'login/',
     'logout': 'logout/',
     'register': 'register/',
@@ -91,6 +93,7 @@ ROUTES = {
     'voice_approve': 'encounters/<uuid:pk>/voice/approve/',
     'coding': 'encounters/<uuid:pk>/coding/',
     'accept_code': 'encounters/<uuid:pk>/coding/<uuid:code_pk>/accept/',
+    'withdraw_code': 'encounters/<uuid:pk>/coding/<uuid:code_pk>/withdraw/',
     'patients': 'patients/',
     'team': 'team/',
     'create_department': 'team/departments/',
@@ -221,7 +224,7 @@ class IsolationMatrix(SyntheticFixture, TestCase):
 
     def url(self, name):
         thing = self.objects[OBJECT[name][0]]
-        if name == 'accept_code':
+        if name in ('accept_code', 'withdraw_code'):
             return reverse(name, kwargs={'pk': thing.encounter_id, 'code_pk': thing.pk})
         if name == 'job_cancel':
             return reverse(name, kwargs={'pk': thing.encounter_id, 'job_pk': thing.pk})
