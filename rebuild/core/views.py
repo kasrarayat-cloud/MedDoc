@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import UUID
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout
+from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout,update_session_auth_hash
 from django.core.exceptions import PermissionDenied,ValidationError
 from django.core import signing
 from django.db import transaction,IntegrityError,DatabaseError
@@ -352,19 +352,47 @@ def verify(request,raw):
 @require_http_methods(['GET','POST'])
 def mfa_setup(request):
     if not request.user.is_authenticated: return redirect('login')
-    device=TOTPDevice.objects.filter(user=request.user).first()
-    if not device:device=TOTPDevice.objects.create(user=request.user,name='Authenticator',confirmed=False)
+    device=TOTPDevice.objects.filter(user=request.user,confirmed=True).order_by('pk').first() or enrolment_device(request)
     form=OTPForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
         with transaction.atomic():
-            device=TOTPDevice.objects.select_for_update().get(pk=device.pk)
-            if device.verify_token(form.cleaned_data['code']):
-                device.confirmed=True;device.save(update_fields=['confirmed']);otp_login(request,device);audit(request.user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
+            user=User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
+            device=TOTPDevice.objects.select_for_update().filter(pk=device.pk,user=user).first()
+            if device and device.verify_token(form.cleaned_data['code']):
+                if not device.confirmed:
+                    # A new authenticator is a new credential. Every other session of this account ends here — one
+                    # opened with the password alone in an enrolment window included — and every other session's
+                    # unconfirmed key is discarded; this session continues under the new session version.
+                    device.confirmed=True;device.save(update_fields=['confirmed'])
+                    TOTPDevice.objects.filter(user=user,confirmed=False).delete()
+                    user.session_version+=1;user.save(update_fields=['session_version'])
+                    update_session_auth_hash(request,user)
+                    request.session.pop(ENROLMENT_DEVICE,None)
+                otp_login(request,device);audit(user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
         form.add_error('code','Invalid or already used code.')
     # QUILLMD_MFA_REQUIRED_ALL puts every clinician through this page, many on a phone that cannot scan its own
     # screen: the same key is also shown as grouped text for manual entry. Default mode renders the page as before.
     secret=manual_entry_key(device) if settings.QUILLMD_MFA_REQUIRED_ALL and not device.confirmed else ''
     return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device,'secret':secret})
+
+#: The session key holding the unconfirmed authenticator THIS session was shown.
+ENROLMENT_DEVICE='mfa_enrolment_device'
+
+def enrolment_device(request):
+    """The unconfirmed authenticator this session enrols, created the first time this session opens the page and kept
+    for its reloads. An unconfirmed key another session was shown is never reused: it is deleted and this session gets
+    its own, so the key a confirmation proves is known only to the session that confirmed it. Before this, every
+    password-only session shared the first unconfirmed device, and a second holder of the password learned the secret
+    the administrator then confirmed (refutation R4)."""
+    with transaction.atomic():
+        user=User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
+        own=request.session.get(ENROLMENT_DEVICE)
+        device=TOTPDevice.objects.filter(pk=own,user=user,confirmed=False).first() if isinstance(own,int) else None
+        if device is None:
+            TOTPDevice.objects.filter(user=user,confirmed=False).delete()
+            device=TOTPDevice.objects.create(user=user,name='Authenticator',confirmed=False)
+            request.session[ENROLMENT_DEVICE]=device.pk
+    return device
 
 def manual_entry_key(device):
     """The device's base32 key — exactly the `secret` in its otpauth URI — in groups of four for typing."""

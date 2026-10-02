@@ -1,9 +1,13 @@
 """Declared administrator changes (inventory 7A, F2): a second administrator, and an administrator's authenticator
 reset — core.admin_authority, `manage.py elevate_additional_admin`, `manage.py reset_admin_mfa`.
 
-Every refusal arm asserts NOTHING CHANGED: the accounts' staff flags and session versions, every authenticator row and
-the audit trail are compared whole, before and after. The declarations live in a scratch git checkout, committed the
-way scripts/run-ruled-mutation.sh requires, and the door's two variables are passed explicitly.
+Every refusal arm asserts NOTHING CHANGED: the accounts' staff flags and session versions, every authenticator row
+(including the last code it accepted and its failure count) and the audit trail are compared whole, before and after.
+The repository declarations live in a scratch git checkout, committed the way scripts/run-ruled-mutation.sh requires,
+and the door's two variables are passed explicitly. The approver's presence is a current code from the approver's own
+authenticator, in a 0600 file. The production door (refutation R5) is exercised in-process with the host facts it
+cannot have here stubbed (root, the bootstrap receipt, the RDS description, the CA bundle, the TLS connection), and
+once more from a release-shaped copy — rebuild/ alone, no git, no docs, no scripts — in a separate process.
 """
 import io
 import json
@@ -25,7 +29,8 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from core import admin_authority as authority
 from core.models import AuditEvent, User
-from ops.provider_campaign import Refused
+
+Refused = authority.Refused
 
 STORAGES = {'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
             'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}
@@ -59,6 +64,19 @@ class DeclaredChangeFixture(TestCase):
                                               password=PASSWORD, verified_at=now, is_staff=True)
         self.admin_devices = [TOTPDevice.objects.create(user=self.admin, name='Old phone', confirmed=True),
                               TOTPDevice.objects.create(user=self.admin, name='Abandoned', confirmed=False)]
+        self.codes = Path(tempfile.mkdtemp(prefix='approver-code-'))
+        self.addCleanup(shutil.rmtree, self.codes, True)
+
+    def code_file(self, device=None, value=None, mode=0o600, name='code'):
+        """A file holding the approver's CURRENT code (or `value`), mode 0600, as the approver would write it."""
+        if value is None:
+            device = device or self.approver_device
+            device.refresh_from_db()
+            value = code(device)
+        path = self.codes / name
+        path.write_text(value + '\n')
+        path.chmod(mode)
+        return str(path)
 
     def git(self, *args):
         return subprocess.run([*GIT, '-C', str(self.root), *args], capture_output=True, check=True)
@@ -81,19 +99,22 @@ class DeclaredChangeFixture(TestCase):
         head = self.git('log', '-1', '--format=%H', '--', relative).stdout.decode().strip()
         return relative, {'RULED_MUTATION_DECLARATION': relative, 'RULED_MUTATION_DECL_COMMIT': head}
 
-    def perform(self, operation, relative, target, environ):
-        return authority.perform(operation, relative, target, repository=self.root, environ=environ)
+    def perform(self, operation, relative, target, environ, code_file=None):
+        code_file = self.code_file() if code_file is None else code_file
+        return authority.perform(operation, relative, target, code_file or None, repository=self.root,
+                                 environ=environ)
 
     def state(self):
         users = list(User.objects.order_by('pk').values_list('pk', 'is_staff', 'is_superuser', 'is_active',
                                                              'session_version', 'password'))
-        devices = list(TOTPDevice.objects.order_by('pk').values_list('pk', 'user_id', 'confirmed', 'key'))
+        devices = list(TOTPDevice.objects.order_by('pk').values_list('pk', 'user_id', 'confirmed', 'key', 'last_t',
+                                                                     'throttling_failure_count'))
         return users, devices, AuditEvent.objects.count()
 
-    def assertRefusedUnchanged(self, message, operation, relative, target, environ):
+    def assertRefusedUnchanged(self, message, operation, relative, target, environ, code_file=None):
         before = self.state()
         with self.assertRaisesRegex(Refused, message):
-            self.perform(operation, relative, target, environ)
+            self.perform(operation, relative, target, environ, code_file)
         self.assertEqual(self.state(), before, 'a refused administrator change changed something')
 
 
@@ -119,6 +140,15 @@ class ElevateAdditionalAdministrator(DeclaredChangeFixture):
         self.assertEqual(event.details['approver'], str(self.approver.pk))
         self.assertTrue(event.details['sessions_invalidated'])
         self.assertEqual(result['target'], str(self.doctor.pk))
+        # R7: the actor is the approver because the approver's code proved presence; the operator is recorded too.
+        self.assertEqual(event.details['approver_presence'], 'authenticator code verified')
+        self.assertEqual(event.details['approver_device'], self.approver_device.persistent_id)
+        self.assertEqual((event.details['operator_uid'], event.details['operator_euid']), (os.getuid(), os.geteuid()))
+        self.assertEqual(event.details['door'], 'repository')
+        self.assertEqual(event.details['declaration_author'], 'Synthetic Test <synthetic@test.invalid>')
+        self.assertEqual(event.details['declaration_committer'], 'Synthetic Test <synthetic@test.invalid>')
+        self.approver_device.refresh_from_db()
+        self.assertGreater(self.approver_device.last_t, -1, 'the approver\'s code was not consumed')
 
     def test_without_the_door_nothing_changes(self):
         relative, door = self.declare(self.text(authority.ELEVATE, self.doctor))
@@ -244,9 +274,11 @@ class ResetAdministratorAuthenticator(DeclaredChangeFixture):
         self.assertRefusedUnchanged('same account', authority.RESET, relative, self.approver.pk, door)
 
     def test_an_approver_without_an_authenticator_cannot_approve(self):
+        written = self.code_file()   # the approver's code, taken before the authenticator is gone
         TOTPDevice.objects.filter(user=self.approver).delete()
         relative, door = self.declare(self.text(authority.RESET, self.admin))
-        self.assertRefusedUnchanged('no confirmed authenticator', authority.RESET, relative, self.admin.pk, door)
+        self.assertRefusedUnchanged('no confirmed authenticator', authority.RESET, relative, self.admin.pk, door,
+                                    code_file=written)
 
     def test_a_reset_declaration_is_used_once(self):
         self.reset()
@@ -260,14 +292,16 @@ class ResetAdministratorAuthenticator(DeclaredChangeFixture):
         old_keys = [device.key for device in self.admin_devices]
         relative, door = self.declare(self.text(authority.RESET, self.admin))
         out, err = io.StringIO(), io.StringIO()
+        approver_code = Path(self.code_file()).read_text().strip()
         with patch.object(authority, 'REPOSITORY', self.root), patch.dict('os.environ', door):
             call_command('reset_admin_mfa', '--declaration', relative, '--target', str(self.admin.pk),
-                         stdout=out, stderr=err)
+                         '--approver-code-file', str(self.codes / 'code'), stdout=out, stderr=err)
         printed = out.getvalue() + err.getvalue()
         result = json.loads(out.getvalue())
         self.assertTrue(result['enrolment_required_at_next_sign_in'])
         self.assertFalse(TOTPDevice.objects.filter(user=self.admin).exists(), 'the command created a key')
-        for secret in old_keys + [PASSWORD, self.admin.password, self.admin.email, self.approver.email]:
+        for secret in old_keys + [PASSWORD, self.admin.password, self.admin.email, self.approver.email, approver_code,
+                                  self.approver_device.key]:
             self.assertNotIn(secret, printed)
         self.assertNotIn('otpauth', printed)
 
@@ -279,7 +313,7 @@ class ResetAdministratorAuthenticator(DeclaredChangeFixture):
             os.environ.pop('RULED_MUTATION_DECL_COMMIT', None)
             with self.assertRaisesRegex(CommandError, 'Administrator change refused: .*ruled-mutation door'):
                 call_command('reset_admin_mfa', '--declaration', relative, '--target', str(self.admin.pk),
-                             stdout=io.StringIO(), stderr=io.StringIO())
+                             '--approver-code-file', self.code_file(), stdout=io.StringIO(), stderr=io.StringIO())
         self.assertEqual(self.state(), before)
 
 
@@ -313,6 +347,68 @@ class ReenrolmentAfterADeclaredReset(DeclaredChangeFixture):
         TOTPDevice.objects.filter(user=self.admin).update(confirmed=False)
         self.assertEqual(self.sign_in(Client()).status_code, 200)
 
+    def setup_key(self, client):
+        """The base32 secret the setup page shows this session (the otpauth URI's own), and its TOTP code now."""
+        import html
+        import re
+        from base64 import b32decode
+        from urllib.parse import parse_qs, urlsplit
+        page = client.get('/mfa/')
+        self.assertEqual(page.status_code, 200)
+        uri = html.unescape(re.search(r'<textarea id="mfa-uri"[^>]*>(.*?)</textarea>', page.content.decode()).group(1))
+        secret = parse_qs(urlsplit(uri).query)['secret'][0]
+        key = b32decode(secret + '=' * (-len(secret) % 8))
+        return secret, str(totp(key, step=30, t0=0, digits=6)).zfill(6)
+
+    @override_settings(ADMIN_SITE=True)
+    def test_a_second_window_session_never_learns_the_key_that_is_confirmed(self):
+        """Refutation R4, the refuter's two-client scenario: two password-only sessions in the window were shown ONE
+        setup key, so the holder of the other session signed in later with the key the administrator confirmed."""
+        self.reset()
+        other, legit = Client(), Client()
+        self.assertEqual(self.sign_in(other).url, '/mfa/')
+        other_secret, other_code = self.setup_key(other)
+        self.assertEqual(self.sign_in(legit).url, '/mfa/')
+        legit_secret, legit_code = self.setup_key(legit)
+        self.assertNotEqual(other_secret, legit_secret, 'two window sessions were shown the same setup key')
+        self.assertEqual(legit.post('/mfa/', {'code': legit_code}).status_code, 302)
+        self.assertEqual(TOTPDevice.objects.filter(user=self.admin, confirmed=True).count(), 1)
+        later = Client()
+        refused = later.post('/login/', {'email': self.admin.email, 'password': PASSWORD, 'otp': other_code})
+        self.assertEqual(refused.status_code, 200, 'the other session\'s key signs in')
+        self.assertNotIn('_auth_user_id', later.session)
+        self.assertEqual(later.get('/console/').status_code, 302)
+
+    @override_settings(ADMIN_SITE=True)
+    def test_every_other_session_ends_when_an_authenticator_is_confirmed(self):
+        """Refutation R4: a window session opened before the enrolment survived it, and could still enrol and reach
+        the console. Confirming a new authenticator now ends every other session of the account."""
+        self.reset()
+        stale, legit = Client(), Client()
+        self.sign_in(stale)
+        _, stale_code = self.setup_key(stale)
+        self.sign_in(legit)
+        _, legit_code = self.setup_key(legit)
+        self.assertEqual(legit.post('/mfa/', {'code': legit_code}).url, '/console/')
+        for path in ('/mfa/', '/console/'):
+            with self.subTest(path=path):
+                response = stale.get(path)
+                self.assertEqual((response.status_code, response.url.split('?')[0]), (302, '/login/'))
+        self.assertEqual(stale.post('/mfa/', {'code': stale_code}).url.split('?')[0], '/login/')
+        # The confirming session continues, on the new session version.
+        self.assertEqual(legit.get('/console/').status_code, 200)
+        self.assertEqual(User.objects.get(pk=self.admin.pk).session_version, 2)
+
+    @override_settings(ADMIN_SITE=True)
+    def test_a_session_keeps_its_own_key_across_reloads(self):
+        self.reset()
+        client = Client()
+        self.sign_in(client)
+        first, _ = self.setup_key(client)
+        again, current = self.setup_key(client)
+        self.assertEqual(first, again, 'a reload of the same session changed its key')
+        self.assertEqual(client.post('/mfa/', {'code': current}).url, '/console/')
+
     @override_settings(ADMIN_SITE=False)
     def test_the_doctor_surface_never_enrols_an_administrator(self):
         self.reset()
@@ -335,3 +431,400 @@ class ReenrolmentAfterADeclaredReset(DeclaredChangeFixture):
         response = self.sign_in(Client())
         self.assertEqual(response.status_code, 200)
         self.assertIn('Sign-in failed', response.content.decode())
+
+
+class ApproverPresence(DeclaredChangeFixture):
+    """Refutation R7: the approver was named and never consulted. The approver's own current code is now required,
+    verified against the approver's confirmed authenticator and consumed."""
+
+    def declared(self, name=NAME, target=None):
+        target = target or self.doctor
+        return self.declare(self.text(authority.ELEVATE, target), name=name)
+
+    def test_no_code_file_refuses(self):
+        relative, door = self.declared()
+        self.assertRefusedUnchanged('approver\'s presence is required', authority.ELEVATE, relative,
+                                    self.doctor.pk, door, code_file='')
+
+    def test_a_wrong_code_refuses_and_leaves_no_failure_recorded(self):
+        relative, door = self.declared()
+        wrong = '000000' if code(self.approver_device) != '000000' else '111111'
+        self.assertRefusedUnchanged('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
+                                    code_file=self.code_file(value=wrong))
+
+    def test_the_targets_or_another_administrators_code_is_not_the_approvers(self):
+        relative, door = self.declared()
+        for device in (self.doctor_device, self.admin_devices[0]):
+            with self.subTest(device=device.name):
+                self.assertRefusedUnchanged('did not verify', authority.ELEVATE, relative, self.doctor.pk, door,
+                                            code_file=self.code_file(device=device))
+
+    def test_a_used_code_is_refused_the_second_time(self):
+        relative, door = self.declared()
+        used = self.code_file()
+        self.perform(authority.ELEVATE, relative, self.doctor.pk, door, code_file=used)
+        other = User.objects.create_user(username='third', email='third@synthetic.invalid', password=PASSWORD,
+                                         verified_at=timezone.now())
+        TOTPDevice.objects.create(user=other, name='Third', confirmed=True)
+        relative, door = self.declared(name='20261001-quillmd-admin-third.md', target=other)
+        self.assertRefusedUnchanged('did not verify', authority.ELEVATE, relative, other.pk, door, code_file=used)
+
+    def test_a_code_file_others_can_read_or_a_link_refuses(self):
+        relative, door = self.declared()
+        good = self.code_file()
+        link = self.codes / 'link'
+        link.symlink_to(good)
+        cases = {'group-readable': self.code_file(mode=0o640, name='group'),
+                 'world-readable': self.code_file(mode=0o644, name='world'),
+                 'a symbolic link': str(link), 'missing': str(self.codes / 'absent'),
+                 'not a code': self.code_file(value='12345', name='short'),
+                 'more than a code': self.code_file(value='123456 and more', name='long')}
+        for label, path in cases.items():
+            with self.subTest(case=label):
+                self.assertRefusedUnchanged('approver code file', authority.ELEVATE, relative, self.doctor.pk, door,
+                                            code_file=path)
+
+    def test_positive_control_the_approvers_current_code_in_a_0600_file_is_presence(self):
+        relative, door = self.declared()
+        result = self.perform(authority.ELEVATE, relative, self.doctor.pk, door)
+        self.assertEqual(result['approver_presence'], 'verified')
+        self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The production door (refutation R5): bootstrap_first_admin's operator authority, never a git checkout.
+# ---------------------------------------------------------------------------------------------------------------------
+
+RELEASE_SHA = 'e' * 40
+PROFILE_SHA = 'ab' * 32
+RECEIPT = '/var/lib/quillmd-bootstrap/receipt.json'
+
+
+class _RootOs:
+    """os, as production_operator sees it on the production host: root. Every other attribute is the real os."""
+
+    def __getattr__(self, name):
+        return getattr(os, name)
+
+    @staticmethod
+    def geteuid():
+        return 0
+
+
+def production_declaration(operation, target, approver, reason='Synthetic production roster change, checked by phone',
+                           **override):
+    from datetime import datetime, timezone as tz
+    declaration = {'format': 1, 'operation': authority.PRODUCTION_OPERATION, 'actions': [operation],
+                   'release_sha': RELEASE_SHA, 'profile_sha256': PROFILE_SHA,
+                   'expires_at': (datetime.now(tz.utc) + timedelta(hours=1)).isoformat(),
+                   'database_arn': 'arn:aws:rds:us-east-1:123456789012:db:quillmd-production',
+                   'database_resource_id': 'db-SYNTHETIC',
+                   'kms_key_arn': 'arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012',
+                   'target': {'id': str(target.pk), 'email': target.email},
+                   'approver': {'id': str(approver.pk), 'email': approver.email}, 'reason': reason}
+    declaration.update(override)
+    return declaration
+
+
+def production_door(app_root, declaration_path=None, commit='d' * 40):
+    """The production host's facts this test cannot have — root, the bootstrap receipt, the reviewed profile, the
+    pinned CA bundle, the RDS description and the TLS connection — stubbed; everything else is the real door:
+    production_operator.authority reads the JSON the door names and binds format, operation, profile, release,
+    receipt and expiry; production_context checks the action and the application profile. `declaration_path=None`
+    is the door NOT opened."""
+    from contextlib import ExitStack
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from django.conf import settings
+    from core.management.commands import bootstrap_first_admin as first
+    from ops import deployment_profile, production_operator as operator
+    profile = SimpleNamespace(sha256=PROFILE_SHA, app_root=Path(app_root), state_root=settings.STATE_DIR,
+                              ca_bundle=Path('/synthetic/ca.pem'), ca_bundle_sha256='cd' * 32)
+
+    def private_json(path):
+        if str(path) != RECEIPT:
+            raise AssertionError('unexpected private file ' + str(path))
+        return {'release_sha': RELEASE_SHA, 'profile_sha256': PROFILE_SHA}
+    door = {'QUILLMD_DEPLOYMENT_PROFILE': 'production'}
+    if declaration_path is not None:
+        door.update(RULED_MUTATION_DECLARATION=str(declaration_path), RULED_MUTATION_DECL_COMMIT=commit)
+    stack = ExitStack()
+    stack.enter_context(patch.object(operator, 'os', _RootOs()))
+    stack.enter_context(patch.object(operator, 'private_json', private_json))
+    stack.enter_context(patch.object(deployment_profile, 'load_production', return_value=profile))
+    stack.enter_context(patch.object(first, 'describe_target', return_value={}))
+    stack.enter_context(patch.object(first, 'application_database', return_value=None))
+    stack.enter_context(patch('ops.service_launcher.verified_ca_bundle', return_value=None))
+    environ = stack.enter_context(patch.dict(os.environ, door))
+    for name in ('RULED_MUTATION_DECLARATION', 'RULED_MUTATION_DECL_COMMIT'):
+        if declaration_path is None:
+            environ.pop(name, None)
+    stack.enter_context(override_settings(SYNTHETIC_ONLY=False, QUILLMD_REGISTRATION='invite',
+                                          QUILLMD_MFA_REQUIRED_ALL=True, QUILLMD_WELCOME_CREDIT=Decimal('0'),
+                                          RELEASE_SHA=RELEASE_SHA))
+    return stack
+
+
+class ProductionDoor(DeclaredChangeFixture):
+    def write(self, declaration, name='administrators.json'):
+        path = self.codes / name
+        path.write_text(json.dumps(declaration))
+        return path
+
+    def act(self, operation, path, target, door_path='same', code_file='current'):
+        door_path = path if door_path == 'same' else door_path
+        with production_door(authority.REBUILD, door_path):
+            return authority.perform(operation, str(path), target,
+                                     self.code_file() if code_file == 'current' else code_file)
+
+    def refused_unchanged(self, message, operation, path, target, **kwargs):
+        before = self.state()
+        with self.assertRaisesRegex(Refused, message):
+            self.act(operation, path, target, **kwargs)
+        self.assertEqual(self.state(), before)
+
+    def test_positive_control_elevation_through_the_production_door(self):
+        path = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver))
+        result = self.act(authority.ELEVATE, path, self.doctor.pk)
+        self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
+        event = AuditEvent.objects.get(action='account.admin_elevated')
+        self.assertEqual((event.actor_id, event.details['door'], event.details['declaration_commit'],
+                          event.details['release_sha'], event.details['approver_presence']),
+                         (self.approver.pk, 'production', 'd' * 40, RELEASE_SHA, 'authenticator code verified'))
+        self.assertEqual(result['declaration'], 'administrators.json')
+
+    def test_positive_control_reset_through_the_production_door(self):
+        path = self.write(production_declaration(authority.RESET, self.admin, self.approver))
+        self.act(authority.RESET, path, self.admin.pk)
+        self.assertFalse(TOTPDevice.objects.filter(user=self.admin).exists())
+        self.assertEqual(User.objects.get(pk=self.admin.pk).session_version, 1)
+
+    def test_without_the_door_nothing_changes(self):
+        path = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver))
+        self.refused_unchanged('production door: declaration_commit', authority.ELEVATE, path, self.doctor.pk,
+                               door_path=None)
+
+    def test_the_production_profile_never_falls_back_to_a_repository_declaration(self):
+        relative, door = self.declare(self.text(authority.ELEVATE, self.doctor))
+        before = self.state()
+        with production_door(authority.REBUILD, None), patch.dict(os.environ, door):
+            with self.assertRaisesRegex(Refused, 'production door'):
+                authority.perform(authority.ELEVATE, relative, self.doctor.pk, self.code_file(),
+                                  repository=self.root, environ=door)
+        self.assertEqual(self.state(), before)
+
+    def test_each_declaration_fault_refuses(self):
+        from datetime import datetime, timezone as tz
+        good = production_declaration(authority.ELEVATE, self.doctor, self.approver)
+        cases = [
+            ('production door: declaration_scope', dict(good, operation='first_admin')),
+            ('production door: declaration_scope', dict(good, profile_sha256='ff' * 32)),
+            ('production door: declaration_expired',
+             dict(good, expires_at=(datetime.now(tz.utc) - timedelta(minutes=1)).isoformat())),
+            ('production door: installed_release', dict(good, release_sha='c' * 40)),
+            ('production door: declaration_action', dict(good, actions=[authority.RESET])),
+            ('exactly one action', dict(good, actions=[authority.ELEVATE, authority.RESET])),
+            ('another target account', dict(good, target={'id': str(self.admin.pk), 'email': self.admin.email})),
+            ('same account', dict(good, approver={'id': str(self.doctor.pk), 'email': self.doctor.email})),
+            ('approver must be', dict(good, approver={'id': str(self.approver.pk)})),
+            ('at least 12 characters', dict(good, reason='short')),
+        ]
+        for index, (message, declaration) in enumerate(cases):
+            with self.subTest(message=message, index=index):
+                self.refused_unchanged(message, authority.ELEVATE, self.write(declaration, f'd{index}.json'),
+                                       self.doctor.pk)
+
+    def test_the_declaration_argument_must_be_the_file_the_door_opened(self):
+        named = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver))
+        other = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver), 'other.json')
+        self.refused_unchanged('another file than', authority.ELEVATE, other, self.doctor.pk, door_path=named)
+
+    def test_a_production_declaration_is_used_once_and_needs_the_approver(self):
+        path = self.write(production_declaration(authority.ELEVATE, self.doctor, self.approver))
+        self.refused_unchanged('approver\'s presence', authority.ELEVATE, path, self.doctor.pk, code_file=None)
+        self.act(authority.ELEVATE, path, self.doctor.pk)
+        User.objects.filter(pk=self.doctor.pk).update(is_staff=False)
+        self.refused_unchanged('already been used', authority.ELEVATE, path, self.doctor.pk)
+
+
+from django.test import TransactionTestCase  # noqa: E402
+
+DRIVER = r'''
+import io, json, os, sys
+release, spec = sys.argv[1], json.loads(sys.argv[2])
+sys.path.insert(0, release)
+os.chdir(release)
+os.environ['DJANGO_SETTINGS_MODULE'] = 'quillmd.settings'
+import django
+django.setup()
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from core.tests.test_admin_authority import production_door
+import core.admin_authority
+out = io.StringIO()
+argv = [spec['command'], '--declaration', spec['declaration'], '--target', spec['target'],
+        '--approver-code-file', spec['code_file']]
+try:
+    if spec['door'] == 'production':
+        with production_door(release, spec['declaration']):
+            call_command(*argv, stdout=out)
+    elif spec['door'] == 'production-not-opened':
+        with production_door(release, None):
+            call_command(*argv, stdout=out)
+    else:
+        call_command(*argv, stdout=out)
+    print(json.dumps({'ok': True, 'module': core.admin_authority.__file__, 'out': json.loads(out.getvalue())}))
+except CommandError as exc:
+    print(json.dumps({'ok': False, 'module': core.admin_authority.__file__, 'error': str(exc)}))
+'''
+
+
+@override_settings(STORAGES=STORAGES)
+class ReleaseShapedInstall(TransactionTestCase):
+    """Refutation R5, end to end: a copy of what a release carries — rebuild/ alone, as `git archive` of the commit
+    builds it (tracked files, plus this tree's not-yet-committed ones, no ignored file) — runs each command in a process
+    of its own through the production door, and refuses without it. Its own code is what runs: the door checks that
+    production_operator lives in the profile's app_root, which is the copy."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.release = Path(tempfile.mkdtemp(prefix='quillmd-release-'))
+        listed = subprocess.run(['git', '-C', str(authority.REPOSITORY), 'ls-files', '-z', '--cached', '--others',
+                                 '--exclude-standard', '--', 'rebuild'], capture_output=True, check=True).stdout
+        for relative in filter(None, listed.decode().split('\0')):
+            source = authority.REPOSITORY / relative
+            if source.is_file() and not source.is_symlink():
+                target = cls.release / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+        cls.app = cls.release / 'rebuild'
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.release, True)
+        super().tearDownClass()
+
+    def setUp(self):
+        now = timezone.now()
+        self.approver = User.objects.create_user(username='r-approver', email='r-approver@synthetic.invalid',
+                                                 password=PASSWORD, verified_at=now, is_staff=True)
+        self.approver_device = TOTPDevice.objects.create(user=self.approver, name='Approver', confirmed=True)
+        self.second_approver = User.objects.create_user(username='r-approver-2', email='r-approver-2@synthetic.invalid',
+                                                        password=PASSWORD, verified_at=now, is_staff=True)
+        self.second_device = TOTPDevice.objects.create(user=self.second_approver, name='Approver 2', confirmed=True)
+        self.doctor = User.objects.create_user(username='r-doctor', email='r-doctor@synthetic.invalid',
+                                               password=PASSWORD, verified_at=now)
+        TOTPDevice.objects.create(user=self.doctor, name='Doctor', confirmed=True)
+        self.admin = User.objects.create_user(username='r-admin', email='r-admin@synthetic.invalid',
+                                              password=PASSWORD, verified_at=now, is_staff=True)
+        TOTPDevice.objects.create(user=self.admin, name='Old phone', confirmed=True)
+        self.files = Path(tempfile.mkdtemp(prefix='release-door-'))
+        self.addCleanup(shutil.rmtree, self.files, True)
+
+    def run_command(self, command, target, door, declaration, device=None):
+        import sys
+        from django.db import connection
+        device = device or self.approver_device
+        code_file = self.files / ('code-' + command)
+        device.refresh_from_db()
+        code_file.write_text(code(device) + '\n')
+        code_file.chmod(0o600)
+        driver = self.files / 'driver.py'
+        driver.write_text(DRIVER)
+        env = {k: v for k, v in os.environ.items() if k not in ('DJANGO_SETTINGS_MODULE',)
+               and not k.startswith('RULED_MUTATION_')}
+        env.update(QUILLMD_DB_NAME=connection.settings_dict['NAME'], QUILLMD_ENV_MANAGED='1')
+        spec = {'command': command, 'declaration': str(declaration), 'target': str(target.pk),
+                'code_file': str(code_file), 'door': door}
+        done = subprocess.run([sys.executable, '-B', str(driver), str(self.app), json.dumps(spec)], env=env,
+                              capture_output=True, text=True, timeout=300)
+        self.assertEqual(done.returncode, 0, done.stderr[-3000:])
+        return json.loads(done.stdout.strip().splitlines()[-1])
+
+    def test_the_release_is_rebuild_alone(self):
+        self.assertEqual(sorted(p.name for p in self.release.iterdir()), ['rebuild'])
+        self.assertFalse((self.app / '.git').exists() or (self.release / '.git').exists())
+        self.assertTrue((self.app / 'core' / 'admin_authority.py').is_file())
+        self.assertFalse((self.app / '.env').exists())
+
+    def test_each_command_runs_through_the_production_door_from_the_release(self):
+        # One approver per act: an act consumes the approver's current code, as it must.
+        for command, operation, target, approver, device in (
+                ('elevate_additional_admin', authority.ELEVATE, self.doctor, self.approver, self.approver_device),
+                ('reset_admin_mfa', authority.RESET, self.admin, self.second_approver, self.second_device)):
+            with self.subTest(command=command):
+                path = self.files / (command + '.json')
+                path.write_text(json.dumps(production_declaration(operation, target, approver)))
+                done = self.run_command(command, target, 'production', path, device=device)
+                self.assertTrue(done['ok'], done)
+                self.assertTrue(done['module'].startswith(str(self.app)), done['module'])
+                self.assertEqual(done['out']['door'], 'production')
+        self.assertTrue(User.objects.get(pk=self.doctor.pk).is_staff)
+        self.assertFalse(TOTPDevice.objects.filter(user=self.admin).exists())
+        self.assertEqual(sorted(AuditEvent.objects.filter(action__in=authority.ACTIONS.values())
+                                .values_list('action', 'actor__username', 'details__door')),
+                         [('account.admin_elevated', 'r-approver', 'production'),
+                          ('account.admin_mfa_reset', 'r-approver-2', 'production')])
+
+    def test_the_release_refuses_without_the_door_and_has_no_repository_door(self):
+        path = self.files / 'elevate.json'
+        path.write_text(json.dumps(production_declaration(authority.ELEVATE, self.doctor, self.approver)))
+        before = list(User.objects.order_by('pk').values_list('pk', 'is_staff', 'session_version'))
+        for door, message in (('production-not-opened', 'production door: declaration_commit'),
+                              ('repository', 'docs/foundation/mutations')):
+            with self.subTest(door=door):
+                done = self.run_command('elevate_additional_admin', self.doctor, door, path)
+                self.assertFalse(done['ok'], done)
+                self.assertIn(message, done['error'])
+        self.assertEqual(list(User.objects.order_by('pk').values_list('pk', 'is_staff', 'session_version')), before)
+        self.assertFalse(AuditEvent.objects.filter(action__in=authority.ACTIONS.values()).exists())
+
+
+@override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, QUILLMD_MFA_REQUIRED_ALL=True, STORAGES=STORAGES)
+class ClinicianEnrolmentKeepsWorking(TestCase):
+    """The R4 repair on the clinician path (QUILLMD_MFA_REQUIRED_ALL): the manual key and the QR are this session's,
+    a reload keeps them, a wrong code keeps them, and confirming ends the clinician's other sessions only."""
+
+    def setUp(self):
+        from core.models import Department, Membership, Organization
+        self.clinician = User.objects.create_user(username='enrol-clinician', email='enrol-clinician@synthetic.invalid',
+                                                  password=PASSWORD, verified_at=timezone.now())
+        department = Department.objects.create(organization=Organization.objects.create(name='Enrol clinic'),
+                                               name='Enrol')
+        Membership.objects.create(user=self.clinician, department=department, role='clinician')
+
+    def sign_in(self, client):
+        response = client.post('/login/', {'email': self.clinician.email, 'password': PASSWORD, 'otp': ''})
+        self.assertEqual(response.url, '/mfa/')
+
+    def test_reload_and_a_wrong_code_keep_the_manual_key_and_the_right_code_confirms(self):
+        from base64 import b32encode
+        client = Client()
+        self.sign_in(client)
+        first = client.get('/mfa/').context['secret']
+        self.assertEqual(client.get('/mfa/').context['secret'], first)
+        wrong = client.post('/mfa/', {'code': '000000'})
+        self.assertEqual(wrong.status_code, 200)
+        self.assertEqual(wrong.context['secret'], first)
+        device = TOTPDevice.objects.get(user=self.clinician)
+        self.assertEqual(b32encode(device.bin_key).decode().rstrip('='), first.replace(' ', ''))
+        TOTPDevice.objects.filter(pk=device.pk).update(throttling_failure_count=0, throttling_failure_timestamp=None)
+        self.assertEqual(client.post('/mfa/', {'code': code(device)}).url, '/')
+        self.assertEqual(client.get('/').status_code, 200)
+
+    def test_confirming_ends_the_clinicians_other_sessions_and_nobody_elses(self):
+        phone, laptop, colleague = Client(), Client(), Client()
+        self.sign_in(phone)
+        phone.get('/mfa/')
+        self.sign_in(laptop)
+        laptop.get('/mfa/')
+        other = User.objects.create_user(username='enrol-colleague', email='enrol-colleague@synthetic.invalid',
+                                         password=PASSWORD, verified_at=timezone.now())
+        colleague.force_login(other)
+        before = colleague.get('/mfa/').status_code
+        device = TOTPDevice.objects.get(user=self.clinician)
+        self.assertEqual(laptop.post('/mfa/', {'code': code(device)}).url, '/')
+        self.assertEqual(laptop.get('/').status_code, 200)
+        self.assertEqual(phone.get('/').url.split('?')[0], '/login/')
+        self.assertEqual(colleague.get('/mfa/').status_code, before)
