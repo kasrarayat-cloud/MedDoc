@@ -780,7 +780,8 @@ def run_one():
             with path.open('xb') as file:path.chmod(0o600);file.write(payload)
             job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
             if withheld(job.encounter_id):
-                try:path.unlink()
+                # Already gone is the outcome wanted: the redaction's own sweep may read the new reference and remove it first.
+                try:path.unlink(missing_ok=True)
                 except OSError:
                     # Kept referenced, so the redaction's sweep (at its commit, retry or replay) still finds and removes it.
                     logging.getLogger(__name__).error('A withheld provider result was not removed; the redaction sweep removes it.')

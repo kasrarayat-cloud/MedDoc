@@ -169,3 +169,27 @@ class LateResultAfterRedaction(ssw.Console, HeldSettlementFixture, TransactionTe
             job, draft, *_ = self.second_worker_during_the_call('late-journaled-race', resolve_form=ssw.RELEASE,
                                                                then=self.journaled_only(seen))
         self.assert_withheld_then_the_exact_retry_commits(job, draft, seen)
+
+    def test_a_result_the_redactions_sweep_removed_first_is_still_withheld_cleanly(self):
+        """Self-review of round 2: the redaction's own sweep can remove the result file between the write and the check after
+        it (it reads the job's new reference). The check then finds the file gone: that is the outcome it wants, so the
+        reference is cleared and the withholding audited, never logged as a failure with the reference kept."""
+        self.journal()
+
+        def redact(job, draft):
+            requested = redaction.request(self.c1, draft.pk, 'c' * 64, uuid.uuid4())
+            redaction.execute(self.c2, requested.pk, self.checkpoint(j.verified()))
+        real = redaction.withheld
+        calls = []
+        def check(encounter_id):
+            calls.append(encounter_id)
+            if len(calls) == 1:
+                return False                      # the write happens: the redaction has not committed yet
+            redaction.sweep(encounter_id)         # its sweep, reading the job's new reference, removes the file first
+            return real(encounter_id)
+        with patch('core.redaction.withheld', side_effect=check):
+            job, _draft, *_ = self.second_worker_during_the_call('late-swept-first', resolve_form=ssw.RELEASE, then=redact)
+        job.refresh_from_db()
+        self.assertEqual((job.result_path, job.result_sha256), ('', ''))  # 9ac45e01: FileNotFoundError, reference kept
+        self.assertEqual(self.holding_the_quote(), [])
+        self.assertTrue(m.AuditEvent.objects.filter(action='provider.output_withheld', target=str(job.pk)).exists())
