@@ -247,7 +247,7 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
 
     def generate_with(self, version, notes, text):
         """A new encounter generated through the quote, enqueue and the worker, the provider patched to return `text`
-        (a v3 relations answer) exactly once."""
+        (a v4 relations answer) exactly once."""
         self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
         encounter = Encounter.objects.latest('created_at')
         quote = self.client.get(f'/encounters/{encounter.pk}/').context['usage_quote']

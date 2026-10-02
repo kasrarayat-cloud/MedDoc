@@ -996,8 +996,8 @@ class OneSwitchAtEveryReader(SimpleTestCase):
 
 
 def _keyed_reply(body, picks):
-    """A complete relations answer (contract v3's wire: answers naming their keys, each context one entry per unit in
-    unit order) to the request itself (the picked unit 'answer', every other 'independent'), from the model the request
+    """A complete relations answer (contract v4's wire: answers naming their keys, each context the partition of the
+    units by relation) to the request itself (the picked unit 'answer', every other 'independent'), from the model the request
     named, end_turn."""
     payload = json.loads(body['messages'][0]['content'])
     units = payload['source_units']
@@ -1011,8 +1011,8 @@ def _keyed_reply(body, picks):
         entry = {'key': key, 'unit_ids': chosen, 'conflict': False}
         if with_options:
             entry['option_ids'] = []
-        entry['context'] = [{'unit': u['id'], 'relation': 'answer' if u['id'] in chosen else 'independent'}
-                            for u in units]
+        entry['context'] = {'answer': [u['id'] for u in units if u['id'] in chosen], 'qualifier': [], 'contrary': [],
+                            'unresolved': [], 'independent': [u['id'] for u in units if u['id'] not in chosen]}
         fields.append(entry)
     return {'id': 'msg_switch', 'type': 'message', 'role': 'assistant', 'model': body['model'],
             'content': [{'type': 'text', 'text': json.dumps({'fields': fields})}], 'stop_reason': 'end_turn',

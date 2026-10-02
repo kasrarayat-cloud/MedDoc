@@ -1776,11 +1776,11 @@ class PricingCommandTests(unittest.TestCase):
         amended = re.search(r'^amended_pricing_version: (\S+)$', amendment, re.M).group(1)
         base = re.search(r'^previous_pricing_version: (\S+)$', amendment, re.M).group(1)
         # (the relations version is the base price bound to the ENGINE's contract identity: the historical amendment's
-        # v2 version until 2026-10-02, contract v3's since - the same base, another contract, so another version)
+        # v2 version until 2026-10-02, then contract v3's, now v4's - the same base, another contract, another version)
         self.assertEqual(pc.contract_pricing_version(base, 'ordinary-field-relations-v2'), amended)
         self.assertNotEqual(report['pricing_versions']['ordinary_notes_field_relations'], amended)
         self.assertEqual(report['pricing_versions']['ordinary_notes_field_relations'],
-                         pc.contract_pricing_version(base, 'ordinary-field-relations-v3'))
+                         pc.contract_pricing_version(base, 'ordinary-field-relations-v4'))
         self.assertEqual(report['request_profiles']['mapping_request']['max_output_tokens'], 20000)
 
     def test_the_transcription_version_is_computed_under_the_declared_rate_and_no_other(self):

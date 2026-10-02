@@ -708,12 +708,15 @@ class ExportReadBackTests(unittest.TestCase):
 
 
 def positional(body):
-    """The contract-v3 wire of a body written keyed (field key -> entry, context unit ID -> relation), test code only:
-    a list of answers naming their keys, each context one {unit, relation} entry per unit in unit-ID order."""
+    """The engine's wire (contract v4) of a body written keyed (field key -> entry, context unit ID -> relation), test
+    code only: a list of answers naming their keys, each context the partition of its units by relation."""
+    def partition(context):
+        lists = {name: [] for name in ('answer', 'qualifier', 'contrary', 'unresolved', 'independent')}
+        for unit, relation in sorted(context.items(), key=lambda pair: int(pair[0])):
+            lists[relation].append(int(unit))
+        return lists
     return {'fields': [{'key': key, **{k: v for k, v in entry.items() if k != 'context'},
-                        'context': [{'unit': int(unit), 'relation': relation}
-                                    for unit, relation in sorted(entry['context'].items(), key=lambda pair: int(pair[0]))]}
-                       for key, entry in body['fields'].items()]}
+                        'context': partition(entry['context'])} for key, entry in body['fields'].items()]}
 
 
 class RawSelectionTests(unittest.TestCase):
@@ -725,8 +728,8 @@ class RawSelectionTests(unittest.TestCase):
                 st.raw_selection(message, [], '', 'default')
 
     def test_the_relations_answer_reads_into_the_replays_unchanged_shape(self):
-        # (N13's frozen form and notes; the v3 wire the contract returns, fields in any order, each context in unit
-        # order; written keyed here and translated by `positional`)
+        # (N13's frozen form and notes; the v4 wire the contract returns, fields in any order, each context the partition
+        # of its units; written keyed here and translated by `positional`)
         inputs = st.frozen_inputs()
         case = next(c for c in inputs['cases']['cases'] if c['id'] == 'N13')
         fields = inputs['cases']['forms'][case['form']]['fields']

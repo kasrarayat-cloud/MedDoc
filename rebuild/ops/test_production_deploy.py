@@ -1065,7 +1065,18 @@ BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8
 # larger per unit, so fewer fields fit one bounded response and the relations field batches split sooner (each part
 # still priced and held as before). compile_request, maximum_cost, generate, validated, records, claimed, disagrees and
 # the send (client.messages.create(**compiled['wire']), max_retries=0, the profile cap) are AST-identical.
-ORDINARY_PRICED_SHA256 = '50e02822eb7ca9b9e22098dea7863353e13c6e87b53bdf5953bae678c5310f67'
+# The relations-contract-v4 addendum (fix/v2-relations-compact; was 50e02822...): each field's relations are a
+# PARTITION of the offered unit IDs - context an object of five closed lists (answer, qualifier, contrary, unresolved,
+# independent) of UnitId enum values - instead of v3's one {unit, relation} entry per unit. CONTRACT/SALT v4 (the pricing
+# version moves with the contract identity), READABLE (stored v3 records read too), INSTRUCTIONS (the partition shape),
+# PARTITION (the list names), response_schema (the same fixed vocabulary: FieldKey/UnitId/OptionId enums each once, a
+# closed Partition object, no length keyword), parse (proves the partition: every offered unit exactly once across the
+# five lists, none unknown) and response_bound (the true worst case: every unit in one list). PRICED EFFECT: the request
+# bytes change (instructions and schema), so maximum_cost - the same formula - prices the new bytes; the response bound
+# is about a fifth of v3's per unit, so far more fields fit one bounded 20,000-token response (25 units: 60 fields, was
+# 17) and the relations field batches split far later. compile_request, maximum_cost, generate, validated, records,
+# read, claimed, disagrees and the send are AST-identical.
+ORDINARY_PRICED_SHA256 = 'efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb'
 
 
 def ordinary_module_proof(where):

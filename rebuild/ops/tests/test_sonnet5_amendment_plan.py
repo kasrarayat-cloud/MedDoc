@@ -33,9 +33,9 @@ from .test_provider_campaign import (REAL_TEXT, RELATIONS_BASE, RELATIONS_V1, RE
 
 REBUILD = Path(__file__).resolve().parents[2]
 #: The contract this engine runs (core.v3_field_relations.CONTRACT; the driver reports it as frozen_walk.engine_contract
-#: and every amendment plan below names it) and its version under the pinned base. Since 2026-10-02 it is v3, so the
-#: campaign's real v1 -> v2 amendment names a contract this engine no longer runs, and these synthetic amendments name v3.
-ENGINE_CONTRACT = 'ordinary-field-relations-v3'
+#: and every amendment plan below names it) and its version under the pinned base. Since 2026-10-02 it is v4 (v3 the same
+#: day), so the campaign's real v1 -> v2 amendment names a contract this engine no longer runs; these name the engine's.
+ENGINE_CONTRACT = 'ordinary-field-relations-v4'
 ENGINE_VERSION = pc.contract_pricing_version(RELATIONS_BASE, ENGINE_CONTRACT)
 DRIVER = Path(__file__).resolve().parent / 'amendment_plan_driver.py'
 UNSENT = ['notes:N03:field_relations', 'notes:N10:field_relations', 'notes:N13:field_relations',
@@ -217,7 +217,7 @@ class AmendedPlanTests(unittest.TestCase):
         # (the campaign's real amendment names v2: since 2026-10-02 this engine runs v3 and refuses it before planning)
         out = self.plan(live_shape(self, self.declaration), self.amendment(
             ordinary_field_contract='ordinary-field-relations-v2', amended_pricing_version=RELATIONS_V2))
-        self.assertIn('this engine runs ordinary-field-relations-v3', out['refused'])
+        self.assertIn('this engine runs ordinary-field-relations-v4', out['refused'])
 
     def test_a_maximum_or_the_sum_that_does_not_fit_the_limit_left_refuses(self):
         # 15 completed sends at 2/10 per million: 327,700 input tokens each expose $9.8487 (one bound, ~$0.257, does not

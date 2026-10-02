@@ -55,7 +55,7 @@ class NativeSchemaCompatibility(SimpleTestCase):
                 self.assertEqual(unsupported(self.wire(g.SONNET_5, schema)), [])
 
     def test_the_per_request_ordinary_schema_reaches_the_sdk_body_unchanged(self):
-        # (the v3 relations answer: a plain dictionary built per request; enums, references, required members and closed
+        # (the v4 relations answer: a plain dictionary built per request; enums, references, required members and closed
         # objects only - no length bound, which the parser proves instead)
         from core import v3_field_relations as r
         from .test_v3_ordinary_notes import field

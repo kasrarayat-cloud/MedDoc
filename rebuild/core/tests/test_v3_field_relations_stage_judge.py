@@ -50,7 +50,7 @@ class RetainedJudge(SimpleTestCase):
 
     def judge(self, case_id, text):
         """(served {key: (status, text)}, graded, findings, details, raw-selection evidence) as the runner judges it.
-        `text` is a retained v2 keyed body (verbatim, or edited as a test states); the provider answers in contract v3's
+        `text` is a retained v2 keyed body (verbatim, or edited as a test states); the provider answers in contract v4's
         wire, so it is translated (`from_keyed`: the same selections, relations and options) before anything reads it."""
         text = from_keyed(text)
         case, fields = self.case(case_id)
