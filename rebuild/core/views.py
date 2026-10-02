@@ -740,11 +740,11 @@ def encounter_detail(request,pk):
         # Retain historical suggestions, but do not display licensed descriptors
         # after entitlement expires or changes to a different licensed feed.
         cpt=models.Q(terminology__release__system='CPT')
-        if cpt_licensed():
-            visible_codes=visible_codes.exclude(cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID))
-        else:
-            visible_codes=visible_codes.exclude(cpt)
-        codes=list(visible_codes)
+        hidden=cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID) if cpt_licensed() else cpt
+        # An acceptance of a hidden code (CPT is locked, or another licence) can still be withdrawn, without showing the
+        # code or its descriptor: it would otherwise block finalizing once marked for re-review (refutation F7).
+        hidden_accepted=list(visible_codes.filter(hidden,accepted_by__isnull=False).values('pk','review_required'))
+        codes=list(visible_codes.exclude(hidden))
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
     is_v3=v3_mapping.is_v3_version(e.template_version)
@@ -947,7 +947,7 @@ def encounter_detail(request,pk):
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
     from . import wm_narrative
-    return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'hidden_accepted':hidden_accepted,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
@@ -1499,7 +1499,8 @@ def finalize(request,pk):
             # confirmed or withdrawn first, never frozen as it stands.
             if CodeSuggestion.objects.filter(encounter=e,review_required=True).exists():
                 raise ValidationError('An accepted code is marked for re-review because the notes changed after it was accepted. '
-                                      'Accept it again or withdraw it on the Coding tab. Nothing was finalized.')
+                                      'Accept it again or withdraw it on the Coding tab (a hidden CPT code can only be '
+                                      'withdrawn). Nothing was finalized.')
             is_v3=v3_mapping.is_v3_version(e.template_version)
             # A v3 signature or initials area holds no answer (it is signed by hand on the printed form), so there is
             # nothing in it to review; every other field still needs the clinician's review.

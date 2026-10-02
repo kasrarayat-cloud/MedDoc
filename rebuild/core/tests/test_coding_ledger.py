@@ -14,7 +14,7 @@ from django.db import DatabaseError, connection, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from core import coding
+from core import coding, models as m
 from core.context import integration_status
 from core.management.commands.import_terminology import save_release
 from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter
@@ -126,6 +126,48 @@ class CodingLedger(TestCase):
         with zipfile.ZipFile(io.BytesIO(exported)) as archive:
             body = archive.read('word/document.xml').decode()
         self.assertNotIn('Synthetic chest pain code', body)
+
+    def test_F7_a_hidden_cpt_acceptance_marked_for_re_review_can_be_withdrawn_without_being_shown(self):
+        """Refutation F7 (dc33e094): a CPT acceptance recorded under a licence, then marked for re-review by a notes change,
+        blocked finalizing while the coding tab hid it (CPT is locked) and offered no way to withdraw it."""
+        icd_release(); cpt = cpt_release()
+        encounter = self.document('Symptoms: No chest pain, CPT 99213.\nExamination: Normal gait.')
+        stored = CodeSuggestion.objects.create(encounter=encounter, terminology=Code.objects.get(release=cpt, code='99213'),
+            evidence='Symptoms: No chest pain, CPT 99213.', explanation='Stored CPT', accepted_by=self.user, accepted_at=timezone.now())
+        self.save_notes(encounter, 'Symptoms: No chest pain, CPT 99213.\nExamination: Normal gait, steady.')
+        stored.refresh_from_db(); self.assertTrue(stored.review_required)
+        page = self.client.get(f'/encounters/{encounter.pk}/?tab=coding').content.decode()
+        self.assertNotIn('SYNTHETIC CPT DESCRIPTOR NOT CPT CONTENT', page); self.assertNotIn('99213', page)  # still hidden
+        self.assertIn(f'/coding/{stored.pk}/withdraw/', page)        # dc33e094: no way to withdraw it
+        self.assertIn('data-hidden-cpt', page)
+        self.generate(encounter); self.review(encounter)
+        refused = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'reviewed': 'on', 'revision': encounter.revision},
+                                   follow=True)
+        self.assertIn('marked for re-review', self.text(refused))
+        encounter.refresh_from_db()
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{stored.pk}/withdraw/',
+                                          {'revision': encounter.revision}).status_code, 302)
+        self.assertFalse(CodeSuggestion.objects.filter(pk=stored.pk).exists())
+        encounter.refresh_from_db()
+        self.finalize(encounter)  # nothing blocks it any more
+
+    def test_F12_withdraw_needs_an_owner_or_clinician_and_the_current_revision(self):
+        icd_release()
+        encounter = self.document(); self.suggest(encounter)
+        code = CodeSuggestion.objects.get(encounter=encounter); self.accept(encounter, code)
+        encounter.refresh_from_db()
+        employee = m.User.objects.create_user(username='coding-employee', email='coding-employee@synthetic.invalid',
+                                              verified_at=timezone.now())
+        m.Membership.objects.create(user=employee, department=self.department, role='employee')
+        from django.test import Client
+        other = Client(); other.force_login(employee)
+        self.assertEqual(other.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
+                                    {'revision': encounter.revision}).status_code, 403)
+        stale = self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/', {'revision': encounter.revision - 1})
+        self.assertEqual(stale.status_code, 409)
+        self.assertTrue(CodeSuggestion.objects.filter(pk=code.pk, accepted_by__isnull=False).exists())
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{code.pk}/withdraw/',
+                                          {'revision': encounter.revision}).status_code, 302)  # the control
 
     def test_reversing_0034_refuses_while_ledger_evidence_exists(self):
         import importlib
