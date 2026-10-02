@@ -247,7 +247,7 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
 
     def generate_with(self, version, notes, text):
         """A new encounter generated through the quote, enqueue and the worker, the provider patched to return `text`
-        (a keyed answer) exactly once."""
+        (a v3 relations answer) exactly once."""
         self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
         encounter = Encounter.objects.latest('created_at')
         quote = self.client.get(f'/encounters/{encounter.pk}/').context['usage_quote']
@@ -273,7 +273,9 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
         keys = [f['key'] for f in version.fields]
         self.assertEqual([g.question_key(f['label']) for f in version.fields],
                          [g.question_key(f['label']) for f in frozen_fields])
-        text = ATTEMPT_020_TEXT.replace('"v3_1"', json.dumps(keys[0])).replace('"v3_2"', json.dumps(keys[1]))
+        # (the retained v2 body, translated into this contract's wire: the same selections and relations)
+        from .test_v3_field_relations import from_keyed
+        text = from_keyed(ATTEMPT_020_TEXT.replace('"v3_1"', json.dumps(keys[0])).replace('"v3_2"', json.dumps(keys[1])))
         asked, context, _ = g.v3_generation_fields(version.fields)
         self.assertEqual([u['quote'] for u in g.source_units(notes, asked, context_labels=context)[0]],
                          ['The patient is suicidal.', 'Suicidal ideation: none.', 'The patient is on methadone.',

@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from core import generation as g, generation_batch as b, batch_jobs as jobs
 from core.models import Reservation, Usage
 from .test_generation_batch import SETTINGS, BatchFixture, manifest, sample
-from .test_v3_field_relations import relation_wire
+from .test_v3_field_relations import answer_of, relation_wire, set_relation
 from .test_v3_field_relations_workflow import sdk_response
 
 ORDINARY = dict(SETTINGS, V3_FIELD_RELATIONS=True)
@@ -79,16 +79,20 @@ class OrdinaryBatchContract(SimpleTestCase):
         changed = copy.deepcopy(plan); changed['units'][0]['quote'] = 'The patient is well.'
         with self.assertRaisesMessage(ValidationError, 'differs'): b.request(changed, 1)
         raw = reply(plan, 1); body = json.loads(raw['content'][0]['text'])
-        first = next(iter(body['fields'].values())); first['context'].pop(next(iter(first['context'])))
+        body['fields'][0]['context'].pop(0)                              # (a context one unit short)
         raw['content'][0]['text'] = json.dumps(body)
         with self.assertRaises(ValidationError):
             b.assemble(plan, [raw] + [reply(plan, n) for n in range(2, len(plan['parts']) + 1)])
-        # (the v1 list shape, and an answer keyed for another part's fields, are refused too)
-        v1 = reply(plan, 1); keyed_body = json.loads(v1['content'][0]['text'])
-        v1['content'][0]['text'] = json.dumps({'fields': [{'key': k, **v, 'option_ids': [],
-            'context': list(v['context'].values())} for k, v in keyed_body['fields'].items()]})
+        # (the v1 list shape, v2's keyed shape, and an answer for another part's fields, are refused too)
+        v1 = reply(plan, 1); wire_body = json.loads(v1['content'][0]['text'])
+        v1['content'][0]['text'] = json.dumps({'fields': [{**item, 'option_ids': [],
+            'context': [entry['relation'] for entry in item['context']]} for item in wire_body['fields']]})
+        v2 = reply(plan, 1)
+        v2['content'][0]['text'] = json.dumps({'fields': {item['key']: {
+            **{k: v for k, v in item.items() if k not in ('key', 'context')},
+            'context': {str(entry['unit']): entry['relation'] for entry in item['context']}} for item in wire_body['fields']}})
         foreign = reply(plan, 2)
-        for raw in (v1, foreign):
+        for raw in (v1, v2, foreign):
             with self.assertRaises(ValidationError):
                 b.assemble(plan, [raw] + [reply(plan, n) for n in range(2, len(plan['parts']) + 1)])
 
@@ -105,14 +109,14 @@ class OrdinaryBatchContract(SimpleTestCase):
 
         def edited(ordinal, key, edit):
             raw = reply(plan, ordinal); body = json.loads(raw['content'][0]['text'])
-            edit(body['fields'][key]); raw['content'][0]['text'] = json.dumps(body)
+            edit(answer_of(body, key)); raw['content'][0]['text'] = json.dumps(body)
             return raw
         for name, ordinal, key, edit in (
                 ('the selected unit marked contrary, conflict true', 1, first,
-                 lambda f: (f['context'].update({'1': 'contrary'}), f.update(conflict=True))),
-                ('the selected unit marked independent', 1, first, lambda f: f['context'].update({'1': 'independent'})),
+                 lambda f: (set_relation(f, 1, 'contrary'), f.update(conflict=True))),
+                ('the selected unit marked independent', 1, first, lambda f: set_relation(f, 1, 'independent')),
                 ('an answer relation and nothing selected, in another part', 2, later,
-                 lambda f: f['context'].update({'1': 'answer'}))):
+                 lambda f: set_relation(f, 1, 'answer'))):
             with self.subTest(name=name):
                 responses = [edited(n, key, edit) if n == ordinal else reply(plan, n)
                              for n in range(1, len(plan['parts']) + 1)]
@@ -138,15 +142,15 @@ class OrdinaryBatchContract(SimpleTestCase):
             for n in range(1, len(plan['parts']) + 1):
                 raw = reply(plan, n)
                 if n == part_of[last]:
-                    body = json.loads(raw['content'][0]['text']); edit(body['fields'][last])
+                    body = json.loads(raw['content'][0]['text']); edit(answer_of(body, last))
                     raw['content'][0]['text'] = json.dumps(body)
                 out.append(raw)
             return out
         clean, _ = b.assemble(plan, responses(lambda f: None))
         self.assertEqual((clean[first]['status'], clean[first]['text']), ('supported', NOTE))
-        for name, edit in (('an answer relation, nothing selected', lambda f: f['context'].update({'1': 'answer'})),
-                           ('a qualifier relation, nothing selected', lambda f: f['context'].update({'1': 'qualifier'})),
-                           ('the consistent selection', lambda f: (f['context'].update({'1': 'answer'}),
+        for name, edit in (('an answer relation, nothing selected', lambda f: set_relation(f, 1, 'answer')),
+                           ('a qualifier relation, nothing selected', lambda f: set_relation(f, 1, 'qualifier')),
+                           ('the consistent selection', lambda f: (set_relation(f, 1, 'answer'),
                                                                    f.update(unit_ids=[1])))):
             with self.subTest(name=name):
                 answers, _ = b.assemble(plan, responses(edit))
@@ -154,7 +158,7 @@ class OrdinaryBatchContract(SimpleTestCase):
                                  {first: ('conflict', ''), last: ('conflict', '')})
                 self.assertEqual({k: (v['status'], v['text']) for k, v in answers.items() if k not in (first, last)},
                                  {k: (v['status'], v['text']) for k, v in clean.items() if k not in (first, last)})
-        answers, _ = b.assemble(plan, responses(lambda f: f['context'].update({'1': 'contrary'})))
+        answers, _ = b.assemble(plan, responses(lambda f: set_relation(f, 1, 'contrary')))
         self.assertEqual((answers[first]['status'], answers[first]['text']), ('supported', NOTE))   # (not a claim)
 
 

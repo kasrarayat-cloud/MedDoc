@@ -471,7 +471,9 @@ class RelationsFieldBatches(SimpleTestCase):
         with self.assertRaises(ValidationError):
             b.assemble(plan, replies[:-1])
         foreign = json.loads(replies[1]['content'][0]['text'])
-        foreign['fields'][plan['parts'][0]['field_ids'][0]] = foreign['fields'].pop(plan['parts'][1]['field_ids'][0])
+        # (part 2's first answer renamed to a field part 1 asks)
+        next(item for item in foreign['fields'] if item['key'] == plan['parts'][1]['field_ids'][0])['key'] = \
+            plan['parts'][0]['field_ids'][0]
         with self.assertRaises(ValidationError):
             b.parse_part(plan, 2, {**replies[1], 'content': [{'type': 'text', 'text': json.dumps(foreign)}]})
         for changed in ({**replies[1], 'stop_reason': 'max_tokens'}, {**replies[1], 'model': g.SONNET_5_5},
@@ -994,19 +996,24 @@ class OneSwitchAtEveryReader(SimpleTestCase):
 
 
 def _keyed_reply(body, picks):
-    """A complete keyed relations answer to the request itself (the picked unit 'answer', every other 'independent'),
-    from the model the request named, end_turn."""
+    """A complete relations answer (contract v3's wire: answers naming their keys, each context one entry per unit in
+    unit order) to the request itself (the picked unit 'answer', every other 'independent'), from the model the request
+    named, end_turn."""
     payload = json.loads(body['messages'][0]['content'])
     units = payload['source_units']
     by_quote = {u['quote']: u['id'] for u in units}
     labels = {f['key']: f['label'] for f in payload['catalogue']}
-    fields = {}
-    for key in payload['requested_field_ids']:
+    requested = payload['requested_field_ids']
+    with_options = any(payload['option_catalogue'].get(key) for key in requested)
+    fields = []
+    for key in requested:
         chosen = [by_quote[picks[labels[key]]]] if picks.get(labels[key]) in by_quote else []
-        fields[key] = {'unit_ids': chosen, 'conflict': False,
-                       'context': {str(u['id']): 'answer' if u['id'] in chosen else 'independent' for u in units}}
-        if payload['option_catalogue'].get(key):
-            fields[key]['option_ids'] = []
+        entry = {'key': key, 'unit_ids': chosen, 'conflict': False}
+        if with_options:
+            entry['option_ids'] = []
+        entry['context'] = [{'unit': u['id'], 'relation': 'answer' if u['id'] in chosen else 'independent'}
+                            for u in units]
+        fields.append(entry)
     return {'id': 'msg_switch', 'type': 'message', 'role': 'assistant', 'model': body['model'],
             'content': [{'type': 'text', 'text': json.dumps({'fields': fields})}], 'stop_reason': 'end_turn',
             'stop_details': None, 'stop_sequence': None,

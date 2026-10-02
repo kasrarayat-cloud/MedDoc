@@ -707,6 +707,15 @@ class ExportReadBackTests(unittest.TestCase):
         self.assertEqual(self.problems(result), ['export'])
 
 
+def positional(body):
+    """The contract-v3 wire of a body written keyed (field key -> entry, context unit ID -> relation), test code only:
+    a list of answers naming their keys, each context one {unit, relation} entry per unit in unit-ID order."""
+    return {'fields': [{'key': key, **{k: v for k, v in entry.items() if k != 'context'},
+                        'context': [{'unit': int(unit), 'relation': relation}
+                                    for unit, relation in sorted(entry['context'].items(), key=lambda pair: int(pair[0]))]}
+                       for key, entry in body['fields'].items()]}
+
+
 class RawSelectionTests(unittest.TestCase):
     """C2: the model's own selection is read from the provider message only (never from the adopted answers)."""
 
@@ -715,8 +724,9 @@ class RawSelectionTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaises(pc.Refused):
                 st.raw_selection(message, [], '', 'default')
 
-    def test_the_keyed_relations_answer_reads_into_the_replays_unchanged_shape(self):
-        # (N13's frozen form and notes; the keyed wire the repaired contract returns, members in any order)
+    def test_the_relations_answer_reads_into_the_replays_unchanged_shape(self):
+        # (N13's frozen form and notes; the v3 wire the contract returns, fields in any order, each context in unit
+        # order; written keyed here and translated by `positional`)
         inputs = st.frozen_inputs()
         case = next(c for c in inputs['cases']['cases'] if c['id'] == 'N13')
         fields = inputs['cases']['forms'][case['form']]['fields']
@@ -727,7 +737,7 @@ class RawSelectionTests(unittest.TestCase):
                            first: {'unit_ids': [ids[0]], 'conflict': False,
                                    'context': {**{str(i): 'independent' for i in reversed(ids[1:])},
                                                str(ids[0]): 'answer', str(ids[1]): 'contrary'}}}}
-        message = {'content': [{'type': 'text', 'text': json.dumps(body)}]}
+        message = {'content': [{'type': 'text', 'text': json.dumps(positional(body))}]}
         selection = st.raw_selection(message, fields, case['notes'], 'field_relations')
         self.assertEqual(set(selection), {first, other})
         self.assertEqual(selection[first], {'unit_ids': [ids[0]], 'conflict': False, 'options': [],
@@ -735,7 +745,8 @@ class RawSelectionTests(unittest.TestCase):
         self.assertEqual(selection[other], {'unit_ids': [], 'conflict': True, 'options': [], 'relations': {}})
         # (the frozen replay's own reader of this shape: offline_replay adopt(), unchanged)
         for bad in ({'fields': [{'key': first, 'unit_ids': [], 'conflict': False, 'option_ids': [], 'context': []}]},
-                    {'fields': {first: body['fields'][first]}}):
+                    positional({'fields': {first: body['fields'][first]}}),
+                    body):                                                   # (v2's keyed shape: refused)
             with self.subTest(bad=bad), self.assertRaises(pc.Refused):
                 st.raw_selection({'content': [{'type': 'text', 'text': json.dumps(bad)}]}, fields, case['notes'],
                                  'field_relations')
@@ -760,7 +771,7 @@ class RawSelectionTests(unittest.TestCase):
         def message(first_entry, other_entry=None):
             body = {'fields': {first: first_entry, other: other_entry or {
                 'unit_ids': [], 'conflict': False, 'context': {str(i): 'independent' for i in ids}}}}
-            return {'content': [{'type': 'text', 'text': json.dumps(body)}]}
+            return {'content': [{'type': 'text', 'text': json.dumps(positional(body))}]}
         agreeing = {'unit_ids': [ids[0]], 'conflict': False,
                     'context': {**{str(i): 'independent' for i in ids}, str(ids[0]): 'answer', str(ids[1]): 'contrary'}}
         unselected_answer = {**agreeing, 'context': {**agreeing['context'], str(ids[2]): 'answer'}}

@@ -1043,7 +1043,20 @@ BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8
 # The refutation round 6 addendum (fix/v2-sonnet55-notes, was bd3902aa...): sole_independent only (a line denying a
 # class that bears on the answer's, in either direction; its docstring) - read after the response, nothing reaches
 # the wire; every other definition is AST-identical.
-ORDINARY_PRICED_SHA256 = '6fc2071f29afb194442eedfff9186e4ec87d15aaba9cb0a726c400dfba5e5ffe'
+# The relations-contract-v3 addendum (fix/v2-relations-scale; was 6fc2071f...): the answer schema no longer grows with
+# fields x units (v2's 14 units x 10 fields was refused live, "Schema is too complex for compilation"). CONTRACT/SALT v3
+# (so the pricing version moves: ordinary_pricing_version hashes the contract), READABLE (read() also verifies a stored
+# v2 record under v2's own salt and binding; binding() takes the record's contract), INSTRUCTIONS (the positional
+# self-naming shape), response_schema (fields a list of answers naming their key; context a list of {unit, relation};
+# FieldKey/UnitId/OptionId/Relation enums, each once; no length keyword - transform_schema leaves it unchanged and
+# compile_request still refuses otherwise), parse (proves the exact coverage the grammar cannot: every requested key
+# once, every offered unit once per field in the offered order) and response_bound (the positional worst-case body).
+# PRICED EFFECT: the request bytes change (instructions and schema), so maximum_cost - the same formula, (request bytes
+# + 12000) x input rate + the profile's max_output_tokens x output rate - prices the new bytes; the response bound is
+# larger per unit, so fewer fields fit one bounded response and the relations field batches split sooner (each part
+# still priced and held as before). compile_request, maximum_cost, generate, validated, records, claimed, disagrees and
+# the send (client.messages.create(**compiled['wire']), max_retries=0, the profile cap) are AST-identical.
+ORDINARY_PRICED_SHA256 = '50e02822eb7ca9b9e22098dea7863353e13c6e87b53bdf5953bae678c5310f67'
 
 
 def ordinary_module_proof(where):

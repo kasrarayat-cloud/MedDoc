@@ -19,6 +19,7 @@ from ops import provider_campaign as pc
 from ops import sonnet5_stages as st
 from ops.tests import network_guard
 from .test_v3_field_relations_contract import ATTEMPT_020_TEXT, raw_result
+from .test_v3_field_relations import from_keyed
 from .test_v3_ordinary_notes import LIVE
 
 #: The text block of live attempt 019's retained provider response (case N10 on the field-relations path), verbatim:
@@ -48,7 +49,10 @@ class RetainedJudge(SimpleTestCase):
         return case, self.inputs['cases']['forms'][case['form']]['fields']
 
     def judge(self, case_id, text):
-        """(served {key: (status, text)}, graded, findings, details, raw-selection evidence) as the runner judges it."""
+        """(served {key: (status, text)}, graded, findings, details, raw-selection evidence) as the runner judges it.
+        `text` is a retained v2 keyed body (verbatim, or edited as a test states); the provider answers in contract v3's
+        wire, so it is translated (`from_keyed`: the same selections, relations and options) before anything reads it."""
+        text = from_keyed(text)
         case, fields = self.case(case_id)
         with override_settings(**dict(LIVE, **st.steps.PATH_FLAGS['field_relations'])):
             answers = rel.validated(raw_result(case['notes'], fields, text))

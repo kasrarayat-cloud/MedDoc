@@ -81,7 +81,7 @@ else:
     from .test_provider_campaign import NoEnvOpened, limits_record, terms_record
     from .test_sonnet5_qa import SONNET_5
 
-    from core.tests.test_v3_field_relations import keyed
+    from core.tests.test_v3_field_relations import wired
     from .test_provider_campaign import RELATIONS_BASE, RELATIONS_V1, RELATIONS_V2
     UNSENT = ['notes:N03:field_relations', 'notes:N10:field_relations', 'notes:N13:field_relations',
               'notes:N14:field_relations', 'notes:N15:field_relations', 'notes:N16:field_relations']
@@ -98,11 +98,11 @@ else:
 
     def wire_answer(notes, fields, payload, selection):
         """The provider body for `selection` against the request actually sent: the frozen reference_answer, and on the
-        relations path its list body translated into the keyed v2 wire (test code only)."""
+        relations path its list body translated into the contract-v3 wire (test code only; the frozen file is unchanged)."""
         answer, units = st.steps.reference_answer(notes, fields, payload, selection)
         if 'catalogue' in payload:
             asked, offered = st.steps.source_units(notes, fields)
-            return keyed(answer, asked, offered), units
+            return wired(answer, asked, offered), units
         return answer, units
 
     STAGE_SETTINGS = {

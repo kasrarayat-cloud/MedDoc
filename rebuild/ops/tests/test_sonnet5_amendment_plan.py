@@ -32,6 +32,11 @@ from .test_provider_campaign import (REAL_TEXT, RELATIONS_BASE, RELATIONS_V1, RE
                                      limits_record, repository_with, scratch, terms_record, usage)
 
 REBUILD = Path(__file__).resolve().parents[2]
+#: The contract this engine runs (core.v3_field_relations.CONTRACT; the driver reports it as frozen_walk.engine_contract
+#: and every amendment plan below names it) and its version under the pinned base. Since 2026-10-02 it is v3, so the
+#: campaign's real v1 -> v2 amendment names a contract this engine no longer runs, and these synthetic amendments name v3.
+ENGINE_CONTRACT = 'ordinary-field-relations-v3'
+ENGINE_VERSION = pc.contract_pricing_version(RELATIONS_BASE, ENGINE_CONTRACT)
 DRIVER = Path(__file__).resolve().parent / 'amendment_plan_driver.py'
 UNSENT = ['notes:N03:field_relations', 'notes:N10:field_relations', 'notes:N13:field_relations',
           'notes:N14:field_relations', 'notes:N15:field_relations', 'notes:N16:field_relations']
@@ -96,6 +101,7 @@ class AmendedPlanTests(unittest.TestCase):
         self.declaration = pc.declared(self.path, repository=self.repo, out=io.StringIO())
 
     def amendment(self, name='20260929-amendment.md', **changes):
+        changes = {'ordinary_field_contract': ENGINE_CONTRACT, 'amended_pricing_version': ENGINE_VERSION, **changes}
         path = self.path.parent / name
         path.write_text(amendment_text(self.declaration.sha256, **changes), encoding='utf-8')
         git(self.repo, 'add', '--', str(path.relative_to(self.repo)))
@@ -125,18 +131,18 @@ class AmendedPlanTests(unittest.TestCase):
                 self.assertEqual(report['sends'], 6)
                 self.assertEqual(report['remainder']['sends'], UNSENT)
                 self.assertEqual(report['remainder']['failure'], 1)
-                self.assertEqual(report['amendment']['pricing_version'], RELATIONS_V2)
+                self.assertEqual(report['amendment']['pricing_version'], ENGINE_VERSION)
                 for row in report['order']:
                     # (refutation F3-IS-DECLARED: the amended version is NOT the declared one, and says so; it is the
                     # amendment's, which is its own column)
                     self.assertEqual((row['pricing_version'], row['pricing_version_is_declared'],
                                       row['pricing_version_is_amended'], row['amended']),
-                                     (RELATIONS_V2, False, True, True))
+                                     (ENGINE_VERSION, False, True, True))
                     self.assertEqual(row['pricing_version_is_declared'],
                                      row['pricing_version'] == self.declaration.pricing_version(row['pricing_key']))
                     case = next(c for c in self.inputs['cases']['cases'] if c['id'] == row['case'])
                     frozen = Decimal(case['cost_bound_usd']['field_relations']['provider_cost_max'])
-                    self.assertGreater(Decimal(row['maximum_cost']), frozen)        # (the keyed schema is larger)
+                    self.assertGreater(Decimal(row['maximum_cost']), frozen)        # (the closed schema is larger)
                     self.assertLess(Decimal(row['maximum_cost']), frozen + Decimal('0.01'))
                     self.assertEqual(Decimal(row['bound_x1_1']), Decimal(row['maximum_cost']) * Decimal('1.1'))
                 self.assertTrue(report['worst_case_fits'])
@@ -164,7 +170,7 @@ class AmendedPlanTests(unittest.TestCase):
                                  (frozen, False, self.declaration.pricing_version('ordinary_notes'), True, False))
             else:
                 self.assertEqual((row['amended'], row['pricing_version'], row['pricing_version_is_declared'],
-                                  row['pricing_version_is_amended']), (True, RELATIONS_V2, False, True))
+                                  row['pricing_version_is_amended']), (True, ENGINE_VERSION, False, True))
                 self.assertNotEqual(Decimal(row['maximum_cost']), frozen)
         self.assertEqual((report['earlier_stops'], report['can_pass']), ([], True))
         self.frozen_walk_is_stated(report)
@@ -173,12 +179,12 @@ class AmendedPlanTests(unittest.TestCase):
     def frozen_walk_is_stated(self, report):
         """Refutation F2-FROZEN-WALK: the frozen N6 walk (notes/app_path_walk.py, through app_path_steps.reference_answer)
         answers the relations path in contract v1's list shape, which this engine refuses — the freeze still verifies,
-        so the plan states it, measured on every relations case (the keyed translation of the SAME selection is
+        so the plan states it, measured on every relations case (the v3 translation of the SAME selection is
         accepted: core.tests.test_v3_field_relations_contract)."""
         walk = report['frozen_walk']
         relations = sorted(c['id'] for c in self.inputs['cases']['cases'] if 'field_relations' in c['send_paths'])
         self.assertEqual((walk['engine_contract'], walk['path'], walk['valid']),
-                         ('ordinary-field-relations-v2', 'field_relations', False))
+                         (ENGINE_CONTRACT, 'field_relations', False))
         self.assertEqual(sorted(walk['cases']), relations)
         for case, verdict in walk['cases'].items():
             self.assertTrue(verdict.startswith('refused: ') and 'malformed' in verdict, (case, verdict))
@@ -203,15 +209,15 @@ class AmendedPlanTests(unittest.TestCase):
         other = 'configured-v1:' + '1' * 64
         out = self.plan(live_shape(self, self.declaration), self.amendment(
             previous_pricing_version=other,
-            amended_pricing_version=pc.contract_pricing_version(other, 'ordinary-field-relations-v2')))
+            amended_pricing_version=pc.contract_pricing_version(other, ENGINE_CONTRACT)))
         self.assertEqual(out['at'], 'declaration')
         self.assertIn('the base price is not the pinned one', out['refused'])
 
     def test_a_contract_the_engine_does_not_run_refuses(self):
+        # (the campaign's real amendment names v2: since 2026-10-02 this engine runs v3 and refuses it before planning)
         out = self.plan(live_shape(self, self.declaration), self.amendment(
-            ordinary_field_contract='ordinary-field-relations-v3',
-            amended_pricing_version=pc.contract_pricing_version(RELATIONS_BASE, 'ordinary-field-relations-v3')))
-        self.assertIn('this engine runs ordinary-field-relations-v2', out['refused'])
+            ordinary_field_contract='ordinary-field-relations-v2', amended_pricing_version=RELATIONS_V2))
+        self.assertIn('this engine runs ordinary-field-relations-v3', out['refused'])
 
     def test_a_maximum_or_the_sum_that_does_not_fit_the_limit_left_refuses(self):
         # 15 completed sends at 2/10 per million: 327,700 input tokens each expose $9.8487 (one bound, ~$0.257, does not
