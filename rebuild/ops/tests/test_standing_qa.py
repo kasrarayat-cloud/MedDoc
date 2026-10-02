@@ -1837,6 +1837,27 @@ class TranscriptionDeclarationTests(Base):
     runner's allowlist with their pinned sha256, two sends per recording; no transcription line without the stage and no
     stage without its section."""
 
+    def test_patient_context_is_explicit_and_historical_behavior_is_preserved(self):
+        old=parse(self)
+        self.assertFalse(old.transcription.patient_context)
+        self.assertNotIn('patient_context',old.transcription.record())
+        text=edited('transcription_smart_format: false\n',
+            'transcription_smart_format: false\ntranscription_notes_contract: field_relations\n'
+            'transcription_patient_context: true\n')
+        text=text.replace('pricing_version transcription: configured-v1:'+'e'*64,
+            'pricing_version transcription: configured-v1:'+'e'*64+'\n'
+            'pricing_version voice_notes_field_relations: configured-v1:'+'f'*64)
+        confirmed=parse(self,text)
+        self.assertTrue(confirmed.transcription.patient_context)
+        self.assertTrue(confirmed.transcription.record()['patient_context'])
+        for malformed in ('yes','True','1'):
+            with self.subTest(malformed=malformed),self.assertRaises(pc.Refused):
+                parse(self,text.replace('transcription_patient_context: true',
+                                       'transcription_patient_context: '+malformed))
+        with self.assertRaises(pc.Refused):
+            parse(self,edited('transcription_smart_format: false\n',
+                'transcription_smart_format: false\ntranscription_patient_context: true\n'))
+
     def test_every_transcription_term_is_required_and_fixed(self):
         cases = [
             ('transcription_provider: deepgram', 'transcription_provider: openai', 'provider is deepgram'),
@@ -2316,6 +2337,18 @@ class TranscriptionLedgerTests(Base):
         flipped = dataclasses.replace(campaign.declaration, transcription=dataclasses.replace(
             campaign.declaration.transcription, notes_contract='field_relations'))
         with self.assertRaisesRegex(pc.Refused, 'another notes contract'):
+            st.StandingCampaign(flipped, campaign.root).stage_open('transcription')
+        campaign.stage_open('transcription')
+
+    def test_patient_context_cannot_be_retroactively_added_to_an_existing_campaign(self):
+        campaign = self.campaign()
+        self.pass_model_check(campaign)
+        _, sends, inputs = self.open_run(campaign)
+        campaign.ledger.write_attempt(self.transcription_attempt(campaign, sends[0], inputs))
+        self.completed(campaign, len(campaign.ledger.rows()))
+        flipped = dataclasses.replace(campaign.declaration, transcription=dataclasses.replace(
+            campaign.declaration.transcription, patient_context=True))
+        with self.assertRaisesRegex(pc.Refused, 'another patient-context review'):
             st.StandingCampaign(flipped, campaign.root).stage_open('transcription')
         campaign.stage_open('transcription')
 

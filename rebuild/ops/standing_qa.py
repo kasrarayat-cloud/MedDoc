@@ -497,22 +497,28 @@ class TranscriptionTerms:
     #: or 'field_relations' (the candidate's claude-sonnet-5-5 default; switched on around that send only, priced under
     #: voice_notes_field_relations). Optional in a declaration; absent means 'default', what campaigns 1 and 2 ran.
     notes_contract: str = 'default'
+    # New campaigns may exercise the actual clinician transcript-context review.
+    # An absent term preserves every historical campaign's unconfirmed behavior.
+    patient_context: bool = False
 
     def parameters(self):
         """The query parameters the one request carries, exactly (core.jobs.deepgram_parameters' shape)."""
         return {'model': self.model, 'smart_format': self.smart_format, 'mip_opt_out': self.mip_opt_out}
 
     def record(self):
-        return {'provider': self.provider, 'model': self.model, 'rate_per_minute': self.rate_per_minute,
+        value = {'provider': self.provider, 'model': self.model, 'rate_per_minute': self.rate_per_minute,
                 'parameters': self.parameters(), 'notes_contract': self.notes_contract,
                 'inputs': [AUDIO_BY_ID[i].record() for i in self.inputs]}
+        if self.patient_context:
+            value['patient_context'] = True
+        return value
 
 
 #: The transcription section's one-value lines, each stated exactly once when a transcription stage is declared.
 TRANSCRIPTION_LINES = ('transcription_provider', 'transcription_model', 'transcription_rate_per_minute',
                        'transcription_mip_opt_out', 'transcription_smart_format', 'transcription_credential_file')
 #: Transcription lines a declaration MAY state, at most once each.
-TRANSCRIPTION_OPTIONAL_LINES = ('transcription_notes_contract',)
+TRANSCRIPTION_OPTIONAL_LINES = ('transcription_notes_contract', 'transcription_patient_context')
 #: The pricing key a transcript's generation is quoted under, per declared notes contract. `voice_notes_field_relations`
 #: is computed under the transcription stage's flags (its declared voice rate, which every pricing version hashes) with
 #: field relations on — never the notes stage's relations version, whose voice rate is another.
@@ -583,8 +589,15 @@ def transcription_terms(text, seen, stages, credential_file):
         contract = one('transcription_notes_contract')     # (stated: it must be one plain line, as every term is)
     require(contract in TRANSCRIPTION_NOTES_CONTRACTS,
             'transcription_notes_contract is `default` or `field_relations`.')
+    patient_context = False
+    if re.findall(r'(?<![A-Za-z0-9_])transcription_patient_context(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I):
+        context = one('transcription_patient_context')
+        require(context in ('true', 'false'), 'transcription_patient_context is `true` or `false`.')
+        patient_context = context == 'true'
+    require(not patient_context or contract == 'field_relations',
+            'A confirmed transcript requires the field-relations generation contract.')
     return TranscriptionTerms(provider, model, rate, 'true', smart_format, credential,
-                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)), contract)
+                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)), contract, patient_context)
 
 
 #: Exactly one authorization line (provider_campaign.AUTHORIZATION_LINE finds every line that reads as one), this form.
@@ -1295,6 +1308,11 @@ class StandingCampaign(pc.Campaign):
             require(all(found == key for found in generated),
                     'The campaign\'s earlier transcript generations ran under another notes contract than the declared '
                     f'{self.declaration.transcription.notes_contract!r}; an edited declaration never changes what is admitted.')
+            reviewed = [attempt.get('transcription_patient_context', False) for attempt, _ in rows
+                        if attempt.get('stage') == 'transcription']
+            require(all(value is self.declaration.transcription.patient_context for value in reviewed),
+                    'The campaign\'s earlier transcript requests used another patient-context review; '
+                    'an edited declaration never changes what is admitted.')
         in_force = self.limits(rows).stage(stage.id)
         for prerequisite in in_force.requires:
             require(self.ledger.stage_state(prerequisite)['state'] == 'passed',

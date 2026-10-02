@@ -474,6 +474,7 @@ class TranscriptionRun(stages.Run):
                 'form_sha256': template.sha256, 'audio_sha256': entry.sha256,
                 'audio': {'id': entry.id, 'bytes': entry.bytes, 'label': entry.label},
                 'template': str(template.pk), 'version': str(version.pk), 'encounter': str(encounter.pk),
+                **({'transcription_patient_context': True} if terms.patient_context else {}),
                 'transcription': {'provider': terms.provider, 'model': terms.model,
                                   'rate_per_minute': terms.rate_per_minute,
                                   'parameters': config['deepgram_parameters'], 'recording_seconds': str(seconds),
@@ -631,9 +632,13 @@ class TranscriptionRun(stages.Run):
             return None, [{'code': 'transcript_not_applied',
                            'why': 'the page offers no review of this transcript, or shows another text than the retained '
                                   'one'}]
-        response = self.world.client.post(f'/encounters/{encounter.pk}/notes/', {
+        confirm_context = self.campaign.declaration.transcription.patient_context
+        payload = {
             'revision': str(encounter.revision), 'transcript_job': str(job.pk), 'transcript_reviewed': 'on',
-            'transcript_mode': 'replace', 'corrected_transcript': shown})
+            'transcript_mode': 'replace', 'corrected_transcript': shown}
+        if confirm_context:
+            payload['transcript_patient_context'] = 'on'
+        response = self.world.client.post(f'/encounters/{encounter.pk}/notes/', payload)
         encounter.refresh_from_db()
         applied = list(AuditEvent.objects.filter(action='transcription.applied', target=str(job.pk)))
         raw_sha256 = hashlib.sha256(raw.encode()).hexdigest()
@@ -641,6 +646,17 @@ class TranscriptionRun(stages.Run):
                   'notes_sha256': hashlib.sha256(encounter.notes.encode()).hexdigest(),
                   'notes_characters': len(encounter.notes), 'transcript_sha256': raw_sha256,
                   'applied': [{k: v for k, v in event.details.items() if k != 'department'} for event in applied]}
+        if confirm_context:
+            from core.models import TranscriptReview
+            from core import transcript_context
+            reviews = TranscriptReview.objects.filter(encounter=encounter,job=job,
+                source_revision=encounter.revision,patient_context=True)
+            valid = reviews.count() == 1 and bool(transcript_context.current(encounter))
+            record['patient_context_review_verified'] = valid
+            if not valid:
+                pc.write_new(evidence / 'notes-applied.json', record)
+                return record, [{'code':'transcript_context_not_confirmed',
+                                 'why':'The actual source-bound clinician confirmation was not retained.'}]
         pc.write_new(evidence / 'notes-applied.json', record)
         if not (response.status_code == 302 and encounter.notes == raw and len(applied) == 1
                 and applied[0].details.get('corrected') is False and applied[0].details.get('raw_sha256') == raw_sha256
@@ -664,6 +680,7 @@ class TranscriptionRun(stages.Run):
         require(hashlib.sha256(encounter.notes.encode()).hexdigest() == made['notes_sha256'] and not encounter.answers
                 and encounter.status == 'draft', 'The encounter changed after its transcript was saved as the notes.')
         return self.generate_on(send, template, version, encounter, extra={
+            **({'transcription_patient_context': True} if self.terms.patient_context else {}),
             'audio_sha256': entry.sha256, 'audio': {'id': entry.id, 'bytes': entry.bytes, 'label': entry.label},
             'transcription_attempt': made['attempt'], 'case': entry.id}, judge=self.judge_transcript(encounter.notes))
 
