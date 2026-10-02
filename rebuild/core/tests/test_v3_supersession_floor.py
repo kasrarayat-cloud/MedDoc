@@ -10,11 +10,11 @@ hold a thing now ENDS that thing for the floors exactly as a cessation does (`v3
 answer claiming it is held and shown with that line, a supersession naming nothing leans on another line (a bare
 cessation), and it never releases anything.
 
-A CONJOINED CESSATION NAMES ITS SHARED SUBJECT. 'The scope was advanced to the terminal ileum and withdrawn slowly.'
-parses 'withdrawn' as a conjunct of the copula's adjective 'advanced', with no subject of its own, so it named nothing
-and held EVERY other answer of the note (the owner's colonoscopy form, D02: 14 of 17 answers held on the v3 Word engine).
-A conjunct with no subject now ends its head's ('scope', `v3_actors._shared_subjects`); a cessation that names nothing
-stays bare. No provider, no network, no database."""
+A CONJOINED CESSATION STILL NAMES NOTHING (withdrawn 2026-10-02 after refutation RS-1 to RS-5 and F-AGENT-RELEASE).
+54fb4e74 let a conjunct with no subject end its head's ('The scope was advanced to the terminal ileum and withdrawn
+slowly.' ended 'scope'); that RELEASED a stopped medication as current ('Haematology reviewed and stopped.', 'Her INR
+was checked and stopped.'). Every conjunct reads as on ab58c98f, and D02's description line holds every other answer on
+the v3 relations path again: a declared residual. No provider, no network, no database."""
 import json
 from types import SimpleNamespace
 
@@ -84,11 +84,13 @@ class Worst:
         fields = form(*labels)
         key = next(f['key'] for f in fields if f['label'] == label)
         answers = self.answers(notes, fields, {label: [pick]})
-        self.assertEqual((answers[key]['status'], answers[key]['text']), ('supported', pick), (notes, answers[key]))
+        # (a line labelled with its own question answers with its value)
+        text = pick.split(':', 1)[1].strip() if pick.startswith(label + ':') else pick
+        self.assertEqual((answers[key]['status'], answers[key]['text']), ('supported', text), (notes, answers[key]))
         self.assertEqual(g.governed_decisions(notes, fields, {key: answers[key]}), [], notes)
         field_of = next(f for f in fields if f['key'] == key)
         row = g.as_currently_governed(g.governance_for(notes, fields), notes, {**field_of, **answers[key]})
-        self.assertEqual((row['status'], row['text']), ('supported', pick), notes)
+        self.assertEqual((row['status'], row['text']), ('supported', text), notes)
 
 
 class SupersessionFloor(Worst):
@@ -164,41 +166,166 @@ class SupersessionFloor(Worst):
                             ('Clinic attendance', 'Plan'), 'Clinic attendance',
                             'The patient attends the clinic every week.')
 
+    def assert_cases_held(self, cases, label='Medications'):
+        for answer, tail in cases:
+            joiner = '' if tail.startswith('\n') else ' '
+            for notes in (answer + joiner + tail, tail.lstrip('\n') + ('\n' if joiner == '' else ' ') + answer):
+                with self.subTest(notes=notes):
+                    self.assert_held(notes, (label, 'Plan'), label, answer, shown=tail.lstrip('\n'))
+
+    def test_rsl_1_fronted_imperatives_and_gerunds_the_tagger_reads_as_nouns(self):
+        # (refutation RSL-1, F-UNLISTED-MISSES) the verb tagged a noun or proper noun before the drug it supersedes
+        self.assert_cases_held((
+            ('The patient takes gliclazide 80 mg twice daily.', 'Switch gliclazide to insulin.'),
+            ('The patient takes metformin 500 mg twice daily.', 'Withhold metformin.'),
+            ('The patient takes sertraline 50 mg daily.', 'Substitute citalopram for sertraline.'),
+            (WARFARIN, 'HOLD WARFARIN.'), (WARFARIN, 'SWITCH WARFARIN TO APIXABAN.'),
+            (WARFARIN, 'Withholding warfarin for 5 days.'), (WARFARIN, 'Withholding warfarin today.'),
+            (WARFARIN, 'Substitute apixaban for warfarin.'),
+            ('Medications: bisoprolol 5 mg daily.', '\nPlan: switch bisoprolol to atenolol.'),
+            ('Medications: warfarin 5 mg daily.', '\nPlan: Withholding warfarin.')))
+        # ... and only the drug it supersedes: the replacement a fronted verb names is not ended
+        self.assert_adopted('The patient takes insulin at night. Switch gliclazide to insulin.', ('Medications', 'Plan'),
+                            'Medications', 'The patient takes insulin at night.')
+        self.assert_adopted('The patient takes citalopram 20 mg daily. Substitute citalopram for sertraline.',
+                            ('Medications', 'Plan'), 'Medications', 'The patient takes citalopram 20 mg daily.')
+
+    def test_rsl_2_fragments_whose_verb_hangs_on_what_it_supersedes(self):
+        self.assert_cases_held((
+            (WARFARIN, 'Held warfarin.'), ('The patient takes amlodipine 5 mg daily.', 'Holding amlodipine.'),
+            ('The patient takes bisoprolol 5 mg daily.', 'Hold bisoprolol.'), (WARFARIN, 'WARFARIN HELD.'),
+            (WARFARIN, 'Warfarin: held for surgery.'), (WARFARIN, 'Warfarin: held.'), (WARFARIN, 'Warfarin (held).'),
+            ('Medications: metformin 500 mg twice daily.', '\nPlan: Held metformin.'),
+            ('The patient takes clopidogrel 75 mg daily.', 'Changed clopidogrel to ticagrelor.')))
+
+    def test_rsl_3_a_present_tense_replacer_is_not_what_it_replaces(self):
+        self.assert_cases_held((
+            (WARFARIN, 'Apixaban replaces warfarin.'),
+            ('The patient takes atenolol 50 mg daily.', 'Bisoprolol replaces atenolol.'),
+            ('The patient takes omeprazole 20 mg daily.', 'Lansoprazole now replaces omeprazole.'),
+            ('Medications: warfarin 5 mg daily.', '\nPlan: Apixaban replaces warfarin.')))
+        # the replacer stays the model's
+        for tail in ('Apixaban replaces warfarin.', 'The cardiologist replaces warfarin with apixaban.'):
+            with self.subTest(tail=tail):
+                self.assert_adopted('The patient is on apixaban. ' + tail, ('Medications', 'Plan'), 'Medications',
+                                    'The patient is on apixaban.')
+
+    def test_rsl_4_an_answer_naming_the_superseded_drug_anywhere_in_it(self):
+        # (the answer-side reader had dropped a drug tagged as an adverb or compound, a third list item, upper case)
+        switched = 'Warfarin has been switched to apixaban.'
+        self.assert_cases_held((
+            ('The patient takes apixaban 5 mg twice daily.', 'Apixaban has been switched to warfarin.'),
+            ('The patient takes apixaban 5 mg twice daily.', 'Apixaban was replaced by warfarin.'),
+            ('The patient takes apixaban 5 mg twice daily.', 'Apixaban was withheld today.'),
+            ('The patient takes apixaban 5 mg twice daily.', 'Apixaban is on hold for surgery.'),
+            ('The patient takes metformin, ramipril and warfarin.', switched),
+            ('The patient takes metformin 500 mg twice daily, ramipril 10 mg daily and warfarin 5 mg daily.', switched),
+            ('The patient is on metformin, ramipril and warfarin.', switched),
+            ('The patient takes WARFARIN 5 MG DAILY.', switched), ('The patient takes 5 mg of warfarin daily.', switched),
+            ('The patient takes omeprazole 20 mg daily.', 'Omeprazole has been switched to lansoprazole.'),
+            # the cessation it shares the arm with (adopted on ab58c98f too)
+            ('The patient takes apixaban 5 mg twice daily.', 'Apixaban was stopped.')))
+        self.assert_adopted('The patient takes apixaban 5 mg twice daily. ' + switched, ('Medications', 'Plan'),
+                            'Medications', 'The patient takes apixaban 5 mg twice daily.')
+
+    def test_each_verb_form_and_old_value_preposition_is_pinned(self):
+        # (refutation F01-F07, F09, F10: each mutant survived the suite)
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            'Warfarin was switched on Monday to apixaban.', 'The GP replaces warfarin with apixaban.',
+            'Replace warfarin with apixaban.', 'We will replace warfarin with apixaban.',
+            'Please withhold the warfarin tonight.', 'Withhold warfarin today.', 'Change warfarin to apixaban.',
+            'Please change warfarin to apixaban.', 'Please swap warfarin for apixaban.', 'The GP swaps warfarin for apixaban.',
+            'We will substitute apixaban for warfarin.', 'The GP substitutes apixaban for warfarin.',
+            'Her anticoagulant was changed from warfarin to apixaban.',
+            'Her anticoagulant was swapped from warfarin to apixaban.')))
+
+    def test_bare_and_keyed_readings_are_pinned(self):
+        clinic = 'The patient attends the clinic every week.'
+        # (F02) a later supersession that cannot be bare does not cancel an earlier bare one
+        self.assert_held(clinic + ' She was switched to apixaban and the patient was held overnight.',
+                         ('Clinic attendance', 'Plan'), 'Clinic attendance', clinic)
+        # (F16, F17) 'on hold' after a noun ends that noun only; swapping 'between' ends nothing
+        for tail in ('Warfarin on hold.', 'She swaps between two inhalers.'):
+            with self.subTest(tail=tail):
+                self.assert_adopted(clinic + ' ' + tail, ('Clinic attendance', 'Plan'), 'Clinic attendance', clinic)
+
+    def test_an_agent_switching_names_nothing_it_ended(self):
+        # A person subject of an active supersession is its agent, never its theme: what it ended is unnamed (bare).
+        self.assert_cases_held(((WARFARIN, 'The cardiologist switched to apixaban.'),
+                                (WARFARIN, 'We switched to apixaban.')))
+
+    def test_o2_o10_an_old_value_under_the_replacement_and_a_conjunct_own_object(self):
+        # (refutation O2) 'to' read as an infinitive marker hangs 'from' under the replacement: still the old value
+        for notes, label, answer in (
+                ('The patient attends the anticoagulation clinic every week. The patient was switched to apixaban from '
+                 'warfarin.', 'Clinic attendance', 'The patient attends the anticoagulation clinic every week.'),
+                ('Oxygen: 2 L/min via nasal cannula.\nShe was switched to nasal cannula from a face mask overnight.',
+                 'Oxygen', 'Oxygen: 2 L/min via nasal cannula.'),
+                # (O10) a conjunct with its own object ends that object, not the head's subject
+                ('Registrar: Dr Example Synthetic\nThe registrar was called and discontinued the heparin infusion.',
+                 'Registrar', 'Registrar: Dr Example Synthetic')):
+            with self.subTest(notes=notes):
+                self.assert_adopted(notes, (label, 'Plan'), label, answer)
+        self.assert_held(WARFARIN + ' The patient was switched to apixaban from warfarin.', ('Medications', 'Plan'),
+                         'Medications', WARFARIN)
+
 
 class ConjoinedCessation(Worst):
+    """WITHDRAWN 2026-10-02 (refutation RS-1 to RS-5, F-AGENT-RELEASE): 54fb4e74 let a cessation conjunct with no subject
+    of its own end its head's subject, and df29952c guarded the agent of a transitive head. Both RELEASED a stopped
+    medication as current ('Haematology reviewed and stopped.', 'The cardiologist was consulted and stopped them.', 'Her
+    INR was checked and stopped.', 'The cardiologist agreed and stopped.'): who or what a cessation ends cannot be read
+    from a subject the sentence omits. Every conjunct reads exactly as on ab58c98f, so D02's 'The scope was advanced to
+    the terminal ileum and withdrawn slowly.' is a bare cessation again (a declared residual on the v3 relations path)."""
     DESCRIPTION = 'DESCRIPTION OF PROCEDURE: The scope was advanced to the terminal ileum and withdrawn slowly.'
     D02 = ('BOWEL PREPARATION / BBPS: Good, BBPS 8\nEXTENT OF EXAMINATION: Terminal ileum\n' + DESCRIPTION +
            '\nSPECIMENS: Two polyps sent to pathology.\nESTIMATED BLOOD LOSS: Minimal\nCOMPLICATIONS: None')
+    #: RS-1 (an intransitive head's agent), RS-2 (a passive head, an active conjunct with its own pronoun object), RS-3
+    #: (a measurement or a linking verb's subject), RS-4 (a treatment, an unaccusative conjunct), RS-5 (a class word),
+    #: F-AGENT-RELEASE and the false greens F11 / F12 / F18: each HELD on ab58c98f and must stay held.
+    RELEASES = (
+        ('The patient takes warfarin 5 mg daily.', 'Medications', ('Haematology reviewed and stopped.',
+         'The cardiologist reviewed and discontinued.', 'The cardiologist was consulted and stopped them.',
+         'Her INR was checked and stopped.', 'The INR was high and stopped.', 'The cardiologist agreed and stopped.',
+         'Cardiology reviewed and stopped.', 'Anticoagulation was reviewed and stopped.',
+         'The patient was reviewed, the INR checked and stopped.', 'The cardiologist advised her to reduce and stop.',
+         'Her symptoms remained resolved.', 'Warfarin was given a trial and stopped.',
+         'Warfarin was started and stopped.')),
+        ('The patient takes ramipril 5 mg daily.', 'Medications', ('Potassium was 6.1 and stopped.',
+                                                                    'Her potassium was high and discontinued.')),
+        ('The patient takes lithium 400 mg nightly.', 'Medications', ('Levels were toxic and stopped.',)),
+        ('The patient has a cough.', 'Current symptoms', ('Antibiotics were given and resolved.',)),
+    )
 
-    def test_the_d02_description_line_no_longer_holds_every_other_answer(self):
+    def test_a_conjoined_cessation_names_nothing_it_ended_and_holds_as_on_ab58c98f(self):
+        for answer, label, tails in self.RELEASES:
+            for tail in tails:
+                for notes in (answer + ' ' + tail, tail + ' ' + answer):
+                    with self.subTest(notes=notes):
+                        self.assert_held(notes, (label, 'Plan'), label, answer, shown=tail)
+        # (F15: a conjunct with its own subject ends only that subject, as on ab58c98f)
+        self.assert_adopted('The patient takes apixaban. Apixaban was started and warfarin was stopped.',
+                            ('Medications', 'Plan'), 'Medications', 'The patient takes apixaban.')
+
+    def test_declared_residual_the_d02_description_line_holds_every_other_answer(self):
+        # The bare 'withdrawn slowly' holds every other answer on the v3 relations path, exactly as on ab58c98f (the
+        # legacy default engine adopts them). Not released by any reading: what it withdrew is not in the sentence.
         labels = ('BOWEL PREPARATION / BBPS', 'EXTENT OF EXAMINATION', 'SPECIMENS', 'ESTIMATED BLOOD LOSS',
                   'COMPLICATIONS')
         fields = form(*labels)
         lines = self.D02.split('\n')
         picks = {label: [next(line for line in lines if line.startswith(label + ':'))] for label in labels}
         answers = self.answers(self.D02, fields, picks)
-        got = {f['label']: answers[f['key']]['status'] for f in fields}
-        self.assertEqual(got, {label: 'supported' for label in labels})
-        self.assertEqual(g.governed_decisions(self.D02, fields, answers), [])
-        # the same sentence unlabelled, beside an unrelated answer
-        self.assert_adopted('The patient attends the clinic every week. The scope was advanced to the terminal ileum '
-                            'and withdrawn slowly.', ('Clinic attendance', 'Plan'), 'Clinic attendance',
-                            'The patient attends the clinic every week.')
-
-    def test_the_conjunct_ends_its_shared_subject(self):
-        self.assert_held('Instrument: Olympus scope.\n' + self.DESCRIPTION, ('Instrument', 'Plan'), 'Instrument',
-                         'Instrument: Olympus scope.', shown=self.DESCRIPTION)
-        for tail in ('Warfarin was started and stopped.', 'Warfarin was reduced and then withdrawn.'):
-            with self.subTest(tail=tail):
-                self.assert_held(WARFARIN + ' ' + tail, ('Medications', 'Plan'), 'Medications', WARFARIN, shown=tail)
-        self.assert_adopted('The patient attends the clinic every week. Warfarin was started and stopped.',
-                            ('Clinic attendance', 'Plan'), 'Clinic attendance', 'The patient attends the clinic every week.')
+        self.assertEqual({f['label']: answers[f['key']]['status'] for f in fields},
+                         {label: 'conflict' for label in labels})
+        for f in fields:
+            self.assertIn(self.DESCRIPTION, [c['quote'] for c in answers[f['key']]['held_candidate']['context']])
 
     def test_a_true_bare_cessation_stays_bare(self):
-        # (the last: the active subject of a head with an object is its agent, and the conjunct's own object is elided)
         for tail in ('Stopped last month.', 'It was stopped.', 'The patient quit five years ago.', 'She stopped it.',
                      'The patient started warfarin and then stopped.', 'The cardiologist reviewed her and discontinued.',
-                     'The GP reviewed the warfarin and switched to apixaban.'):
+                     # (F-VACUOUS-GP-ROW: 'gp' is too short to be a key, so the row named a clinician that is one)
+                     'The cardiologist reviewed the warfarin and switched to apixaban.'):
             with self.subTest(tail=tail):
                 self.assert_held('The patient attends the clinic every week. ' + tail, ('Clinic attendance', 'Plan'),
                                  'Clinic attendance', 'The patient attends the clinic every week.', shown=tail)
@@ -226,6 +353,22 @@ class InsteadPointsBack(Worst):
 @override_settings(**RELATIONS)
 class InsteadOnSonnet5(InsteadPointsBack, SimpleTestCase):
     pass
+
+
+@override_settings(**dict(LIVE, V3_HISTORY_CONTEXT=False, V3_FIELD_RELATIONS=False, V3_GENERATION_BATCHES=False))
+class InsteadOnTheDefaultPath(SimpleTestCase):
+    def test_instead_changes_nothing_on_the_default_path(self):
+        # (refutation F13) 'instead' feeds only 'dependent' (the relation floors), never 'standalone', which the default
+        # path's rules (a) and (b) read: the default path adopts the plan exactly as it does beside an unrelated line.
+        from .test_v3_ordinary_notes import run
+        self.assertFalse(g.field_relations_enabled())
+        fields = [field('v3_3', 'Plan', 'long_text'), field('v3_7', 'Assessment', 'long_text')]
+        plan = 'The patient will be discharged home.'
+        for tail in ('The patient walks daily.', 'The patient will instead be admitted for surgery.',
+                     'The patient will be admitted instead.'):
+            notes = plan + '\n\n' + tail
+            with self.subTest(notes=notes):
+                self.assertEqual(run(notes, {'Plan': [plan]}, fields=fields)['Plan']['status'], 'supported')
 
 
 @override_settings(**SONNET_55_DEFAULT)
@@ -288,19 +431,46 @@ class Reading(SimpleTestCase):
                 ('There is no change in symptoms.', set(), False),
                 ('She switches between two inhalers.', set(), False),
                 ('The light was switched on.', set(), False),
-                ('The scope was advanced to the terminal ileum and withdrawn slowly.', {'scope'}, False),
-                ('DESCRIPTION OF PROCEDURE: The scope was advanced to the terminal ileum and withdrawn slowly.', {'scope'},
-                 False),
-                ('Warfarin was started and stopped.', {'warfarin'}, False),
+                # every conjunct reads as on ab58c98f (the withdrawn subject sharing, refutation RS-1 to RS-5)
+                ('The scope was advanced to the terminal ileum and withdrawn slowly.', set(), True),
+                ('DESCRIPTION OF PROCEDURE: The scope was advanced to the terminal ileum and withdrawn slowly.', set(),
+                 True),
+                ('Warfarin was started and stopped.', set(), True),
+                ('Haematology reviewed and stopped.', set(), True),
+                ('The cardiologist was consulted and stopped them.', set(), True),
+                ('Her INR was checked and stopped.', set(), True),
+                ('Potassium was 6.1 and stopped.', set(), True),
+                ('The cardiologist agreed and stopped.', set(), True),
                 ('The patient started warfarin and then stopped.', set(), True),
                 ('Stopped last month.', set(), True),
                 ('It was stopped.', set(), True),
                 ('The patient quit five years ago.', set(), True),
                 ('She stopped and was switched from warfarin.', {'warfarin'}, True),
                 ('The cardiologist reviewed her and discontinued.', set(), True),
-                ('The bleeding settled and stopped.', {'bleeding'}, False),
+                ('The bleeding settled and stopped.', set(), True),
                 ('The nurse held the warfarin.', {'warfarin'}, False),
-                ('The patient held her breath.', {'breath'}, False)):
+                ('The patient held her breath.', {'breath'}, False),
+                # (refutation RSL-1 to RSL-3, O2) the verb the tagger reads as a noun, a verb hanging on what it
+                # supersedes, a present-tense replacer, the old value under the replacement
+                ('Switch gliclazide to insulin.', {'gliclazide'}, False),
+                ('Withhold metformin.', {'metformin'}, False),
+                ('Substitute citalopram for sertraline.', {'sertraline'}, False),
+                ('HOLD WARFARIN.', {'warfarin'}, False),
+                ('Withholding warfarin for 5 days.', {'warfarin'}, False),
+                ('Held warfarin.', {'warfarin'}, False),
+                ('Holding amlodipine.', {'amlodipine'}, False),
+                ('WARFARIN HELD.', {'warfarin'}, False),
+                ('Warfarin (held).', {'warfarin'}, False),
+                ('Warfarin: held for surgery.', set(), True),
+                ('Changed clopidogrel to ticagrelor.', {'clopidogrel'}, False),
+                ('Apixaban replaces warfarin.', {'warfarin'}, False),
+                ('Lansoprazole now replaces omeprazole.', {'omeprazole'}, False),
+                ('Bisoprolol replaces atenolol.', set(), True),
+                ('The GP replaces warfarin with apixaban.', {'warfarin'}, False),
+                ('The patient was switched to apixaban from warfarin.', {'warfarin'}, False),
+                ('Warfarin switched to apixaban.', {'warfarin'}, False),
+                ('The cardiologist switched to apixaban.', set(), True),
+                ('She was switched to apixaban and the patient was held overnight.', set(), True)):
             with self.subTest(text=text):
                 found, found_bare = self.reading(text)
                 self.assertEqual((found, found_bare), (a.keys(ended), bare), text)

@@ -3680,8 +3680,9 @@ def v3_opposed_candidates(reading, uid):
     key of the answer with one kind of the other unit's and holds only when they share one - its claim with their
     negation and the reverse, a predicate with one of the other polarity and the same head (`v3_opposed_predicates`), a
     denial's head or complement words with a labelled line's label or value (`v3_denies_labelled`, both ways), a
-    labelled line's label with a denial of ever having it (`v3_ends_labelled`, both ways), and its claim with their
-    cessation. A superset of every unit an arm holds, never a rule: the arms themselves decide."""
+    labelled line's label with a denial of ever having it (`v3_ends_labelled`, both ways), and its claim or the things it
+    names (`v3_actors` 'named_keys') with their cessation. A superset of every unit an arm holds, never a rule: the arms
+    themselves decide."""
     from .v3_actors import keys
     by = v3_floor_index(reading)['by']
     info = reading['actors'][uid]
@@ -3695,7 +3696,7 @@ def v3_opposed_candidates(reading, uid):
             found.update(index.get(key, ()))
     look('negated', mine_claim)
     look('claim', mine_negated)
-    look('ceased', mine_claim)
+    look('ceased', mine_claim | info.get('named_keys', frozenset()))
     for head, negated, _, complement, _ in reading['predicates'][uid]:
         look('asserting_head' if negated else 'denying_head', head)
         if negated:
@@ -3750,8 +3751,9 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             'No MAPPA involvement.'), or a denial of what a labelled line with a positive value asserts
             (`v3_denies_labelled`: 'Mental state: depressed.' / 'She is not depressed.'), a line labelled by a word the
             form does not print included ('Mood: not depressed.'), or a denial of ever having a labelled topic
-            (`v3_ends_labelled`), or a cessation of what it claims ('The patient takes warfarin.' / 'Warfarin was
-            stopped.'; 'The patient presents with chest pain.' / 'The pain resolved yesterday.').
+            (`v3_ends_labelled`), or a cessation or supersession of what it claims or names ('The patient takes
+            warfarin.' / 'Warfarin was stopped.'; 'The patient presents with chest pain.' / 'The pain resolved
+            yesterday.'; 'The patient takes apixaban 5 mg twice daily.' / 'Apixaban has been switched to warfarin.').
       ANOTHER PERSON'S SAME TOPIC: for an answer whose own subject is not the patient (a labelled line, a 'Label is'
             sentence, a thing), a statement earlier in the same run (after the last explicit-patient statement) naming
             another person, or a pronoun standing for another or an ambiguous actor, that shares a claimed word ('His
@@ -3848,8 +3850,10 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 or any(v3_opposed_predicates(first, v3_without_time(second)) for first in mine_timeless for second in theirs)
                 or v3_denies_labelled(labelled.get(uid), theirs) or v3_denies_labelled(labelled.get(oid), mine)
                 or v3_ends_labelled(labelled.get(uid), found) or v3_ends_labelled(labelled.get(oid), info)
-                # a cessation of what it claims; one a text answer selects with it is part of that answer (its history)
-                or (found['ceased_keys'] & mine_claim and not (text_answer and oid in selected))):
+                # a cessation of what it claims or names (2026-10-02, RSL-4: 'takes apixaban 5 mg' tags the drug an
+                # adverb, so it claims nothing); one a text answer selects with it is part of that answer (its history)
+                or (found['ceased_keys'] & (mine_claim | info.get('named_keys', frozenset()))
+                    and not (text_answer and oid in selected))):
             causes.append((other, None))
     # ANOTHER PERSON'S SAME TOPIC (none in a single-patient note)
     if info['kind'] not in ('patient', 'pronoun') and uid not in sole:
