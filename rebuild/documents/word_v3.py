@@ -1631,8 +1631,8 @@ class Detector:
 
     @staticmethod
     def white_ink(c) -> bool:
-        """Every visible run of the cell is white or near-white (luminance 0.9 or more, or the light background theme
-        colours): the ink of a header printed on a fill, whatever the fill is and wherever it comes from."""
+        """Every visible run of the cell is white or near-white (luminance 0.9 or more, read from the colour value Word
+        writes, a theme colour's included): the ink of a header printed on a fill, whatever the fill and its source."""
         runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
         if not runs:
             return False
@@ -1641,10 +1641,7 @@ class Detector:
             col = rpr.find(q("w:color")) if rpr is not None else None
             if col is None:
                 return False
-            theme = (col.get(q("w:themeColor")) or "").lower()
             val = (col.get(q("w:val")) or "").lower()
-            if theme in ("background1", "light1"):
-                continue
             if not re.fullmatch(r"[0-9a-f]{6}", val):
                 return False
             rr, gg, bb = int(val[0:2], 16), int(val[2:4], 16), int(val[4:6], 16)
