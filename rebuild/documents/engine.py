@@ -52,6 +52,7 @@ def process_v3(workspace, request):
         if operation == "inspect":
             found = word_v3.inspect(data)
             return {"format": "docx", "fields": found["fields"], "warnings": found["notes"] + V3_WARNINGS,
+                    "coverage_issues": found.get('coverage_issues', []),
                     "layout_pending": found["layout_pending"],
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "layout_prepare":
@@ -834,6 +835,9 @@ def inspect_auto(workspace, *, preferred='auto'):
         coverage['block_generation'] = bool(preferred == 'legacy' and (
             coverage.get('legacy_omissions') or coverage.get('legacy_unmapped') or coverage.get('comparison_unresolved')))
     result = advanced if selected == 'v3' else legacy
+    if selected == 'v3' and advanced.get('coverage_issues'):
+        coverage['selected_engine_issues'] = advanced['coverage_issues']
+        coverage['block_generation'] = True
     if coverage.get('legacy_omissions') and selected == 'legacy':
         result['warnings'].append('Additional answer destinations need mapping review; this import is incomplete. '
                                   'Use a separately reviewed advanced mapping; no existing document will switch engines.')

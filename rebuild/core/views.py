@@ -562,7 +562,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
     """The contract v3 mapping review: every field in document order, the places a field could still be added to,
     the corrections that made this version, and the clinician's confirmation."""
     from documents import DocumentError
-    from .import_binding import ordinary_role_fields
+    from .import_binding import ordinary_role_fields, coverage_reviewed
     try:ordinary_roles=ordinary_role_fields(version)
     except (ValidationError,DocumentError,OSError):ordinary_roles=set()
     query=' '.join(request.GET.get('find','').split())[:120]
@@ -600,13 +600,16 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
         'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.field_limit(),
         'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
+        'coverage_issues':version.import_manifest.get('coverage',{}).get('selected_engine_issues',[]),
+        'coverage_reviewed':coverage_reviewed(version),
         'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
 
 def template_detail_v3(request,t,version):
     from documents import DocumentError
     if request.method!='POST':return v3_page(request,t,version)
     action=request.POST.get('action','')
-    handler={'v3_save':v3_save_corrections,'v3_add':v3_add_field,'v3_confirm':v3_confirm}.get(action)
+    handler={'v3_save':v3_save_corrections,'v3_add':v3_add_field,'v3_confirm':v3_confirm,
+             'v3_coverage':v3_review_coverage}.get(action)
     if handler is None:
         return v3_page(request,t,version,status=400,error='This mapping is reviewed field by field on this page. Nothing was saved.')
     try:
@@ -615,12 +618,14 @@ def template_detail_v3(request,t,version):
         latest=t.versions.order_by('-number').first()
         return v3_page(request,t,latest,status=400,error=error_message(exc),posted=request.POST)
 
-def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=(),ordinary_information=()):
+def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=(),ordinary_information=(),coverage_review=None):
     """A new immutable mapping version, with the corrections that made it recorded beside the fields. Added fields
     keep origin 'manual'; the new version needs its own confirmation."""
     kind_changed=kind_changed or {}
     corrections={'base_version':latest.number,'removed':list(removed),'added':list(added),'kind_changed':kind_changed,'renamed':list(renamed)}
     if ordinary_information:corrections['ordinary_information_classified']=list(ordinary_information)
+    retained_review=latest.corrections.get('coverage_review',[]) if coverage_review is None else coverage_review
+    if retained_review:corrections['coverage_review']=retained_review
     from .import_binding import for_mapping
     version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,
                                            document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,import_manifest=for_mapping(latest.import_manifest,fields),created_by=request.user,
@@ -628,6 +633,30 @@ def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=No
     audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number,contract=version.contract,
           removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed],ordinary_information_classified=list(ordinary_information))
     return version
+
+def v3_review_coverage(request,t):
+    """A clinician's precise exclusions; no ambiguous place becomes a writable field."""
+    membership(request.user,t.department,roles=['owner','clinician'])
+    from copy import copy
+    from .import_binding import coverage_reviewed
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):
+            return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
+        issues=latest.import_manifest.get('coverage',{}).get('selected_engine_issues',[])
+        if not issues:raise ValidationError('This mapping has no recorded structural exclusions to review.')
+        if any(request.POST.get('exclude_'+issue['id'])!='on' for issue in issues):
+            raise ValidationError('Review and explicitly exclude every listed area, or upload a repaired original. Nothing was saved.')
+        reviews=[{'id':issue['id'],'disposition':'leave_unchanged','source_sha256':t.sha256,
+                  'reviewed_by':str(request.user.pk)} for issue in issues]
+        candidate=copy(latest);candidate.corrections={**latest.corrections,'coverage_review':reviews}
+        if not coverage_reviewed(candidate):
+            raise ValidationError('A mapped field writes into an excluded area. Remove that field or repair the original; no exclusion was saved.')
+        new=v3_new_version(request,t,latest,latest.fields,coverage_review=reviews)
+        audit(request.user,'template.coverage_reviewed',new.pk,department=t.department,exclusions=[row['id'] for row in reviews])
+    messages.success(request,'Exclusions saved in a new mapping version. These areas remain unchanged; this is partial coverage. Confirm the supported mapping before creating documents.')
+    return redirect('template_detail',pk=t.pk)
 
 def v3_save_corrections(request,t):
     """Rename, change a text-like kind, or remove fields that are not answers; one new version, corrections recorded."""

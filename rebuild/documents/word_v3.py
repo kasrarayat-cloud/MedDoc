@@ -1496,6 +1496,7 @@ class Detector:
         self.layout_proposal = layout_proposal
         self.layout_candidates = []
         self.withdrawn_areas: list[Area] = []   # EC3: answer areas withdrawn from shared merged cells
+        self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
         self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
@@ -1514,6 +1515,12 @@ class Detector:
         self._form_wide_nodes = []        # keeps the guidance paragraphs alive: their ids key the scope reading
         self._coded_problem = ""
         self._compute_headings()
+
+    def coverage_issue(self, slot, code, detail):
+        issue = {'part': slot.part, 'slot': slot.path, 'code': code, 'detail': detail}
+        issue['id'] = hashlib.sha256(repr((slot.part, slot.id, code, detail)).encode()).hexdigest()
+        if not any(prior['id'] == issue['id'] for prior in self.coverage_issues):
+            self.coverage_issues.append(issue)
 
     # -- cached reads ----------------------------------------------------------------------------------------------
     def text(self, el, own=True) -> str:
@@ -2207,6 +2214,7 @@ class Detector:
                 self.notes.append("Unassigned answer box at " + a.slot.id +
                                   ". The complete question or section exceeds the mapping limit; nothing was shortened. "
                                   "Printed text: " + a.label + " Section: " + a.context)
+                self.coverage_issue(a.slot, 'source_limit', self.notes[-1])
                 self.areas.remove(a)
                 # A withdrawn area is no longer a layout proposal either; its source stays claimed.
                 self.layout_candidates[:] = [c for c in self.layout_candidates if c[2] is not a]
@@ -2319,6 +2327,8 @@ class Detector:
                 note = ("The cell at %s is one vertically merged cell beside %d rows (%s). Its signing or protected area "
                         "is kept as printed and completed by hand; no answer is mapped there." % (cell.id, len(shared), rows))
             self.notes.append(note)
+            if withdrawn:
+                self.coverage_issue(cell, 'shared_merged_answer', note)
 
     def qualify_sides(self):
         """A side printed in another row cell or its heading belongs to the question used for source matching.
@@ -3373,7 +3383,8 @@ class Detector:
             problem = "The complete source contains signing/consent instructions. Governing context: " + context
         if problem:
             return {"problem": "Nested option grid at " + table.id + ": " + problem
-                    + " Printed source: " + source + " Options: " + self.text(table.el, own=False)}
+                    + " Printed source: " + source + " Options: " + self.text(table.el, own=False),
+                    "coverage_slot": table.id}
         return {"label": label, "context": context, "cardinality": raw_question,
                 "write_context": write_context,
                 "source_slots": paragraphs + [slot for slot in before if slot.kind == "p"
@@ -3970,6 +3981,7 @@ class Detector:
             nested = self.nested_checkbox_source(g) if not question else None
             if nested and nested.get("problem"):
                 self.notes.append(nested["problem"])
+                self.coverage_issue(self.index.by_id[nested['coverage_slot']], 'nested_options', nested['problem'])
                 for paragraph in g["paras"]:
                     self.claimed.add(id(paragraph.el))
                 continue
@@ -6047,6 +6059,7 @@ def inspect(data: bytes) -> dict:
     areas, notes = detector.detect()
     fields = mapped_fields(detector, areas)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
+            "coverage_issues": detector.coverage_issues,
             "layout_pending": len(detector.layout_candidates)}
 
 

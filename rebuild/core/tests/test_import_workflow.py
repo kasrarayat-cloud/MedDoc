@@ -15,7 +15,7 @@ from django.db import DatabaseError, transaction
 from docx import Document
 from core import import_binding
 from core.jobs import enqueue, run_one
-from core.models import Encounter, TemplateVersion, Job, Reservation
+from core.models import Encounter, Template, TemplateVersion, Job, Reservation
 from core.security import private_path
 from .test_word_v3_workflow import V3Fixture, part_text
 from .test_workflow import TEST_SETTINGS
@@ -35,6 +35,13 @@ def ordinary_form():
     return raw(doc)
 
 
+def shared_form():
+    doc=Document();table=doc.add_table(rows=2,cols=2)
+    table.cell(0,0).text='Medications';table.cell(1,0).text='Allergies';table.cell(0,1).merge(table.cell(1,1))
+    doc.add_paragraph('Reason for visit: ____________')
+    return raw(doc)
+
+
 @override_settings(**dict(TEST_SETTINGS,QUILLMD_WORD_ENGINE='auto',QUILLMD_ROLE_SUGGESTIONS=False))
 class AutoImportWorkflow(V3Fixture,TestCase):
     def setUp(self):
@@ -48,6 +55,26 @@ class AutoImportWorkflow(V3Fixture,TestCase):
             'ordinary_'+by['Initial assessment']['key']:'on','ordinary_'+by['Consent form signed']['key']:'on'})
         self.assertEqual(response.status_code,302,response.content.decode())
         self.version=self.latest(self.template)
+
+    def seed(self,engine):
+        from django.core.management import call_command
+        with override_settings(BASE_DIR=Path(self.directory.name),QUILLMD_WORD_ENGINE=engine):
+            call_command('seed_private',stdout=io.StringIO())
+        template=Template.objects.get(name='Clinical assessment')
+        version=template.versions.get();import_binding.verify(version)
+        self.assertEqual(version.import_manifest['source_sha256'],template.sha256)
+        self.assertEqual(version.import_manifest['engine'],'v3' if version.contract=='v3' else 'legacy')
+        return version
+
+    def test_auto_demo_seed_keeps_qualified_legacy_contract_and_binding(self):
+        version=self.seed('auto')
+        self.assertNotEqual(version.contract,'v3')
+        self.assertEqual(Encounter.objects.filter(template_version=version).count(),1)
+
+    def test_v3_demo_seed_does_not_fabricate_clinician_mapping_confirmation(self):
+        version=self.seed('v3')
+        self.assertEqual(version.contract,'v3');self.assertIsNone(version.confirmed)
+        self.assertEqual(Encounter.objects.filter(template_version=version).count(),0)
 
     def test_original_binding_is_immutable_and_copied_to_explicit_review_version(self):
         first=self.version;manifest=copy.deepcopy(first.import_manifest)
@@ -184,3 +211,52 @@ class AutoImportWorkflow(V3Fixture,TestCase):
                 enqueue(encounter,self.user)
         self.assertEqual(Job.objects.count(),0)
         self.assertEqual(Reservation.objects.count(),0)
+
+    def test_known_v3_exclusion_blocks_until_exact_clinician_review_and_stays_unwritten(self):
+        template,version=self.uploaded(name='Synthetic shared omission',data=shared_form())
+        self.assertEqual([f['label'] for f in version.fields],['Reason for visit'])
+        issue=version.import_manifest['coverage']['selected_engine_issues'][0]
+        with self.assertRaises(ValidationError):import_binding.verify(version)
+        blocked=self.client.post(f'/templates/{template.pk}/',{'action':'v3_confirm','mapping_version':version.pk,
+                                                             'checked_every_field':'on'})
+        self.assertEqual(blocked.status_code,400)
+        # General confirmation is not an area-specific exclusion; precise review
+        # makes a NEW immutable version and never invents two destinations.
+        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_coverage','mapping_version':version.pk,
+                                                               'exclude_'+issue['id']:'on'})
+        self.assertEqual(response.status_code,302,response.content.decode())
+        reviewed=self.latest(template);self.assertEqual(reviewed.fields,version.fields)
+        self.assertNotEqual(reviewed.pk,version.pk);self.assertEqual(reviewed.import_manifest,version.import_manifest)
+        import_binding.verify(reviewed)
+        self.assertFalse(reviewed.import_manifest['coverage']['automatic_complete'])
+        self.confirm(template,reviewed)
+        self.assertEqual(self.new_encounter(reviewed,'Reason for visit: Knee pain').status_code,302)
+        encounter=Encounter.objects.get(template_version=reviewed);job=enqueue(encounter,self.user)
+        self.assertTrue(run_one());job.refresh_from_db();self.assertEqual(job.state,'succeeded',job.error)
+        encounter.refresh_from_db();key=reviewed.fields[0]['key']
+        response=self.client.post(f'/encounters/{encounter.pk}/save/',{'revision':encounter.revision,
+                                      'answer_'+key:'Knee pain','reviewed_'+key:'on'})
+        self.assertEqual(response.status_code,302);encounter.refresh_from_db()
+        self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'})
+        encounter.refresh_from_db();self.assertEqual(encounter.status,'finalized')
+        exported=Document(private_path(encounter.export_path))
+        self.assertEqual(exported.tables[0].cell(0,1).text,'')
+        self.assertEqual(exported.tables[0].cell(1,1).text,'')
+        self.assertEqual(exported.tables[0].cell(0,0).text,'Medications')
+        self.assertEqual(exported.tables[0].cell(1,0).text,'Allergies')
+        self.assertIn('Knee pain',exported.paragraphs[-1].text)
+
+    def test_exclusions_cannot_be_approved_by_manager_or_bypass_writes_via_copies(self):
+        template,version=self.uploaded(name='Synthetic exclusion authorization',data=shared_form())
+        issue=version.import_manifest['coverage']['selected_engine_issues'][0]
+        self.client.force_login(self.manager)
+        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_coverage','mapping_version':version.pk,
+                                                               'exclude_'+issue['id']:'on'})
+        self.assertEqual(response.status_code,403);self.assertEqual(template.versions.count(),1)
+        version.corrections={'coverage_review':[{'id':issue['id'],'disposition':'leave_unchanged',
+                'source_sha256':template.sha256,'reviewed_by':str(self.user.pk)}]}
+        # The writer's COPY destination participates even when its primary anchor is elsewhere.
+        altered=copy.deepcopy(version.fields)
+        altered[0]['locator']['target']['copies']=[{'part':issue['part'],'slot':issue['slot']}]
+        version.fields=altered
+        self.assertFalse(import_binding.coverage_reviewed(version))

@@ -87,6 +87,8 @@ class ImportSelection(unittest.TestCase):
         table.cell(0,0).text='Medications';table.cell(1,0).text='Allergies';table.cell(0,1).merge(table.cell(1,1))
         result=inspect_template(self.save(doc),engine='auto')
         self.assertTrue(any('NOT mapped' in warning for warning in result['warnings']))
+        self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+        self.assertEqual(result['import_manifest']['coverage']['selected_engine_issues'][0]['code'],'shared_merged_answer')
         self.assertFalse(result['import_manifest']['coverage']['automatic_complete'])
 
     def test_legacy_rejection_routes_a_mixed_checkbox_form_to_v3(self):

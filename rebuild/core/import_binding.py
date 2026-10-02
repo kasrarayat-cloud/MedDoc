@@ -16,10 +16,10 @@ def verify(version):
     manifest = getattr(version, 'import_manifest', {})
     if not manifest:  # historical versions retain their established contract
         return
-    if manifest.get('coverage', {}).get('block_generation'):
-        raise ValidationError('This import has unmapped answer areas and the alternative engine could not preserve '
-                              'its existing destinations. No generation or charge is allowed. Create and confirm '
-                              'a separately reviewed advanced mapping; existing documents retain their engine.')
+    if manifest.get('coverage', {}).get('block_generation') and not coverage_reviewed(version):
+        raise ValidationError('This import has unmapped answer areas. No generation or charge is allowed until a '
+                              'clinician reviews the exact exclusions or a new original/mapping repairs them. '
+                              'Excluded areas remain unchanged and do not count as supported coverage.')
     expected = 'v3' if version.contract == 'v3' else 'legacy'
     from documents.service import engine_fingerprint, DocumentError
     try:
@@ -33,6 +33,37 @@ def verify(version):
             or manifest.get('mapping_sha256') != digest(version.fields)):
         raise ValidationError('The stored import choice does not match this original and mapping version. '
                               'Nothing was sent or exported; review a new mapping version.')
+
+
+def coverage_reviewed(version):
+    """Explicitly excluded physical areas stay unwritable and never count as support.
+
+    A mapping review may leave an ambiguous original area unchanged; it cannot
+    turn that review into a mapped answer or an attestation. Every new mapping
+    is checked again against these original exclusions before money or export.
+    """
+    coverage = version.import_manifest.get('coverage', {})
+    issues = coverage.get('selected_engine_issues') or []
+    if not issues or coverage.get('comparison_unresolved'):
+        return False
+    reviews = version.corrections.get('coverage_review', [])
+    by_id = {row.get('id'): row for row in reviews if isinstance(row, dict)}
+    for issue in issues:
+        row = by_id.get(issue['id'])
+        if (not row or row.get('disposition') != 'leave_unchanged'
+                or row.get('source_sha256') != version.template.sha256 or not row.get('reviewed_by')):
+            return False
+        from types import SimpleNamespace
+        from documents.word_v3 import _PlaceReader, _place_id
+        reader = _PlaceReader(SimpleNamespace(by_id={}))  # conservative places; no original parsed outside sandbox
+        excluded = _place_id(issue['part'], issue['slot'])
+        for field in version.fields:
+            if field.get('kind') in ('signature', 'initials') or field.get('write_protected'):
+                continue
+            if any(place == excluded or place.startswith(excluded + '/') or excluded.startswith(place + '/')
+                   for place, _, _ in reader.of(field)):
+                return False
+    return True
 
 
 def ordinary_role_fields(version):
