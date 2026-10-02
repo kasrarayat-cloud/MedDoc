@@ -1606,7 +1606,9 @@ class Detector:
             starts_empty = first is not None and self.is_empty_cell(first) and first.info["col"] == 0
             if not (starts_empty and texts and all(c.info["span"] >= 2 for c in texts)):
                 kind = "data"
-        if kind == "label" and self.guidance_answer_row(cells):
+        if kind == "label" and self.continues_an_answer(tbl_slot, r):
+            kind = "data"
+        if kind == "label" and self.guidance_answer_row(tbl_slot, r):
             kind = "data"
         if len(texts) == 1 and texts[0].info["span"] >= max(2, width - 1) and all(
                 c is texts[0] or self.is_empty_cell(c) for c in cells):
@@ -1614,28 +1616,88 @@ class Detector:
         self._grid[key] = kind
         return kind
 
-    def guidance_answer_row(self, cells) -> bool:
+    def merged_restart(self, tbl_slot, row, col):
+        """The cell a vertical-merge continuation at (row, col) continues (the nearest restart above it), or None."""
+        rows = self.grid(tbl_slot)
+        for r in sorted((r for r in rows if r < row), reverse=True):
+            head = next((x for x in rows[r] if x.info["col"] == col), None)
+            if head is None or head.info["vmerge"] != "continue":
+                return head if head is not None and head.info["vmerge"] == "restart" else None
+        return None
+
+    def continues_an_answer(self, tbl_slot, r) -> bool:
+        """A row whose only answer place CONTINUES a merged answer cell from the row above, beside its own printed label:
+        every continuation in the row continues an empty cell, and a label cell is printed to the left of the first one.
+
+        ⚠️ M4 (refutation of 8e00df9e, pre-existing on b01e9cfa): such a row prints no empty cell of its own, so it read
+        as a header row and gave its question to the row below ('Plan — Comments on the left eye'). A second header row
+        under merged header cells ('Initial | Date' under 'Completed by', a dev form) continues printed cells, so it
+        stays a header row."""
+        cells = sorted(self.grid(tbl_slot).get(r, []), key=lambda c: c.info["col"])
+        continued = [c for c in cells if c.info["vmerge"] == "continue"]
+        if not continued:
+            return False
+        for c in continued:
+            head = self.merged_restart(tbl_slot, r, c.info["col"])
+            if head is None or not self.is_empty_cell(head):
+                return False
+        return any(c.info["vmerge"] != "continue" and c.info["col"] < continued[0].info["col"] and self.is_label_cell(c)
+                   for c in cells)
+
+    #: A question row with its instruction: numbering cells may come first ('1.', 'a)', '(iii)'), then question +
+    #: guidance pairs to the end of the row ('Q G', 'N Q G', 'Q G Q G').
+    GUIDANCE_ROW = re.compile(r"N*(?:QG)+")
+    NUMBERING_CELL = re.compile(r"(?:%s)[.)]?|\((?:%s)\)" % (LIST_MARK, LIST_MARK))
+
+    def guidance_answer_row(self, tbl_slot, r) -> bool:
         """A question row whose answer cell prints the author's instruction in guidance ink ('Reason for visit |
-        Describe the main complaint.'): its printed cells pair up, each question in ordinary ink followed by its own
-        guidance cell (Q G, or Q G Q G). Rule (d) maps that guidance cell as its own row's answer place, so the row is
-        a data row - never a column header naming the rows below it.
+        Describe the main complaint.'): its printed cells read as GUIDANCE_ROW, each instruction directly after its own
+        ordinary-ink question. Rule (d) maps that guidance cell as its own row's answer place, so the row is a data row
+        - never a column header naming the rows below it.
 
         ⚠️ EC4 (engine comparison, SF15): read as a label row, the instruction became the NEXT row's column header and
         its question was labelled 'Plan — Describe the main complaint.' - another row's instruction is what the model
-        was asked. A header row printed wholly in guidance ink (grey, or white on a dark fill) has no ordinary-ink
-        question, so it stays a header row; so does a row of headers with a guidance cell that is no question's own
-        ('Drug(s) under Investigation: | IND No.: | Study (Indication)' over its answer row, measured on a dev form)."""
-        printed = [c for c in sorted(cells, key=lambda c: c.info["col"])
-                   if self.cell_text(c) and not is_blank_text(self.cell_text(c))]
-        if not printed or len(printed) % 2:
+        was asked. A header row printed wholly in guidance ink has no ordinary-ink question, so it stays a header row;
+        so does a row of headers with a guidance cell that is no question's own ('Drug(s) under Investigation: | IND
+        No.: | Study (Indication)', measured on a dev form; 'Medication | Name and strength | Dose', F05).
+        ⚠️ AND (refutation of 8e00df9e): a question cell merged down from the row above is that row's question (M5); a
+        numbering column before the question is no reason to read the row as a header (M6); and a row marked as the
+        table's repeated header (w:tblHeader) is a header row whatever its ink (M7). A SECTION column before the question
+        ('History | Reason for visit | <guidance>') is NOT allowed: it reads exactly as a header row of two ordinary
+        headers and a guidance one ('Drug(s) under Investigation: | IND No.: | Study (Indication)', a dev form), whose
+        cells name the answers below (declared residual: that section-column row stays a header row, as on b01e9cfa)."""
+        cells = sorted(self.grid(tbl_slot).get(r, []), key=lambda c: c.info["col"])
+        if not cells:
             return False
-        return all(not self.is_guidance_cell(question) and self.is_label_cell(question) and self.is_guidance_cell(answer)
-                   for question, answer in zip(printed[0::2], printed[1::2]))
+        trpr = cells[0].el.getparent().find(q("w:trPr")) if cells[0].el.getparent() is not None else None
+        flag = trpr.find(q("w:tblHeader")) if trpr is not None else None
+        if flag is not None and (flag.get(q("w:val")) or "1") not in ("0", "false", "off"):
+            return False
+        roles = []
+        for c in cells:
+            source = self.merged_restart(tbl_slot, r, c.info["col"]) if c.info["vmerge"] == "continue" else c
+            if source is None:
+                return False
+            text = self.cell_text(source)
+            if not text or is_blank_text(text):
+                continue
+            if BOX in text or CHECKED in text or "\x00" in self.cell_objects(source) or BOX in self.cell_objects(source):
+                return False
+            if self.is_guidance_cell(source):
+                roles.append("G")
+            else:
+                roles.append("N" if self.NUMBERING_CELL.fullmatch(clean_label(text) or text.strip()) else "Q")
+        return self.GUIDANCE_ROW.fullmatch("".join(roles)) is not None
 
     def merged_answer_questions(self, tbl_slot, row, cell) -> list:
-        """The distinct printed questions of every row a vertically merged answer cell spans (its own row and each row
-        it continues into), when there are two or more of them; else []. A tall answer cell beside ONE question (the
-        continued rows print no question, or a label cell merged the same way) is that question's own place."""
+        """For a vertically merged cell, the printed question of every row it spans (its own row and each row it continues
+        into) whose cells to its left print anything, when two or more do; else []. A tall answer cell beside ONE
+        question (the continued rows print nothing to its left, or a label cell merged the same way) is that question's
+        own place.
+
+        ⚠️ FAIL CLOSED (refutation of 8e00df9e, M2/M3): distinct LAST-label strings counted 'Right eye | Visual acuity'
+        over 'Left eye | Visual acuity' as one question, and option words ('Left', 'Right') as none; the right-eye value
+        then filled one tall cell spanning both eyes. Any printed cell left of the merge counts, each row once."""
         if cell.info["vmerge"] != "restart":
             return []
         rows = self.grid(tbl_slot)
@@ -1644,8 +1706,15 @@ class Detector:
             if not any(c.info["col"] == cell.info["col"] and c.info["vmerge"] == "continue" for c in rows[later]):
                 break
             spanned.append(later)
-        labels = [label for label in dict.fromkeys(self.row_label(tbl_slot, r, cell.info["col"]) for r in spanned) if label]
-        return labels if len(labels) >= 2 else []
+        printed = []
+        for r in spanned:
+            texts = [clean_label(self.cell_text(c)) for c in sorted(rows[r], key=lambda c: c.info["col"])
+                     if c.info["col"] + c.info["span"] <= cell.info["col"] and c.info["vmerge"] != "continue"
+                     and self.cell_text(c) and not is_blank_text(self.cell_text(c))]
+            texts = [t for t in texts if t]
+            if texts:
+                printed.append(" — ".join(texts))
+        return printed if len(printed) >= 2 else []
 
     def header_rows(self, tbl_slot):
         key = ("headers", id(tbl_slot))
@@ -2127,6 +2196,7 @@ class Detector:
         self.rule_inline_initial_boxes()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
+        self.withdraw_shared_merged_answers()
         self.qualify_numbered()
         self.qualify_sides()
         self.surface_duplicates()
@@ -2143,25 +2213,117 @@ class Detector:
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
 
+    def withdraw_shared_merged_answers(self):
+        """EC3, as ONE pass over every rule's areas: an answer area anywhere inside a vertically merged cell beside two or
+        more printed questions (merged_answer_questions) is withdrawn - mapped for none of them - and the inspection
+        says so once per cell, naming the questions (the legacy engine's behaviour for the same rows). Signing,
+        initials and protected areas are kept: they never take an answer, and their destination roles depend on them.
+
+        ⚠️ EC3 (engine comparison, SF03): one shared answer cell was mapped for the first question and the second was
+        dropped without a word. ⚠️ AND (refutation of 8e00df9e, F04/M10): the check lived in rule (d) alone, so a
+        content control (and, but for a claim no test needed, a drawn blank) in the same cell was mapped by an earlier
+        or later rule with no note."""
+        verdicts, withdrawn = {}, []
+
+        def shared_cell(slot):
+            node = slot
+            while node is not None:
+                if node.kind == "tc" and node.info.get("vmerge") == "restart":
+                    if node.id not in verdicts:
+                        verdicts[node.id] = self.merged_answer_questions(node.parent, node.info["row"], node)
+                    if verdicts[node.id]:
+                        return node
+                node = node.parent
+            return None
+        for area in self.areas:
+            if area.protection or area.kind in SIGNING_KINDS:
+                continue
+            question = clean_label(area.label.split(" — ")[0]).casefold()
+            slots = [area.slot] + list(area.extra_slots)
+            for box in area.target.get("boxes", []):
+                slot = self.index.by_id.get("%s#%s" % (box.get("part"), box.get("slot")))
+                if slot is not None:
+                    slots.append(slot)
+            cell = next((hit for slot in slots if (hit := shared_cell(slot)) is not None), None)
+            # A question printed INSIDE the merged cell ('Primary Event (diagnosis): ____' in a cell merged beside three
+            # other rows, a dev form) owns its answer there: the cell is not an answer cell beside those rows.
+            if cell is not None and not (question and question in re.sub(r"\s+", " ", self.cell_text(cell)).casefold()):
+                withdrawn.append((area, cell))
+        noted = []
+        for area, cell in withdrawn:
+            self.areas.remove(area)
+            self.layout_candidates[:] = [c for c in self.layout_candidates if c[2] is not area]
+            if cell.id not in noted:
+                noted.append(cell.id)
+                shared = verdicts[cell.id]
+                self.notes.append(
+                    "The answer cell at %s is one vertically merged cell beside %d questions (%s), so it was NOT "
+                    "mapped: the merge hides which answer belongs to which question. Unmerge the answer cell, or add a "
+                    "field for it by hand on this page." % (cell.id, len(shared), "; ".join("'%s'" % label[:80]
+                                                                                        for label in shared[:6])))
+
     #: A numbered slot's whole printed label: '1.', '2)' or '(3)' (digits only, as the legacy tab contract reads them).
     NUMBERED_SLOT = re.compile(r"(\d{1,3})[.)]|\((\d{1,3})\)")
 
     def qualify_numbered(self):
         """A numbered slot is a question only within its section: it carries the section heading it is printed under,
         exactly as the legacy tab contract labels it ('POSTOPERATIVE FINDINGS — 1'), so two sections' '1.' are two
-        questions rather than one repeated label.
+        questions rather than one repeated label. The section is section_heading's: a WORD heading of the slot's own
+        container; without one the marker is kept, and surface_duplicates shows each position.
 
         ⚠️ EC5 (engine comparison, the owner colonoscopy form): v3 labelled both sections' slots '1.' '2.' '3.' with
         the section only in the context - duplicate question labels, which the mapping page asks to rename and
-        generation holds. Without a section heading the marker is kept, and surface_duplicates shows each position.
-        Newly detected areas only; a stored mapping keeps its labels."""
+        generation holds. Newly detected areas only; a stored mapping keeps its labels."""
+        holders = {node.id for area in self.areas for node in [self.host_paragraph(area.slot)] if node is not None}
         for area in self.areas:
             match = self.NUMBERED_SLOT.fullmatch(area.label.strip())
             if not match:
                 continue
-            heading = clean_label(self.heading_before(area.slot))
+            heading = self.section_heading(area.slot, holders)
             if heading:
                 area.label = "%s — %s" % (heading, match.group(1) or match.group(2))
+
+    def section_heading(self, slot, holders) -> str:
+        """The section a numbered slot is printed under, read as the legacy tab contract reads it: the nearest Word
+        heading (word_heading) printed before the slot's paragraph IN ITS OWN CONTAINER (the body, or the same table
+        cell), that holds no answer area itself; else "".
+
+        ⚠️ (refutation of 8e00df9e) heading_before also reads a short all-bold line as a heading: a bold QUESTION label
+        ('Known allergies', a 'Diagnosis' label cell) named the medication and plan slots under it (M1), a bold '1.'
+        marker named the next slot (M8), and in document order a header cell to the RIGHT ('SPECIMENS') named the left
+        column's slots (M9). Those readings stay what the context shows; the label takes only a Word heading."""
+        paragraph = self.host_paragraph(slot)
+        if paragraph is None:
+            return ""
+        pool = paragraph.parent.children if paragraph.parent is not None else \
+            [x for x in self.index.roots if x.part == paragraph.part]
+        for node in reversed([x for x in pool if x.seq < paragraph.seq]):
+            if node.kind == "p" and node.id not in holders and self.word_heading(node.el):
+                return clean_label(self.text(node.el))
+        return ""
+
+    def word_heading(self, p) -> bool:
+        """documents.tab_form._heading: printed text, and an outline level or a 'Heading N' style in its style
+        ancestry (the default paragraph style when it names none). Never bold or capitals alone."""
+        if not self.text(p).strip():
+            return False
+        ppr = p.find(q("w:pPr"))
+        level = ppr.find(q("w:outlineLvl")) if ppr is not None else None
+        if level is not None and level.get(q("w:val")) in {str(i) for i in range(9)}:
+            return True
+        style = ppr.find(q("w:pStyle")) if ppr is not None else None
+        name = style.get(q("w:val")) if style is not None else ""
+        if not name and "word/styles.xml" in self.package.names:
+            name = next((x.get(q("w:styleId")) for x in self.package.tree("word/styles.xml").findall(q("w:style"))
+                         if x.get(q("w:type")) == "paragraph" and (x.get(q("w:default")) or "") in ("1", "true")), "")
+        chain, _ = self.question_box_style_chain(name, "paragraph")
+        for x in chain:
+            if re.fullmatch(r"Heading[1-9]", x.get(q("w:styleId")) or "", re.I):
+                return True
+            level = x.find("./" + q("w:pPr") + "/" + q("w:outlineLvl"))
+            if level is not None and level.get(q("w:val")) in {str(i) for i in range(9)}:
+                return True
+        return False
 
     def qualify_sides(self):
         """A side printed in another row cell or its heading belongs to the question used for source matching.
@@ -4647,18 +4809,6 @@ class Detector:
                     instructed = bool(txt) and not placeholder and not guidance and self.instructed_answer_cell(tslot, r, c)
                     if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance or instructed):
                         continue
-                    shared = self.merged_answer_questions(tslot, r, c)
-                    if shared:
-                        # ⚠️ EC3 (engine comparison, SF03): one vertically merged answer cell beside two printed
-                        # questions was mapped for the first and the second was dropped without a word. Neither is
-                        # mapped, and the inspection says so (the legacy engine's behaviour for the same rows).
-                        self.claimed.update(id(node) for node in c.el.iter())
-                        self.notes.append(
-                            "The answer cell at %s is one vertically merged cell beside %d questions (%s), so it was NOT "
-                            "mapped: the merge hides which answer belongs to which question. Unmerge the answer cell, "
-                            "or add a field for it by hand on this page." % (
-                                c.id, len(shared), "; ".join("'%s'" % label[:80] for label in shared[:6])))
-                        continue
                     label = self.row_label(tslot, r, c.info["col"])
                     if instructed:
                         label = self.instructed_item(tslot, rows, r, c) or label
@@ -5181,8 +5331,12 @@ class Detector:
         return self.cell_twips(tslot, c) < 400
 
     def is_guidance_cell(self, c) -> bool:
-        """Every visible run uses hint ink; colour does not establish that text is disposable."""
+        """Every visible run uses hint ink; colour does not establish that text is disposable. Light ink on a dark cell
+        fill is the ordinary ink of a styled header, never guidance (refutation of 8e00df9e, M7: explicit white on navy
+        paired with an 'auto' cell as question + instruction and the table lost its headers and its log rows)."""
         runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
+        if self.dark_fill(c):
+            return False
         if not runs or c.el.find(".//" + q("w:tbl")) is not None or c.el.find(".//" + SDT) is not None or \
                 c.el.find(".//" + FLDCHAR) is not None \
                 or BOX in self.cell_text(c):
@@ -5194,6 +5348,19 @@ class Detector:
                    for r in runs):
             return False
         return all(is_hint_run(r) for r in runs)
+
+    @staticmethod
+    def dark_fill(c) -> bool:
+        """The cell's own shading is dark (luminance below one half): light text on it reads as ordinary ink."""
+        tcpr = c.el.find(q("w:tcPr"))
+        shd = tcpr.find(q("w:shd")) if tcpr is not None else None
+        if shd is None:
+            return False
+        value = (shd.get(q("w:color")) if (shd.get(q("w:val")) or "") == "solid" else shd.get(q("w:fill"))) or ""
+        if not re.fullmatch(r"[0-9A-Fa-f]{6}", value):
+            return False
+        rr, gg, bb = int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+        return (0.299 * rr + 0.587 * gg + 0.114 * bb) / 255 < 0.5
 
     def cell_is_plain(self, c) -> bool:
         return all(x.kind in ("p", "glyphs") for x in c.children) and len([x for x in c.children if x.kind == "p"]) <= 2

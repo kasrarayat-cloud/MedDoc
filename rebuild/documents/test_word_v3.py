@@ -1989,3 +1989,333 @@ class EngineSwitchShapes(unittest.TestCase):
     def test_ec5_control_without_a_section_heading_the_marker_is_kept(self):
         info, _ = self.inspect(numbered_slots_bytes(heading=False))
         self.assertFalse([f for f in info["fields"] if "—" in f["label"]], [f["label"] for f in info["fields"]])
+
+
+# ─── the refutation of 8e00df9e (refute-wec): EC3 / EC4 / EC5 repairs and the false greens it found ────────────────
+
+def _shade(cell, fill):
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), fill)
+    cell._tc.get_or_add_tcPr().append(shd)
+
+
+def _grey(paragraph, text):
+    from docx.shared import RGBColor
+    paragraph.add_run(text).font.color.rgb = RGBColor.from_string("808080")
+
+
+def _tab_line(container, mark, bold=False):
+    paragraph = container.add_paragraph()
+    paragraph.add_run(mark).bold = bold or None
+    _underlined_tab(paragraph)
+    return paragraph
+
+
+class RefutationRepairs(unittest.TestCase):
+    """Each finding of the refutation (M1-M10, F02, F04, F05, F07-F09) as a pinned input: a numbered slot never carries
+    another question's label, a merged answer cell beside two printed questions is mapped for none of them whatever
+    fills it, and another row's instruction is never a column header."""
+
+    def inspect(self, data):
+        from . import word_v3 as w
+        return w.inspect(data)
+
+    def labels(self, data):
+        return [f["label"] for f in self.inspect(data)["fields"]]
+
+    # M1 ─ a bold question label is not a section: numbered slots carry only a Word heading of their own container
+    def test_m1_a_bold_question_label_never_names_the_numbered_slots_under_another_question(self):
+        doc = Document()
+        doc.add_paragraph().add_run("Known allergies").bold = True
+        _underlined_tab(doc.add_paragraph())
+        doc.add_paragraph("Current medications:")
+        for mark in ("1.", "2.", "3."):
+            _tab_line(doc, mark)
+        labels = self.labels(docx_bytes(doc))
+        self.assertFalse([label for label in labels if label.startswith("Known allergies —")], labels)
+        self.assertEqual([label for label in labels if label.endswith(("1.", "2.", "3."))], ["1.", "2.", "3."])
+
+    def test_m1_a_bold_label_cell_never_names_the_numbered_slots_of_the_rows_below(self):
+        doc = Document()
+        table = doc.add_table(rows=4, cols=2)
+        table.cell(0, 0).paragraphs[0].add_run("Diagnosis").bold = True
+        table.cell(1, 0).text = "Plan:"
+        for row, mark in ((2, "1."), (3, "2.")):
+            paragraph = table.cell(row, 1).paragraphs[0]
+            paragraph.add_run(mark)
+            _underlined_tab(paragraph)
+        labels = self.labels(docx_bytes(doc))
+        self.assertFalse([label for label in labels if "Diagnosis —" in label], labels)
+
+    def test_m1_control_a_word_heading_above_still_names_the_slots_as_on_legacy(self):
+        doc = Document()
+        doc.add_heading("History", 2)
+        doc.add_paragraph("Current medications:")
+        for mark in ("1.", "2."):
+            _tab_line(doc, mark)
+        labels = self.labels(docx_bytes(doc))
+        self.assertEqual([label for label in labels if label.startswith("History")], ["History — 1", "History — 2"], labels)
+
+    # M8 ─ a bold marker is not a heading
+    def test_m8_bold_markers_take_their_section_not_the_previous_marker(self):
+        for marks in (("1.", "2.", "3."), ("(1)", "(2)", "(3)")):
+            with self.subTest(marks=marks):
+                doc = Document()
+                for section in ("POSTOPERATIVE FINDINGS", "RECOMMENDATIONS"):
+                    doc.add_heading(section, 2)
+                    for mark in marks:
+                        _tab_line(doc, mark, bold=True)
+                self.assertEqual(self.labels(docx_bytes(doc)), ["POSTOPERATIVE FINDINGS — %d" % n for n in (1, 2, 3)]
+                                 + ["RECOMMENDATIONS — %d" % n for n in (1, 2, 3)])
+
+    # M9 ─ a heading in another table cell is not the section of this cell's slots
+    def test_m9_a_column_heading_to_the_right_never_names_the_left_columns_slots(self):
+        for style in (None, "Heading 2"):
+            with self.subTest(style=style):
+                doc = Document()
+                table = doc.add_table(rows=2, cols=2)
+                for col, text in enumerate(("FINDINGS", "SPECIMENS")):
+                    paragraph = table.cell(0, col).paragraphs[0]
+                    paragraph.add_run(text).bold = True
+                    if style:
+                        paragraph.style = doc.styles[style]
+                for col, marks in ((0, ("1.", "2.")), (1, ("3.", "4."))):
+                    cell = table.cell(1, col)
+                    for n, mark in enumerate(marks):
+                        paragraph = cell.paragraphs[0] if n == 0 else cell.add_paragraph()
+                        paragraph.add_run(mark)
+                        _underlined_tab(paragraph)
+                fields = self.inspect(docx_bytes(doc))["fields"]
+                left = [f["label"] for f in fields if f["locator"]["slot"].startswith("b/tbl[0]/tr[1]/tc[0]")]
+                self.assertEqual(len(left), 2, [f["label"] for f in fields])
+                self.assertFalse([label for label in left if "SPECIMENS" in label], left)
+
+    # F07 / F08 / F09 ─ the claimed '2)' and '(3)' markers
+    def test_f07_f08_f09_parenthesised_markers_carry_their_section_and_number(self):
+        for marks in (("(1)", "(2)", "(3)"), ("1)", "2)", "3)")):
+            with self.subTest(marks=marks):
+                self.assertEqual(self.labels(numbered_slots_bytes(marks=marks)),
+                                 ["POSTOPERATIVE FINDINGS — %d" % n for n in (1, 2, 3)]
+                                 + ["RECOMMENDATIONS — %d" % n for n in (1, 2, 3)])
+
+    # M2 / M3 ─ two rows that each print a question share the merged cell, whatever their last label cell says
+    def merged_rows(self, rows, *, extra=None, header=None):
+        """`rows`: [[left cells...]] beside one answer column merged over all of them (under an optional `header`
+        row); then a separate Plan table."""
+        doc = Document()
+        width = max(len(r) for r in rows) + 1
+        top = 1 if header else 0
+        table = doc.add_table(rows=len(rows) + top, cols=width)
+        for c, text in enumerate(header or ()):
+            table.cell(0, c).text = text
+        for r, cells in enumerate(rows):
+            for c, text in enumerate(cells):
+                if text:
+                    table.cell(r + top, c).text = text
+        merged = table.cell(top, width - 1).merge(table.cell(top + len(rows) - 1, width - 1))
+        if extra:
+            extra(merged)
+        plan = doc.add_table(rows=1, cols=2)
+        plan.cell(0, 0).text = "Plan"
+        return docx_bytes(doc)
+
+    def assert_shared(self, data, *, names=()):
+        info = self.inspect(data)
+        # Only the separate Plan table's own answer cell is mapped. (Its label may carry the header of the table it
+        # continues, 'Plan — Effusion findings': pre-existing on b01e9cfa, not EC3.)
+        self.assertEqual([f["locator"]["slot"] for f in info["fields"]], ["b/tbl[1]/tr[0]/tc[1]"],
+                         [(f["label"], f["locator"]["slot"]) for f in info["fields"]])
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        for name in names:
+            self.assertIn(name, notes[0])
+
+    def test_m2_rows_with_the_same_last_label_but_different_items_share_the_cell(self):
+        self.assert_shared(self.merged_rows([["Right eye", "Visual acuity"], ["Left eye", "Visual acuity"]]),
+                           names=("Right eye", "Left eye"))
+        self.assert_shared(self.merged_rows([["Pre-procedure", "Blood pressure:"], ["Post-procedure", "Blood pressure"]]),
+                           names=("Pre-procedure", "Post-procedure"))
+
+    def test_m3_option_words_beside_a_merged_cell_are_still_two_questions(self):
+        self.assert_shared(self.merged_rows([["Left"], ["Right"]], header=("Knee", "Effusion findings")),
+                           names=("Left", "Right"))
+
+    # F04 / M10 ─ whatever fills the shared cell (a drawn blank, an underlined tab, a content control), no rule maps it
+    def test_f04_m10_a_shared_merged_cell_is_mapped_for_none_whatever_fills_it(self):
+        def underscores(cell):
+            cell.paragraphs[0].add_run("____________________")
+
+        def tab(cell):
+            _underlined_tab(cell.paragraphs[0])
+
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        for name, fill in (("underscores", underscores), ("tab", tab), ("control", control)):
+            with self.subTest(fill=name):
+                data = self.merged_rows([["Current medications"], ["Allergies"]], extra=fill)
+                info = self.inspect(data)
+                inside = [f for f in info["fields"] if f["locator"]["slot"].startswith("b/tbl[0]/tr[0]/tc[1]")]
+                self.assertEqual(inside, [], [(f["label"], f["locator"]["slot"]) for f in inside])
+                self.assert_shared(data, names=("Current medications", "Allergies"))
+
+    # F02 ─ the walk stops at the end of its own merge
+    def test_f02_a_second_merge_lower_in_the_column_is_its_own_cell(self):
+        doc = Document()
+        table = doc.add_table(rows=6, cols=2)
+        for row, text in ((0, "Current medications"), (2, "Plan"), (3, "Allergies"), (4, "Social history"), (5, "Follow-up")):
+            table.cell(row, 0).text = text
+        table.cell(0, 1).merge(table.cell(1, 1))
+        table.cell(3, 1).merge(table.cell(4, 1))
+        info = self.inspect(docx_bytes(doc))
+        by = fields_by_label(info["fields"])
+        self.assertEqual(by["Current medications"]["locator"]["slot"], "b/tbl[0]/tr[0]/tc[1]")
+        self.assertNotIn("Allergies", by)
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        self.assertIn("Social history", notes[0])
+        self.assertNotIn("Current medications", notes[0])
+
+    # M4 ─ a row whose answer cell continues a merged answer is a question row, never the next row's header
+    def test_m4_the_row_below_a_shared_merged_cell_keeps_its_own_label(self):
+        doc = Document()
+        table = doc.add_table(rows=3, cols=3)
+        table.cell(0, 0).text = "Right eye"
+        table.cell(0, 1).text = "Comments on the right eye"
+        table.cell(1, 0).text = "Left eye"
+        table.cell(1, 1).text = "Comments on the left eye"
+        table.cell(0, 2).merge(table.cell(1, 2))
+        table.cell(2, 0).text = "Plan"
+        table.cell(2, 1).merge(table.cell(2, 2))
+        labels = self.labels(docx_bytes(doc))
+        self.assertIn("Plan", labels)
+        self.assertFalse([label for label in labels if "Comments" in label and "Plan" in label], labels)
+
+    # M5 / M6 ─ another row's instruction, behind a merged question cell or a numbered/section column
+    def test_m5_an_instruction_behind_a_merged_question_cell_is_not_the_next_rows_header(self):
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        table.cell(0, 0).text = "Reason for visit"
+        table.cell(0, 0).merge(table.cell(1, 0))
+        _grey(table.cell(0, 1).paragraphs[0], "Describe the main complaint.")
+        _grey(table.cell(1, 1).paragraphs[0], "Include when it started.")
+        table.cell(2, 0).text = "Plan"
+        self.assertIn("Plan", self.labels(docx_bytes(doc)))
+
+    def test_m6_an_instruction_beside_a_numbering_column_is_not_the_next_rows_header(self):
+        # (A SECTION column, 'History | Reason for visit | <guidance>', is a declared residual: it reads exactly as the
+        # header row of the next test, so it stays a header row as on b01e9cfa.)
+        for first in (("1.", "2."), ("a)", "b)")):
+            with self.subTest(first=first):
+                doc = Document()
+                table = doc.add_table(rows=2, cols=3)
+                table.cell(0, 0).text = first[0]
+                table.cell(0, 1).text = "Reason for visit"
+                _grey(table.cell(0, 2).paragraphs[0], "Describe the main complaint.")
+                table.cell(1, 0).text = first[1]
+                table.cell(1, 1).text = "Plan"
+                labels = self.labels(docx_bytes(doc))
+                self.assertIn("Plan", labels)
+                self.assertFalse([label for label in labels if "Describe" in label], labels)
+
+    # F05 ─ a header row of question, guidance and header cells stays a header row
+    def test_f05_a_header_row_ending_in_an_ordinary_cell_keeps_naming_the_columns(self):
+        doc = Document()
+        table = doc.add_table(rows=3, cols=3)
+        table.cell(0, 0).text = "Medication"
+        _grey(table.cell(0, 1).paragraphs[0], "Name and strength")
+        table.cell(0, 2).text = "Dose"
+        table.cell(1, 0).text = "Morning"
+        table.cell(2, 0).text = "Evening"
+        from . import word_v3 as w
+        data = docx_bytes(doc)
+        detector = w.Detector(w.open_package(data))
+        self.assertEqual(detector.row_kind(next(s for s in detector.index.slots if s.kind == "tbl"), 0), "label")
+        # (The grey header cell itself is also mapped as 'Medication' by rule (d): pre-existing on b01e9cfa, not EC4.)
+        labels = [label for label in self.labels(data) if label.startswith(("Morning", "Evening"))]
+        self.assertEqual(labels, ["Morning — Name and strength", "Morning — Dose", "Evening — Name and strength",
+                                  "Evening — Dose"])
+
+    # M7 ─ white header text on a dark fill is ordinary ink; a repeated header row is a header row
+    def test_m7_a_dark_header_row_keeps_its_log_table_and_takes_no_answer(self):
+        from docx.shared import RGBColor
+        for header_flag in (True, False):
+            with self.subTest(tblHeader=header_flag):
+                doc = Document()
+                table = doc.add_table(rows=4, cols=2)
+                for col, text in enumerate(("Medication", "Dose and frequency")):
+                    cell = table.cell(0, col)
+                    _shade(cell, "1F3864")
+                    run = cell.paragraphs[0].add_run(text)
+                    run.bold = True
+                    if col == 1:
+                        run.font.color.rgb = RGBColor.from_string("FFFFFF")
+                if header_flag:
+                    table.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
+                fields = self.inspect(docx_bytes(doc))["fields"]
+                self.assertIn("table_rows", [f["kind"] for f in fields], [(f["label"], f["kind"]) for f in fields])
+                self.assertFalse([f for f in fields if f["locator"]["slot"].startswith("b/tbl[0]/tr[0]/")],
+                                 [(f["label"], f["locator"]["slot"]) for f in fields])
+
+    def test_m7_white_column_headers_on_a_dark_fill_still_name_the_rows_below(self):
+        from docx.shared import RGBColor
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        for col, text in enumerate(("Lesion", "Diameter (mm)")):
+            cell = table.cell(0, col)
+            _shade(cell, "1F3864")
+            run = cell.paragraphs[0].add_run(text)
+            run.bold = True
+            if col == 1:
+                run.font.color.rgb = RGBColor.from_string("FFFFFF")
+        table.cell(1, 0).text = "Lesion A"
+        table.cell(2, 0).text = "Lesion B"
+        self.assertEqual(self.labels(docx_bytes(doc)), ["Lesion A — Diameter (mm)", "Lesion B — Diameter (mm)"])
+
+    # The controls the repairs must keep (each measured on a dev form; synthetic twins here)
+    def test_ec4_control_a_header_row_with_a_guidance_cell_that_is_no_questions_own_stays_a_header(self):
+        """'Drug(s) under Investigation: | IND No.: | Study (Indication)' (the last in guidance ink) over a row of guidance
+        answer cells is a header row: its cells name the columns below."""
+        from . import word_v3 as w
+        doc = Document()
+        table = doc.add_table(rows=2, cols=3)
+        table.cell(0, 0).text = "Drug under investigation:"
+        table.cell(0, 1).text = "IND No.:"
+        for row, col, text in ((0, 2, "Study (Indication)"), (1, 0, "Enter drug"), (1, 1, "Enter IND No.")):
+            _grey(table.cell(row, col).paragraphs[0], text)
+        detector = w.Detector(w.open_package(docx_bytes(doc)))
+        tslot = next(s for s in detector.index.slots if s.kind == "tbl")
+        self.assertEqual(detector.row_kind(tslot, 0), "label")
+        self.assertEqual(detector.column_header(tslot, 1, 1), "IND No.:")
+
+    def test_m4_control_a_second_header_row_under_merged_header_cells_keeps_naming_the_columns(self):
+        """'Taken | Completed by' with 'Taken' (and an empty corner cell) merged down over a second header row
+        'Initial | Date': the second row continues printed header cells, so it stays a header row, and the 'Initial'
+        column keeps its initials areas and their signing role."""
+        from . import word_v3 as w
+        doc = Document()
+        table = doc.add_table(rows=3, cols=4)
+        table.cell(0, 0).text = "Date taken"
+        table.cell(0, 1).merge(table.cell(0, 2)).text = "Completed by"
+        table.cell(0, 0).merge(table.cell(1, 0))
+        table.cell(0, 3).merge(table.cell(1, 3))
+        table.cell(1, 1).text = "Initial"
+        table.cell(1, 2).text = "Date"
+        data = docx_bytes(doc)
+        fields = w.inspect(data)["fields"]
+        kinds = {f["locator"]["slot"]: f["kind"] for f in fields}
+        self.assertEqual(kinds.get("b/tbl[0]/tr[2]/tc[1]"), "initials", [(f["label"], f["kind"], f["locator"]["slot"]) for f in fields])
+        self.assertIn("signing_area", {r["source"] for r in w.destination_roles(data, fields)["roles"]})
+
+    def test_ec3_control_a_question_printed_inside_the_merged_cell_keeps_its_answer(self):
+        """A merged cell that prints its own question ('Primary event (diagnosis): ____') beside rows of other questions
+        is that question's place, not an answer cell beside them."""
+        doc = Document()
+        table = doc.add_table(rows=3, cols=2)
+        for row, text in enumerate(("Onset date: ____", "Onset time: ____", "Occurred at: ____")):
+            table.cell(row, 0).text = text
+        table.cell(0, 1).merge(table.cell(2, 1)).text = "Primary event (diagnosis): ____________"
+        info = self.inspect(docx_bytes(doc))
+        self.assertIn("Primary event (diagnosis)", [f["label"] for f in info["fields"]])
+        self.assertFalse([n for n in info["notes"] if "merged" in n], info["notes"])
