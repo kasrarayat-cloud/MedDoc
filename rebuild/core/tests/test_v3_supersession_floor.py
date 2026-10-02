@@ -80,6 +80,13 @@ class Worst:
         row = g.as_currently_governed(g.governance_for(notes, fields), notes, {**field_of, **stored})
         self.assertEqual((row['status'], row['text']), ('conflict', ''), notes)
 
+    def assert_cases_held(self, cases, label='Medications'):
+        for answer, tail in cases:
+            joiner = '' if tail.startswith('\n') else ' '
+            for notes in (answer + joiner + tail, tail.lstrip('\n') + ('\n' if joiner == '' else ' ') + answer):
+                with self.subTest(notes=notes):
+                    self.assert_held(notes, (label, 'Plan'), label, answer, shown=tail.lstrip('\n'))
+
     def assert_adopted(self, notes, labels, label, pick):
         fields = form(*labels)
         key = next(f['key'] for f in fields if f['label'] == label)
@@ -165,13 +172,6 @@ class SupersessionFloor(Worst):
         self.assert_adopted('The patient attends the clinic every week. The patient was held overnight for observation.',
                             ('Clinic attendance', 'Plan'), 'Clinic attendance',
                             'The patient attends the clinic every week.')
-
-    def assert_cases_held(self, cases, label='Medications'):
-        for answer, tail in cases:
-            joiner = '' if tail.startswith('\n') else ' '
-            for notes in (answer + joiner + tail, tail.lstrip('\n') + ('\n' if joiner == '' else ' ') + answer):
-                with self.subTest(notes=notes):
-                    self.assert_held(notes, (label, 'Plan'), label, answer, shown=tail.lstrip('\n'))
 
     def test_rsl_1_fronted_imperatives_and_gerunds_the_tagger_reads_as_nouns(self):
         # (refutation RSL-1, F-UNLISTED-MISSES) the verb tagged a noun or proper noun before the drug it supersedes
@@ -276,6 +276,119 @@ class SupersessionFloor(Worst):
                 self.assert_adopted(notes, (label, 'Plan'), label, answer)
         self.assert_held(WARFARIN + ' The patient was switched to apixaban from warfarin.', ('Medications', 'Plan'),
                          'Medications', WARFARIN)
+
+
+class RoundTwoRepairs(Worst):
+    """Round-2 refutation of e3a77077 (refute-sup-r2/result.json): coverage gaps the base adopts too, each closed as a
+    HOLD by `v3_actors._superseded_repaired`, read BESIDE e3a77077's reading and united with it (nothing it held is
+    released), and by the answer side ('named_keys')."""
+    APIXABAN = 'The patient takes apixaban 5 mg twice daily.'
+
+    def test_r2r_h1_a_clinician_the_parser_hangs_the_verb_on_is_its_agent(self):
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            'The haematologist withheld today.', 'The cardiologist withheld today.',
+            'The anaesthetist withheld before the procedure.', 'The anaesthetist held for surgery.')))
+
+    def test_r2r_p1_pending_names_the_condition_not_what_is_held(self):
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            'Warfarin held pending surgery.', 'Warfarin withheld pending review.', 'Warfarin withheld pending colonoscopy.',
+            'Warfarin withheld pending INR result.', 'Withheld pending review.',
+            'The cardiologist withheld pending review.')) + (
+            (self.APIXABAN, 'Apixaban held pending surgery.'), (self.APIXABAN, 'Apixaban withheld pending colonoscopy.'),
+            ('Medications: warfarin 5 mg daily.', '\nPlan: Warfarin held pending surgery.')))
+
+    def test_c_rsl4_an_answer_naming_its_drug_as_an_adverb_or_a_dosage_form(self):
+        self.assert_cases_held((
+            ('The patient takes apixaban twice daily.', 'Apixaban was stopped.'),
+            ('The patient takes apixaban twice daily.', 'Apixaban has been switched to warfarin.'),
+            ('The patient takes apixaban twice daily.', 'Held apixaban.'),
+            ('The patient takes apixaban daily.', 'Apixaban was stopped.'),
+            ('The patient takes apixaban 5 mg tablets twice daily.', 'Apixaban was stopped.'),
+            ('The patient takes edoxaban daily.', 'Hold edoxaban.'),
+            ('The patient takes amlodipine daily.', 'Amlodipine was stopped.'),
+            ('The patient takes apixaban at night.', 'Apixaban has been switched to warfarin.')))
+        self.assert_adopted('The patient takes apixaban twice daily. Warfarin was stopped.', ('Medications', 'Plan'),
+                            'Medications', 'The patient takes apixaban twice daily.')
+
+    def test_c_rsl3_an_upper_or_title_case_replacer(self):
+        self.assert_cases_held((
+            (WARFARIN, 'APIXABAN REPLACES WARFARIN.'), (WARFARIN, 'Apixaban Replaces Warfarin.'),
+            (WARFARIN, 'APIXABAN NOW REPLACES WARFARIN.'),
+            ('The patient takes atenolol 50 mg daily.', 'BISOPROLOL REPLACES ATENOLOL.'),
+            ('The patient takes omeprazole 20 mg daily.', 'LANSOPRAZOLE NOW REPLACES OMEPRAZOLE.')))
+        self.assert_adopted('The patient is on apixaban. APIXABAN REPLACES WARFARIN.', ('Medications', 'Plan'),
+                            'Medications', 'The patient is on apixaban.')
+
+    def test_c_rsl2_an_upper_case_dose_held(self):
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            'WARFARIN 5 MG HELD.', 'WARFARIN 5 MG OD HELD.', 'WARFARIN 5 MG DAILY HELD.', 'WARFARIN HELD X 5 DAYS.')) + (
+            ('The patient takes amlodipine 5 mg daily.', 'AMLODIPINE 5 MG HELD.'),))
+
+    def test_sup2f_1_a_subject_keeps_its_own_prepositional_phrase(self):
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            'Anticoagulation with warfarin was switched to apixaban.',
+            'Her anticoagulation with warfarin has been held for surgery.',
+            'Treatment with warfarin was changed to apixaban.',
+            'The prescription for warfarin was changed to apixaban.')) + (
+            ('The patient takes methotrexate 15 mg weekly.', 'Therapy with methotrexate was withheld.'),))
+
+    def test_sup2f_2_a_date_is_not_an_old_value(self):
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            'Warfarin was switched to apixaban from Monday.', 'Warfarin was changed to apixaban from next week.',
+            'Warfarin was switched over to apixaban from Monday.', 'Warfarin switches to apixaban from Monday.')) + (
+            ('The patient takes atenolol 50 mg daily.', 'Atenolol switches to bisoprolol from Monday.'),))
+
+    def test_sup2f_3_a_present_form_acts_on_its_subject_unless_it_replaces(self):
+        self.assert_cases_held((
+            ('The patient takes clopidogrel 75 mg daily.', 'Clopidogrel hold for 7 days before surgery.'),
+            ('The patient takes lithium 400 mg nightly.', 'Lithium hold until levels back.'),
+            ('The patient takes aspirin 75 mg and clopidogrel 75 mg daily.', 'Aspirin and clopidogrel hold for 7 days.'),
+            ('Medications: apixaban 5 mg twice daily.', '\nPlan: Apixaban hold for 48 hours before surgery.'),
+            # (SUP2F-M3: a replacement read as an open complement)
+            ('The patient takes atenolol 50 mg daily.', 'Atenolol changes to bisoprolol.')))
+
+    def test_lows_agents_labels_particles_possessives_and_old_values(self):
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            # R2R-A1: an agent held, nothing it held is named
+            'The cardiologist held.', 'Haematology held.', 'The anaesthetist held.', 'We held.', 'The surgical team held.',
+            # C-RSL1: a drug label then an imperative
+            'HOLD: WARFARIN.',
+            # C-AGENT-SHAPE-MISSES, SUP2F-4
+            'The SHO switched to apixaban.', 'The prescriber switched to apixaban.', 'The care home switched to apixaban.',
+            'The SHO changed to apixaban.', 'The care home swapped to apixaban.', 'Paediatrics switched to apixaban.',
+            'Orthopaedics switched to apixaban.',
+            # C-POSSESSIVE
+            'Held patient\u2019s warfarin.')) + (
+            ('The patient takes metformin 500 mg twice daily.', 'Metformin: withhold.'),
+            ('The patient takes metformin 500 mg twice daily.', 'Metformin - withhold.'),
+            # C-CHANGED-OVER
+            ('The patient takes clopidogrel 75 mg daily.', 'Changed clopidogrel over to ticagrelor.'),
+            # SUP2F-5: the old value under 'onto'
+            ('The patient takes atenolol 50 mg daily.', 'She was changed onto bisoprolol from atenolol.')))
+
+    def test_a_named_supersession_holds_only_what_it_names(self):
+        # (mutants P06, P13, P14 survived the holds above: each turns these named readings bare, holding every answer)
+        clinic = 'The patient attends the clinic every week.'
+        for tail in ('Clopidogrel hold for 7 days before surgery.', 'She was changed onto bisoprolol from atenolol.'):
+            with self.subTest(tail=tail):
+                self.assert_adopted(clinic + ' ' + tail, ('Clinic attendance', 'Plan'), 'Clinic attendance', clinic)
+        # and 'changed onto' with no old value names nothing it ended
+        self.assert_cases_held((('The patient takes atenolol 50 mg daily.', 'She was changed onto bisoprolol.'),))
+
+    def test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned(self):
+        self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
+            # M1: names_carer, names_person, AGENT_NOUNS, the -ian ending
+            'The nurse switched to apixaban.', 'The registrar switched to apixaban.',
+            'The consultant switched to apixaban.', 'The team switched to apixaban.', 'Her husband switched to apixaban.',
+            'The ward switched to apixaban.', 'The MDT switched to apixaban.', 'The practice switched to apixaban.',
+            'The anticoagulation service switched to apixaban.', 'The hospital switched to apixaban.',
+            'The obstetrician switched to apixaban.', 'The geriatrician switched to apixaban.',
+            # M2: the explicit patient switched names nothing it ended
+            'The patient was switched to apixaban.', 'The patient has been changed to apixaban.',
+            # M5: a pronoun withheld names nothing it ended
+            'They were withheld before surgery.')) + (
+            # M4: a drug the tagger reads as a verb in apposition
+            ('The patient takes one drug, namely metformin.', 'Metformin was withheld today.'),))
 
 
 class ConjoinedCessation(Worst):
@@ -387,6 +500,16 @@ class InsteadOnSonnet55Default(InsteadPointsBack, SimpleTestCase):
 @override_settings(**RELATIONS)
 class SupersessionOnSonnet5(SupersessionFloor, SimpleTestCase):
     pass
+
+
+@override_settings(**RELATIONS)
+class RoundTwoOnSonnet5(RoundTwoRepairs, SimpleTestCase):
+    pass
+
+
+@override_settings(**SONNET_55_DEFAULT)
+class RoundTwoOnSonnet55Default(RoundTwoRepairs, SimpleTestCase):
+    model = g.SONNET_5_5
 
 
 @override_settings(**SONNET_55_DEFAULT)

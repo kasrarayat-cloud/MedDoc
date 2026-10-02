@@ -582,6 +582,142 @@ def _superseded(t, lem, txt, inside):
     return ended, verb != 'hold' or not filled
 
 
+#: (2026-10-02, round-2 refutation) The repaired reading's further spellings and words. Each can only make a
+#: supersession read where e3a77077's did not, end MORE, or hold as a bare cessation: `_superseded_repaired` is read
+#: BESIDE `_superseded`, never instead of it.
+#: Third-person spellings, for a present form the lemmatizer leaves as spelled ('APIXABAN REPLACES WARFARIN.').
+SUPERSESSION_PRESENT = {'switches': 'switch', 'replaces': 'replace', 'substitutes': 'substitute', 'swaps': 'swap',
+                        'changes': 'change', 'withholds': 'withhold', 'holds': 'hold'}
+#: The prepositions by which each verb names its replacement or old value, hung by the parser on what it supersedes
+#: ('replaces warfarin with apixaban', 'Switch gliclazide to insulin.'); any other preposition on its theme is part of
+#: the theme ('Anticoagulation with warfarin was switched to apixaban.', 'Treatment with warfarin was withheld.').
+SUPERSESSION_VERB_PREPOSITIONS = {'switch': ('to', 'from', 'into', 'onto'), 'change': ('to', 'from', 'into', 'onto'),
+                                  'swap': ('to', 'from', 'for', 'with'), 'replace': ('with', 'by'),
+                                  'substitute': ('with', 'by', 'for'), 'withhold': (), 'hold': ()}
+#: The verbs whose active subject is the REPLACER ('Apixaban replaces warfarin.'); for every other one a present form's
+#: subject is what it acts on ('Clopidogrel hold for 7 days before surgery.', 'Atenolol changes to bisoprolol.').
+REPLACER_SUBJECT_VERBS = frozenset(('replace', 'substitute'))
+#: More clinicians and services by word or ending, read only to make a subject an AGENT (bare, more holds).
+AGENT_NOUNS_MORE = frozenset(('sho', 'fy1', 'fy2', 'prescriber', 'prescribers', 'home', 'dispenser', 'provider'))
+#: Words heading an object that is the condition of a hold, not what it holds ('Warfarin held pending surgery.').
+PENDING_WORDS = frozenset(('pending',))
+
+
+#: (round-2 refutation C-RSL4-ANSWER-ADV) The places of an argument, where an adverb is the tagger's reading of a name.
+NAMED_ARGUMENT_DEPS = frozenset(('dobj', 'obj', 'pobj', 'nsubj', 'nsubjpass', 'attr', 'oprd', 'appos', 'conj'))
+#: Dosage forms: an adjective modifying one is the drug it is a form of ('apixaban 5 mg tablets').
+DOSAGE_FORM_NOUNS = frozenset(('tablet', 'capsule', 'pill', 'injection', 'inhaler', 'cream', 'dose', 'medication',
+                               'medicine', 'drug', 'puff', 'patch', 'spray', 'drop', 'solution', 'suspension', 'liquid'))
+
+
+def _agent_repaired(token):
+    """`_agent`, and a clinician or service by `AGENT_NOUNS_MORE` or by a spelling with an agent ending ('The SHO ...',
+    'The care home ...', 'Paediatrics ...': the lemmatizer singularizes 'paediatrics')."""
+    text = _fold(token.text)
+    return (_agent(token) or _lemma(token) in AGENT_NOUNS_MORE or text in AGENT_NOUNS_MORE
+            or text.endswith(AGENT_ENDINGS))
+
+
+def _superseded_repaired(t, lem, txt, inside):
+    """(2026-10-02, round-2 refutation R2R-H1, R2R-P1, R2R-A1, C-RSL1/2/3, C-CHANGED-OVER, C-AGENT-SHAPE-MISSES,
+    C-POSSESSIVE, SUP2F-1/2/3/4/5) The REPAIRED supersession reading, read beside e3a77077's `_superseded` and united
+    with it (`_floor_reading`): what it ends is added to what `_superseded` ends, and where it names nothing it holds as
+    a bare cessation in addition, so nothing `_superseded` holds is released. (ended lemmas, bare) or None. It differs in:
+      - recognising present spellings ('APIXABAN REPLACES WARFARIN.'), a verb noun whose own noun children name what it
+        supersedes ('Metformin: withhold.', 'HOLD: WARFARIN.', 'WARFARIN 5 MG HELD.'), and a particle's preposition
+        ('Changed clopidogrel over to ticagrelor.');
+      - its theme: the first of [passive subjects and objects], [the thing subjects], [the verb's own noun children],
+        [the noun it hangs on] that NAMES something; a present form's subject is the theme except for a replacer
+        ('Clopidogrel hold for 7 days before surgery.'); an object headed by 'pending' is the hold's condition, not its
+        theme ('Warfarin held pending surgery.'); a clinician, service or specialty is an AGENT wherever the parser hangs
+        it ('The haematologist withheld today.', 'The SHO switched to apixaban.', 'Paediatrics switched ...'); a
+        possessor the verb hangs on gives way to what it possesses ('Held patient's warfarin.');
+      - a subject's own prepositional phrase is part of it ('Anticoagulation with warfarin was switched to apixaban.');
+        only the verb's own replacement prepositions (`SUPERSESSION_VERB_PREPOSITIONS`) hung on an object or a fronted
+        noun are not;
+      - an old value that names only a time is no old value ('switched to apixaban from Monday' ends warfarin), and the
+        old value is also read under 'onto'/'into' ('changed onto bisoprolol from atenolol');
+      - 'hold' is bare when no thing fills its theme, an agent's included ('The cardiologist held.', 'Withheld pending
+        review.'). Only HOLDS."""
+    spelled = txt[t.i]
+    verb = (lem[t.i] if lem[t.i] in SUPERSESSION_VERBS else SUPERSESSION_FORMS.get(spelled)
+            or SUPERSESSION_GERUNDS.get(spelled) or SUPERSESSION_PRESENT.get(spelled)
+            or (spelled if spelled in SUPERSESSION_VERBS else None))
+    if verb is None:
+        return None
+    host = t.head if (t.head.i != t.i and t.head.pos_ in ('NOUN', 'PROPN')
+                      and t.dep_ in ('compound', 'amod', 'acl', 'parataxis', 'appos')) else None
+    while host is not None and host.dep_ == 'poss' and host.head.i != host.i and host.head.pos_ in ('NOUN', 'PROPN'):
+        host = host.head                                   # 'Held patient's warfarin.': the possessed thing
+    if host is not None and host.i not in inside:
+        host = None
+    fronted = host is not None and t.dep_ in ('compound', 'amod')
+    pending = {c.i for c in t.children if c.dep_ in ('dobj', 'obj')
+               and any(_fold(g.text) in PENDING_WORDS for g in c.children)}
+    objects = [c for c in t.children if c.i in inside and c.i not in pending and (c.dep_ in ('dobj', 'obj') or (
+        c.dep_ in ('xcomp', 'oprd', 'attr') and c.pos_ in CONTENT and not c.is_stop))]
+    nouns = [c for c in t.children if c.i in inside and c.pos_ in ('NOUN', 'PROPN')
+             and c.dep_ in ('compound', 'dep', 'nmod', 'appos')]
+    if t.pos_ not in ('VERB', 'ADJ') and not (fronted or objects or nouns):
+        # a verb the parser flattened into a noun phrase: the noun right after it, its sibling, is what it acts on
+        # ('BISOPROLOL REPLACES ATENOLOL.': both nouns are objects of the first)
+        after = t.doc[t.i + 1] if t.i + 1 < len(t.doc) else None
+        if (after is not None and after.i in inside and after.head.i == t.head.i and after.i != t.head.i
+                and after.pos_ in ('NOUN', 'PROPN')):
+            objects = [after]
+    if t.pos_ not in ('VERB', 'ADJ') and spelled not in SUPERSESSION_FORMS and not fronted and not objects and not nouns:
+        return None
+    subjects = _subjects(t, inside)
+    passive = [s for s, is_passive in subjects if is_passive]
+    present_acts_on = verb not in REPLACER_SUBJECT_VERBS or t.tag_ in ('VBD', 'VBN') or t.pos_ != 'VERB'
+    things = [s for s, is_passive in subjects if not is_passive and present_acts_on and not _agent_repaired(s)]
+    if host is not None and not fronted and _agent_repaired(host):
+        host = None                                        # 'The haematologist withheld today.': the agent
+    # the verb's prepositions: its own, its particle's, those it hangs on an object or the noun it is fronted before
+    own = set(SUPERSESSION_VERB_PREPOSITIONS.get(verb, ()))
+    preps, skip = {}, set()
+
+    def add(prep):
+        preps.setdefault(_fold(prep.text), []).extend(g for g in prep.children if g.dep_ in ('pobj', 'pcomp'))
+    for child in t.children:
+        if child.dep_ in ('prep', 'agent'):
+            add(child)
+        elif child.dep_ == 'prt':
+            for grand in child.children:
+                if grand.dep_ == 'prep':
+                    add(grand)
+    hung = objects + ([host] if fronted else [])
+    for token in hung:
+        for prep in token.children:
+            if prep.dep_ in ('prep', 'agent') and _fold(prep.text) in own:
+                add(prep)
+                skip |= {x.i for x in prep.subtree}
+    replacements = [c for c in t.children if c.dep_ in ('advcl', 'xcomp') and c not in objects
+                    and any(a.dep_ == 'aux' and _fold(a.text) == 'to' for a in c.children)]
+    if replacements:
+        preps.setdefault('to', []).extend(replacements)
+    for word in ('to', 'onto', 'into'):
+        for new in list(preps.get(word, ())):
+            for prep in new.children:
+                if prep.dep_ == 'prep' and _fold(prep.text) == 'from':
+                    add(prep)
+    if (verb == 'change' and not {'to', 'from', 'onto', 'into'} & set(preps)) or (
+            verb in ('switch', 'swap', 'change') and 'between' in preps):
+        return None
+    if verb == 'switch' and any(c.dep_ == 'prt' and _fold(c.text) == 'on' for c in t.children):
+        return None
+    if host is not None:
+        skip |= {x.i for x in t.subtree} | ({x.i for x in host.subtree if x.i < t.i} if fronted else set())
+    groups = [passive + objects, things, nouns, [host] if host is not None else []]
+    named = [g for g in groups if g and keys(_phrase_lemmas(g, inside, skip) - {'patient'})]
+    theme = named[0] if named else next((g for g in groups if g), [])
+    old = {w for w in _phrase_lemmas([o for word in SUPERSEDED_PREPOSITIONS.get(verb, ()) for o in preps.get(word, ())],
+                                     inside) if w not in SOLE_TIME_WORDS}
+    ended = old if keys(old - {'patient'}) else _phrase_lemmas(theme, inside, skip)
+    filled = passive or objects or things or nouns or host is not None
+    return ended, verb != 'hold' or not filled
+
+
 def _on_hold(prep, inside):
     """(2026-10-02, RV4H-2) What an 'on hold' preposition ends: the noun it modifies ('Warfarin on hold.'), or the theme
     of the verb it completes - a passive subject, an object, else a subject ('The warfarin is on hold for surgery.',
@@ -629,11 +765,17 @@ def _floor_reading(words, root, lem=None, txt=None):
     cessation, ended = False, set()
     # (2026-10-02, RV4H-2) what a SUPERSESSION ends, and whether one of them names nothing it ended
     superseded, supersession_bare = set(), False
+    # (round-2 refutation) the repaired reading, united with e3a77077's: it only adds what is ended and bare holds
+    repaired, repaired_bare = set(), False
     for t in words:
         found = _superseded(t, lem, txt, inside)
         if found is not None:
             superseded |= found[0]
             supersession_bare = supersession_bare or (found[1] and not keys(found[0] - {'patient'}))
+        found = _superseded_repaired(t, lem, txt, inside)
+        if found is not None:
+            repaired |= found[0]
+            repaired_bare = repaired_bare or (found[1] and not keys(found[0] - {'patient'}))
         if t.dep_ == 'prep' and txt[t.i] == 'on' and any(g.dep_ == 'pobj' and _fold(g.text) == 'hold'
                                                           for g in t.children):
             held = _on_hold(t, inside)
@@ -652,6 +794,7 @@ def _floor_reading(words, root, lem=None, txt=None):
                       if x.pos_ in CONTENT}
     ended -= {'patient'}
     superseded -= {'patient'}
+    repaired -= {'patient'}
     # A CLASS denial denies by a quantifier ('takes no anticoagulants', 'has had no pain', 'has never smoked', 'none',
     # 'nothing'), unless the quantified thing is set apart from what was already said ('no other medication', 'nothing
     # else', 'no further pain'); a plain 'not' denies its own predicate, which OPPOSED reads with its object, time and
@@ -710,8 +853,9 @@ def _floor_reading(words, root, lem=None, txt=None):
     intention = any(intended(h) for h in clauses)
     return {'quantified_denial': quantified, 'reattribution': reattribution,
             'denial_nouns': keys(denial_nouns), 'denial_heads': keys(denial_heads) | frozenset(denial_heads),
-            'ceased_keys': keys(ended | superseded),
-            'bare_cessation': (cessation and not keys(ended)) or (supersession_bare and not keys(ended | superseded)),
+            'ceased_keys': keys(ended | superseded | repaired),
+            'bare_cessation': ((cessation and not keys(ended)) or (supersession_bare and not keys(ended | superseded))
+                               or (repaired_bare and not keys(ended | repaired))),
             'topic_denial_keys': (keys({_lemma(m) for c in root.children if c.dep_ in ('dobj', 'attr')
                                         and not any(g.dep_ == 'prep' for g in c.children)
                                         for m in c.children if m.dep_ in ('amod', 'compound')})
@@ -1610,7 +1754,20 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=froz
                   'named_keys': keys({_lemma(t) for t in words if t.pos_ in ('NOUN', 'PROPN')
                                       or (t.pos_ == 'ADJ' and t.dep_ != 'amod')
                                       or (t.pos_ == 'VERB' and t.dep_ in ('conj', 'appos')
-                                          and t.head.pos_ in ('NOUN', 'PROPN'))} - {'patient'}),
+                                          and t.head.pos_ in ('NOUN', 'PROPN'))
+                                      # (round-2 refutation C-RSL4-ANSWER-ADV) a drug the tagger reads as an adverb in
+                                      # an argument's place ('takes apixaban twice daily'), or as an adjective of a
+                                      # dosage form or a frequency ('takes apixaban 5 mg tablets', 'takes apixaban daily')
+                                      or (t.pos_ == 'ADV' and t.dep_ in NAMED_ARGUMENT_DEPS and t.is_alpha
+                                          and not t.is_stop)
+                                      # ... or as the adverb right after an object-less verb ('takes apixaban at night')
+                                      or (t.pos_ == 'ADV' and t.dep_ == 'advmod' and t.is_alpha and not t.is_stop
+                                          and not _fold(t.text).endswith('ly') and t.head.pos_ == 'VERB'
+                                          and t.i == t.head.i + 1
+                                          and not any(c.dep_ in ('dobj', 'obj') for c in t.head.children))
+                                      or (t.pos_ == 'ADJ' and t.dep_ == 'amod'
+                                          and (_lemma(t.head) in DOSAGE_FORM_NOUNS
+                                               or _lemma(t.head) in GENERIC_WORDS))} - {'patient'}),
                   'predicates': () if colon.get(uid) else _predicates(root),
                   'negated_keys': frozenset() if colon.get(uid) else _denied(words, root),
                   'finite_past': not colon.get(uid) and _tense(root) == 'past',
