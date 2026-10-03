@@ -75,7 +75,11 @@ def elliptical_dependencies(reading):
     from . import v3_syntax,v3_actors as a
     units=reading['units'];docs=v3_syntax.docs(u['quote'] for u in units)
     reading['_source_scope_docs']=docs
-    causes={};previous=None;leading=[]
+    causes={};previous=[];leading=[];typed={}
+    def affected(claim,modifier):
+        classes=typed.get(modifier['id'],frozenset())
+        mine=(reading['actors'][claim['id']].get('sole') or {}).get('classes',frozenset())
+        return not classes or not mine or bool(classes & mine)
     for unit,doc in zip(units,docs or [None]*len(units)):
         uid=unit['id'];info=reading['actors'][uid];sole=info.get('sole') or {}
         fragment=False
@@ -100,13 +104,24 @@ def elliptical_dependencies(reading):
                     and not sole.get('classes') and not info.get('other_floor')
                     and ('class' in sole.get('reach',()) or any(t.dep_=='neg'
                         or (t.dep_=='det' and a._fold(t.text)=='no') for t in doc)))
-                fragment=operator or topicless or adpositional or restriction
+                # A negated indefinite nominal predicate omits what it is
+                # classifying ("No longer a daily medication"). Its clinical
+                # class bounds the adjacent dependency; a direct independent
+                # negative "No diabetes" has no indefinite predicate article.
+                nominal_predicate=bool(not any(t.pos_ in ('VERB','AUX') for t in doc)
+                    and a._negates(root)
+                    and any(t.dep_=='det' and a._fold(t.text) in ('a','an') for t in root.children))
+                if nominal_predicate:typed[uid]=sole.get('classes',frozenset())
+                fragment=operator or topicless or adpositional or restriction or nominal_predicate
         if fragment:
-            if previous is not None:causes.setdefault(previous,[]).append(unit)
+            prior=next((u for u in reversed(previous) if affected(u,unit)),None)
+            if prior is not None:causes.setdefault(prior['id'],[]).append(unit)
             else:leading.append(unit)
         else:
-            if leading:causes.setdefault(uid,[]).extend(leading);leading=[]
-            previous=uid
+            if leading:
+                causes.setdefault(uid,[]).extend(u for u in leading if affected(unit,u))
+                leading=[u for u in leading if not affected(unit,u)]
+            previous.append(unit)
     reading[key]=causes
     return causes
 
@@ -172,7 +187,15 @@ def exclusive_reattributions(reading):
                 and (nominal_action or not (a._lemma(root)=='be'
                     and any(t.dep_ in ('acomp','attr') for t in root.children)))
                 and mine_sole.get('classes',frozenset()) & other_sole.get('classes',frozenset()))
-            if ((predicates-{'be'}) & (my_predicates-{'be'}) or heads & my_heads or same_assertion) and topic & (
+            # A copular nominal role/reference has no separate positive action
+            # proving it independent (sole warfarin user / only patient on
+            # warfarin). A same-named clinical claim remains reviewable rather
+            # than inferring a relation. Distinct complete knowledge actions
+            # and adjectival solitude/status retain their separate predicates.
+            nominal_reference=bool(a._lemma(root)=='be' and not core_clauses
+                and any(t.dep_=='attr' and t.pos_ in ('NOUN','PROPN','PRON','NUM') for t in root.children))
+            if ((predicates-{'be'}) & (my_predicates-{'be'}) or heads & my_heads
+                    or same_assertion or nominal_reference) and topic & (
                     mine.get('claim_keys',frozenset())|mine.get('named_keys',frozenset())):
                 causes.setdefault(claim['id'],[]).append(other)
     reading[key]=causes

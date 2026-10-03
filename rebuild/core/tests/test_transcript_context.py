@@ -176,6 +176,20 @@ class PatientDefault(SimpleTestCase):
         self.check(on+' Her father is single with warfarin.','Medications',[on])
         self.check(on+' Her father is the sole person taking warfarin.','Medications',[on],'conflict')
 
+    def test_nominal_classifier_and_exclusive_role_are_affected_claim_dependencies(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['No longer a daily medication.','Her father is the sole warfarin user.',
+                     'Her father is the only patient on warfarin.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Current medications',[source],'conflict')
+        for tail in ['Her father is the sole apixaban user.','Her father is the only patient on apixaban.',
+                     'Her father knows warfarin.','Her father is an expert on warfarin.',
+                     'Only her father knows warfarin.','No diabetes.','No longer a daily symptom.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source])
+        self.check(source+' Reports cough. No longer a daily medication.','Medications',[source],'conflict')
+        self.check(source+' Reports cough. No longer a daily medication.','Symptoms',['Reports cough.'])
+        self.check(source+' Reports cough. Her father is the sole warfarin user.','Medications',[source],'conflict')
+        self.check(source+' Reports cough. Her father is the sole warfarin user.','Symptoms',['Reports cough.'])
+
     @override_settings(V3_GENERATION_BATCHES=True)
     def test_whole_form_plan_keeps_context_in_request_digest_and_field_records(self):
         from core import generation_batch as b
