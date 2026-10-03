@@ -1,0 +1,20 @@
+[
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/diagnose-clinical-6f0f647a.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-6f0f647a-parser-witness/parser-witness.json",
+    "sha256": "e424c69da9ee8c9435c4a370359b3c39c551179782e980270f215df0b6b8469a",
+    "bytes": 82889
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/diagnose_clinical_6f0f647a.py",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-6f0f647a-parser-witness/instrument.py",
+    "sha256": "6ec4d99593ecab43dccd41a84b10c527e1b122e64aa3c82c1fb92682e82d8853",
+    "bytes": 4626
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/diagnose-clinical-6f0f647a.log",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-6f0f647a-parser-witness/instrument.log",
+    "sha256": "b18183887002e9b585603c71c03a8a966c6bfa2bbec580680dd7415d6c5488b5",
+    "bytes": 5966
+  }
+]

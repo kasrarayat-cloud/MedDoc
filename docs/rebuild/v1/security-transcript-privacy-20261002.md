@@ -316,3 +316,38 @@ replay, not a live transcription/generation or a human microphone pass. `clinica
 hashes the raw result, exact instrument, successful instrument log and complete source manifest. All17 original
 source witnesses remain in protected scratch and the writer's preserved commit. Finished clinical qualification
 is withdrawn pending repair and a fresh frozen independent pass.
+
+### Fifth served authorization run passed on a distinct repaired archive
+
+The lead prepared a new provisional fixture-only demo at `789c0372127d89b1750a2f790c561e68c19f1654`, database
+`quillmd_qa_int_sol_789c0372`, doctor9160 PID1247536, admin9161 PID1247540 and worker1247541. Only the verified
+old provisional5a processes were stopped by the lead; their source/archive/database/evidence remain retained.
+The harness independently rechecked all three process identities, all629 archive/extracted source files, protected
+QA profile and actual synthetic health. Distinct terminal run `789c-fifth-20261003` completed exit0:124 actual HTTP
+requests in7.542s and zero provider requests. This is the first complete served security pass; four earlier failed
+runs remain failed. It is still provisional and fixture-only, with no clinical/model or installed qualification.
+
+All list/totals/metadata, owner/dual-owner/manager detail, foreign GET/HEAD/valid-CSRFPOST, genuine hash-bound
+export/API, separate-cookie and authenticated nonstaff role controls described above passed again. Membership
+revocation retained two own financial200 positives while denying clinical access404. Password-only admin access
+failed; actual TOTP login, admin dashboard and admin usage CSV succeeded. Sixteen doctor-console requests returned
+404 without redirect for signed-out, clinician, ordinary admin cookies and an actual admin session under the doctor
+cookie name. Sixteen wrong-public-Host requests returned404 without redirect across both listeners and normalized
+case/trailing-dot/port variants; both correct-public-host login positives returned200. The original admin dashboard
+500 is closed on this exact served archive. Every one of the nine financial table fingerprints is identical across
+post-fixture, post-requests and exit snapshots. All six own fixture accounts are inactive with session version1 and
+their memberships retired; fixture financial/clinical/audit rows and protected credentials remain retained.
+
+The lead's browser/job idle window was released only after the real exit0. Across five terminal authorization
+runs,298 HTTP requests occurred;24 committed own accounts were retired and the initial rolled-back run committed
+none. No paid API request or installed/previous-QA mutation occurred. `served-auth-789c-fifth/manifest.json` binds
+the exact raw complete result and harness source. No provider-billed evidence or clinical qualification is inferred.
+
+At the clinical writer's request, six bounded parser witnesses were also captured against unchanged6f0f647a after
+all17 hashes were rechecked before and after. They preserve source tokens/dependencies, actors, resolved subjects,
+claim/negated keys, dependency maps and actual relation causes for the five unsafe and one false-hold findings.
+The explicitpatient Without/Absent/Free clauses produce no negated keys; the exclusive father clause parses `left`
+as `leave` and supplies no exclusive dependency despite shared named knee/pain; the father denial is explicitly
+`other_floor=True` yet still supplies a hold. No source was modified. `clinical-6f0f647a-parser-witness/manifest.json`
+retains the exact witness/instrument/log; the lead independently confirmed all five unsafe outputs. Clinical repair
+and a new complete finished-source refutation remain pending and do not erase this failed qualification.
