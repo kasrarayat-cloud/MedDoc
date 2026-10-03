@@ -72,3 +72,15 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
         version.fields=fields;version.import_manifest=import_binding.for_mapping(version.import_manifest,fields)
         self.assertFalse(import_binding.coverage_reviewed(version))
         with self.assertRaises(ValidationError):import_binding.verify(version)
+
+    def test_unqualified_fixed_header_refuses_generic_review_before_job_or_reservation(self):
+        from documents.test_source_coverage import SourceCoverage
+        doc=Document();SourceCoverage().fixed_header(doc);doc.add_paragraph('Reason: ______')
+        out=io.BytesIO();doc.save(out);template,version=self.uploaded(data=out.getvalue())
+        self.assertTrue(version.import_manifest['coverage']['block_generation'])
+        with self.assertRaises(ValidationError):import_binding.verify(version)
+        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_confirm',
+                                 'mapping_version':version.pk,'checked_every_field':'on'})
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(self.new_encounter(version).status_code,200)
+        self.assertEqual(Job.objects.count(),0);self.assertEqual(Reservation.objects.count(),0)

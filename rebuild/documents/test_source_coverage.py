@@ -159,3 +159,49 @@ class SourceCoverage(unittest.TestCase):
             self.assertEqual(before.namelist(),after.namelist())
             for name in before.namelist():
                 if name!='word/document.xml':self.assertEqual(before.read(name),after.read(name),name)
+
+    def fixed_header(self,doc):
+        p=doc.sections[0].header.paragraphs[0];p.text='Patient name: ______'
+        pict=OxmlElement('w:pict');shape=etree.SubElement(pict,'{urn:schemas-microsoft-com:vml}shape')
+        shape.set('style','position:absolute;width:72pt;height:12pt')
+        box=etree.SubElement(shape,'{urn:schemas-microsoft-com:vml}textbox')
+        content=etree.SubElement(box,qn('w:txbxContent'));pp=etree.SubElement(content,qn('w:p'))
+        rr=etree.SubElement(pp,qn('w:r'));etree.SubElement(rr,qn('w:t')).text='FIXED ADJACENT LABEL'
+        p.add_run()._r.append(pict)
+
+    def test_fixed_header_geometry_is_explicit_before_generation_and_forged_fill_refuses(self):
+        doc=Document();self.fixed_header(doc);doc.add_paragraph('Reason: ______');result=self.inspect(doc)
+        self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+        issues=result['import_manifest']['coverage']['selected_engine_issues']
+        self.assertTrue(any(i['code']=='unqualified_fixed_container' and i['part']=='word/header1.xml' for i in issues))
+        field=next(f for f in result['fields'] if f['locator']['part']=='word/header1.xml')
+        self.assertTrue(field['write_protected'])
+        forged=dict(field,write_protected=False)
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(data(doc),[forged],{forged['key']:'SYNTHETIC replacement'})
+        ordinary=next(f for f in result['fields'] if f['label']=='Reason')
+        self.assertFalse(ordinary.get('write_protected'))
+        out=word_v3.fill(data(doc),result['fields'],{ordinary['key']:'Synthetic ordinary review'})
+        self.assertEqual(Document(io.BytesIO(out)).sections[0].header.paragraphs[0].text,'Patient name: ______')
+
+    def test_positioned_table_is_source_held_while_regular_table_remains_answerable(self):
+        doc=Document();floating=doc.add_table(rows=1,cols=2);floating.cell(0,0).text='Finding'
+        pos=OxmlElement('w:tblpPr');pos.set(qn('w:vertAnchor'),'text');pos.set(qn('w:tblpY'),'300')
+        floating._tbl.tblPr.append(pos)
+        regular=doc.add_table(rows=1,cols=2);regular.cell(0,0).text='Plan'
+        result=self.inspect(doc);by={f['label']:f for f in result['fields']}
+        self.assertTrue(by['Finding']['write_protected']);self.assertFalse(by['Plan'].get('write_protected'))
+        self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+        forged=dict(by['Finding'],write_protected=False)
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(data(doc),[forged],{forged['key']:'Synthetic replacement'})
+        out=word_v3.fill(data(doc),result['fields'],{by['Plan']['key']:'Synthetic plan'})
+        parsed=Document(io.BytesIO(out));self.assertEqual(parsed.tables[0].cell(0,1).text,'')
+        self.assertEqual(parsed.tables[1].cell(0,1).text,'Synthetic plan')
+
+    def test_cell_append_wrap_changes_only_the_new_answer_paragraph(self):
+        doc=Document();cell=doc.add_table(rows=1,cols=1).cell(0,0);cell.text='FIXED SOURCE GUIDANCE'
+        old=etree.tostring(cell.paragraphs[0]._p)
+        word_v3.write_cell(cell._tc,'SYNTHETIC synthetic',append=True)
+        self.assertEqual(etree.tostring(cell.paragraphs[0]._p),old)
+        wrap=cell.paragraphs[1]._p.find('./'+qn('w:pPr')+'/'+qn('w:wordWrap'))
+        self.assertEqual(wrap.get(qn('w:val')),'off')
+        self.assertEqual(cell.paragraphs[1].text,'SYNTHETIC synthetic')

@@ -2206,6 +2206,7 @@ class Detector:
         self.rule_lines_below_label()
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
+        self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         shared = self.shared_merged_answers()
@@ -2225,6 +2226,45 @@ class Detector:
         self.withdraw_shared_merged_answers(shared)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    def guard_fixed_containers(self):
+        """Unqualified fixed geometry remains visible, source-held and unwritable.
+
+        Positioned tables and header/footer parts containing fixed text boxes
+        cannot safely grow with generated answers. Their placement has not been
+        qualified; a character-count estimate cannot authorize overprinting.
+        Plain flowing header/footer fields and ordinary inline images keep their
+        existing behavior. This never moves a container or shortens an answer.
+        """
+        fixed_parts={part for part in self.package.content_parts()
+                     if part!='word/document.xml' and
+                     self.package.tree(part).find('.//'+q('w:txbxContent')) is not None}
+        for area in self.areas:
+            sources=[area.slot,*area.extra_slots]
+            for ref in area.target.get('copies',[]):
+                slot=self.index.by_id.get(ref.get('part','')+'#'+ref.get('slot',''))
+                if slot is not None:sources.append(slot)
+            for slot in sources:
+                fixed=None;reason=''
+                if slot.part in fixed_parts:
+                    fixed=slot.part+'#hf'
+                    reason=('This header/footer contains fixed text boxes. Answer growth has not been qualified '
+                            'and can overwrite nearby printed content; these source areas remain unchanged.')
+                else:
+                    parent=slot
+                    while parent is not None:
+                        if (parent.kind=='tbl' and parent.el.find('./'+q('w:tblPr')+'/'+q('w:tblpPr')) is not None):
+                            fixed=parent.id
+                            reason=('This positioned table has fixed placement. Answer growth has not been qualified '
+                                    'and can overlap another area; these source areas remain unchanged.')
+                            break
+                        parent=parent.parent
+                if fixed is None:continue
+                if not area.protection:area.protection=reason
+                self.protected_regions.add(fixed)
+                detail=reason+' Location: '+slot.id
+                self.coverage_issue(slot,'unqualified_fixed_container',detail)
+                if detail not in self.notes:self.notes.append(detail)
 
     def shared_merged_answers(self) -> list:
         """EC3's decision, as ONE pass over every rule's areas, with NO exemption: every answer area with a place anywhere
@@ -7389,6 +7429,12 @@ def write_cell(tc, answer, replace=False, whole=False, append=False):
         if wraps_structure(tc):
             fail("The instruction cell contains another form structure.", "unsupported_layout")
         paragraph = etree.SubElement(tc, q("w:p"))
+        # Newly inserted answer text may contain a word wider than a narrow
+        # instruction cell. Permit character-level line breaking without
+        # changing the original paragraph, cell width, or answer characters.
+        # OOXML wordWrap=off specifies character-level (not word-level) breaks.
+        ppr=etree.SubElement(paragraph,q('w:pPr'))
+        etree.SubElement(ppr,q('w:wordWrap')).set(q('w:val'),'off')
         source_run = next(p0.iter(R), None)
         props = source_run.find(q("w:rPr")) if source_run is not None else None
         paragraph.append(_new_run(_answer_rpr(props), answer))

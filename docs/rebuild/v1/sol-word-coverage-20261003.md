@@ -88,3 +88,36 @@ connection refusal controls and renderer identities are under the protected
 `word/` evidence directory. No cost or invoice evidence was fabricated. The
 54/60 overall, 18/20 holdout, family, independence and native Word gates remain
 open. The release must remain private, synthetic-only and maintenance-protected.
+
+## Follow-up source and fixed-geometry guards
+
+The first 22476485 candidate failed independent actual inspect/fill refutation:
+slash-delimited bracket alternatives containing hyphens, apostrophes, parentheses,
+Unicode or numbers could become unrestricted writable fields. Bare and period-ended
+literal-list parents also escaped the source review guard. That candidate and its
+actual overwrite outputs remain preserved. Commit afacf960 withdraws every
+nonempty slash-part alternative except established date/authoring placeholders,
+and records adjacent literal lists for precise review without inventing answers.
+Twelve focused checks passed in 52.275 seconds, exit 0.
+
+All 31 generic first exports now have rendered measurements. Five retained
+failures are D26 long (24 new overlap pairs), D27 long (96 and one missing probe),
+D28 long (77 and three missing probes), D29 ordinary/long (18/214 and four long
+missing probes), and D35 long (two missing probes). The 26 other cases have no
+new issue within this limited geometry metric; that does not qualify their
+mapping or whole clinical workflow. Original first mapping scores remain 2/31
+strict and 4/31 tolerant. D28's separately measured reflow candidate removes the
+77 overlaps, but its stricter contiguous complete-answer check remains 80/85;
+ordered-character extraction diagnostics are separate and do not promote it.
+
+The follow-up guard records mapped header/footer areas in parts containing fixed
+text boxes and mapped areas inside positioned tables as source-bound unsupported
+geometry. They remain visible and unwritable, block generic confirmation and
+creation before any job/reservation, and resist forged manual writer metadata.
+Plain flowing headers/footers and ordinary tables retain their qualified paths.
+Newly appended answer paragraphs permit character-level wrapping without changing
+original paragraphs, widths or answer characters. OOXML `wordWrap=off` defines
+this behavior in the [official WordprocessingML documentation](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.wordwrap?view=openxml-3.0.1).
+The 31 affected source/import/workflow tests passed in 80.132 seconds, real exit 0,
+with the synthetic database destroyed. Same-first-value rendered verification
+and finished-diff independent refutation are still required for this follow-up.
