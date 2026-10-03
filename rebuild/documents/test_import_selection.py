@@ -65,6 +65,31 @@ class ImportSelection(unittest.TestCase):
                 self.assertEqual(result['import_manifest']['engine'],'legacy')
                 self.assertFalse(result['import_manifest']['coverage']['new_import_v3_preference']['exact_ordinary_parity'])
 
+    @override_settings(QUILLMD_WORD_AUTO_PREFER_V3=True)
+    def test_ordinary_physical_initial_and_signed_receipt_places_reach_new_v3_preference(self):
+        for number,label in enumerate(('Initial symptoms occurred at','Initial diagnosis',
+                      'Signed consent was received on','Signed consent received on')):
+            with self.subTest(label=label):
+                doc=self.simple();doc.tables[0].cell(0,0).text=label
+                path=self.save(doc);old=inspect_template(path,engine='legacy');new=inspect_template(path,engine='auto')
+                self.assertEqual(new['import_manifest']['engine'],'v3')
+                self.assertTrue(new['import_manifest']['coverage']['new_import_v3_preference']['exact_ordinary_parity'])
+                self.assertFalse(new['import_manifest']['coverage']['block_generation'])
+                self.assertEqual(new['fields'][0]['kind'],'text')
+                legacy_output=self.root/f'old-ordinary-{number}.docx'
+                fill_template(path,old['fields'],{'cell_0':'Synthetic old ordinary value'},legacy_output)
+                self.assertEqual(Document(legacy_output).tables[0].cell(0,1).text,'Synthetic old ordinary value')
+                source=path.read_bytes();output=self.root/f'new-ordinary-{number}.docx'
+                fill_template(path,new['fields'],{new['fields'][0]['key']:'Synthetic new ordinary value'},output)
+                self.assertEqual(Document(output).tables[0].cell(0,1).text,'Synthetic new ordinary value')
+                self.assertEqual(path.read_bytes(),source)
+        for label in ('Nurse initials','Patient signature','Manager approval','Consent form signed'):
+            with self.subTest(human_or_ambiguous=label):
+                doc=self.simple();doc.tables[0].cell(0,0).text=label
+                result=inspect_template(self.save(doc),engine='auto')
+                self.assertEqual(result['import_manifest']['engine'],'legacy')
+                self.assertFalse(result['import_manifest']['coverage']['new_import_v3_preference']['exact_ordinary_parity'])
+
     def test_parity_rejects_wrong_label_kind_context_and_overlapping_or_broader_places(self):
         import copy
         from . import import_selection as selection

@@ -187,10 +187,11 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
             with self.subTest(shape=shape,caption=caption):
                 doc=Document()
                 if shape=='table':
-                    table=doc.add_table(rows=1,cols=2);table.cell(0,0).text=caption
-                    table.cell(0,1).text='______'
-                else:doc.add_paragraph(caption+': ______')
-                doc.add_paragraph('Unrelated note: ______')
+                    table=doc.add_table(rows=2,cols=2);table.cell(0,0).text=caption
+                    table.cell(1,0).text='Unrelated note'
+                else:
+                    doc.add_paragraph(caption+': ______')
+                    doc.add_paragraph('Unrelated note: ______')
                 doc.sections[0].header.paragraphs[0].text='Synthetic fixed header'
                 doc.sections[0].footer.paragraphs[0].text='Synthetic fixed footer'
                 out=io.BytesIO();doc.save(out);raw=out.getvalue()
@@ -239,8 +240,11 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                 if shape=='table':
                     self.assertEqual(after.tables[0].cell(0,0).text,caption)
                     self.assertEqual(after.tables[0].cell(0,1).text,value)
-                else:self.assertEqual(after.paragraphs[0].text,caption+': '+value)
-                self.assertEqual(after.paragraphs[-1].text,'Unrelated note: Synthetic review')
+                    self.assertEqual(after.tables[0].cell(1,0).text,'Unrelated note')
+                    self.assertEqual(after.tables[0].cell(1,1).text,'Synthetic review')
+                else:
+                    self.assertEqual(after.paragraphs[0].text,caption+': '+value)
+                    self.assertEqual(after.paragraphs[-1].text,'Unrelated note: Synthetic review')
                 with ZipFile(io.BytesIO(raw)) as old,ZipFile(io.BytesIO(exported)) as new:
                     self.assertEqual(old.namelist(),new.namelist())
                     for part in old.namelist():

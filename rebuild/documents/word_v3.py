@@ -1535,6 +1535,7 @@ class Area:
     label_slot: object = None
     structural: bool = False
     source_action: bool = False     # source-owned action; role bounded to this destination, not its whole paragraph
+    ordinary_reading: bool = False  # fresh physical argument, never a reviewed label or persisted permission
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -2413,6 +2414,7 @@ class Detector:
                 if (not area.structural and area.kind in SIGNING_KINDS
                         and self.ordinary_source_kind(sources, area.kind)):
                     area.kind = 'text'
+                    area.ordinary_reading = True
                 continue
             code = 'human_signing_action' if 'human_signing_action' in roles else 'ambiguous_source_action'
             area.source_action = True
