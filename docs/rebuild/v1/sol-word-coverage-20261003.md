@@ -155,3 +155,29 @@ history; no stored mapping or existing finalized export is rewritten.
 
 The final source still requires its affected checks, actual original-upload
 admission controls on all engines, and a finished-diff independent refutation.
+
+## Admission qualification and date follow-up
+
+The 5f39682f affected batch ran 33 tests in 65.967 seconds: 32 passed and one new
+fixture was rejected by the immutable import-evidence database guard. The fixture
+is corrected by preserving the original manifest byte for byte; its single
+workflow check then passed in 1.565 seconds. The initial refusal is retained;
+the other 32 unaffected checks are reused rather than rerun.
+
+Nine actual original upload routes passed on D27/D35/D29 × auto/legacy/v3. The
+six auto/v3 versions carry held coverage; each explicit legacy upload refuses
+unsupported structure before creating a template. Attempts to confirm and create
+encounters produce zero jobs and reservations. Removing quarantine declaration
+metadata still fails the independent original-hash guard. The one actual test
+passed in 21.781 seconds, runner exit 0 in 27.244 seconds, database destroyed.
+These results do not qualify a held original or regrade any frozen first result.
+
+Root's finished 5f component refutation completed 35 actual cases with no unsafe
+writes or false holds. A separate security component pass completed 30 actual
+inspections in 17.250 seconds and demonstrated one useful-date false hold:
+`[DD / MM / YYYY]`. The exact date-format exemption now permits horizontal
+spacing around its slashes. Unclosed slash-bearing bracket ranges also get exact
+review issues; no free writer or guessed choice is added. Two new pure source,
+actual fill and preservation controls passed in 4.054 seconds, exit 0 without a
+database or provider request. Their real binding/export and exclusion workflow
+checks, final rendered supplement and finished source refutation remain queued.

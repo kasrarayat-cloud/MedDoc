@@ -131,6 +131,27 @@ class SourceCoverage(unittest.TestCase):
         self.assertFalse(result['import_manifest']['coverage'].get('selected_engine_issues'))
         self.assertEqual({f['label'] for f in result['fields']},{'Name patient name','Date dd/mm/yyyy','Plan enter clinical plan'})
 
+    def test_spaced_date_formats_fill_while_spaced_literal_alternatives_stay_held(self):
+        for hint in ('DD / MM / YYYY','dd\t/\tmm / yy','MM\u00a0/\u00a0DD / YYYY'):
+            with self.subTest(hint=hint):
+                doc=Document();doc.add_paragraph('Date: ['+hint+']');result=self.inspect(doc)
+                self.assertFalse(result['import_manifest']['coverage'].get('selected_engine_issues'))
+                field=result['fields'][0];self.assertEqual(field['kind'],'date')
+                out=word_v3.fill(data(doc),result['fields'],{field['key']:'03/14/2026'})
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'Date: 03/14/2026')
+        doc=Document();doc.add_paragraph('Site: [left / right]');doc.add_paragraph('Reason: ______')
+        result=self.inspect(doc);self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+        self.assertEqual([f['label'] for f in result['fields']],['Reason'])
+
+    def test_unclosed_slash_source_is_reviewable_without_inventing_an_answer(self):
+        doc=Document();doc.add_paragraph('Site: [left/right');doc.add_paragraph('Reason: ______')
+        result=self.inspect(doc);self.assertEqual([f['label'] for f in result['fields']],['Reason'])
+        issue=result['import_manifest']['coverage']['selected_engine_issues'][0]
+        self.assertEqual(issue['code'],'unbalanced_bracketed_source')
+        self.assertEqual((issue['start'],issue['end']),(6,len(doc.paragraphs[0].text)))
+        out=word_v3.fill(data(doc),result['fields'],{result['fields'][0]['key']:'Synthetic review'})
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'Site: [left/right')
+
     def test_long_bracketed_source_is_not_silently_discarded_at_grammar_limit(self):
         for length in (121,2100):
             with self.subTest(length=length):

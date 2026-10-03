@@ -1,6 +1,8 @@
 """Explicit source review cannot be replaced by a generic confirmation or copied writer."""
 import copy
 import io
+from pathlib import Path
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase,override_settings
@@ -22,12 +24,13 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
         if shape=='list':
             numbered(doc,'Gender',90,'decimal')
             for item in ('Male','Female','Other'):numbered(doc,item,91,'lowerLetter')
+        elif shape=='unbalanced':doc.add_paragraph('Site: [left/right')
         else:doc.add_paragraph('The care received was right for [me/us].')
         doc.add_paragraph('Reason for visit: ______')
         out=io.BytesIO();doc.save(out);return doc,out.getvalue()
 
     def test_exact_review_preserves_printed_sources_and_ordinary_field_workflow(self):
-        for shape in ('list','alternatives'):
+        for shape in ('list','alternatives','unbalanced'):
             with self.subTest(shape=shape):
                 original,raw=self.source(shape)
                 template,version=self.uploaded(data=raw,name='Synthetic exact source review '+shape)
@@ -88,19 +91,32 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
     def test_measured_document_quarantine_refuses_even_precise_exclusion_before_money(self):
         _,raw=self.source('alternatives');template,version=self.uploaded(data=raw)
         manifest=copy.deepcopy(version.import_manifest)
-        manifest['coverage']['layout_quarantine']={'source_sha256':template.sha256,
-                                                   'failed_anchors':[version.fields[0]['locator']],
-                                                   'evidence':['synthetic measured-failure control']}
         quarantined=TemplateVersion.objects.create(template=template,number=2,fields=version.fields,
                     contract=version.contract,created_by=self.user,import_manifest=manifest,
                     corrections={'coverage_review':[{'id':issue['id'],'disposition':'leave_unchanged',
                                   'source_sha256':template.sha256,'reviewed_by':str(self.user.pk)}
                                  for issue in manifest['coverage']['selected_engine_issues']]})
-        self.assertFalse(import_binding.coverage_reviewed(quarantined))
-        with self.assertRaisesMessage(ValidationError,'retained rendered answer failures'):
-            import_binding.verify(quarantined)
-        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_confirm',
-                                 'mapping_version':quarantined.pk,'checked_every_field':'on'})
-        self.assertEqual(response.status_code,400)
-        self.assertEqual(self.new_encounter(quarantined).status_code,200)
-        self.assertEqual(Job.objects.count(),0);self.assertEqual(Reservation.objects.count(),0)
+        self.assertEqual(quarantined.import_manifest,version.import_manifest)
+        from documents.word_v3 import KNOWN_LAYOUT_FAILURES
+        declaration={'failed_anchors':[version.fields[0]['locator']],
+                     'evidence':['synthetic measured-failure control']}
+        with patch.dict(KNOWN_LAYOUT_FAILURES,{template.sha256:declaration}):
+            self.assertFalse(import_binding.coverage_reviewed(quarantined))
+            with self.assertRaisesMessage(ValidationError,'retained rendered answer failures'):
+                import_binding.verify(quarantined)
+            response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_confirm',
+                                     'mapping_version':quarantined.pk,'checked_every_field':'on'})
+            self.assertEqual(response.status_code,400)
+            self.assertEqual(self.new_encounter(quarantined).status_code,200)
+            self.assertEqual(Job.objects.count(),0);self.assertEqual(Reservation.objects.count(),0)
+
+    def test_spaced_date_source_has_valid_binding_and_genuine_export(self):
+        from documents.service import fill_template
+        doc=Document();doc.add_paragraph('Date: [DD / MM / YYYY]')
+        out=io.BytesIO();doc.save(out);template,version=self.uploaded(data=out.getvalue())
+        self.assertFalse(version.import_manifest['coverage'].get('block_generation'))
+        self.confirm(template,version);import_binding.verify(version)
+        field=version.fields[0];self.assertEqual(field['kind'],'date')
+        target=Path(self.directory.name)/'spaced-date-export.docx'
+        fill_template(private_path(template.original_path),version.fields,{field['key']:'03/14/2026'},target)
+        self.assertEqual(Document(target).paragraphs[0].text,'Date: 03/14/2026')

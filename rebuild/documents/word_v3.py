@@ -5833,10 +5833,14 @@ class Detector:
             inner=match.group(1).strip()
             parts=inner.split('/')
             if (len(parts)>1 and
-                    not re.fullmatch(r'(?:dd|mm|yy|yyyy)(?:/(?:dd|mm|yy|yyyy))+',inner,re.I)):
+                    not re.fullmatch(r'(?:dd|mm|yy|yyyy)(?:[^\S\r\n]*/[^\S\r\n]*(?:dd|mm|yy|yyyy))+',inner,re.I)):
                 unresolved.append((match.start(),match.end(),'printed_bracket_alternatives',
                     'Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact '
                     'choice interpretation need review; this source range remains unchanged: '+match.group(0)))
+        for match in re.finditer(r'\[[^\[\]]*/[^\[\]]*$',text):
+            unresolved.append((match.start(),match.end(),'unbalanced_bracketed_source',
+                'This slash-bearing source range has no closing bracket. Its answer or authoring role is unresolved; '
+                'preserve the exact text and review it before generation: '+match.group(0)))
         # A long marked range is outside the qualified placeholder grammar. Its
         # physical presence cannot be silently omitted because of the 120 limit.
         for match in re.finditer(r'\[[^\[\]]+\]',text):
