@@ -679,3 +679,39 @@ batches/open campaign requests, source/target financial hashes and stored-export
 reseeding or regeneration. The first helper refutation retained a concrete timeout witness with lost first stdout/
 stderr and identified missing extracted-source verification and nonterminal staged/batch admission. Those are
 pre-execution repair requirements, not permission to weaken a guard or mutate an existing database.
+
+
+### Clinical acdd mixed-actor cessation refutation
+
+Frozen `acdd1f2f06e9776f7993098d7473189f5a1bc53c` received 133 whole-validator/current-governance/final-decision probes
+in 27.853s and 21 narrow root/baseline/parser controls in 8.129s, both exit 0. All 20 committed component hashes and
+HEAD remained unchanged before and after measurement. Sources were released only after those actual exits. The
+probe used the shared pinned parser, refused all database/network connections and retained the original first
+voice output separately. The two batches remain separate supplemental observations, not a rebased denominator.
+
+A new definite unsafe release remains: `Takes warfarin 5 mg daily.` survives `Her father switched from prone to
+supine positioning and the patient stopped warfarin.` as supported in actual v4 validation, supported in current
+governance and with no final-decision hold. It reproduces for both `Current medications` and `Medications`, for an
+explicit-patient selected baseline, with a semicolon, with `the patient withheld warfarin`, and with `the patient
+replaced warfarin with apixaban`. A separate full-stop patient cessation is correctly held. The narrow batch has
+five unsafe control outputs; the primary batch's two equivalent-label outputs demonstrate the same mixed-actor
+condition and are not added as independent cases to a new score.
+
+The retained parser/scope witness has an explicit patient cessation and `ceased_keys={'warfarin'}` inside the mixed
+unit. `pure_foreign_clause` correctly returns false, but the unit remains `other_floor=True/main_patient=False` and
+the opposed-candidate guard at `generation.py:3910` skips it before the named cessation check. The clinician's default
+patient context must never discard an explicit patient action merely because the sentence starts with a relative.
+
+One definite unnecessary hold is the same father's position clause followed by `the patient stopped apixaban`:
+the independently supported warfarin value is held although that named cessation concerns a different drug. The
+scope witness instead marks a bare cessation and gives it global reach. The repaired generic unknown-medication
+dependency, father-only position change, actual question-heading coupling and precise named replacement-target
+controls otherwise pass within this instrument. No whole medication class is authorized for release by this result.
+
+The original raw unknown-substance flag remains an unproven medication ambiguity and is not another unsafe count.
+Earlier foreign body-pronoun, temporal, malformed and standalone-baseline holds remain conservative residuals;
+they are not automatically counted as new definite unnecessary holds. The medication possession/use withdrawal
+stays withdrawn. Original voice replay still has zero useful values without reviewed context and only `v3_7` with
+exact context; `v3_2` and `v3_4` remain held. No paid/audio/human or browser-to-export qualification is inferred.
+`clinical-acdd1f2f-refutation/manifest.json` binds the retained exact source manifest, instruments, logs, outputs and
+parser/scope witnesses. The finished-source qualification is refuted pending repair and a fresh independent pass.
