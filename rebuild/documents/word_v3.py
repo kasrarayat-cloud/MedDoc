@@ -2399,6 +2399,16 @@ class Detector:
                                default=len(printed))
                 before = max((end for _, end, _ in self.blank_spans(printed, pieces)
                               if end <= start), default=0)
+                # A separately printed caption followed by its own blank is
+                # a different question even within one Word paragraph. Keep
+                # actor/predicate continuations in the original act clause:
+                # whitespace alone, or a modal verb after an actor blank,
+                # cannot establish an independent clinical destination.
+                prefix = printed[before:start]
+                caption = re.fullmatch(r'(?:[ \t]{2,}|\s*[\r\n]+\s*)([^:;?!\r\n]+):\s*', prefix) if before else None
+                if (caption and not self.checkbox_source_action(caption[1], governing=True)
+                        and clean_label(caption[1], limit=None) == area.label):
+                    clause_start = max(clause_start, before)
                 sources.append(printed[max(before,clause_start):start])
                 # Identity and response blanks belong to their original
                 # printed clause even when the acting predicate follows them.
@@ -2959,6 +2969,20 @@ class Detector:
         document_pattern = (r'\b(?:this|the|these|above|foregoing)\s+'
                             r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
                             r'(?:records?|documents?|forms?|reports?|information|statements?|details?)(?=\W|_|$)')
+        # A finite auxiliary belongs to the subject/predicate relation, not
+        # the actor's name. Read its complement with the same action reader;
+        # neither tense, negation nor an unfamiliar actor creates authority.
+        # This also protects an actor blank before the predicate. Clinical
+        # complements keep their ordinary meaning ("will review the dose").
+        auxiliary = (r'(?:will|would|shall|should|can|could|may|might|must|cannot|'
+                     r'am|is|are|was|were|has|have|had|do|does|did|been|being|not|yet|hereby|personally)')
+        finite = re.match(r'^(?:(?P<subject>[^.;:?!\r\n]+?)\s+)?'
+                          r'(?P<aspect>(?:'+auxiliary+r'\s+)+)(?P<complement>\S.+)$', source, re.I)
+        if finite and not first_person:
+            complement = finite['complement']
+            action = cls.checkbox_source_action(complement, governing=governing)
+            if action:
+                return 'ambiguous_source_action'
         # Permission and witnessing are acts even when their object is a
         # procedure/person rather than the document. Their subject/predicate
         # relationship supplies the role; merely mentioning consent, signing
@@ -3079,7 +3103,9 @@ class Detector:
         receipt = (r'\bsigned\s+[^:?!\r\n]+?\s+'
                    r'(?:(?:was|were|is|are|has\s+been|had\s+been)\s+)?'
                    r'(?:received|recorded|filed|stored)\b')
-        return any(re.search(receipt,source,re.I) or
+        received_signed_object = (r'\b(?:received|recorded|filed|stored)\s+'
+                                  r'(?:the|a|an|this|that|these|those)\s+signed\s+[^:?!\r\n]+')
+        return any(re.search(receipt,source,re.I) or re.search(received_signed_object,source,re.I) or
                    re.search(r'\b(?:recorded|documented)\b[^:?!]*\bsigned\b[^:?!]*\bstatus$',source,re.I)
                    for source in printed)
 

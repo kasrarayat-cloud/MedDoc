@@ -1,0 +1,19 @@
+# Independent Word destination continuation — 2026-10-03
+
+This is permitted product work after the platform interruption. The exact blocked action is unknown and remains stopped. No security campaign, provider send, installation, cleanup, credential rotation or deployment was performed here.
+
+The retained `security/refute-worda620ebaf/result.json` has SHA-256 `34746175a23132ab1da16ecc518d388f2da97edfaa061e6e4aa1365bb35e5e90` and binds its tested source to `a620ebaf55894d6e7543e259d1ab369d50938639`. That commit's Word module matches the report's source manifest. Eighteen exact retained originals were individually hashed before replay; all originals and prior failed outputs remain unchanged.
+
+The seven retained unsafe actor destinations (future/modal/aspect paragraph clauses, checkbox and table) now remain human-owned. Finite auxiliary complements are read by the existing action reader; a document noun alone does not create a signing action. An independent printed clinical caption and its own blank after two spaces or a line break no longer inherits a neighboring approval act. Initial clinical values and historical receipt of signed documents retain ordinary writers. Unknown or other-person signer qualifiers remain human signing roles; a renamed mapping or old identity policy cannot appoint the authenticated finalizer. Electronic identity for the established unqualified clinician workflow and explicit existing clinician roles remains validated against the reviewing finalizer.
+
+Note-derived signing suggestions are withdrawn, including when the old setting is `1`, an old job carries the recorded contract, or an old draft contains an offer. No historical job, accounting row or finalized export is migrated. Existing disabled-feature routing provides the refusal. Unknown/qualified signer labels, including consultant/GP or print-name qualifiers without established signer authority, now require the human workflow; that is a deliberate support narrowing. Informational date questions remain ordinary.
+
+Evidence lives under `rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/word/`:
+
+- `retained-input-identity.json`: retained report/source and exact-original identities.
+- `retained-replay.json`: 18/18 exposed retained inputs passed pure inspect/role/fill replay with genuine synthetic DOCX outputs; zero network/provider/database connections. This is regression evidence, not unseen acceptance.
+- `affected-pure-third.log`: 38/38 compact destination and adjacent-answer pure tests passed. Package parts, checked state, hyperlink and neighboring content are asserted unchanged.
+- The first compact newline failure was console-only; no captured raw log is claimed. `fixed-regression-second.log` retains the first captured new receipt-control failure. `affected-db-first.log` retains the date-headed signature false hold; it was subsequently corrected.
+- `affected-db-second.log`: all six current authority tests pass, including actual legacy blank exports after mapping rename, useful ordinary Plan answers, stored-offer refusal with unchanged job/usage/ledger rows, and the immutable old-queued-job contract. The historical role-suggestion module still has incompatible positive-offer assertions; that affected suite is being updated before qualification. The isolated test database was destroyed by Django.
+
+This source is not yet a qualified integrated release. Remaining gates are the applicable historical-test updates, affected default-engine/coverage workflow checks, independent finished-diff refutation, exact integrated candidate CI, the original whole-document acceptance denominators, and the permitted isolated private-demo workflow. Native Word appearance, live-model qualification and human microphone acceptance are not proven here. Original imports bind the processor fingerprint, so prior stored mappings are not silently rerun through changed code.
