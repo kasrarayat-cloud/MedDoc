@@ -816,7 +816,12 @@ def owned_oppositions(reading,claim):
                     negated ^= not a._negates(parent)
                 child=parent
             record=g.v3_without_time((head,negated,tense,bounded,coordinated))
-            if any(g.v3_opposed_predicates(own,record) for own in mine):
+            # Compare only possible oppositions, using the effective polarity
+            # after the outer denial and the normalized predicate heads.
+            # The unit index cannot supply this test: its outer speaker may
+            # hide a separately owned patient content clause.
+            if any(own[1]!=record[1] and own[0]&record[0]
+                    and g.v3_opposed_predicates(own,record) for own in mine):
                 result.append(unit);break
     return result
 
