@@ -364,6 +364,73 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
         self.assertEqual(filled.tables[0].cell(0,1).text,'')
         for row in range(1,4):self.assertEqual(filled.tables[0].cell(row,1).text,'Synthetic ordinary status')
 
+    def source_act_forms(self,statement):
+        for shape in ('checkbox','paragraph','table'):
+            doc=Document()
+            if shape=='table':
+                table=doc.add_table(rows=1,cols=2);table.cell(0,0).text=statement+':'
+            else:doc.add_paragraph(('☐ ' if shape=='checkbox' else '')+statement+' ______')
+            doc.add_paragraph('Unrelated note: ______');buffer=io.BytesIO();doc.save(buffer)
+            yield shape,buffer.getvalue()
+
+    def assert_source_act_stays_human_owned(self,statement):
+        for shape,raw in self.source_act_forms(statement):
+            with self.subTest(statement=statement,shape=shape):
+                result=word_v3.inspect(raw);held=[f for f in result['fields'] if f.get('write_protected')]
+                self.assertEqual(len(held),1)
+                self.assertTrue(any(i['code'] in ('human_signing_action','ambiguous_source_action')
+                                    for i in result['coverage_issues']))
+                field=deepcopy(held[0]);field.pop('write_protected');field.pop('review_reason')
+                self.assertIn(field['key'],word_v3.destination_roles(raw,[field])['violations'])
+                with self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(raw,[field],{field['key']:'checked' if shape=='checkbox' else 'Synthetic completion'})
+                ordinary=next(f for f in result['fields'] if f['label']=='Unrelated note')
+                before=Document(io.BytesIO(raw));after=Document(io.BytesIO(word_v3.fill(raw,result['fields'],
+                                                        {ordinary['key']:'Synthetic review'})))
+                self.assertEqual([p.text for p in after.paragraphs[:-1]],[p.text for p in before.paragraphs[:-1]])
+                if shape=='table':
+                    self.assertEqual([c.text for c in after.tables[0].rows[0].cells],
+                                     [c.text for c in before.tables[0].rows[0].cells])
+
+    def test_checkbox_action_condition_cannot_supply_signing_authority(self):
+        for statement in ('By checking this box, I agree to this procedure',
+                          'By checking this box I agree to this procedure',
+                          'By checking this box you authorize this treatment',
+                          'By ticking this box; we certify that this record is complete'):
+            self.assert_source_act_stays_human_owned(statement)
+
+    def test_documentary_nominal_action_does_not_become_an_ordinary_option(self):
+        for statement in ('Confirmation that this record is complete and accurate',
+                          'Certification of this clinical record','Certification of treatment completion'):
+            self.assert_source_act_stays_human_owned(statement)
+
+    def test_documentary_imperative_cannot_be_completed_by_generation(self):
+        for statement in ('Confirm this form is complete','Please verify the information above is correct',
+                          'Authorize this treatment','Consent to this procedure'):
+            self.assert_source_act_stays_human_owned(statement)
+
+    def test_third_person_action_never_infers_a_signer_and_ordinary_observations_stay_useful(self):
+        for statement in ('The signer certifies that this record is accurate',
+                          'The department lead confirms that this form is accurate',
+                          'The department lead authorizes treatment'):
+            self.assert_source_act_stays_human_owned(statement)
+        for statement in ('Confirm left knee swelling','The laboratory results confirm no infection',
+                          'Recorded approval status','Initial presentation','Recorded signed report status'):
+            for shape,raw in self.source_act_forms(statement):
+                with self.subTest(statement=statement,shape=shape):
+                    result=word_v3.inspect(raw)
+                    self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                      ('human_signing_action','ambiguous_source_action')])
+                    fields=deepcopy(result['fields'])
+                    for field in fields:
+                        if field['kind'] in ('signature','initials'):field['kind']='text'
+                    target=next(f for f in fields if f['kind']=='checkbox') if shape=='checkbox' else \
+                           next(f for f in fields if f['label']!='Unrelated note')
+                    self.assertFalse(target.get('write_protected'))
+                    self.assertEqual(word_v3.destination_roles(raw,[target])['violations'],{})
+                    word_v3.fill(raw,fields,{target['key']:'checked' if target['kind']=='checkbox'
+                                            else 'Synthetic ordinary status'})
+
 
 class SourceCoverage(unittest.TestCase):
     def inspect(self,doc):

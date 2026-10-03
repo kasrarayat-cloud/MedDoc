@@ -2802,8 +2802,8 @@ class Detector:
         if any(roles):
             definite = 'human_signing_action' in roles
             code = 'human_signing_action' if definite else 'ambiguous_source_action'
-            reason = ('This printed first-person document action is human-owned. Complete it through the established signing workflow.'
-                      if definite else 'This printed first-person action does not establish who performs it. '
+            reason = ('This printed document action is human-owned. Complete it through the established signing workflow.'
+                      if definite else 'This printed action does not establish who performs it. '
                       'Keep it unchanged and review its precise source role; a review click does not authorize that act.')
             self.protected_regions.add(slot.id);self.box_action_reasons[slot.id] = reason
             self.coverage_issue(slot, code, reason + ' Location: ' + slot.id)
@@ -2863,15 +2863,21 @@ class Detector:
 
     @classmethod
     def checkbox_source_action(cls,text,*,governing=False):
-        """Printed first-person performative ownership, not a signer-name guess.
+        """Printed performative ownership, not a signer-name guess.
 
         Ordinary clinical states and recorded-status labels are not this frame.
-        Formal declarations are acts themselves. Other performative predicates
-        require their printed documentary object to establish an attestation;
-        missing object/context stays a precise source-role ambiguity.
+        First-person, documentary nominal, imperative, third-person and explicit
+        checkbox-action conditions share one reading. A third-person subject
+        supplies no signer identity. Documentary objects distinguish those
+        requests from ordinary clinical questions and nonhuman observations.
         """
         source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        condition = re.match(r'^by\s+(?:checking|ticking|selecting|signing|initiall?ing)\b'
+                             r'[^,;:\r\n]{0,200}?(?:[,;:]\s*|\s+(?=(?:I|we|you|he|she|they)\b))(.+)$',source,re.I)
+        if condition:
+            return cls.checkbox_source_action(condition[1],governing=governing)
         predicate = cls.first_person_source(source)
+        first_person = bool(predicate)
         # A documentary action noun is a governing label, not a recorded-status
         # label. This reads the action, irrespective of a named signer/role.
         if governing:
@@ -2895,24 +2901,64 @@ class Detector:
                         and cls.first_person_source(statement)
                         and re.search(r'\bsign(?:ed|ing)?\b',statement,re.I)):
                     return 'human_signing_action'
+        document_pattern = (r'\b(?:this|the|these|above|foregoing)\s+'
+                            r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
+                            r'(?:record|document|form|report|information|statements?|details?)(?=\W|_|$)')
         if not predicate:
-            return ''
+            # A documentary nominal printed as an option is still the act,
+            # even without a named signer or a colon-bearing parent label.
+            nominal = re.match(r'^(approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
+                               r'certification|attestation|declaration|authori[sz]ation|consent)'
+                               r'\s+(?:that|of|for|to)\b',source,re.I)
+            if (nominal and (re.search(document_pattern,source,re.I)
+                             or re.match(r'certification|attestation|declaration|authori[sz]ation|consent',nominal[1],re.I))):
+                return 'human_signing_action'
+            action = (r'certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|'
+                      r'affirm(?:s|ed|ing)?|consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing)|'
+                      r'confirm(?:s|ed|ing)?|verif(?:y|ies|ied|ying)|acknowledg(?:e|es|ed|ing)|'
+                      r'agree(?:s|d|ing)?|accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?')
+            base_action = (r'certify|attest|declare|affirm|consent|authori[sz]e|confirm|verify|acknowledge|'
+                           r'agree|accept|approve|review|read')
+            imperative = re.match(r'^(?:please\s+)?('+base_action+r')(?=\W|_|$)',source,re.I)
+            if imperative and re.match(r'\s+(?:is|are|was|were|has|have|had)\b',source[imperative.end():],re.I):
+                imperative = None  # "Consent was obtained" reports a noun's status; it is not an order.
+            third_person = re.match(r'^([^.;:?!\r\n]+?)\s+('+action+r')(?=\W|_|$)',source,re.I)
+            if third_person:
+                subject,verb = third_person[1].strip(),third_person[2]
+                if (re.fullmatch(base_action,verb,re.I)
+                        and not re.fullmatch(r'you|they|he|she|it',subject,re.I)
+                        and not re.search(r's\s*$',subject,re.I)):
+                    third_person = None  # "Signed consent" is a noun phrase, not subject + finite verb.
+            frame = imperative or third_person
+            if not frame:
+                return ''
+            predicate = source[frame.start(1 if imperative else 2):]
+            # A request about a clinical observation is not a documentary
+            # attestation merely because it says confirm/verify/review.
+            if not re.search(document_pattern,predicate,re.I):
+                formal = re.match(r'(?:certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|'
+                                  r'affirm(?:s|ed|ing)?|consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing))'
+                                  r'(?=\W|_|$)',predicate,re.I)
+                # Authorizing treatment or giving consent performs an act
+                # without saying "document". An unqualified third-person
+                # subject supplies no identity/authority to perform it either.
+                if formal:
+                    return 'human_signing_action' if imperative else 'ambiguous_source_action'
+                return ''
         if re.match(r'(?:so|this|that)(?=\W|_|$)',predicate,re.I):
             return 'ambiguous_source_action'
-        document = re.search(r'\b(?:this|the|these|above|foregoing)\s+'
-                             r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
-                             r'(?:record|document|form|report|information|statements?|details?)(?=\W|_|$)', predicate, re.I)
-        if re.match(r'(?:certif(?:y|ied|ying)|attest(?:ed|ing)?|declar(?:e|ed|ing)|affirm(?:ed|ing)?|'
-                    r'consent(?:ed|ing)?|authori[sz](?:e|ed|ing)|(?:give|given|gave)\s+(?:(?:my|our)\s+)?consent)'
+        document = re.search(document_pattern,predicate,re.I)
+        if re.match(r'(?:certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|affirm(?:s|ed|ing)?|'
+                    r'consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing)|(?:give|given|gave)\s+(?:(?:my|our)\s+)?consent)'
                     r'(?=\W|_|$)', predicate, re.I):
             return 'human_signing_action'
-        if not re.match(r'(?:confirm(?:ed|ing)?|verif(?:y|ied|ying)|acknowledg(?:e|ed|ing)|agree(?:d|ing)?|'
-                        r'accept(?:ed|ing)?|approv(?:e|ed|ing)|review(?:ed|ing)?|read)(?=\W|_|$)',
+        if not re.match(r'(?:confirm(?:s|ed|ing)?|verif(?:y|ies|ied|ying)|acknowledg(?:e|es|ed|ing)|agree(?:s|d|ing)?|'
+                        r'accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?)(?=\W|_|$)',
                         predicate, re.I):
             # An unfamiliar predicate about the document cannot silently become
             # authority to make the printed first-person assertion either.
             return 'ambiguous_source_action' if document else ''
-        return 'human_signing_action' if document else 'ambiguous_source_action'
+        return 'human_signing_action' if document else 'ambiguous_source_action' if first_person else ''
 
     def adjacent_option_text(self, unit):
         """Separate only a proven explicit trailing condition from its option."""

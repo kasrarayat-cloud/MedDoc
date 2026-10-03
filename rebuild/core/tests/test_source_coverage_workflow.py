@@ -151,7 +151,20 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
         cases += [('paragraph',('I confirm that this clinical record is complete and accurate:',)),
                   ('table',('I confirm that this clinical record is complete and accurate:',)),
                   ('paragraph',('Manager approval:',))]
-        for statement_index,(shape,source) in enumerate(cases,1):
+        self.source_action_workflow(cases)
+
+    def test_noninitial_document_acts_refuse_before_money_and_preserve_sources_through_export(self):
+        self.source_action_workflow([('checkbox',(statement,)) for statement in (
+            'By checking this box, I agree to this procedure',
+            'Confirmation that this record is complete and accurate',
+            'Confirm this form is complete',
+            'The signer certifies that this record is accurate',
+            'Authorize this treatment', 'Consent to this procedure',
+            'The department lead authorizes treatment','Certification of treatment completion')],start=100)
+
+    def source_action_workflow(self,cases,*,start=1):
+        from core import v3_mapping
+        for statement_index,(shape,source) in enumerate(cases,start):
             for engine in ('v3','auto'):
                 with self.subTest(shape=shape,source=source,engine=engine),override_settings(
                         QUILLMD_WORD_ENGINE=engine,QUILLMD_WORD_AUTO_PREFER_V3=True):
