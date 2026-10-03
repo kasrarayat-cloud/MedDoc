@@ -34,6 +34,44 @@ def numbered(doc, values, kind='bullet'):
 
 
 class DocumentRelations(unittest.TestCase):
+    def test_heading_with_own_digit_destinations_cannot_claim_following_spacers(self):
+        doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+        p = cell.paragraphs[0]; p.style = 'Heading 3'
+        for label in ('Waist Circumference: ', 'in.  Hip Circumference: '):
+            p.add_run(label)
+            for _ in range(3):
+                run = p.add_run(); symbol = OxmlElement('w:sym')
+                symbol.set(qn('w:font'), 'Symbol'); symbol.set(qn('w:char'), 'F0F0')
+                run._r.append(symbol)
+        p.add_run('in.'); cell.add_paragraph(); cell.add_paragraph()
+        raw = data(doc); info = w.inspect(raw); fields = info['fields']
+        self.assertEqual([f['label'] for f in fields], ['Waist Circumference', 'Hip Circumference'])
+        self.assertTrue(all(f['locator']['slot'] == 'b/tbl[0]/tr[0]/tc[0]/p[0]' for f in fields))
+        self.assertEqual([(f['locator']['target']['start'], f['locator']['target']['end']) for f in fields], [(21, 24), (48, 51)])
+        out = Document(io.BytesIO(w.fill(raw, fields, {fields[0]['key']: '032', fields[1]['key']: '040'})))
+        self.assertEqual(out.tables[0].cell(0, 0).paragraphs[0].text, 'Waist Circumference: 032in.  Hip Circumference: 040in.')
+        self.assertTrue(all(not p.text for p in out.tables[0].cell(0, 0).paragraphs[1:]))
+        self.assertEqual(w.fill(raw, fields, {}), raw)
+
+    def test_all_recognized_inline_blanks_keep_their_own_heading_destination(self):
+        for placeholder in ('|__|__|__|', '{{Findings}}', '[Describe findings]'):
+            with self.subTest(placeholder=placeholder):
+                doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+                p = cell.paragraphs[0]; p.style = 'Heading 3'; p.text = 'Findings: ' + placeholder
+                cell.add_paragraph(); cell.add_paragraph(); raw = data(doc); fields = w.inspect(raw)['fields']
+                self.assertEqual(len(fields), 1)
+                self.assertEqual(fields[0]['locator']['slot'], 'b/tbl[0]/tr[0]/tc[0]/p[0]')
+                self.assertEqual(fields[0]['locator']['target']['type'], 'span')
+        # An unfilled underline uses the same precise blank reader. A plain
+        # label without its own blank still owns its directly following box.
+        for underline in (True, False):
+            doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+            p = cell.paragraphs[0]; p.style = 'Heading 3'; p.text = 'Findings:'
+            if underline: p.add_run('   ').underline = True
+            cell.add_paragraph(); cell.add_paragraph(); fields = w.inspect(data(doc))['fields']
+            self.assertEqual(len(fields), 1)
+            self.assertEqual(fields[0]['locator']['slot'], 'b/tbl[0]/tr[0]/tc[0]/p[' + ('0' if underline else '1') + ']')
+
     def test_previous_question_has_complete_local_source(self):
         doc = Document(); doc.add_heading('Relationships', 1)
         first = 'How is the reporting condition monitored outside self-report?'

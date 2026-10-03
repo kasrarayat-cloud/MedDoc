@@ -6346,7 +6346,10 @@ class Detector:
                 txt = self.text(ps.el).strip()
                 if not txt or len(txt) > 200 or BOX in txt or "\x00" in self.ptext(ps.el)[0]:
                     continue
-                if UNDERSCORES.search(txt) or DOTS.search(txt):
+                # A printed heading can contain its own digit, underline or
+                # placeholder answer. That precise source blank owns the
+                # response; following empty paragraphs are not its answer.
+                if self.blank_spans(*self.ptext(ps.el)):
                     continue
                 label = clean_label(txt)
                 signing = bool(SIGNATURE.search(label) or INITIALS.search(label) or re.match(r"^(?:date|printed name|name)\b", label, re.I))
