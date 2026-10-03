@@ -2352,6 +2352,34 @@ class TranscriptionLedgerTests(Base):
             st.StandingCampaign(flipped, campaign.root).stage_open('transcription')
         campaign.stage_open('transcription')
 
+    def test_corrections_require_prospective_opt_in_and_cannot_change_a_campaign(self):
+        from ops import standing_qa_voice_review as review
+        text = fixture_text().replace('transcription_smart_format: false\n',
+            'transcription_smart_format: false\ntranscription_patient_context: true\n'
+            'transcription_notes_contract: field_relations\ntranscription_review: '+review.MANIFEST_SHA256+'\n')
+        # Some fixtures already declare the default contract; retain one term.
+        text = text.replace('transcription_notes_contract: default\n', '')
+        text = text.replace('pricing_version transcription: configured-v1:'+'e'*64,
+            'pricing_version transcription: configured-v1:'+'e'*64+'\n'
+            'pricing_version voice_notes_field_relations: configured-v1:'+'f'*64)
+        declaration = parse(self, text)
+        self.assertEqual(declaration.transcription.review, review.MANIFEST_SHA256)
+        for changed in (text.replace('transcription_patient_context: true', 'transcription_patient_context: false'),
+                        text.replace(review.MANIFEST_SHA256, '0' * 64),
+                        text + '\ntranscription_review: '+review.MANIFEST_SHA256+'\n'):
+            with self.subTest(changed=changed[-80:]), self.assertRaises(pc.Refused):
+                parse(self, changed)
+        campaign = self.campaign()
+        self.pass_model_check(campaign)
+        _, sends, inputs = self.open_run(campaign)
+        campaign.ledger.write_attempt(self.transcription_attempt(campaign, sends[0], inputs))
+        self.completed(campaign, len(campaign.ledger.rows()))
+        changed = dataclasses.replace(campaign.declaration, transcription=dataclasses.replace(
+            campaign.declaration.transcription, review=review.MANIFEST_SHA256))
+        with self.assertRaisesRegex(pc.Refused, 'another correction freeze'):
+            st.StandingCampaign(changed, campaign.root).stage_open('transcription')
+        campaign.stage_open('transcription')
+
     def test_an_allowlisted_recording_is_admitted_and_recorded(self):
         campaign = self.campaign()
         self.pass_model_check(campaign)

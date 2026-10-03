@@ -1,0 +1,61 @@
+{
+  "id": "reviewed-synthetic-voice-v1",
+  "scope": "Explicit automated review simulation of project-authored synthetic audio. Not human microphone acceptance. No hidden substitution of the original script.",
+  "preserved_ambiguity": "The two blood-loss amounts remain unclarified; C08 stays held.",
+  "provider_upload_allowed": true,
+  "corpus_qualification": false,
+  "rows": [
+    {
+      "audio_id": "soap-ankle-speech",
+      "audio_sha256": "3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7",
+      "prior_raw_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+      "raw_text": "Symptoms. Left ankle soreness began after twisting the left ankle yesterday. Pertinent negatives. Denies fever, numbness, and right ankle pain. Pain score, six out of 10. Pain score correction three out of 10. The earlier six out of ten one entered in error. Examination mild swelling over the left lateral ankle. No open wound. Assessment. The clinician explicitly documents a left ankle strain. Plan. The clinician explicitly directs rest, eyes wrapped in cloth for fifteen minutes at a time, and follow-up in three days. No medication is prescribed.",
+      "reviewed_text": "Symptoms. Left ankle soreness began after twisting the left ankle yesterday. Pertinent negatives. Denies fever, numbness, and right ankle pain. Pain score, six out of 10. Pain score correction three out of 10. The earlier six out of ten was entered in error. Examination mild swelling over the left lateral ankle. No open wound. Assessment. The clinician explicitly documents a left ankle sprain. Plan. The clinician explicitly directs rest, ice wrapped in cloth for fifteen minutes at a time, and follow-up in three days. No medication is prescribed.",
+      "reviewed_sha256": "ab251f1b25ff18a0857269e7fc112e7e5dd67021c10b1350d2cab99421b9844d",
+      "edits": [
+        {
+          "raw": "The earlier six out of ten one entered in error.",
+          "reviewed": "The earlier six out of ten was entered in error."
+        },
+        {
+          "raw": "a left ankle strain.",
+          "reviewed": "a left ankle sprain."
+        },
+        {
+          "raw": "eyes wrapped in cloth",
+          "reviewed": "ice wrapped in cloth"
+        }
+      ],
+      "script_sha256": "c113b5d8c8970f565fe440612b51dd43a913d788b1ebdcd65761ca8fc5b1447a",
+      "evidence_source": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261003/evidence/003/case/notes.txt"
+    },
+    {
+      "audio_id": "colonoscopy-speech",
+      "audio_sha256": "dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c",
+      "prior_raw_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+      "raw_text": "Fictional software test only. Patient name, sample colonoscopy. Date of birth, 01/02/1980. Patient ID, sync, colon, AI 20260921. Procedure date, 09/21/2026. Endoscopist. Doctor. Synthetic enamples. Procedure. Diagnostic colonoscopy. Anesthesia. Monitored anesthesia care. Bowel preparation score. BBPS eight. The scope one advanced ten o second. Rectal bleeding. Sigmoid diverticulosis and small internal hemorrhoids. No polyps were seen. No specimens were collected. Estimated blood loss was zero milliliters. Less than one milliliter. There were no immediate complications. Recommendation, follow-up with the referring clinician in two weeks.",
+      "reviewed_text": "Fictional software test only. Patient name, sample colonoscopy. Date of birth, 01/02/1980. Patient ID, SYN-COLON-AI-20260921. Procedure date, 09/21/2026. Endoscopist. Dr Synthetic Example. Procedure. Diagnostic colonoscopy. Anesthesia. Monitored anesthesia care. Bowel preparation score. BBPS eight. The scope was advanced to the cecum. Indication. Rectal bleeding. Sigmoid diverticulosis and small internal hemorrhoids. No polyps were seen. No specimens were collected. Estimated blood loss was zero milliliters. Less than one milliliter. There were no immediate complications. Recommendation, follow-up with the referring clinician in two weeks.",
+      "reviewed_sha256": "bb44d3c6608e7965492e21e71ee164714966ba946987833172a57f5b07422d97",
+      "edits": [
+        {
+          "raw": "Patient ID, sync, colon, AI 20260921.",
+          "reviewed": "Patient ID, SYN-COLON-AI-20260921."
+        },
+        {
+          "raw": "Doctor. Synthetic enamples.",
+          "reviewed": "Dr Synthetic Example."
+        },
+        {
+          "raw": "The scope one advanced ten o second.",
+          "reviewed": "The scope was advanced to the cecum."
+        },
+        {
+          "raw": "Rectal bleeding.",
+          "reviewed": "Indication. Rectal bleeding."
+        }
+      ],
+      "script_sha256": "038bae1345badb1ee111538347464ee1a47f45768045ad0a49f8ac945cc0356d",
+      "evidence_source": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261003/evidence/005/case/notes.txt"
+    }
+  ]
+}

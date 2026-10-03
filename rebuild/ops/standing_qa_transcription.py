@@ -477,6 +477,7 @@ class TranscriptionRun(stages.Run):
                 'audio': {'id': entry.id, 'bytes': entry.bytes, 'label': entry.label},
                 'template': str(template.pk), 'version': str(version.pk), 'encounter': str(encounter.pk),
                 **({'transcription_patient_context': True} if terms.patient_context else {}),
+                **({'transcription_review_manifest_sha256': terms.review} if terms.review else {}),
                 'transcription': {'provider': terms.provider, 'model': terms.model,
                                   'rate_per_minute': terms.rate_per_minute,
                                   'parameters': config['deepgram_parameters'], 'recording_seconds': str(seconds),
@@ -488,7 +489,7 @@ class TranscriptionRun(stages.Run):
             outcome, findings, made = self.transcribe(attempt, job, evidence, maximum)
             applied = None
             if not findings:
-                applied, more = self.apply_transcript(encounter, job, evidence)
+                applied, more = self.apply_transcript(encounter, job, evidence, entry)
                 findings += more
             if not findings:
                 self.transcribed[entry.id] = {'attempt': attempt['number'], 'encounter': str(encounter.pk),
@@ -619,9 +620,8 @@ class TranscriptionRun(stages.Run):
                 'artifacts': sorted(str(p.relative_to(evidence)) for p in evidence.rglob('*') if p.is_file())}
         return outcome, findings, made
 
-    def apply_transcript(self, encounter, job, evidence):
-        """The clinician's review: the transcript the page offers, saved UNEDITED as the notes through the real notes
-        view (replace: the encounter had no typed notes). Returns (record, findings)."""
+    def apply_transcript(self, encounter, job, evidence, entry=None):
+        """Save the shown ASR or explicitly declared synthetic corrections through the real review view."""
         from core.models import AuditEvent
         from core.views import review_transcript
         encounter.refresh_from_db()
@@ -634,10 +634,29 @@ class TranscriptionRun(stages.Run):
             return None, [{'code': 'transcript_not_applied',
                            'why': 'the page offers no review of this transcript, or shows another text than the retained '
                                   'one'}]
+        reviewed = shown
+        correction = None
+        if self.terms.review:
+            try:
+                from . import standing_qa_voice_review
+            except ImportError:
+                import standing_qa_voice_review
+            pc.write_new(evidence / 'raw-transcript.txt', raw, raw=True)
+            try:
+                require(entry is not None, 'A prospective correction binds an actual recording.')
+                correction = standing_qa_voice_review.frozen(self.terms.review)[entry.id]
+                reviewed = standing_qa_voice_review.reviewed(correction, entry.sha256, raw)
+            except (Refused, KeyError) as error:
+                return None, [{'code': 'transcript_correction_source_mismatch', 'why': str(error)}]
+            pc.write_new(evidence / 'reviewed-transcript.txt', reviewed, raw=True)
+            pc.write_new(evidence / 'transcript-edits.json', {
+                'manifest_sha256': self.terms.review, 'audio_sha256': entry.sha256,
+                'raw_sha256': correction['prior_raw_sha256'], 'reviewed_sha256': correction['reviewed_sha256'],
+                'edits': correction['edits'], 'human_acceptance': False})
         confirm_context = self.campaign.declaration.transcription.patient_context
         payload = {
             'revision': str(encounter.revision), 'transcript_job': str(job.pk), 'transcript_reviewed': 'on',
-            'transcript_mode': 'replace', 'corrected_transcript': shown}
+            'transcript_mode': 'replace', 'corrected_transcript': reviewed}
         if confirm_context:
             payload['transcript_patient_context'] = 'on'
         response = self.world.client.post(f'/encounters/{encounter.pk}/notes/', payload)
@@ -648,6 +667,10 @@ class TranscriptionRun(stages.Run):
                   'notes_sha256': hashlib.sha256(encounter.notes.encode()).hexdigest(),
                   'notes_characters': len(encounter.notes), 'transcript_sha256': raw_sha256,
                   'applied': [{k: v for k, v in event.details.items() if k != 'department'} for event in applied]}
+        if correction is not None:
+            record.update(review_manifest_sha256=self.terms.review,
+                          reviewed_sha256=correction['reviewed_sha256'], synthetic_review=True,
+                          human_acceptance=False)
         if confirm_context:
             from core.models import TranscriptReview
             from core import transcript_context
@@ -660,11 +683,12 @@ class TranscriptionRun(stages.Run):
                 return record, [{'code':'transcript_context_not_confirmed',
                                  'why':'The actual source-bound clinician confirmation was not retained.'}]
         pc.write_new(evidence / 'notes-applied.json', record)
-        if not (response.status_code == 302 and encounter.notes == raw and len(applied) == 1
-                and applied[0].details.get('corrected') is False and applied[0].details.get('raw_sha256') == raw_sha256
+        if not (response.status_code == 302 and encounter.notes == reviewed and len(applied) == 1
+                and applied[0].details.get('corrected') is (reviewed != raw)
+                and applied[0].details.get('raw_sha256') == raw_sha256
                 and applied[0].details.get('mode') == 'replace'):
             return record, [{'code': 'transcript_not_applied',
-                             'why': 'the reviewed transcript was not saved, unedited, as the notes'}]
+                             'why': 'the exact declared review was not saved and audited as the notes'}]
         return record, []
 
     # ── the generation on the transcript ─────────────────────────────────────────────────────────────────────────
@@ -686,6 +710,7 @@ class TranscriptionRun(stages.Run):
                 and encounter.status == 'draft', 'The encounter changed after its transcript was saved as the notes.')
         return self.generate_on(send, template, version, encounter, extra={
             **({'transcription_patient_context': True} if self.terms.patient_context else {}),
+            **({'transcription_review_manifest_sha256': self.terms.review} if self.terms.review else {}),
             'audio_sha256': entry.sha256, 'audio': {'id': entry.id, 'bytes': entry.bytes, 'label': entry.label},
             'transcription_attempt': made['attempt'], 'case': entry.id},
             judge=self.judge_transcript(encounter.notes,

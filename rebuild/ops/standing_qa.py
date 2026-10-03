@@ -389,6 +389,7 @@ WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
     'rebuild/ops/standing_qa_signing.py',
     'rebuild/ops/standing_qa_voice_forms.py', 'rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json',
     'rebuild/ops/standing_qa_soap_form.py', 'rebuild/ops/fixtures/builtin-soap-voice-v1.json',
+    'rebuild/ops/standing_qa_voice_review.py', 'rebuild/ops/fixtures/reviewed-synthetic-voice-v1.json',
     'rebuild/core/soap_document.py', 'rebuild/core/soap_views.py',
     'rebuild/core/mapping_assistance.py',
     'rebuild/core/mapping_wire.py', 'rebuild/core/mapping_jobs.py', 'rebuild/core/destination_roles.py',
@@ -575,6 +576,8 @@ class TranscriptionTerms:
     patient_context: bool = False
     # An absent override preserves the historical record byte contract.
     forms: tuple = ()
+    # Explicit prospective synthetic review; absence retains historical raw ASR.
+    review: str = ''
 
     def parameters(self):
         """The query parameters the one request carries, exactly (core.jobs.deepgram_parameters' shape)."""
@@ -589,6 +592,8 @@ class TranscriptionTerms:
         if self.forms:
             value['forms'] = [{'audio_id': audio_id, 'id': name, 'sha256': TRANSCRIPTION_FORM_HASHES[name]}
                               for audio_id, name in self.forms]
+        if self.review:
+            value['review_manifest_sha256'] = self.review
         return value
 
 
@@ -596,7 +601,7 @@ class TranscriptionTerms:
 TRANSCRIPTION_LINES = ('transcription_provider', 'transcription_model', 'transcription_rate_per_minute',
                        'transcription_mip_opt_out', 'transcription_smart_format', 'transcription_credential_file')
 #: Transcription lines a declaration MAY state, at most once each.
-TRANSCRIPTION_OPTIONAL_LINES = ('transcription_notes_contract', 'transcription_patient_context')
+TRANSCRIPTION_OPTIONAL_LINES = ('transcription_notes_contract', 'transcription_patient_context', 'transcription_review')
 #: The pricing key a transcript's generation is quoted under, per declared notes contract. `voice_notes_field_relations`
 #: is computed under the transcription stage's flags (its declared voice rate, which every pricing version hashes) with
 #: field relations on — never the notes stage's relations version, whose voice rate is another.
@@ -676,6 +681,15 @@ def transcription_terms(text, seen, stages, credential_file):
         patient_context = context == 'true'
     require(not patient_context or contract == 'field_relations',
             'A confirmed transcript requires the field-relations generation contract.')
+    review = ''
+    if re.findall(r'(?<![A-Za-z0-9_])transcription_review(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I):
+        review = one('transcription_review', r'([0-9a-f]{64})')
+        try:
+            from . import standing_qa_voice_review
+        except ImportError:
+            import standing_qa_voice_review
+        require(review == standing_qa_voice_review.MANIFEST_SHA256 and patient_context,
+                'A synthetic correction names the frozen review hash and requires explicit transcript-context review.')
     form_lines = TRANSCRIPTION_FORM_LINE.findall(text)
     require(len(form_lines) == len(re.findall(
         r'(?<![A-Za-z0-9_])transcription_form(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)),
@@ -689,7 +703,7 @@ def transcription_terms(text, seen, stages, credential_file):
                 'A transcription form names an allowlisted form with its exact pinned hash.')
     return TranscriptionTerms(provider, model, rate, 'true', smart_format, credential,
                               tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)),
-                              contract, patient_context, forms)
+                              contract, patient_context, forms, review)
 
 
 #: Exactly one authorization line (provider_campaign.AUTHORIZATION_LINE finds every line that reads as one), this form.
@@ -1118,6 +1132,16 @@ def stage_inputs(stage, declaration):
         require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
         inputs = {**inputs, 'transcription_audio': declaration.transcription.inputs,
                   'transcription_notes_contract': declaration.transcription.notes_contract}
+        if declaration.transcription.review:
+            try:
+                from . import standing_qa_voice_review
+            except ImportError:
+                import standing_qa_voice_review
+            reviews = standing_qa_voice_review.frozen(declaration.transcription.review)
+            for audio_id in declaration.transcription.inputs:
+                require(audio_id in reviews and reviews[audio_id]['audio_sha256'] == AUDIO_BY_ID[audio_id].sha256,
+                        'The prospective review must bind each declared synthetic recording.')
+            inputs['transcription_review_manifest_sha256'] = declaration.transcription.review
         if declaration.transcription.forms:
             inputs['transcription_forms'] = declaration.transcription.forms
             for name in sorted({name for _, name in declaration.transcription.forms if name != TRANSCRIPTION_FORM}):
@@ -1320,6 +1344,8 @@ class StandingLedger(pc.Ledger):
             name = transcription_form_id(entry.id, declaration.transcription.forms)
             require((send or {}).get('form') == name and form == TRANSCRIPTION_FORM_HASHES[name],
                     'The attempt form is not the exact declared form for this recording.')
+            require(attempt.get('transcription_review_manifest_sha256', '') == declaration.transcription.review,
+                    'The attempt does not bind the prospectively declared transcript correction freeze.')
         attempt.update(mode=MODE, monetary_ceiling=None, run=run['run'], run_id=run['run_id'],
                        attempt_id=f'{declaration.campaign}/{run["run_id"]}/attempt-{attempt["number"]:03d}',
                        send_key=send_key, engine_files=watched_hashes())
@@ -1429,6 +1455,11 @@ class StandingCampaign(pc.Campaign):
                         if attempt.get('stage') == 'transcription']
             require(all(value is self.declaration.transcription.patient_context for value in reviewed),
                     'The campaign\'s earlier transcript requests used another patient-context review; '
+                    'an edited declaration never changes what is admitted.')
+            edits = [attempt.get('transcription_review_manifest_sha256', '') for attempt, _ in rows
+                     if attempt.get('stage') == 'transcription']
+            require(all(value == self.declaration.transcription.review for value in edits),
+                    'The campaign\'s earlier transcript requests used another correction freeze; '
                     'an edited declaration never changes what is admitted.')
         in_force = self.limits(rows).stage(stage.id)
         for prerequisite in in_force.requires:
