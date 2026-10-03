@@ -135,15 +135,35 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
     def test_human_document_acts_refuse_before_money_and_preserve_the_act_after_exact_exclusion(self):
         from documents.test_source_coverage import AdjacentCheckboxAnswers
         from core import v3_mapping
-        statements=('I confirm that this clinical record is complete and accurate',
-                    'I verify that the information above is correct',
-                    'I acknowledge that I have read and agree with this document',
-                    'I have personally reviewed and approved this document')
-        for statement_index,statement in enumerate(statements,1):
+        sources=(('I confirm that this clinical record is complete and accurate',),
+                 ('I verify that the information above is correct',),
+                 ('I acknowledge that I have read and agree with this document',),
+                 ('I have personally reviewed and approved this document',),
+                 ("I'm certifying this document for: ",),
+                 ('I have given consent to this procedure: ',),
+                 ("We've approved this form: ",),
+                 ('I authorize the treatment for: ',),
+                 ('I confirm this form is accurate.','Yes, completed by: '),
+                 ('Witness statement: I saw the patient sign.','Yes, completed by: '),
+                 ('Approval of this report: ☒ I do so on: ',),
+                 ('Manager approval: ☒ Approved: ',))
+        cases=[('checkbox',source) for source in sources]
+        cases += [('paragraph',('I confirm that this clinical record is complete and accurate:',)),
+                  ('table',('I confirm that this clinical record is complete and accurate:',)),
+                  ('paragraph',('Manager approval:',))]
+        for statement_index,(shape,source) in enumerate(cases,1):
             for engine in ('v3','auto'):
-                with self.subTest(statement=statement,engine=engine),override_settings(
+                with self.subTest(shape=shape,source=source,engine=engine),override_settings(
                         QUILLMD_WORD_ENGINE=engine,QUILLMD_WORD_AUTO_PREFER_V3=True):
-                    raw=AdjacentCheckboxAnswers().form('☒ '+statement+'_________')
+                    doc=Document()
+                    expected_source=[]
+                    if shape=='table':
+                        table=doc.add_table(rows=1,cols=2);table.cell(0,0).text=source[0]
+                    else:
+                        expected_source=[*source[:-1],(source[-1] if shape=='paragraph' or '☒' in source[-1]
+                                                     else '☒ '+source[-1])+'_________']
+                        for printed in expected_source:doc.add_paragraph(printed)
+                    doc.add_paragraph('Unrelated note: ______');buffer=io.BytesIO();doc.save(buffer);raw=buffer.getvalue()
                     evidence=None;scratch=Path(os.environ.get('QUILLMD_STATE_DIR','/nonexistent'))
                     approved=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word/adjacent-writein')
                     if scratch.is_relative_to(approved) and scratch.is_dir() and not scratch.is_symlink():
@@ -153,10 +173,19 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     if evidence:(evidence/'first-import.json').write_text(json.dumps(
                         {'fields':version.fields,'import_manifest':version.import_manifest},indent=2))
                     self.assertTrue(version.import_manifest['coverage'].get('block_generation'))
+                    coverage=version.import_manifest['coverage']
+                    self.assertTrue(any(i['code'] in ('human_signing_action','ambiguous_source_action') for i in
+                        coverage.get('selected_engine_issues',[])+coverage.get('advanced_unresolved_areas',[])))
                     with self.assertRaises(ValidationError):import_binding.verify(version)
                     self.assertEqual(self.new_encounter(version,'Unrelated note: Synthetic review').status_code,200)
+                    self.assertFalse(Encounter.objects.filter(template_version=version).exists())
                     self.assertFalse(Job.objects.filter(encounter__template_version=version).exists())
                     self.assertFalse(Reservation.objects.filter(job__encounter__template_version=version).exists())
+                    if evidence:(evidence/'before-money.json').write_text(json.dumps({
+                        'case':statement_index,'shape':shape,'configured_engine':engine,
+                        'selected_engine':version.import_manifest['engine'],
+                        'encounters':0,'jobs':0,'reservations':0,'provider_requests':0,
+                        'result':'actual admission held before job/reservation'},indent=2))
                     if engine!='v3':continue
                     issues=version.import_manifest['coverage']['selected_engine_issues']
                     self.assertEqual(self.client.post(f'/templates/{template.pk}/',dict(action='v3_coverage',
@@ -166,7 +195,7 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     encounter=Encounter.objects.get(template_version=reviewed);job=enqueue(encounter,self.user)
                     self.assertTrue(run_one());job.refresh_from_db();self.assertEqual(job.state,'succeeded',job.error)
                     encounter.refresh_from_db();ordinary=next(f for f in reviewed.fields if f['label']=='Unrelated note')
-                    action=next(f for f in reviewed.fields if f['kind']=='checkbox')
+                    action=next(f for f in reviewed.fields if f.get('write_protected'))
                     if evidence:
                         from core.models import ProviderReceipt,Usage
                         import hashlib
@@ -210,8 +239,11 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                             str(encounter.pk),str(job.pk)]).order_by('created_at','pk').values(
                             'id','created_at','actor_id','action','target','details')),indent=2,default=str))
                     exported=Document(io.BytesIO(exported_bytes))
-                    self.assertEqual(exported.paragraphs[0].text,'☒ '+statement+'_________')
-                    self.assertEqual(exported.paragraphs[1].text,'Unrelated note: Synthetic review')
+                    self.assertEqual([p.text for p in exported.paragraphs[:-1]],expected_source)
+                    self.assertEqual(exported.paragraphs[-1].text,'Unrelated note: Synthetic review')
+                    if shape=='table':
+                        self.assertEqual(exported.tables[0].cell(0,0).text,source[0])
+                        self.assertEqual(exported.tables[0].cell(0,1).text,'')
                     self.assertEqual(private_path(template.original_path).read_bytes(),raw)
 
     @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture',

@@ -291,6 +291,80 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
                                   ('human_signing_action','ambiguous_source_action')])
 
 
+    def test_nominal_action_places_are_held_without_enumerating_signer_names(self):
+        for label in ('Manager approval','Department lead approval','Approval by manager',
+                      'Approval from department lead','Review and approval','Verification of this report'):
+            for tail in ('','_________'):
+                with self.subTest(label=label,tail=tail):
+                    source=label+': ☐ Approved'+tail;raw=self.form(source);result=word_v3.inspect(raw)
+                    self.assertTrue(any(i['code'] in ('human_signing_action','ambiguous_source_action')
+                                        for i in result['coverage_issues']))
+                    action=next(f for f in result['fields'] if f['kind']=='checkbox')
+                    self.assertTrue(action['write_protected'])
+                    forged=deepcopy(action);forged.pop('write_protected',None);forged.pop('review_reason',None)
+                    self.assertIn(action['key'],word_v3.destination_roles(raw,[forged])['violations'])
+                    with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'checked'})
+                    ordinary=next(f for f in result['fields'] if f['label']=='Unrelated note')
+                    out=word_v3.fill(raw,result['fields'],{ordinary['key']:'Synthetic review'})
+                    self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,source)
+        source='Approval status: ☐ Recorded';raw=self.form(source);result=word_v3.inspect(raw)
+        self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                          ('human_signing_action','ambiguous_source_action')])
+        state=next(f for f in result['fields'] if f['kind']=='checkbox')
+        self.assertFalse(state.get('write_protected'))
+        out=word_v3.fill(raw,result['fields'],{state['key']:'checked'})
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'Approval status: ☒ Recorded')
+
+    def test_noncheckbox_document_actions_are_source_owned_per_destination(self):
+        for source in ('I confirm that this clinical record is complete and accurate:',
+                       'Manager approval:', 'Approval by manager:'):
+            for shape in ('paragraph', 'table'):
+                with self.subTest(source=source,shape=shape):
+                    doc=Document()
+                    if shape=='table':
+                        table=doc.add_table(rows=2,cols=2)
+                        table.cell(0,0).text=source;table.cell(1,0).text='Reason for visit:'
+                    else:
+                        doc.add_paragraph(source+' ______    Reason for visit: ______')
+                    buf=io.BytesIO();doc.save(buf);raw=buf.getvalue();result=word_v3.inspect(raw)
+                    held=[f for f in result['fields'] if f.get('write_protected')]
+                    self.assertEqual(len(held),1)
+                    self.assertTrue(any(i['code'] in ('human_signing_action','ambiguous_source_action')
+                                        for i in result['coverage_issues']))
+                    forged=deepcopy(held[0]);forged.pop('write_protected');forged.pop('review_reason')
+                    self.assertIn(forged['key'],word_v3.destination_roles(raw,[forged])['violations'])
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw,[forged],{forged['key']:'SYNTHETIC UNAUTHORIZED ACT'})
+                    ordinary=next(f for f in result['fields'] if f['label']=='Reason for visit')
+                    self.assertFalse(ordinary.get('write_protected'))
+                    out=word_v3.fill(raw,result['fields'],{ordinary['key']:'Synthetic review'})
+                    filled=Document(io.BytesIO(out))
+                    if shape=='table':
+                        self.assertEqual(filled.tables[0].cell(0,0).text,source)
+                        self.assertEqual(filled.tables[0].cell(0,1).text,'')
+                        self.assertEqual(filled.tables[0].cell(1,1).text,'Synthetic review')
+                    else:
+                        self.assertEqual(filled.paragraphs[0].text,source+' ______    Reason for visit: Synthetic review')
+
+    def test_recorded_status_and_clinical_review_sources_are_independent_of_other_actions(self):
+        doc=Document();table=doc.add_table(rows=4,cols=2)
+        labels=('Manager approval:', 'Initial presentation:', 'Recorded signed report status:', 'Approval status:')
+        for row,label in enumerate(labels):table.cell(row,0).text=label
+        buf=io.BytesIO();doc.save(buf);raw=buf.getvalue();result=word_v3.inspect(raw)
+        self.assertEqual(sum(bool(f.get('write_protected')) for f in result['fields']),1)
+        # The existing initial/signed lexical kinds still require the explicit
+        # ordinary-field mapping decision. This source-role repair does not
+        # globally release those kinds or count that correction as automatic.
+        reviewed=deepcopy(result['fields'])
+        for field in reviewed:
+            if not field.get('write_protected'):field['kind']='text'
+        answers={f['key']:'Synthetic ordinary status' for f in reviewed if not f.get('write_protected')}
+        self.assertEqual(word_v3.destination_roles(raw,[f for f in reviewed if not f.get('write_protected')])['violations'],{})
+        out=word_v3.fill(raw,reviewed,answers);filled=Document(io.BytesIO(out))
+        self.assertEqual(filled.tables[0].cell(0,1).text,'')
+        for row in range(1,4):self.assertEqual(filled.tables[0].cell(row,1).text,'Synthetic ordinary status')
+
+
 class SourceCoverage(unittest.TestCase):
     def inspect(self,doc):
         with tempfile.TemporaryDirectory() as directory:

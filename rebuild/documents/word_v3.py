@@ -1534,6 +1534,7 @@ class Area:
     # structure (a drawn initials box) rather than from its label's wording.
     label_slot: object = None
     structural: bool = False
+    source_action: bool = False     # source-owned action; role bounded to this destination, not its whole paragraph
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -2351,6 +2352,7 @@ class Detector:
         self.rule_lines_below_label()
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
+        self.guard_source_actions()
         self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
@@ -2371,6 +2373,49 @@ class Detector:
         self.withdraw_shared_merged_answers(shared)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    def guard_source_actions(self):
+        """Human acts read from the physical source of each actual destination.
+
+        A checkbox is one representation of an act. Its ordinary paragraph
+        writing line or empty table answer cell grants no signing authority
+        either. Read only that destination's existing source relation: its own
+        line prefix/caption, or its row/column labels. No neighboring question,
+        unrelated cell, page heading or user-supplied field label supplies one.
+        """
+        for area in self.areas:
+            if area.protection:
+                continue
+            sources = []
+            if area.label_slot is not None:
+                sources.append(self.text(area.label_slot.el))
+            if area.slot.kind == 'p' and area.target.get('type') == 'span':
+                printed, pieces = self.ptext(area.slot.el)
+                start = area.target['start']
+                before = max((end for _, end, _ in self.blank_spans(printed, pieces)
+                              if end <= start), default=0)
+                sources.append(printed[before:start])
+            elif area.slot.kind == 'tc':
+                cell = area.slot
+                for source in self.question_cells(cell.parent, cell.info['row'], cell.info['col']):
+                    if source is not cell:
+                        sources.append(self.cell_text(source))
+            # Native controls retain their own printed alias/tag source; the
+            # engine label is derived from that original control, not a review.
+            elif area.slot.kind in ('sdt', 'ff'):
+                sources.append(area.label)
+            roles = [self.checkbox_source_action(source, governing=True) for source in sources]
+            if not any(roles):
+                continue
+            code = 'human_signing_action' if 'human_signing_action' in roles else 'ambiguous_source_action'
+            area.source_action = True
+            area.protection = ('This printed document action is human-owned. Complete it through the established signing workflow.'
+                               if code == 'human_signing_action' else
+                               'This printed action does not establish who performs it. Keep this precise destination unchanged; '
+                               'a review click does not authorize the act.')
+            extent = ({'start': area.target['start'], 'end': area.target['end']}
+                      if area.target.get('type') == 'span' else {})
+            self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
 
     def guard_fixed_containers(self):
         """Unqualified fixed geometry remains visible, source-held and unwritable.
@@ -2830,12 +2875,15 @@ class Detector:
         # A documentary action noun is a governing label, not a recorded-status
         # label. This reads the action, irrespective of a named signer/role.
         if governing:
-            heading = re.fullmatch(r'(approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
+            heading = re.fullmatch(r'(?:[^:?!\r\n]+?\s+)?'
+                                  r'(?P<action>approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
                                   r'certification|attestation|declaration|authori[sz]ation|consent|sign[ -]?off)'
-                                  r'(?:\s+(?:of|for|to)\s+[^:?!]+)?\s*:',source,re.I)
-            if heading and (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
-                            or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',heading[1],re.I)):
-                return 'human_signing_action'
+                                  r'(?:\s+(?:of|for|to|by|from)\s+[^:?!]+)?\s*:',source,re.I)
+            if heading:
+                explicit = (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
+                            or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',
+                                        heading['action'],re.I))
+                return 'human_signing_action' if explicit else 'ambiguous_source_action'
             if ':' in source:
                 caption, statement = source.split(':',1)
                 tail = cls.checkbox_source_action(statement)
@@ -6904,7 +6952,12 @@ def _role_reading(package):
     for area, field in zip(areas, engine):
         places = reader.of(field)
         anchor = _place_id(field["locator"]["part"], field["locator"]["slot"])
-        if area.protection:
+        if area.protection and area.source_action:
+            for pid, start, end in _extent(reader, field):
+                if start is not None:
+                    start, end = segment(pid, start, end, field['key'])
+                roles.append(_role(ROLE_PROTECTED, 'human_document_action', pid, start, end, area.protection))
+        elif area.protection:
             for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
                 roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))
         elif area.kind in SIGNING_KINDS:
