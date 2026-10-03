@@ -137,6 +137,21 @@ class DestinationRegressions(unittest.TestCase):
         self.assertEqual(actual.paragraphs[2].text, 'Neighbor: ______')
         self.assertEqual(actual.paragraphs[0]._p.find(qn('w:hyperlink')).get(qn('w:anchor')), 'retained_reference')
 
+    def test_counted_answer_restriction_is_not_a_person_granting_permission(self):
+        for caption in ('Treatment(s) - only one answer allowed:',
+                        'Treatment(s) - one option permitted:'):
+            with self.subTest(caption=caption):
+                doc = Document(); doc.add_paragraph(caption + ' ☐ Therapy ☐ Exercise')
+                raw = saved(doc); info = word_v3.inspect(raw); field = info['fields'][0]
+                self.assertFalse(field.get('write_protected'))
+                out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: 'Exercise'})))
+                self.assertIn('☒ Exercise', out.paragraphs[0].text)
+        for source in ('☐ I allow only one answer', '☐ Person allowed this procedure',
+                       '☐ Person allowed one answer to this form'):
+            with self.subTest(source=source):
+                doc = Document(); doc.add_paragraph(source); doc.add_paragraph('Clinical reason: ______')
+                self.assert_held(saved(doc))
+
     def test_reserved_authorship_is_physical_and_does_not_depend_on_a_job_title_list(self):
         for author in ('the line manager', 'the radiology supervisor', 'Dr. Synthetic'):
             for shape in ('table', 'paragraph'):

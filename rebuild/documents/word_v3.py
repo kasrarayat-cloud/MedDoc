@@ -3072,7 +3072,17 @@ class Detector:
             third_person = re.match(r'^([^.;:?!\r\n]+?)\s+('+action+r')(?=\W|_|$)',source,re.I)
             if third_person:
                 subject,verb = third_person[1].strip(),third_person[2]
-                if (re.fullmatch(base_action,verb,re.I)
+                # A terminal passive restriction counts printed answers, not
+                # a human actor granting permission. Reuse the selection
+                # grammar and require that its counted noun is the subject's
+                # complete tail; an actor + permission complement stays held.
+                counted = ONE_ANSWER.search(subject) or COUNTED_ANSWERS.search(subject)
+                if (governing and counted and not subject[counted.end():].strip()
+                        and limit_language(subject, local=True) and verb.lower().endswith('ed')
+                        and re.match(permission, verb, re.I)
+                        and not source[third_person.end():].strip(' \t\r\n:.;')):
+                    third_person = None
+                if (third_person and re.fullmatch(base_action,verb,re.I)
                         and not re.fullmatch(r'you|they|he|she|it',subject,re.I)
                         and not re.search(r's\s*$',subject,re.I)):
                     third_person = None  # "Signed consent" is a noun phrase, not subject + finite verb.
