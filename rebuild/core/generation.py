@@ -3858,7 +3858,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
-    from .source_scope import bare_affects,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies
+    from .source_scope import bare_affects,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
     # An elliptical other-person attribution or topicless temporal modifier
@@ -3873,6 +3873,19 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     causes.extend((other,None) for other,topics in prefixed_modifier_dependencies(reading)
         if other['id']!=uid and (shared := topics & (mine_claim | info.get('named_keys',frozenset())))
         and not separate_sides(reading,unit,other,shared))
+    modifier_negations=clinical_modifier_negations(reading)
+    mine_modifiers=modifier_negations.get(uid,{})
+    my_negative=mine_negated | mine_modifiers.get('negative',frozenset())
+    for other in units:
+        oid=other['id']
+        if oid==uid or pure_foreign_clause(reading,other):continue
+        theirs_modifiers=modifier_negations.get(oid,{})
+        their_negative=reading['negated_keys'][oid] | theirs_modifiers.get('negative',frozenset())
+        shared=(theirs_modifiers.get('negative',frozenset()) & (mine_claim | info.get('named_keys',frozenset()))) - my_negative
+        shared |= (mine_modifiers.get('negative',frozenset()) & (reading['claim_keys'][oid] | actors[oid].get('named_keys',frozenset()))) - their_negative
+        shared |= theirs_modifiers.get('ambiguous',frozenset()) & (mine_claim | info.get('named_keys',frozenset()))
+        shared |= mine_modifiers.get('ambiguous',frozenset()) & actors[oid].get('named_keys',frozenset())
+        if shared and not separate_sides(reading,unit,other,shared):causes.append((other,None))
     mine_timeless = [v3_without_time(record) for record in mine]
     labelled = reading.get('labelled_claims', {})
     position = reading['position']
@@ -3917,7 +3930,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     my_words = mine_claim
     for other in v3_floor_index(reading)['class_denials']:
         oid = other['id']
-        if oid == uid or oid in selected:
+        if oid == uid or oid in selected or pure_foreign_clause(reading,other):
             continue
         found = actors[oid]
         surface = found['surface_keys']
