@@ -673,7 +673,9 @@ def generate(notes, fields, config, *, context_labels=(), requirements=()):
     with g.before_the_provider(config.get('mode') == 'live'):
         compiled = compile_request(notes, fields, config, context_labels=context_labels, requirements=requirements)
         if config.get('mode') != 'live':
-            raise ValidationError('Ordinary semantic decisions require a qualified model response; no fixture interpretation is invented.')
+            from . import relations_fixture
+            answers = relations_fixture.result(notes, fields, compiled, config)
+            return answers, Decimal(0), {}, {}, 'synthetic-labelled-relations-fixture', '', True
         from anthropic import Anthropic
         profile = g.job_request_profile(config)
         client = Anthropic(timeout=profile['timeout_seconds'], max_retries=0)
