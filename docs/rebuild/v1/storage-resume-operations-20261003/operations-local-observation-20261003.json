@@ -1,0 +1,92 @@
+{
+  "recorded_utc": "2026-10-03T21:59:44.205345+00:00",
+  "offsite": {
+    "version": 1,
+    "eligible": false,
+    "provider_calls": 0,
+    "reason_code": "policy_expired",
+    "status": {
+      "version": 1,
+      "state": "refused",
+      "reason_code": "policy_expired",
+      "last_remote_complete": {
+        "run_id": "20260923T043000Z-2031049f",
+        "manifest_cipher_sha256": "a6617fd69f4f7da84f6f4c40a52bec53b32dc9cc77300736caaa66052ad3c987",
+        "object_count": 66,
+        "cipher_bytes": 18516232,
+        "completed_at": "2026-09-23T05:00:09.577606+00:00"
+      },
+      "last_verified_readback": {
+        "run_id": "20260923T043000Z-2031049f",
+        "manifest_cipher_sha256": "a6617fd69f4f7da84f6f4c40a52bec53b32dc9cc77300736caaa66052ad3c987",
+        "object_count": 66,
+        "cipher_bytes": 18516232,
+        "verified_at": "2026-09-23T05:00:09.577606+00:00"
+      },
+      "last_isolated_restore": {
+        "run_id": "20260920T095332Z-a9da0017",
+        "manifest_cipher_sha256": "910153b7d671bbd147ab5a840e5a9e6c7a3f4d8fa3913046c852cfc67c062ace",
+        "table_count": 35,
+        "row_count": 225615,
+        "file_count": 42,
+        "verified_at": "2026-09-20T19:20:33.512797+00:00",
+        "source": "independently_retrieved_key"
+      },
+      "last_capacity": {
+        "observed_at": "2026-09-23T05:00:09.577606+00:00",
+        "scope_stored_bytes_after": 80604292,
+        "scope_ceiling_bytes": 1000000000,
+        "last_complete_cipher_bytes": 18516232
+      },
+      "invocation": {
+        "source": "systemd_environment",
+        "systemd_invocation_id": "4c958f75975945b19f089e14563c4104",
+        "timer_trigger_verified": false
+      },
+      "started_at": "2026-10-03T05:00:00.430217+00:00",
+      "finished_at": "2026-10-03T05:00:00.435441+00:00"
+    }
+  },
+  "renewal": {
+    "state": "installed",
+    "last_attempt_at": "2026-09-22T22:22:35.830872+00:00",
+    "last_successful_observation_at": "2026-09-22T22:05:53.615210+00:00",
+    "valid_until": "2026-09-23T22:05:53.615210+00:00",
+    "reason_code": null,
+    "ticket_id": "ed9ec56d5c0141cfc6f04917430b6d68",
+    "unattended_available": false,
+    "required_access": "separate_account_wide_read_only_audit",
+    "failure_does_not_extend_validity": true
+  },
+  "local_backup": {
+    "format": 1,
+    "healthy": true,
+    "latest_outcome": "complete",
+    "last_success_at": "2026-10-03T04:31:14.297578+00:00",
+    "last_success_run_id": "20261003T043001Z-644f9245",
+    "last_success_age_seconds": 62909,
+    "stale_after_seconds": 108000,
+    "last_error": null,
+    "offsite_verified": false,
+    "alert_delivery_verified": false
+  },
+  "local_capture": {
+    "last_success_run_id": "20261003T043001Z-644f9245",
+    "last_success_at": "2026-10-03T04:31:14.297578+00:00",
+    "age_seconds": 62909,
+    "stale": false,
+    "encrypted_artifacts_present": true,
+    "next_permanent_timer_run": "2026-10-04T04:30:00+00:00"
+  },
+  "alert_state": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/backup-alerts/state.json",
+    "error": "FileNotFoundError"
+  },
+  "alert_status": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/backup-alerts/status.json",
+    "sha256": "c8967eeb68776db443247bb47abe3292e822b749d9d016a6570098db7f19a251",
+    "values": {
+      "condition": "offsite_policy_expired"
+    }
+  }
+}

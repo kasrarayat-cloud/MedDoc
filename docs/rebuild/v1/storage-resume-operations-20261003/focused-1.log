@@ -1,0 +1,23 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-storage-resume-ops-20261003; database=quillmd_qa_sol_ops_20261003
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-storage-resume-ops-20261003/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.................................Forbidden (CSRF cookie not set.): /recovery/
+Forbidden (CSRF cookie not set.): /verification/resend/
+......./opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-storage-resume-ops-20261003/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......................Forbidden (CSRF cookie not set.): /console/accounts/8aa76cc9-b657-4dfb-b5bf-026e6107c0b8/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/d1e13940-0461-4749-b7ae-5023e885e37d/
+Forbidden (CSRF cookie not set.): /console/departments/c9345e86-bb25-40dc-b62c-82095b5860fb/payer/
+............................................................/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-storage-resume-ops-20261003/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..................................................
+----------------------------------------------------------------------
+Ran 172 tests in 71.305s
+
+OK
+Destroying test database for alias 'default'...
+Found 172 test(s).
+System check identified no issues (0 silenced).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).
