@@ -871,6 +871,28 @@ class ConsoleAccessControl(ConsoleFixture):
     ROUTES = ['/console/', '/console/audit/', '/console/organizations/', '/console/services/',
               '/console/usage.csv']
 
+    def test_held_mapping_job_without_encounter_renders_its_requester_and_preserves_money(self):
+        """Mapping requests have a template scope, not an encounter or encounter author."""
+        from core.models import CostReconciliation
+        version = self.encounter.template_version
+        mapping = Job.objects.create(mapping_version=version, user=self.user, kind='mapping',
+            state='reconciliation', request_key='console:held-mapping-without-encounter',
+            config={'mode': 'fixture', 'source_sha256': self.template.sha256,
+                    'department_id': str(self.department.pk), 'mapping_version_id': str(version.pk)})
+        reserve(mapping, charge_limit=Decimal('.13'))
+        self.assertIsNone(mapping.encounter_id)
+        self.assertEqual(Reservation.objects.get(job=mapping).state, 'held')
+        financial = [Job, Wallet, Reservation, Usage, LedgerEntry, ProviderReceipt,
+                     Payment, PlatformCost, CostReconciliation]
+        before = {model.__name__: list(model.objects.order_by('pk').values()) for model in financial}
+        self.sign_in()
+        response = self.client.get('/console/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(mapping.pk))
+        self.assertContains(response, self.user.email)
+        self.assertEqual(before,
+            {model.__name__: list(model.objects.order_by('pk').values()) for model in financial})
+
     def test_every_console_route_answers_an_mfa_administrator(self):
         """A smoke test over every route, because one of these shipped as a 500 during authoring.
 
