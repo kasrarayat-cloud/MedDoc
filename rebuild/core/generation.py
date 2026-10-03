@@ -2724,6 +2724,10 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
         values[index] = value
         references[index] = {label for label, pattern in patterns.items() if label != owner
                              and any(pattern.search(text) for text in readings(value))}
+        if 'medications' in references[index] and all(text==value for text in readings(value)):
+            from .source_scope import medication_argument_references
+            if medication_argument_references(value,patterns['medications']):
+                references[index].remove('medications')
         # This complete visit-purpose clause names a topic without asserting its
         # value. Record the relation explicitly; a suffix or another source unit
         # cannot use this exception. Unknown ownership stays in the reference scan.
@@ -3858,9 +3862,11 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
-    from .source_scope import bare_affects,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
+    from .source_scope import bare_affects,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
+    causes.extend((other,None) for other in unresolved_medication_changes(reading)
+                  if other['id']!=uid and other['id'] not in selected and unresolved_medication_affects(reading,other,unit))
     # An elliptical other-person attribution or topicless temporal modifier
     # cannot become independent merely because the model called it so.
     causes.extend((other,None) for other in elliptical_dependencies(reading).get(uid,()))

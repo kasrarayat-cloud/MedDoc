@@ -64,6 +64,71 @@ class PatientDefault(SimpleTestCase):
                 self.check(source, label, [source], 'conflict', context=False)
                 self.check(source, label, [source])
 
+    def test_generic_medication_source_remains_an_unresolved_dependency(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for actor in ['She','The patient']:
+                for unknown in ['unknown','UNKNOWN','']:
+                    tail=f'{actor} switched from an {unknown} medication to supine positioning.'
+                    with self.subTest(label=label,tail=tail):
+                        self.check(source+' '+tail,label,[source],'conflict')
+        tail='The patient switched from an unknown medication to supine positioning.'
+        independent='The patient reports cough.'
+        self.check(independent+' '+tail,'Symptoms',[independent])
+        dependent='The patient reports cough while taking warfarin.'
+        self.check(dependent+' '+tail,'Symptoms',[dependent],'conflict')
+        # A concrete old value still governs that value, without treating its
+        # separately supported current replacement as discontinued as well.
+        change='The patient switched from warfarin medication to apixaban.'
+        replacement='The patient takes apixaban 5 mg twice daily.'
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+change,label,[source],'conflict')
+            self.check(replacement+' '+change,label,[replacement])
+
+    def test_foreign_positional_event_does_not_change_patient_medication(self):
+        for source in ['Takes warfarin 5 mg daily.','The patient takes warfarin 5 mg daily.']:
+            for tail in ['Her father switched from prone to supine positioning.',
+                         'Her father switched to the supine position.']:
+                with self.subTest(source=source,tail=tail):self.check(source+' '+tail,'Medications',[source])
+        # This scopes an unrelated event; it grants no patient actor to a
+        # father's actual medication statement or an unresolved drug change.
+        foreign='Her father takes warfarin 5 mg daily.'
+        self.check(foreign+' The patient switched from prone to supine positioning.','Medications',[foreign],'conflict')
+
+    def test_generic_transition_requires_a_completed_patient_event(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['Her father switched from an unknown medication to supine positioning.',
+                     'Her father previously switched from an unknown medication last year to supine positioning.',
+                     'She did not switch from an unknown medication to supine positioning.',
+                     'The patient may switch from an unknown medication to supine positioning tomorrow.',
+                     'The patient will switch from an unknown medication to supine positioning tomorrow.']:
+            for label in ['Medications','Current medications']:
+                with self.subTest(tail=tail,label=label):self.check(source+' '+tail,label,[source])
+
+    def test_unidentified_old_medication_does_not_also_discontinue_its_named_target(self):
+        change='The patient switched from an unknown medication to apixaban.'
+        source='The patient takes warfarin 5 mg daily.'
+        target='The patient takes apixaban 5 mg twice daily.'
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+change,label,[source],'conflict')
+            self.check(target+' '+change,label,[target])
+            for invalid in ['The patient previously took apixaban last year.',
+                            'The patient may take apixaban tomorrow.',
+                            'Her father takes apixaban 5 mg twice daily.']:
+                with self.subTest(invalid=invalid,label=label):self.check(invalid+' '+change,label,[invalid],'conflict')
+            self.check(target+' '+change+' Apixaban was stopped.',label,[target],'conflict')
+        moved='The patient switched to apixaban from an unknown medication.'
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+moved,label,[source],'conflict')
+            self.check(target+' '+moved,label,[target])
+
+    def test_medication_question_references_do_not_become_drug_arguments(self):
+        source='The patient takes warfarin 5 mg daily.'
+        for tail in ['Medications were copied from the prior section.',
+                     'Her father switched from the medication section to the plan section.',
+                     'Her father switched from an unknown medication to supine positioning. Medications are incorrect.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source],'conflict')
+
     def test_nominal_clinical_assertions_gain_only_default_actor_not_drug_status(self):
         for source, label in [('No fever.', 'Examination'),
                               ('Fever.', 'Symptoms'),

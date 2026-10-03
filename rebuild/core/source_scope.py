@@ -31,7 +31,7 @@ def transition_scope(reading,unit):
             sources=[p for p in root.children if p.dep_=='prep' and a._lemma(p)=='from']
             positional_targets=[(p,g) for p in doc if p.dep_=='prep' and a._lemma(p)=='to'
                 for g in p.children if g.dep_=='pobj' and position_argument(g)]
-            positional=False
+            positional=bool(not sources and len(positional_targets)==1 and positional_targets[0][0].head==root)
             if len(sources)==1 and len(positional_targets)==1:
                 source=sources[0];target_prep,target=positional_targets[0]
                 objects=[t for t in source.children if t.dep_=='pobj']
@@ -44,7 +44,7 @@ def transition_scope(reading,unit):
                 positional=bool((adjective_source or noun_source)
                     and (target_prep.head==root or (noun_source and target_prep.head==objects[0])))
             if (positional and a._lemma(root) in ('switch','change') and len(verbs)==1
-                    and all(a.this_patient(t) or a._fold(t.text) in ('he','she') for t in subjects)
+                    and all(a.this_patient(t) or a.names_person(t) or a._fold(t.text) in ('he','she') for t in subjects)
                     and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in root.children)
                     and not any(t.dep_=='prep' and a._fold(t.text) in ('with','by','of','for') for t in doc)):
                 answer='position'
@@ -80,10 +80,116 @@ def bare_affects(reading,change,claim):
     if scope is None:return True
     info=reading['actors'][claim['id']]
     if scope=='position':return bool(info.get('named_keys',frozenset()) & {'position','posit'})
+    return medication_affects(reading,claim)
+
+
+def medication_affects(reading,claim):
+    """An unresolved medication event governs its claim and actual dependencies."""
+    info=reading['actors'][claim['id']]
     sole=info.get('sole') or {}
     classes=sole.get('classes',frozenset())
     if not classes or sole.get('unknown') or 'global' in sole.get('reach',()):return True
     return bool(classes & {'medication','therapy','test','care'})
+
+
+def unresolved_medication_changes(reading):
+    """A generic old medication argument does not identify what changed.
+
+    A named source already has its own cessation keys. A generic dosage-form
+    noun without a bound medication name needs review of affected medication
+    claims; a positional target cannot establish that this old argument was a
+    position. This only adds dependencies. A proved foreign actor, an explicitly
+    negated event or a future modal supplies no completed patient change here.
+    Existing named-source, bare-event and temporal floors remain unchanged.
+    """
+    key='_unresolved_medication_changes'
+    if key in reading:return reading[key]
+    from . import v3_syntax,v3_actors as a
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=v3_syntax.docs(u['quote']for u in reading['units'])
+    found=[];targets={}
+    for unit,doc in zip(reading['units'],reading['_source_scope_docs'] or [None]*len(reading['units'])):
+        if doc is None or pure_foreign_clause(reading,unit):continue
+        for predicate in doc:
+            verb=a._lemma(predicate)
+            if predicate.pos_!='VERB' or verb not in a.SUPERSEDED_PREPOSITIONS:continue
+            if a._negates(predicate) or any(t.dep_=='aux' and t.tag_=='MD' for t in predicate.children):continue
+            replacements=[t for prep in predicate.children if prep.dep_=='prep' and a._lemma(prep)=='to'
+                for t in prep.children if t.dep_ in ('pobj','pcomp')]
+            source_preps=list(predicate.children)+[p for target in replacements for p in target.children]
+            for prep in source_preps:
+                if prep.dep_!='prep' or a._lemma(prep) not in a.SUPERSEDED_PREPOSITIONS[verb]:continue
+                for argument in prep.children:
+                    if (argument.dep_ not in ('pobj','pcomp') or argument.pos_ not in ('NOUN','PROPN')
+                            or a._lemma(argument) not in a.DOSAGE_FORM_NOUNS
+                            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(argument),())):continue
+                    # A known medication name must modify this argument, not
+                    # the target or another clause. Quantities and forms do
+                    # not provide an identity ('5 mg medication').
+                    named=any(t.dep_ in ('amod','compound','appos') and t.pos_ in ('NOUN','PROPN','ADJ')
+                        and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())
+                        and a._lemma(t) not in a.DOSAGE_FORM_NOUNS
+                        and not any(c.pos_=='NUM' for c in t.children) for t in argument.children)
+                    if not named and unit not in found:
+                        found.append(unit)
+                        if len(replacements)==1:
+                            target=replacements[0]
+                            if ('medication' in a.SOLE_CLASSES.get(a._lemma(target),())
+                                    and a._lemma(target) not in a.DOSAGE_FORM_NOUNS
+                                    and all(t==target or t.pos_ in ('DET','PUNCT')
+                                        for t in target.subtree if t not in set(prep.subtree))):
+                                targets[unit['id']]=a.keys({a._lemma(target),a._fold(target.text)})
+    reading[key]=found
+    reading['_unresolved_medication_targets']=targets
+    return found
+
+
+def unresolved_medication_affects(reading,change,claim):
+    if not medication_affects(reading,claim):return False
+    # Switching FROM an unidentified source does not also end its named TO
+    # value. Only that exact target's separate complete current medication claim
+    # can avoid this new source dependency; all other existing guards still see it.
+    unresolved_medication_changes(reading)
+    target=reading.get('_unresolved_medication_targets',{}).get(change['id'],frozenset())
+    info=reading['actors'][claim['id']];sole=info.get('sole') or {}
+    names=info.get('named_keys',frozenset())
+    if (target and names and names<=target and sole.get('classes')==frozenset({'medication'})
+            and not sole.get('unknown') and info.get('present_tense')
+            and not info.get('past_time') and not info.get('habitual') and not info.get('intention')):return False
+    return True
+
+
+def medication_argument_references(value,pattern):
+    """All literal matches are old medication arguments, not question names.
+
+    The same generic noun can name a printed question or the old argument of a
+    supersession. Only the exact source token in the latter grammatical role
+    qualifies. This removes no clinical dependency: source identity, actor,
+    event polarity, time and current-answer evidence are judged separately.
+    A question heading, named section, target, mixed reference or unparsed token
+    retains the original structural coupling.
+    """
+    from . import v3_syntax,v3_actors as a
+    matches=list(pattern.finditer(value))
+    if not matches:return False
+    docs=v3_syntax.docs([value]);doc=docs[0] if docs else None
+    if doc is None:return False
+    tokens={(t.idx,t.idx+len(t.text)):t for t in doc}
+    for match in matches:
+        token=tokens.get(match.span())
+        if (token is None or token.pos_ not in ('NOUN','PROPN')
+                or a._lemma(token) not in a.DOSAGE_FORM_NOUNS
+                or 'medication' not in a.SOLE_CLASSES.get(a._lemma(token),())
+                or token.dep_ not in ('pobj','pcomp')):return False
+        prep=token.head;predicate=prep.head
+        if (predicate.dep_ in ('pobj','pcomp') and predicate.head.dep_=='prep'
+                and a._lemma(predicate.head)=='to'
+                and 'medication' in a.SOLE_CLASSES.get(a._lemma(predicate),())
+                and a._lemma(predicate) not in a.DOSAGE_FORM_NOUNS):
+            predicate=predicate.head.head
+        if (prep.dep_!='prep' or predicate.pos_!='VERB'
+                or a._lemma(prep) not in a.SUPERSEDED_PREPOSITIONS.get(a._lemma(predicate),())):return False
+    return True
 
 
 def elliptical_dependencies(reading):
