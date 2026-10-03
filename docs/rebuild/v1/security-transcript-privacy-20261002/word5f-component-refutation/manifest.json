@@ -1,0 +1,149 @@
+{
+  "source_commit": "5f39682fcaee98847d338e55d3cf556fe12876eb",
+  "exact_product_components": 10,
+  "inspections": 30,
+  "elapsed_seconds": 17.25,
+  "actual_exit": 0,
+  "no_provider_requests": true,
+  "no_database_connections": true,
+  "raw_docx_files": [
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/date_spaced-original.docx",
+      "sha256": "1740f15e43d1cbaf52d0f321eaaff36dab367260771fa6d62133989a74ff547c",
+      "bytes": 36609,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/date_two_year-actual-export.docx",
+      "sha256": "b0bc19e50731c078cbeb230964696a6b8303307d59ae5643455d297cb65bba6f",
+      "bytes": 36640,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/date_two_year-original.docx",
+      "sha256": "8ee9403804eb5e2562ff1ab22036ff72866a9aa58589c1d7cb01d446c2eb092d",
+      "bytes": 36605,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/date_uppercase_month_first-actual-export.docx",
+      "sha256": "e154b35076df73851537590db90a65d3229e514741445812e30ace767f857caf",
+      "bytes": 36640,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/date_uppercase_month_first-original.docx",
+      "sha256": "d3f500caf340d5220dabe0e10e8f831dea8375c12c73b8c407ee84f668c66e48",
+      "bytes": 36607,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/nested_brackets-original.docx",
+      "sha256": "5b9307fb21203fccc2225497c44a19c0fefd0bdcea7ee71698ea5eb1318b2469",
+      "bytes": 36606,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/new_empty_part-original.docx",
+      "sha256": "6df00c160a6a391a552ec4802e33912b39fc4fc9eaf253f48c2f55a0050a8b5a",
+      "bytes": 36609,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/new_multiline_part-original.docx",
+      "sha256": "2b73c90c7aa4e54f80b334796ee60b2f65562a6c3a4b0daec147ecd98f7c30ee",
+      "bytes": 36616,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/new_spaced_parts-original.docx",
+      "sha256": "46a6c88a6d60302290c83b5a822c920aefb6d3635fdf4b7d9e90e3a2ccfaad30",
+      "bytes": 36607,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/new_verb_parts-original.docx",
+      "sha256": "304999dc91e7499341122be9c51c58f2cca3e00cc1df8f5782a070bf4e5bc026",
+      "bytes": 36615,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/nonslash_directive-original.docx",
+      "sha256": "b6c28f398fd5222cb54a0b5307abdc6599053ee6781854661cdea81a37014d86",
+      "bytes": 36615,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-cases/unclosed_bracket-original.docx",
+      "sha256": "4d19c91acd936d699da6388d2d8dab0f208c7785bd4d167e34372059c255e65c",
+      "bytes": 36602,
+      "rights": "self-authored synthetic structural diagnostic; no provider upload",
+      "disposable": false
+    }
+  ],
+  "definite_date_false_holds": 1,
+  "quarantine_source_hash_controls": 4,
+  "historical_guard_observation": "empty legacy manifests retain their historical fast path; no actual historical-version admission bypass claimed",
+  "files": [
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word5f-component-refutation/result.json",
+      "sha256": "c54fff71880e42213efd3f031f45670aa941937515c99de1c3232d95dbb2db3b",
+      "bytes": 55188,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component.log",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word5f-component-refutation/instrument.log",
+      "sha256": "22b326e98d2186f742519b55e6391ea1b9bdb7bc6de72f1a7d5d6a481eb5a8db",
+      "bytes": 14645,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_word5f_component.py",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word5f-component-refutation/instrument.py",
+      "sha256": "ad5b839ba89c5d1089818dfa99e49ed787df40efa1efd23315d7981fbda94d49",
+      "bytes": 8807,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-source/manifest.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word5f-component-refutation/source-manifest.json",
+      "sha256": "7bcd1ebfd5b801f9c36799c7527a5e960f3323e809199ed8c48a0211c2440dbc",
+      "bytes": 1883,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f-component-source/excluded-fixture.diff",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word5f-component-refutation/excluded-fixture.diff",
+      "sha256": "879e582d8fffe87e820b83b40aae491da07cd86cd76a9943112e283aa93ac015",
+      "bytes": 3267,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/word5f-first-clean-freeze-refusal.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word5f-component-refutation/first-clean-freeze-refusal.json",
+      "sha256": "61f7ffc5791b0fbf4fad93b222f734208bd7bea23d8c7f7377f25de52e7f5a2e",
+      "bytes": 727,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word5f.log",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word5f-component-refutation/first-missing-instrument.log",
+      "sha256": "6b07dc697d68d5d9f924793cb42df354fe5febd40ddfad3fd0618d7dc850f605",
+      "bytes": 218,
+      "disposable": false
+    }
+  ]
+}

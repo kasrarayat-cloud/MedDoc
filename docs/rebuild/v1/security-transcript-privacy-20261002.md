@@ -486,3 +486,71 @@ report identifies one definite unnecessary-hold mechanism and preserves every ra
 previous failure is reset. `clinical-99262258-refutation/manifest.json` hashes both exact instruments/results/logs
 and the complete source manifest; the19 original source copies remain in protected scratch and the writer's commit.
 Finished clinical qualification remains failed pending repair and a new immutable independent pass.
+
+
+### Word5f exact-product component pass and date false hold
+
+The first whole-tree clean preparation for `5f39682fcaee98847d338e55d3cf556fe12876eb` refused before any source copy
+or inspection because the writer's unused `test_source_coverage_workflow.py` fixture correction was uncommitted.
+The lead explicitly authorized a distinct exact-product component freeze, recording the excluded fixture hash/diff.
+Ten product files were compared with committed bytes and copied before30 distinct actual legacy/v3/auto inspections
+(exit0,17.250s); all hashes and HEAD remained identical afterward. No database/network/provider calls, source edits
+or service changes occurred. This is component evidence and does not claim a clean tree or measured database suite.
+
+New spaced slash parts, verb-prefixed parts, empty parts, multiline ranges and nested brackets all become exact source
+issues and refuse admission binding across accepted engine routes; rejecting a legacy import also denies that route.
+Four direct source-hash controls independently refuse D27/D35 in both legacy/v3 even when all copied coverage metadata
+is stripped. These controls do not replace the writer's separately retained actual original-upload admission checks.
+One definite usefulness failure remains: `Date: [DD / MM / YYYY]` is classified as printed alternatives, loses its date
+writer and holds generation/binding. `word_v3.py:5834`'s date exception accepts no separator whitespace. The distinct
+`[MM/DD/YYYY]` and `[dd/mm/yy]` controls map as dates and actual v3 fills write `2026-10-03` correctly. No pre-change
+baseline was measured, so this observation is not attributed solely to the latest diff.
+
+Malformed `Site: [left/right` maps only the separate Reason field, produces no exact unresolved source issue and
+allows binding in v3/auto; it is retained as an incomplete-bracket omission diagnostic, not a supported-format or
+corpus-success assertion. Direct pure historical legacy guard probes with empty manifests return empty refusals for
+known hashes. This is a preserved historical fast path observation, not proof of an actual stored historical version
+or browser admission bypass; no historical data were created or changed. The stored finalized-export view AST is
+identical to096 and still serves the existing hash-verified blob without reparsing. No live export download or
+historical regeneration was performed. Source was released immediately after the actual component exit.
+`word5f-component-refutation/manifest.json` retains the preparation refusal, excluded fixture, exact instrument/source
+manifest/results and twelve protected raw DOCX artifacts (ten originals and two date exports). No binary hook override
+or raw DOCX commit occurred, and no frozen corpus denominator changed.
+
+### Ninth finished clinical source8a: four fresh unsafe outputs
+
+Frozen `8a030d4c8f0027dc962554b8d8df0d4a5207d21d` was verified against all19 committed component bytes and copied
+before60 bounded whole-validator/current-governance/finalization probes (exit0,15.226s). All19 hashes remained
+unchanged afterward. Source was released to the writer immediately after actual exit; no database/network/provider
+calls or source/service changes occurred. Four fresh exact supported answers have no finalization hold despite
+an adversarial model declaring the opposing source independent:
+
+- Selecting `Examination mild swelling over the left lateral ankle.` survives
+  `The patient reports no evidence of swelling over the left ankle.`
+- Selecting the same examination survives
+  `Her father denies that the patient has swelling over the left ankle.`
+- Selecting `The patient takes no warfarin.` survives `Only her father lacks warfarin.`
+- Selecting `No swelling over the left ankle.` survives
+  `Only her father has an absence of swelling over the left ankle.`
+
+The direct negative/operator/complement paths are `source_scope.negative_clinical_modifiers`,
+`ambiguous_negative_complements`, and `clinical_modifier_negations`; exclusive object/lexical polarity is
+`source_scope.py:128,153,237`, consumed by final relation governance at `generation.py:3867,3876`. These observations
+refute finished qualification rather than proving every input a regression introduced by this diff. The family's
+embedded denial concerns the explicit patient and same anatomy; it cannot be discarded as an independent denial
+of the father's own symptom. Exclusive lack/nominal absence must keep their actual negative relation rather than
+supply a new inferred patient value.
+
+All five prior992 unsafe controls and its explicit positive-current-warfarin opposite-polarity father false hold
+now pass within this instrument. No new definite unnecessary hold was found. Three raw flagged holds are retained:
+the malformed `has not absent` control and a subjectless nominal absence both standalone and with another-side
+clause. The latter's baseline already holds, so it is not reported as a newly proven wrong-side hold. The explicit
+patient opposite-side negative/positive control still releases correctly. Nominal absence, direct lack, open
+complements, sole explicit foreign anatomical ownership, independent topics, medication stopped/wrong-subject
+regression controls and the new opposite-polarity family controls otherwise pass within this bounded instrument.
+
+The byte-identical original voice replay remains zero supported without reviewed patient context and only `v3_7`
+with exact context; original wrong picks `v3_2` and `v3_4` stay conflict/empty. This adds no paid/live, first-pass audio,
+billing, human microphone or whole-workflow result. `clinical-8a030d4c-refutation/manifest.json` binds the exact
+instrument/result/log and19-component manifest; complete source copies remain in protected scratch. All prior
+failures remain retained, and finished clinical qualification stays failed pending repair and a new immutable pass.
