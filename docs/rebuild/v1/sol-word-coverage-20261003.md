@@ -242,3 +242,80 @@ XML stays unchanged, arbitrary span/copy writes refuse, and both paired later
 date/notes writers work. The affected real exclusion-to-worker-to-export method,
 finished-component refutation and a distinct final rendered attempt are still
 required before qualification.
+
+## Final component result and audit correction
+
+The affected real exclusion-to-worker-to-finalization/export method passed in
+50.845 seconds, actual exit 0, with its synthetic database destroyed. It covers
+four source shapes, including the independently authored internal-tab case.
+Root's finished 80d1267f component refutation completed 61 controls with no
+unsafe writes or false holds in that measured set; its three explicit product
+code hashes matched before and after. Product source is frozen at
+`80d1267f46d88e7ba68fd33cf0997d6d0e22992a`.
+
+The supplemental renderer's earlier all-Python source proof was defective:
+root-relative `git ls-tree` pathspecs were run from `rebuild`, so the watched set
+was empty. The broad before/after hash claim for the 224, 096 and first two final
+renderer supplements is withdrawn. Their actual exports, failures and geometry
+remain evidence with this provenance limit. The final five imports' retained
+bound processor fingerprints all match the exact 80d v3 processor, independently
+recovering valid narrower provenance. The original frozen 33-case 5a runner used
+the repository root and a nonempty assertion; its source proof and unchanged
+first mapping results are unaffected.
+
+The corrected renderer requires exactly 340 tracked Python files and checks each
+against its committed bytes before and after. Its positive watched-set control
+passed, and the distinct five-case same-first-value run completed with child
+exit 0 in 80.801 seconds. Both 340-file snapshots match exactly; the renderer
+exited -2 after bounded SIGINT shutdown and removed its socket. Evidence is
+`word/final-word-render-20261003T033139682676Z`. The old empty snapshots and
+initial failed final renderer remain retained.
+
+| Case | Final writes from the same first values | Held source | Rendered result and limit |
+| --- | --- | --- | --- |
+| D26 | 10 ordinary/long values | 4 fixed header/footer fields | 7/7 text prefixes visible, no new measured overlap/crop/duplicate boxes; partial support only |
+| D27 | 0 values | all 60 fields, exact original quarantine | original content parts byte-identical; forged write refused; unsupported, no geometry pass |
+| D28 | 255 mapped values | 169 unresolved source issues; 2 internal instruction destinations withdrawn | 83/83 current text prefixes visible and no new overlap/crop/duplicate boxes; whole mapping remains unqualified |
+| D29 | 6 values in separate flowing header/footer parts | 268 body fields; positioned whole body held | document XML byte-identical; forged body write refused; 3/3 remaining prefixes visible; whole document unsupported |
+| D35 | 0 values | all 301 fields, exact original quarantine | original content parts byte-identical; forged write refused; unsupported, no geometry pass |
+
+D28's stricter contiguous complete-string metric keeps the frozen 85-field
+universe: final ordinary 83/85 and long 78/85. Two original instruction-tab
+destinations are now safely withdrawn and remain unmet coverage. The same five
+long extraction/interleaving failures remain; the earlier 80/85 result is not
+erased or promoted. Its ordered-character diagnostic is separate. No native
+Microsoft Word acceptance occurred, and no broad corpus pass is claimed.
+
+The protected `word-component-manifest-80d1267f-v2.json` binds 26 component files,
+all 340 measured Python files, dependency versions and both generic processor
+fingerprints. Generic legacy is
+`6ecb9f603342912dca47c156921652e4763ab1a1e4022ac890346d8fdc2dc9b8`;
+v3 is `d1f659b2a9949e0bab881b2c0bc0582317d2f5b3a15e77e7eea978f994d96dda`.
+Root's union CI, private demo and clinical configuration are separate gates.
+New private ordinary imports retain qualified auto/v3 preference; stored
+versions stay immutable, role suggestions remain disabled, and actual signing
+areas remain human-owned.
+
+All 2,278 files in the initial protected evidence manifest hash-verify unchanged.
+The final v3 preservation snapshot covers 2,840 regular single-link files with
+192,380,928 allocated bytes, and a second check found zero mismatches. Its hash
+is `58f9e1152d161e05a2e7bd14ea682e4fe9d75fc1093108d7b44f5a858495295f`.
+The first final snapshot captured its own still-growing progress log; it is
+preserved and superseded by the corrected snapshot that excludes only its active
+output log. No deletion occurred here. Sixty-five exact reproducible bytecode
+cache directories, 8,617,984 allocated bytes, are proposals for the lead's fresh
+process/reference/ownership gate. The unexpected stale `d.sock` is refused, and
+the expected tool-venv `lib64` symlink is not traversed or proposed for deletion.
+All rejected outputs, source originals, workflow evidence, pinned wheel/tool
+dependencies and financial evidence remain preserved. Filesystem observation:
+90% used, 31,303,409,664 bytes available; concurrent growth is distinct from
+lead-owned cleanup.
+
+There were zero provider requests or pending outcomes in this Word assignment.
+All owned synthetic Word test databases and bounded renderer processes have
+exited. Remaining Word gates are the failed frozen original mapping score
+(2/31 strict, 4/31 tolerant; 33/40 rights-eligible DEV attempted), the 54/60 and
+18/20 full-workflow bars, corpus independence/rights for unopened cases, native
+Word inspection, and the retained unsupported/ambiguous originals. Manual owner
+17/17 recovery and D10/D30 full-route diagnostic exports remain distinct from
+first-pass correctness.
