@@ -40,14 +40,23 @@ def applies(version):
     return bool(version) and not getattr(version, 'document_backend', None)
 
 
-def report(version, fields=None):
+def report(version, fields=None, *, mapping_review=False):
     """The isolated parser's role report for this version's ORIGINAL, bound to the template's digest."""
     import copy
     import hashlib
     import json
     from documents.service import destination_roles
     from .import_binding import verify
-    verify(version)
+    # Mapping review needs to inspect the original roles before the clinician
+    # can resolve its exclusions. This still verifies every import identity;
+    # all encounter/admission callers retain the complete-coverage gate.
+    verify(version, allow_unreviewed=mapping_review)
+    def checked(result):
+        if not mapping_review and result.get('legacy_unresolved_actions'):
+            raise ValidationError('This legacy form has a human-owned or unresolved answer area. '
+                                  'Review a new source-bound mapping before generating or exporting. '
+                                  'Nothing was sent or charged.')
+        return result
     if not applies(version):
         return None
     fields = list(version.fields if fields is None else fields)
@@ -64,7 +73,7 @@ def report(version, fields=None):
         except AttributeError:
             pass
     if key in cache:
-        return copy.deepcopy(cache[key])
+        return checked(copy.deepcopy(cache[key]))
     # ⚠️ AND ACROSS REQUESTS, IN THIS PROCESS (integrated-candidate refutation R2-1): every v3 review save re-ran the
     # isolated parser under the encounter row lock, 5-11x slower than 43fcf214. The report is a pure function of the
     # original's bytes, the mapping and the engine, so a verified reading is reused for the same template and mapping -
@@ -79,7 +88,7 @@ def report(version, fields=None):
             _PROCESS_REPORTS.move_to_end(process_key)
     if hit is not None and _current_digest(path) == version.template.sha256:
         cache[key] = copy.deepcopy(hit)
-        return copy.deepcopy(hit)
+        return checked(copy.deepcopy(hit))
     result = destination_roles(path, fields, engine=engine)
     if result.get('sha256') != version.template.sha256:
         raise ValidationError('Original integrity check failed.')
@@ -94,7 +103,7 @@ def report(version, fields=None):
             _PROCESS_REPORTS[process_key] = copy.deepcopy(result)
             while len(_PROCESS_REPORTS) > _PROCESS_LIMIT:
                 _PROCESS_REPORTS.popitem(last=False)
-    return result
+    return checked(result)
 
 
 def _current_digest(path):
@@ -110,9 +119,9 @@ def _current_digest(path):
     return digest.hexdigest()
 
 
-def v3_held(version, fields=None):
+def v3_held(version, fields=None, *, mapping_review=False):
     """{key: reason} for every field of a contract v3 mapping that touches a role place it may not take."""
-    result = report(version, fields)
+    result = report(version, fields, mapping_review=mapping_review)
     if not result:
         return {}
     return {key: row['reason'] for key, row in (result.get('violations') or {}).items()}

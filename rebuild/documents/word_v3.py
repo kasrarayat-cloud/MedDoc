@@ -2410,6 +2410,15 @@ class Detector:
                         and clean_label(caption[1], limit=None) == area.label):
                     clause_start = max(clause_start, before)
                 sources.append(printed[max(before,clause_start):start])
+                # A named author's abbreviation can contain a period. Read a
+                # complete ownership caption up to THIS blank, independently
+                # of sentence splitting, only when nothing but punctuation
+                # follows the caption. This cannot borrow a reservation across
+                # a subsequent clinical question or a previous answer blank.
+                ownership_prefix = printed[before:start]
+                ownership = self.question_box_authorship(ownership_prefix)
+                if ownership and not ownership_prefix[ownership.end():].strip(' \t\r\n:_.'):
+                    sources.append(ownership_prefix)
                 # Identity and response blanks belong to their original
                 # printed clause even when the acting predicate follows them.
                 # Bind every destination in that clause; never invent a signer
@@ -2425,6 +2434,20 @@ class Detector:
             # engine label is derived from that original control, not a review.
             elif area.slot.kind in ('sdt', 'ff'):
                 sources.append(area.label)
+            # A printed reservation of an author's comments belongs to that
+            # author regardless of the destination's representation. Reading
+            # this relationship only for one-cell boxes released identical
+            # manager-owned statements in ordinary table answer cells.
+            if any(self.question_box_authorship(source) for source in sources):
+                area.source_action = True
+                area.protection = ('This answer area is reserved for another author\'s comments. '
+                                   'Ordinary clinician notes do not establish that author\'s statement; '
+                                   'complete it through the explicit human workflow.')
+                extent = ({'start': area.target['start'], 'end': area.target['end']}
+                          if area.target.get('type') == 'span' else {})
+                self.coverage_issue(area.slot, 'human_authored_destination',
+                                    area.protection + ' Location: ' + area.slot.id, **extent)
+                continue
             roles = [self.checkbox_source_action(source, governing=True) for source in sources]
             if not any(roles):
                 # A lexical kind is not a physical signing role. Only the
@@ -2924,6 +2947,8 @@ class Detector:
         requests from ordinary clinical questions and nonhuman observations.
         """
         source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        if cls.question_box_authorship(source):
+            return 'human_signing_action'
         # Quoting or qualifying a printed human act supplies no authority to
         # perform it. Read only a complete paired quotation / explicit clause;
         # ordinary quoted clinical statements retain their own arguments.
@@ -3105,7 +3130,11 @@ class Detector:
                    r'(?:received|recorded|filed|stored)\b')
         received_signed_object = (r'\b(?:received|recorded|filed|stored)\s+'
                                   r'(?:the|a|an|this|that|these|those)\s+signed\s+[^:?!\r\n]+')
+        # A terminal receipt object records delivery of a signed document;
+        # the action-caption guard already excluded any act of certification.
+        nominal_receipt = r'\bsigned\s+[^:?!\r\n]+?\s+receipt\s*[:.]?$'
         return any(re.search(receipt,source,re.I) or re.search(received_signed_object,source,re.I) or
+                   re.search(nominal_receipt,source,re.I) or
                    re.search(r'\b(?:recorded|documented)\b[^:?!]*\bsigned\b[^:?!]*\bstatus$',source,re.I)
                    for source in printed)
 
@@ -5951,8 +5980,89 @@ class Detector:
 
     @staticmethod
     def question_box_authorship(text):
-        return re.match(r"^this section is for (?:the )?(?:patient|parent|guardian|line manager|employer|witness)\b"
-                        r".*\bto (?:add|provide|record)\b.*\b(?:comments|concerns|statement)\b", text, re.I)
+        # Complete prospective authorship frames appoint the author, without
+        # inferring a job title or enumerating ways they might write comments.
+        # An active section assignment has an author + infinitive predicate;
+        # its passive equivalent has a comment object + "to be" + "by" author.
+        # A receipt/status label lacks that relation. Read the whole caption:
+        # neither a later clinical question nor a neighboring answer belongs
+        # to this reservation. A period in an author's name stays permissible.
+        comment = r"(?:comments|concerns|statements?)"
+        active = (r"^\s*this section is (?:reserved\s+)?for\s+[^:;?!\r\n]+?\s+to\s+"
+                  r"[^.;:?!\r\n]+?\b" + comment + r"\b[^.;:?!\r\n]*\s*[:.]?\s*$")
+        passive = (r"^\s*" + comment + r"\s+to\s+be\s+[^.;:?!\r\n]+?\s+by\s+"
+                   r"[^:;?!\r\n]+?\s*[:.]?\s*$")
+        return re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I)
+
+    def manual_paragraph_options(self, chosen, kind):
+        """A clinician explicitly appoints a complete printed list as options.
+
+        Plain bullets alone do not establish selection or cardinality. This
+        recovery is available only for an adjacent complete printed question
+        and a finite homogeneous list, with every physical paragraph bound.
+        Existing boxes, fields, selections and uncertain list boundaries stay
+        outside this contract. No automatic detection score changes here.
+        """
+        if chosen.kind != 'p' or kind not in ('choice', 'multi_choice'):
+            return None
+        question = chosen
+        if self.list_info(chosen.el):
+            previous = chosen.el.getprevious()
+            question = self.index.by_el.get(id(previous)) if previous is not None else None
+        if question is None or question.kind != 'p' or question.parent is not chosen.parent:
+            return None
+        prompt = self.text(question.el).strip()
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:sectPr'), q('w:br'), q('w:vanish')}
+        if (self.list_info(question.el) or not prompt.endswith(('?', ':'))
+                or not (self.question_box_request(prompt) or re.match(r'^(?:what|which|where|how|who|when)\b', prompt, re.I))
+                or self.question_box_reference(prompt) or self.question_box_authorship(prompt)
+                or self.checkbox_source_action(prompt, governing=True) or self.question_box_signing(prompt)
+                or len(prompt) > MAX_MAPPING_LABEL or not self.tab_source_visible(question)
+                or any(node.tag in unsafe for node in question.el.iter())
+                or self.blank_spans(*self.ptext(question.el))):
+            return None
+        options, descriptors, slots = [], [], []
+        node = question.el.getnext()
+        while node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); info = self.list_info(node)
+            if info is None:
+                break
+            text = self.text(node).strip()
+            # A malformed/hidden/different-level list item is an incomplete
+            # group, never a reason to silently keep only its easy prefix.
+            if (slot is None or slot.parent is not question.parent or slot.part != question.part
+                    or not text or len(text) > 200 or BOX in text or CHECKED in text
+                    or self.blank_spans(*self.ptext(node)) or self.question_box_request(text)
+                    or not self.tab_source_visible(slot) or any(child.tag in unsafe for child in node.iter())
+                    or len(node.findall('./' + q('w:pPr') + '/' + q('w:numPr'))) != 1
+                    or not self.list_marker_is_plain(info)
+                    or info[2] not in ('bullet', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'decimal')
+                    or descriptors and list(info[1:]) != descriptors[0]['numbering'][1:]
+                    or len(options) >= 100):
+                return None
+            options.append(option_text(text)); slots.append(slot)
+            descriptors.append({'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(node),
+                                'text': text, 'numbering': list(info)})
+            node = node.getnext()
+        if len(options) < 2 or chosen is not question and chosen is not slots[0]:
+            return None
+        if len({option.lower() for option in options}) != len(options):
+            return None
+        context = self.context_for(question, complete=True)
+        context = ' > '.join(value for value in (context, prompt) if value)
+        if len(context) > MAX_MAPPING_CONTEXT:
+            return None
+        relation = {'relation': 'manual_paragraph_options', 'question': prompt,
+                    'cardinality': 'one' if kind == 'choice' else 'many',
+                    'source': {'part': question.part, 'slot': question.path, 'fingerprint': fingerprint(question.el)},
+                    'descriptors': descriptors,
+                    'definitions': {name: hashlib.sha256(self.package.zip.read(name)).hexdigest()
+                                    for name in ('word/numbering.xml', 'word/_rels/document.xml.rels')
+                                    if name in self.package.names}}
+        return Area(kind, prompt, slots[0], {'type': 'paragraph_options', 'paragraphs': [slot.path for slot in slots]},
+                    options=options, extra_slots=slots[1:], context=context,
+                    complete_source=True, source_questions=[relation])
 
     def rule_question_boxes(self, *, list_only=False):
         """A printed body question followed by its own empty one-cell bordered table.
@@ -8280,7 +8390,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 fail("The related question mapping is invalid.", "invalid_mapping")
             if relation.get("relation") == "immediate_previous_question":
                 refs = [relation.get("source"), relation.get("reference")]
-            elif relation.get("relation") == "paragraph_list_answer" and isinstance(relation.get("descriptors"), list):
+            elif relation.get("relation") in ('paragraph_list_answer', 'manual_paragraph_options') and isinstance(relation.get("descriptors"), list):
                 instructions = relation.get("instructions", [])
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
@@ -8296,15 +8406,31 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     fail("The related question source is missing.", "invalid_mapping")
                 resolve(ref.get("part"), ref.get("slot"), ref["fingerprint"])
         if relations:
-            if relation_areas is None:
-                relation_areas = Detector(package).detect()[0]
-            if not any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                       and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer') for r in relations)
-                            or area.kind == field.get("kind") and area.options == (field.get("options") or [])
-                            and area.label == field.get("label") and area.context == field.get("context"))
-                       for area in relation_areas):
+            manual_list = any(relation.get('relation') == 'manual_paragraph_options' for relation in relations)
+            if manual_list:
+                current = source_detector.manual_paragraph_options(source_detector.index.by_id[anchors[0].id],
+                                                                   field.get('kind'))
+                owns = bool(current and current.target == target and current.source_questions == relations
+                            and current.options == field.get('options'))
+            else:
+                if relation_areas is None:
+                    relation_areas = Detector(package).detect()[0]
+                owns = any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer') for r in relations)
+                                or area.kind == field.get("kind") and area.options == (field.get("options") or [])
+                                and area.label == field.get("label") and area.context == field.get("context"))
+                           for area in relation_areas)
+            if not owns:
                 fail("The related question no longer owns this answer destination. Review the mapping again.",
                      "mapping_mismatch")
+        elif target.get('type') == 'paragraph_options':
+            # Removing the manual origin/ownership metadata cannot appoint
+            # arbitrary paragraphs as options. Existing automatically detected
+            # groups retain their original exact target and printed options.
+            if not any(area.slot.id == anchors[0].id and area.target == target
+                       and area.options == field.get('options') for area in source_detector.areas):
+                fail('The printed option group has no source-bound review. Review the complete list mapping again.',
+                     'mapping_mismatch')
         for extra in loc.get("extra", []):
             resolve(extra["part"], extra["slot"], extra["fingerprint"])
         for copy in target.get("copies", []):
@@ -8913,7 +9039,7 @@ def write_table_rows(index, field, answer):
 
 # ─── manual mapping: outline and locate ────────────────────────────────────────────────────────────────────────────
 
-MANUAL_KINDS = {"text", "long_text", "date", "time", "checkbox", "choice", "signature", "initials"}
+MANUAL_KINDS = {"text", "long_text", "date", "time", "checkbox", "choice", "multi_choice", "signature", "initials"}
 
 
 def box_key(box) -> str:
@@ -9067,12 +9193,20 @@ def locate(data: bytes, targets: list) -> list:
             if slot.kind == "glyphs":
                 slot = slot.parent
         elif slot.kind == "p":
-            text = detector.ptext(slot.el)[0]
-            if not text.strip(" \t\x00"):
-                target = {"type": "paragraph"}
+            group = detector.manual_paragraph_options(slot, kind)
+            if group is not None:
+                slot, target, options = group.slot, group.target, group.options
+            elif kind == 'multi_choice':
+                fail('For several printed options, choose the question or first item of its complete adjacent '
+                     'plain list. Existing selections, hidden fields and incomplete lists need another mapping.',
+                     'invalid_mapping')
             else:
-                end = len(text.rstrip())
-                target = {"type": "span", "start": end, "end": end, "shape": "after_label"}
+                text = detector.ptext(slot.el)[0]
+                if not text.strip(" \t\x00"):
+                    target = {"type": "paragraph"}
+                else:
+                    end = len(text.rstrip())
+                    target = {"type": "span", "start": end, "end": end, "shape": "after_label"}
         elif slot.kind == "tc":
             refs = place_box_refs(detector.index, slot) if kind == "checkbox" else []
             if refs is None:
@@ -9123,8 +9257,14 @@ def locate(data: bytes, targets: list) -> list:
         context = supplied_context or detector.context_for(slot, complete=True)
         if len(context) > MAX_MAPPING_CONTEXT:
             fail("The complete source section exceeds %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
-        area = Area(kind, label, slot, target, context=clean_label(context, limit=MAX_MAPPING_CONTEXT),
-                    options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
+        if target['type'] == 'paragraph_options':
+            area = group
+            area.label = label
+            if supplied_context:
+                area.context = clean_label(supplied_context, limit=MAX_MAPPING_CONTEXT)
+        else:
+            area = Area(kind, label, slot, target, context=clean_label(context, limit=MAX_MAPPING_CONTEXT),
+                        options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
         if slot.kind == "ff" and target["type"] == "ff_text":
             area.protection = ff_text_protection(slot.el)
         area.capacity = detector.capacity_for(area)

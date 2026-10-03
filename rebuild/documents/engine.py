@@ -690,14 +690,36 @@ def fill_docx(path, output, document, paragraphs, cells, fields, answers):
         document.save(output)
 
 
-def legacy_roles(fields, mapping):
+def legacy_roles(fields, mapping, *, source=None):
     """The legacy default path's destination roles for a STORED mapping, read from a fresh inspection of the original:
     each field's PRINTED label (the inspected one, never the mapping's edited label) and the role the engine's kind rule
     gives it there (word_v3.legacy_role_kind: 'signature', 'initials' or ''). The mapping must be this original's."""
     if not isinstance(mapping, list) or structure(fields) != structure(mapping):
         fail("The field mapping does not match this original. Reinspect and create a new mapping version.", "mapping_mismatch")
-    return {"legacy_roles": {field["key"]: {"printed_label": field["label"],
+    result = {"legacy_roles": {field["key"]: {"printed_label": field["label"],
                                             "role": word_v3.legacy_role_kind(field["label"])} for field in fields}}
+    if source is not None:
+        data, document, paragraphs, cells = source
+        package = word_v3.open_package(data)
+        detector = word_v3.Detector(package)
+        reader = word_v3._PlaceReader(detector.index)
+        places = import_selection.legacy_places(document, paragraphs, cells, fields, detector)
+        roles = word_v3.destination_roles_of(package)
+        # Historical legacy metadata does not establish permission for a
+        # document action or another author's statement. Read the original
+        # role and its actual writing extent; known human signature/initials
+        # fields keep their existing explicit workflow.
+        unresolved = []
+        for field, place in zip(fields, places):
+            if result['legacy_roles'][field['key']]['role']:
+                continue
+            for role in roles:
+                if role['class'] in (word_v3.ROLE_PROTECTED, word_v3.ROLE_POLICY) and reader.touches(place, role):
+                    unresolved.append({'key': field['key'], 'printed_label': field['label'],
+                                       'place': list(place), 'source': role['source'],
+                                       'original_role_place': role['place'], 'reason': role['reason']})
+        result['legacy_unresolved_actions'] = unresolved
+    return result
 
 
 def process(workspace, request):
@@ -761,7 +783,12 @@ def process(workspace, request):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields
     if request["operation"] == "roles":
-        return legacy_roles(fields, request.get("mapping"))
+        return legacy_roles(fields, request.get("mapping"),
+                            source=(path.read_bytes(), document, paragraphs, cells) if fmt == 'docx' else None)
+    if fmt == 'docx' and legacy_roles(fields, request.get('mapping'),
+                                    source=(path.read_bytes(), document, paragraphs, cells)).get('legacy_unresolved_actions'):
+        fail('This legacy form has a human-owned or unresolved answer area. Review a new source-bound mapping; '
+             'the original and any stored document remain unchanged.', 'unresolved_legacy_roles')
     validate_mapping(fields, request["mapping"], answers)
     if fmt == "docx":
         fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)

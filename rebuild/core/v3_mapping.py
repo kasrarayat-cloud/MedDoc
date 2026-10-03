@@ -23,7 +23,7 @@ SIGNING_KINDS = ('signature', 'initials')
 #: Never generated from notes: the clinician enters table rows; signature and initials are signed by hand.
 NEVER_GENERATED = ('table_rows',) + SIGNING_KINDS
 #: What a clinician may add by hand (the engine's manual kinds).
-MANUAL_KINDS = ('text', 'long_text', 'date', 'time', 'choice', 'checkbox', 'signature', 'initials')
+MANUAL_KINDS = ('text', 'long_text', 'date', 'time', 'choice', 'multi_choice', 'checkbox', 'signature', 'initials')
 KIND_NAMES = {'text': 'Text', 'long_text': 'Long text', 'date': 'Date', 'time': 'Time', 'choice': 'One printed option',
               'multi_choice': 'Printed options (several)', 'checkbox': 'Checkbox', 'table_rows': 'Table rows',
               'signature': 'Signature', 'initials': 'Initials'}
@@ -137,6 +137,10 @@ def admission_refusals(version):
     # or reservation; its source-role path otherwise returns before this gate.
     from .import_binding import verify
     verify(version)
+    from . import destination_roles
+    if (not is_v3_version(version) and destination_roles.applies(version)
+            and version.template.format == 'docx'):
+        destination_roles.report(version)
     refusal, inspection = _source_refusal(version)
     if refusal or not counted_tab_column(inspection):
         return refusal, ''

@@ -248,8 +248,14 @@ class ProtectedAndPolicy(unittest.TestCase):
         roles = [r for r in w.destination_roles(blob, engine)['roles'] if r['source'] == 'attestation']
         self.assertEqual([r['place'] for r in roles], [BODY + 'b/tbl[0]/tr[0]/tc[1]'])
         self.assertEqual(w.destination_roles(blob, engine)['violations'], {})
-        relabelled = {**{k: v for k, v in engine[0].items() if k != 'answer_policy'}, 'label': 'Comments'}
-        self.assertEqual(w.destination_roles(blob, [relabelled])['violations'][relabelled['key']]['class'], 'policy')
+        self.assertTrue(engine[0]['write_protected'])
+        relabelled = {**{k: v for k, v in engine[0].items()
+                        if k not in ('answer_policy', 'write_protected', 'review_reason')}, 'label': 'Comments'}
+        # The retained original now also binds an explicit human action. A
+        # protection marker means the unchanged mapping cannot write at all;
+        # stripping it still cannot convert that place to ordinary comments.
+        self.assertEqual(w.destination_roles(blob, [relabelled])['violations'][relabelled['key']]['class'], 'protected')
+        self.assertEqual(refusal(blob, [relabelled], relabelled['key'], 'Yes'), 'protected_signing_area')
 
     def test_a_locked_content_control_is_protected(self):
         doc = Document(); p = doc.add_paragraph('Hospital number: ')
@@ -656,15 +662,28 @@ class ReadingsReleased(unittest.TestCase):
         self.assertEqual(located(blob, BODY + 'b/tbl[0]/tr[0]/tc[0]', 'long_text', 'Capacity')[1], 'destination_role')
 
     def test_r2_04_a_clinical_reading_the_kind_rule_types_initials_is_not_a_role(self):
-        """R2-04: 'Initial GCS: ____' is still an initials field (never generated), but it is no longer a role, so the
-        clinician can remove it and add the text answer the form asks for."""
+        """Retain the seven historical controls with current physical-source behavior.
+
+        Initial clinical readings now import as ordinary text automatically.
+        The unresolved consent action remains held; it cannot be manually
+        re-added as a clinical answer. Historical expectations are retained in
+        the continuation's pre-resume replay, rather than weakening the source.
+        """
         for label in ('Initial GCS', 'Initial assessment', 'Initial dose', 'Initial ECG', 'Initial lactate',
                       'Consent form signed', 'Time signed'):
             with self.subTest(label=label):
                 blob = line_form(label + ': ______')
                 engine = w.inspect(blob)['fields']
-                self.assertIn(engine[0]['kind'], ('signature', 'initials'))
                 self.assertEqual([r for r in w.destination_roles(blob)['roles'] if r['class'] == 'signing'], [])
+                if label == 'Consent form signed':
+                    self.assertTrue(engine[0].get('write_protected'))
+                    self.assertEqual(located(blob, BODY + 'b/p[1]', label=label)[1], 'destination_role')
+                    self.assertEqual(refusal(blob, engine, engine[0]['key'], 'Yes'), 'protected_signing_area')
+                    continue
+                if label.startswith('Initial '):
+                    self.assertEqual(engine[0]['kind'], 'text')
+                    self.assertFalse(engine[0].get('write_protected'))
+                    self.assertIn('SYNVAL', xml(w.fill(blob, engine, {engine[0]['key']: 'SYNVAL'})))
                 added, code = located(blob, BODY + 'b/p[1]', label=label)
                 self.assertIsNone(code)
                 self.assertIn('SYNVAL', xml(w.fill(blob, engine[1:] + [added], {added['key']: 'SYNVAL'})))

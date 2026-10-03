@@ -276,7 +276,7 @@ def validate_proposal(version,compiled,response):
     path=private_path(version.template.original_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=version.template.sha256:
         raise ValidationError('Original integrity check failed.')
-    try:report=destination_roles.report(version)
+    try:report=destination_roles.report(version,mapping_review=True)
     except (DocumentError,OSError,ValidationError):raise ValidationError('Original integrity check failed.') from None
     roles=report.get('roles') or [];held_now=report.get('violations') or {}
     groups=[set(group) for group in report.get('choices') or []]
@@ -455,7 +455,7 @@ def validate_proposal(version,compiled,response):
     # V2: the ORIGINAL's destination roles over the resulting mapping, read again in the isolated parser.
     if adopted:
         fields=result(adopted)
-        try:second=destination_roles.report(version,fields)
+        try:second=destination_roles.report(version,fields,mapping_review=True)
         except (DocumentError,OSError,ValidationError):raise ValidationError('Original integrity check failed.') from None
         for n in list(adopted):
             if changes[n]['field']['key'] in (second.get('violations') or {}):hold(n,ROLE_PLACE)
@@ -550,7 +550,7 @@ def validate_mapping(version,fields,outline_rows):
     if clashes:problems.append('these fields write to the same place: '+', '.join(clashes))
     boxes=v3_mapping.missing_boxes(fields,outline_rows)+v3_mapping.checkboxes_off_box(fields)
     if boxes:problems.append('these checkbox fields do not point at a printed box: '+', '.join(boxes))
-    held=destination_roles.v3_held(version,fields)
+    held=destination_roles.v3_held(version,fields,mapping_review=True)
     if held:problems.append('these fields sit on a signing, initials, consent or protected place of the original form, or '
                             'lack its printed requirement: '+', '.join(v3_mapping.label_of(f) for f in fields if f['key'] in held))
     if problems:raise ValidationError('These decisions would leave a mapping that cannot be confirmed: '+'; '.join(problems)+
