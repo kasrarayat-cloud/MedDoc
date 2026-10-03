@@ -122,6 +122,18 @@ def clinician_identity(field):
     return field.get('answer_policy') == 'clinician_identity' or signature_label(field.get('label'))
 
 
+
+def electronic_identity(field):
+    """Review authority for the established electronic clinician workflow.
+
+    A contract-v3 signing area is completed by hand. Its original physical
+    roles still guard generation/fill, but an old policy or renamed label
+    cannot appoint the electronic finalizer in that workflow. The separate
+    generation identity hold remains unchanged for malformed field controls.
+    """
+    return (field.get('locator') or {}).get('contract') != 'v3' and clinician_identity(field)
+
+
 def validate_identity(fields, answers, actor):
     """Never infer a signature from notes, labels, dates, or another clinician.
 

@@ -836,7 +836,7 @@ def encounter_detail(request,pk):
     # `accept_code`, in this same template, has named its accepter all along.
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
-    from .tab_review import clinician_identity
+    from .tab_review import electronic_identity as clinician_identity
     from .destination_roles import ROLE_NOT_GENERATED as role_not_generated
     printed_roles={}
     if not is_wm and not is_v3 and e.status!='finalized':
@@ -1305,7 +1305,7 @@ def document_refusal(request,encounter,message,status):
 @transaction.atomic
 def save_answers(request,pk):
     from documents import DocumentError
-    from .tab_review import clinician_identity
+    from .tab_review import electronic_identity as clinician_identity
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
@@ -1749,7 +1749,9 @@ def finalize(request,pk):
                                  and destination_roles.generated_text(e.answers.get(f['key']))]
                         if refused:raise ValidationError(LEGACY_ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one and save; you may then type your own entry. Nothing was finalized.')
                         identity_fields=[destination_roles.printed(f,roles) for f in version.fields]
-                validate_identity(identity_fields,e.answers,request.user)
+                # Contract-v3 roles are completed by hand; the fresh physical
+                # refusals above apply, without appointing an electronic signer.
+                if not is_v3:validate_identity(identity_fields,e.answers,request.user)
                 # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an
                 # option label, a list of labels, a ticked box, table rows. The engine checks every anchor's
                 # fingerprint and refuses a stale one; its message is shown as it is.

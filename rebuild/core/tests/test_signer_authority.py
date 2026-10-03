@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from core import destination_roles, generation
 from core.jobs import enqueue, run_one
 from core.models import AuditEvent, Encounter, Job, LedgerEntry, MappingConfirmation, TemplateVersion, Usage
-from core.tab_review import another_signers_line, clinician_identity, validate_identity
+from core.tab_review import another_signers_line, clinician_identity, electronic_identity, validate_identity
 from core.tests.test_destination_roles import Walk, legacy_rows, lines
 from core.tests.test_role_suggestions import ACTION, Legacy, LIVE, NOTES, ON, labelled_provider
 from core.tests.test_v3_supersession_floor import SONNET_55_DEFAULT
@@ -46,6 +46,12 @@ class SignerOwnership(SimpleTestCase):
                 self.assertEqual(destination_roles.legacy_reason(field,row),destination_roles.ROLE_NOT_GENERATED)
         mapped={'key':'k','label':'Signature','answer_policy':'clinician_identity'}
         self.assertTrue(clinician_identity(destination_roles.printed(mapped,{'k':{'printed_label':'Doctor','role':''}})))
+
+    def test_v3_review_is_human_workflow_while_generation_identity_hold_remains(self):
+        field={'key':'k','label':'Signature','answer_policy':'clinician_identity','locator':{'contract':'v3'}}
+        self.assertTrue(clinician_identity(field))
+        self.assertFalse(electronic_identity(field))
+        self.assertTrue(electronic_identity({**field,'locator':{'contract':'legacy'}}))
 
     def test_explicit_clinician_identity_and_ordinary_date_questions_keep_their_workflows(self):
         actor = SimpleNamespace(pk=1, email='synthetic@invalid', get_full_name=lambda: 'Synthetic Clinician')
@@ -115,6 +121,24 @@ class WithdrawnSignerOffers(Legacy, TestCase):
         download = self.client.get(f'/encounters/{e.pk}/export/')
         self.assertEqual(download.status_code, 200)
         self.assertEqual(b''.join(download.streaming_content), exported)
+
+    def test_known_legacy_clinician_signature_still_requires_explicit_same_finalizer(self):
+        from docx import Document
+        from core.security import private_path
+        self.template,self.version=self.uploaded(data=legacy_rows('Signature','Plan'),name='Synthetic electronic clinician authority')
+        self.by=self.by_label(self.version);key=self.key('Signature')
+        e=self.generated('Signature: Dr Other in notes\nPlan: Rest.')
+        self.assertEqual((e.answers[key]['status'],e.answers[key]['text']),('missing',''))
+        row=next(r for r in self.client.get(f'/encounters/{e.pk}/').context['answer_rows'] if r['key']==key)
+        self.assertTrue(row['identity']);self.assertFalse(row.get('role_offer'))
+        self.assertEqual(self.review_all(e,typed={'Signature':'Dr Other'}).status_code,302)
+        response=self.finalized(e)
+        self.assertEqual(e.status,'review')
+        self.assertIn('must match your signed-in clinician name',response.content.decode())
+        name=self.user.get_full_name()
+        self.assertEqual(self.review_all(e,typed={'Signature':name}).status_code,302)
+        self.finalized(e);self.assertEqual(e.status,'finalized')
+        self.assertEqual(Document(private_path(e.export_path)).tables[0].cell(0,1).text,name)
 
     def test_flag_one_admits_no_role_questions_and_preserves_useful_ordinary_answer(self):
         for flag in ('0', '1'):
@@ -196,7 +220,7 @@ class WithdrawnSignerOffers(Legacy, TestCase):
 @override_settings(**dict(ON,QUILLMD_WORD_ENGINE='v3'))
 class V3HumanAuthority(Walk,V3Fixture,TestCase):
     def test_physical_manager_authorisation_never_appoints_finalizer_from_old_policy(self):
-        import json,os
+        import io,json,os
         from pathlib import Path
         from docx import Document
         from core import import_binding
@@ -236,7 +260,7 @@ class V3HumanAuthority(Walk,V3Fixture,TestCase):
         self.assertEqual(self.reviewed(e,old).status_code,302)
         self.finalized(e);self.assertEqual(e.status,'finalized')
         exported=private_path(e.export_path).read_bytes()
-        self.assertIn('Manager authorisation: ____________________',[p.text for p in Document(__import__('io').BytesIO(exported)).paragraphs])
+        self.assertIn('Manager authorisation: ____________________',[p.text for p in Document(io.BytesIO(exported)).paragraphs])
         self.assertEqual(private_path(template.original_path).read_bytes(),original)
         download=self.client.get(f'/encounters/{e.pk}/export/')
         self.assertEqual(download.status_code,200);self.assertEqual(b''.join(download.streaming_content),exported)
