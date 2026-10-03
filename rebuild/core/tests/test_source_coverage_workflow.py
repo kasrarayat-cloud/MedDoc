@@ -1,7 +1,11 @@
 """Explicit source review cannot be replaced by a generic confirmation or copied writer."""
 import copy
 import io
+import json
+import os
+import tempfile
 from pathlib import Path
+from zipfile import ZipFile
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -15,6 +19,7 @@ from core.security import private_path
 from documents.test_source_coverage import numbered
 from .test_word_v3_workflow import V3Fixture
 from .test_workflow import TEST_SETTINGS
+from .test_v3_supersession_floor import SONNET_55_DEFAULT
 
 
 @override_settings(**dict(TEST_SETTINGS,QUILLMD_WORD_ENGINE='v3',QUILLMD_ROLE_SUGGESTIONS=False))
@@ -125,3 +130,119 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
         target=Path(self.directory.name)/'spaced-date-export.docx'
         fill_template(private_path(template.original_path),version.fields,{field['key']:'03/14/2026'},target)
         self.assertEqual(Document(target).paragraphs[0].text,'Date: 03/14/2026')
+
+    @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture'))
+    def test_adjacent_answers_real_upload_worker_review_finalization_and_export(self):
+        from documents import word_v3
+        from documents.test_source_coverage import AdjacentCheckboxAnswers
+        helper = AdjacentCheckboxAnswers()
+        shapes = (
+            ('conditional', helper.form('Any symptoms? ☐ No ☐ Yes → if yes, describe: ______'),
+             {'Any symptoms?': 'Yes', 'if yes, describe:': 'Synthetic headache', 'Unrelated note': 'Synthetic review'}),
+            ('native_other', helper.form(' Other, specify___________', native=True),
+             {'Other, specify': 'checked', 'Unrelated note': 'Synthetic review'}),
+            ('independent_age', helper.form('Gender\t\t ☐ Male\t\t☐ Female\t\tAge   ................  years'),
+             {'Gender': 'Female', 'Age': '42', 'Unrelated note': 'Synthetic review'}),
+        )
+        for shape, raw, expected in shapes:
+            with self.subTest(shape=shape):
+                from docx.oxml import OxmlElement
+                from docx.oxml.ns import qn
+                from docx.opc.constants import RELATIONSHIP_TYPE
+                original_doc = Document(io.BytesIO(raw))
+                original_doc.add_paragraph('Clinician signature: ______')
+                original_doc.add_paragraph('Tick control retained: ☒ Printed')
+                fixed = original_doc.add_paragraph('Fixed guidance: ')
+                relationship = original_doc.part.relate_to('https://example.invalid/synthetic-guidance',
+                    RELATIONSHIP_TYPE.HYPERLINK,is_external=True)
+                link=OxmlElement('w:hyperlink');link.set(qn('r:id'),relationship)
+                run=OxmlElement('w:r');text=OxmlElement('w:t');text.text='Read the synthetic guidance'
+                run.append(text);link.append(run);fixed._p.append(link)
+                buffer=io.BytesIO();original_doc.save(buffer);raw=buffer.getvalue()
+                evidence = None
+                scratch = Path(os.environ.get('QUILLMD_STATE_DIR', '/nonexistent'))
+                approved = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word/adjacent-writein')
+                if scratch.is_relative_to(approved) and scratch.is_dir() and not scratch.is_symlink():
+                    evidence = Path(tempfile.mkdtemp(prefix='workflow-'+shape+'-', dir=scratch))
+                    (evidence/'original.docx').write_bytes(raw)
+                template, version = self.uploaded(data=raw, name='Synthetic adjacent '+shape)
+                self.assertFalse(version.import_manifest['coverage'].get('block_generation'))
+                import_binding.verify(version); self.confirm(template, version)
+                blank = next(f for f in version.fields if f.get('source_questions')
+                             and f['source_questions'][0]['relation'] == 'adjacent_checkbox_answer')
+                # The same-label Other control and write-in require their full
+                # distinct contexts; this fixture does not guess between them.
+                values = {f['key']: ('Synthetic location' if f['key'] == blank['key'] and shape == 'native_other'
+                                    else expected.get(f['label'],'')) for f in version.fields}
+                notes = '\n\n'.join(f"{f['context']} > {f['label']}: {values[f['key']]}" if shape == 'native_other'
+                                   else f"{f['label']}: {values[f['key']]}" for f in version.fields if values[f['key']])
+                if evidence:
+                    (evidence/'mapping.json').write_text(json.dumps({'fields':version.fields,
+                        'import_manifest':version.import_manifest,'input_notes':notes,'expected':values},indent=2))
+                self.assertEqual(self.new_encounter(version, notes).status_code, 302)
+                encounter = Encounter.objects.get(template_version=version)
+                page = self.client.get(f'/encounters/{encounter.pk}/')
+                self.assertIsNotNone(page.context['generation_max_charge'], page.context['generation_quote_error'])
+                response = self.client.post(f'/encounters/{encounter.pk}/generate/',
+                    {'revision':encounter.revision,'usage_quote':page.context['usage_quote']})
+                self.assertEqual(response.status_code,302)
+                self.assertTrue(run_one()); encounter.refresh_from_db()
+                job = Job.objects.get(encounter=encounter)
+                self.assertEqual(job.state,'succeeded',job.error)
+                first = copy.deepcopy(encounter.answers)
+                if evidence: (evidence/'first-pass.json').write_text(json.dumps(first,indent=2))
+                print('ADJACENT_FIRST_PASS',shape,json.dumps({k:{'status':v.get('status'),'text':v.get('text')}
+                                                           for k,v in first.items()},sort_keys=True))
+                # Field review may correct a fixture hold; preserve the first
+                # response separately and never credit corrections as automatic.
+                payload = {'revision':encounter.revision}
+                for field in version.fields:
+                    payload['answer_'+field['key']] = values[field['key']]
+                    payload['reviewed_'+field['key']] = 'on'
+                if shape == 'conditional':
+                    choice = next(f for f in version.fields if f['kind']=='choice')
+                    invalid = {**payload,'answer_'+choice['key']:'No'}
+                    self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/',invalid).status_code,302)
+                    encounter.refresh_from_db()
+                    refused = self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                        {'revision':encounter.revision,'reviewed':'on'})
+                    self.assertEqual(refused.status_code,200); encounter.refresh_from_db()
+                    self.assertEqual(encounter.status,'draft'); self.assertFalse(encounter.export_path)
+                    if evidence: (evidence/'unselected-finalization.json').write_text(json.dumps(
+                        {'status_code':refused.status_code,'encounter_status':encounter.status,'export_path':''}))
+                payload['revision'] = encounter.revision
+                self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/',payload).status_code,302)
+                encounter.refresh_from_db()
+                self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                    {'revision':encounter.revision,'reviewed':'on'}).status_code,302)
+                encounter.refresh_from_db(); self.assertEqual(encounter.status,'finalized')
+                response = self.client.get(f'/encounters/{encounter.pk}/export/')
+                self.assertEqual(response.status_code,200)
+                exported = b''.join(response.streaming_content)
+                if evidence:
+                    (evidence/'final.docx').write_bytes(exported)
+                    (evidence/'review-actions.json').write_text(json.dumps({'answers':values,
+                        'automatic_correct':sum(first.get(k,{}).get('status')=='supported' and first[k].get('text')==v
+                                                for k,v in values.items() if v),'expected_count':sum(bool(v) for v in values.values()),
+                        'corrections_count':sum(first.get(k,{}).get('status')!='supported' or first[k].get('text')!=v
+                                               for k,v in values.items() if v),'fixture_only':True},indent=2))
+                final = Document(io.BytesIO(exported))
+                self.assertEqual(final.paragraphs[-4].text,'Unrelated note: Synthetic review')
+                self.assertEqual(final.paragraphs[-3].text,'Clinician signature: ______')
+                self.assertEqual(final.paragraphs[-2].text,'Tick control retained: ☒ Printed')
+                self.assertEqual(final.paragraphs[-1]._p.xml,original_doc.paragraphs[-1]._p.xml)
+                with ZipFile(io.BytesIO(raw)) as source, ZipFile(io.BytesIO(exported)) as written:
+                    for name in source.namelist():
+                        if name != 'word/document.xml': self.assertEqual(source.read(name),written.read(name),name)
+                if shape == 'conditional':
+                    self.assertEqual(final.paragraphs[0].text,
+                        'Any symptoms? ☐ No ☒ Yes → if yes, describe: Synthetic headache')
+                elif shape == 'native_other':
+                    index = word_v3.SlotIndex(word_v3.open_package(exported))
+                    choice = next(f for f in version.fields if f['kind']=='checkbox')
+                    self.assertEqual(word_v3.constrained_option_states(index,choice),[True])
+                    self.assertIn('Other, specifySynthetic location',final.paragraphs[1].text)
+                else:
+                    self.assertEqual(final.paragraphs[0].text,
+                        'Gender\t\t ☐ Male\t\t☒ Female\t\tAge   42  years')
+                self.assertEqual(private_path(template.original_path).read_bytes(),raw)

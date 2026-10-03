@@ -2340,6 +2340,7 @@ class Detector:
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
         self.rule_checkboxes()
+        self.rule_adjacent_write_ins()
         self.rule_question_boxes(list_only=True)
         self.rule_text_option_choices()
         self.rule_tables()
@@ -2715,6 +2716,124 @@ class Detector:
             # the option ends at a wide gap followed by more text only when it is the last box on the line
             units.append([ref, option, text[:pos] if n == 0 else ""])
         return units
+
+    def adjacent_blank_plan(self, slot):
+        """One physically separate answer span beside qualified box controls.
+
+        Two blanks, hidden/linked ink, drawings and ambiguous option text stay
+        with the existing coverage hold. A printed condition never selects its
+        controlling box; a separate labelled unit never inherits that box.
+        """
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        positions = [i for i, ch in enumerate(text) if ch in (BOX, CHECKED)]
+        if (slot.part != 'word/document.xml' or len(spans) != 1 or not positions or not self.tab_source_visible(slot)
+                or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in slot.el.iter())):
+            return None
+        head = text[:positions[0]].strip()
+        action = re.compile(r'\s*(?:I|we)\s+(?:hereby\s+)?(?:certify|attest|declare|affirm)(?=\W|_|$)', re.I)
+        if self.question_box_signing(head) or any(action.match(text[pos + 1:]) for pos in positions):
+            self.protected_regions.add(slot.id)
+            self.coverage_issue(slot, 'human_signing_action',
+                'The printed signing or attestation action remains human-owned at ' + slot.id)
+            return None
+        start, end, shape = spans[0]
+        if (shape not in ('blank', 'utab') or start <= positions[-1]
+                or hyperlink_write(pieces, start, end)):
+            return None
+        if shape == 'blank':
+            # A recognised ellipsis/underscore rule can end with one or two
+            # contiguous dots that are too short to be a second blank. They
+            # belong to this drawn rule, not to the option or a neighbour.
+            while end < len(text) and text[end] in '_.…': end += 1
+            while start > positions[-1] + 1 and text[start - 1] in '_.…': start -= 1
+            if hyperlink_write(pieces, start, end): return None
+        prefix, suffix = text[positions[-1] + 1:start], text[end:]
+        # Explicit Yes/No condition printed after its own labelled option.
+        condition = re.fullmatch(r'\s*(Yes|No)\s*(?:[→⇒]\s*)?(if\s+(yes|no)\s*,\s*\S.+[?:])\s*', prefix, re.I)
+        if condition and not suffix.strip() and condition[1].casefold() == condition[3].casefold():
+            return {'start': start, 'end': end, 'shape': shape, 'label': condition[2].strip(),
+                    'option': condition[1], 'condition': 'printed_option', 'box': len(positions) - 1}
+        # A wide printed gap separates a different labelled/unit answer from
+        # the last option (Gender ... Female<TAB><TAB>Age ____ years).
+        gap = re.search(r'\t{2,}| {4,}', prefix)
+        if gap and suffix.strip() and self.ANSWER_UNIT.fullmatch(suffix.strip()):
+            option, label = prefix[:gap.start()].strip(), clean_label(prefix[gap.end():], limit=None)
+            if option and label and not re.search(r'[:?!\x00' + BOX + CHECKED + r']', label):
+                return {'start': start, 'end': end, 'shape': shape, 'label': label,
+                        'option': option, 'condition': 'independent_unit', 'box': len(positions) - 1}
+        # One box and one trailing write-in are distinct destinations. Do not
+        # generalise multiple-box descriptions or a sentence after the blank.
+        if len(positions) == 1 and not text[:positions[0]].strip() and not suffix.strip():
+            label = clean_label(prefix, limit=None)
+            if label and not re.search(r'\bif\b|[?!\x00]', label, re.I):
+                return {'start': start, 'end': end, 'shape': shape, 'label': label,
+                        'option': label, 'condition': 'printed_option', 'box': 0}
+        return None
+
+    def adjacent_option_text(self, unit):
+        """Separate only a proven explicit trailing condition from its option."""
+        ref = unit[0]
+        slot = self.index.by_id.get(ref['part'] + '#' + ref['slot'])
+        paragraph = self.host_paragraph(slot) if slot is not None else None
+        if paragraph is None:
+            return unit[1]
+        plan = self.adjacent_blank_plan(paragraph)
+        refs = [u[0] for u in self.box_units(paragraph)]
+        if (plan and plan['condition'] == 'printed_option' and refs[plan['box']] == ref
+                and (len(refs) == 1 or re.match(r'if\s+(?:yes|no)\s*,', plan['label'], re.I))):
+            return plan['option']
+        return unit[1]
+
+    def rule_adjacent_write_ins(self):
+        """An existing qualified checkbox owner permits a separate exact span.
+
+        The complete owner and condition travel with the mapping and are read
+        again by fill. Coverage holds are removed only by a genuine writer at
+        this exact span; no ambiguous option/cardinality group is promoted.
+        """
+        for slot in [s for s in self.index.slots if s.kind == 'p']:
+            plan = self.adjacent_blank_plan(slot)
+            if slot.id in self.protected_regions:
+                for area in self.areas:
+                    if any(ref.get('part') == slot.part and ref.get('slot', '').startswith(slot.path + '/')
+                           for ref in area.target.get('boxes', [])):
+                        area.protection = 'This printed signing or attestation action is human-owned. Complete it through the established signing workflow.'
+                continue
+            if not plan:
+                continue
+            target = {'type': 'span', 'start': plan['start'], 'end': plan['end'], 'shape': plan['shape']}
+            if any(a.slot is slot and a.target == target for a in self.areas):
+                continue
+            control = self.box_units(slot)[plan['box']][0]
+            owners = [a for a in self.areas if a.target.get('type') == 'checkboxes'
+                      and control in a.target.get('boxes', [])]
+            if len(owners) != 1:
+                continue
+            owner = owners[0]; position = owner.target['boxes'].index(control)
+            if (owner.protection or owner.kind not in ('choice', 'multi_choice', 'checkbox')
+                    or owner.label in ('Choose', 'Checkbox', '') or not owner.options
+                    or position >= len(owner.options)
+                    or option_text(owner.options[position]).casefold() != option_text(plan['option']).casefold()):
+                continue
+            label = plan['label']
+            context = ' > '.join(x for x in (owner.context, owner.label,
+                ('Only when the printed option ' + owner.options[position] + ' is selected')
+                    if plan['condition'] == 'printed_option' else 'Separate labelled answer: ' + label) if x)
+            if (len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT
+                    or self.question_box_signing(label) or self.question_box_signing(context)
+                    or self.question_box_signing(owner.label + ':')):
+                continue
+            source = {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+            owner_ref = {'part': owner.slot.part, 'slot': owner.slot.path, 'fingerprint': fingerprint(owner.slot.el)}
+            relation = {'relation': 'adjacent_checkbox_answer', 'question': label, 'context': context,
+                        'source': source, 'owner': owner_ref, 'owner_label': owner.label,
+                        'owner_context': owner.context, 'owner_kind': owner.kind,
+                        'owner_options': list(owner.options), 'owner_target': dict(owner.target),
+                        'condition': plan['condition'], 'control': dict(control), 'option_index': position,
+                        'printed_option': owner.options[position], 'source_text': self.ptext(slot.el)[0]}
+            self.add(Area(self.kind_for(label), label, slot, target, context=context,
+                          complete_source=True, source_questions=[relation]))
 
     def tab_column_properties(self, slot, *, scope_only=False):
         """Resolve additive stops and per-attribute indentation; unknown layout refuses."""
@@ -4177,7 +4296,7 @@ class Detector:
         pslot = g["paras"][0]
         for units in self.split_inline_groups(g):
             options = [option_text(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else option_text(o)
-                       for _, o, _ in units]
+                       for o in (self.adjacent_option_text(unit) for unit in units)]
             question = clean_label(units[0][2])
             before_boxes = self.words_before_boxes(units, options) if len(units) > 1 else ""
             if before_boxes:
@@ -7705,6 +7824,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                            for issue in source_detector.coverage_issues
                            if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
                                                 'unmapped_bracketed_source')]
+    adjacent_answers = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -7726,6 +7847,41 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        for area in adjacent_answers:
+            region = {'place': area.slot.id, 'start': area.target['start'], 'end': area.target['end']}
+            if not any(reader.touches(place, region) for place in reader.of(field)):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or field.get('kind') != area.kind
+                    or field.get('label') != area.label or field.get('context') != area.context
+                    or field.get('source_questions') != area.source_questions):
+                fail('This answer changes a source-bound checkbox write-in or its complete ownership. '
+                     'Review its exact mapping again.', 'mapping_mismatch')
+            relation = area.source_questions[0]
+            if relation['condition'] != 'printed_option':
+                continue
+            owner = relation['owner']
+            controls = [f for f in fields if f.get('kind') == relation['owner_kind']
+                        and f.get('label') == relation['owner_label']
+                        and f.get('context') == relation['owner_context']
+                        and f.get('options') == relation['owner_options']
+                        and (f.get('locator') or {}).get('part') == owner['part']
+                        and (f.get('locator') or {}).get('slot') == owner['slot']
+                        and (f.get('locator') or {}).get('fingerprint') == owner['fingerprint']
+                        and (f.get('locator') or {}).get('target') == relation['owner_target']]
+            if len(controls) != 1:
+                fail('The conditional write-in has no unique original controlling choice. Review the mapping.',
+                     'mapping_mismatch')
+            control = controls[0]; value = answers.get(control['key'])
+            position = relation['option_index']
+            if value not in (None, '', []):
+                selected = position in _options_chosen(control, value)
+            else:
+                states = constrained_option_states(index, control)
+                selected = position < len(states) and states[position] is True
+            if not selected:
+                fail('This write-in is conditional on its own printed option being selected. '
+                     'Review the controlling choice; no tick was inferred.', 'conditional_answer_unselected')
         if target.get("type") == "cell_append":
             if field.get("source_instructions") != cell_instruction_source(index, field):
                 fail("The complete printed answer-cell instructions changed. Review the mapping again.", "mapping_mismatch")
@@ -7780,6 +7936,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
             elif relation.get("relation") == "native_checkbox_history" and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
+            elif relation.get('relation') == 'adjacent_checkbox_answer':
+                refs = [relation.get('source'), relation.get('owner')]
             else:
                 fail("The related question mapping is invalid.", "invalid_mapping")
             for ref in refs:
@@ -7790,8 +7948,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             if relation_areas is None:
                 relation_areas = Detector(package).detect()[0]
             if not any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                       and (not any(r.get("relation") == "native_checkbox_history" for r in relations)
-                            or area.kind == field.get("kind") and area.options == field.get("options")
+                       and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer') for r in relations)
+                            or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                             and area.label == field.get("label") and area.context == field.get("context"))
                        for area in relation_areas):
                 fail("The related question no longer owns this answer destination. Review the mapping again.",

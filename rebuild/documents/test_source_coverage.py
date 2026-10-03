@@ -7,6 +7,7 @@ import io
 import hashlib
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from zipfile import ZipFile
 from unittest.mock import patch
@@ -18,6 +19,7 @@ from lxml import etree
 
 from . import word_v3
 from .service import inspect_template
+from .test_word_v3 import ff_field
 
 
 def data(doc):
@@ -39,6 +41,116 @@ def numbered(doc,text,number_id,format):
         node=OxmlElement(tag);node.set(qn('w:val'),value);num.append(node)
     p._p.get_or_add_pPr().append(num)
     return p
+
+
+class AdjacentCheckboxAnswers(unittest.TestCase):
+    def form(self, text, *, native=False, checked=False):
+        doc = Document()
+        if native:
+            doc.add_paragraph('Specify the anatomical site:')
+            p = doc.add_paragraph(); ff_field(p, 'checkbox', checked=checked)
+            p.add_run(text)
+        else:
+            doc.add_paragraph(text)
+        doc.add_paragraph('Unrelated note: ______')
+        return data(doc)
+
+    def fields(self, raw):
+        result = word_v3.inspect(raw)
+        return result, next(f for f in result['fields'] if f.get('source_questions')
+                           and f['source_questions'][0]['relation'] == 'adjacent_checkbox_answer')
+
+    def test_explicit_condition_has_separate_exact_writer_and_never_infers_a_tick(self):
+        raw = self.form('Any symptoms? ☐ No ☐ Yes → if yes, describe: ______')
+        result, blank = self.fields(raw)
+        choice = next(f for f in result['fields'] if f['kind'] == 'choice')
+        self.assertEqual(choice['options'], ['No', 'Yes'])
+        self.assertEqual(blank['label'], 'if yes, describe:')
+        self.assertFalse(result['coverage_issues'])
+        self.assertEqual(blank['source_questions'][0]['condition'], 'printed_option')
+        for controlling in (None, 'No'):
+            answers = {blank['key']: 'Synthetic headache'}
+            if controlling is not None: answers[choice['key']] = controlling
+            with self.subTest(controlling=controlling), self.assertRaises(word_v3.V3Failure) as error:
+                word_v3.fill(raw, result['fields'], answers)
+            self.assertEqual(error.exception.code, 'conditional_answer_unselected')
+        out = word_v3.fill(raw, result['fields'], {choice['key']: 'Yes', blank['key']: 'Synthetic headache'})
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,
+                         'Any symptoms? ☐ No ☒ Yes → if yes, describe: Synthetic headache')
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[1].text, 'Unrelated note: ______')
+
+    def test_native_other_blank_has_its_own_control_and_preserves_existing_state(self):
+        for original_checked in (False, True):
+            with self.subTest(original_checked=original_checked):
+                raw = self.form(' Other, specify___________', native=True, checked=original_checked)
+                result, blank = self.fields(raw)
+                choice = next(f for f in result['fields'] if f['kind'] == 'checkbox')
+                self.assertEqual(blank['label'], 'Other, specify')
+                self.assertEqual(blank['source_questions'][0]['printed_option'], 'Other, specify')
+                if not original_checked:
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw, result['fields'], {blank['key']: 'Synthetic location'})
+                out = word_v3.fill(raw, result['fields'], {choice['key']: 'checked', blank['key']: 'Synthetic location'})
+                index = word_v3.SlotIndex(word_v3.open_package(out))
+                self.assertEqual(word_v3.constrained_option_states(index, choice), [True])
+                self.assertIn('Other, specifySynthetic location', Document(io.BytesIO(out)).paragraphs[1].text)
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[2].text, 'Unrelated note: ______')
+                if original_checked:
+                    word_v3.fill(raw, result['fields'], {blank['key']: 'Synthetic location'})
+
+    def test_unit_labelled_answer_does_not_depend_on_adjacent_gender_choice(self):
+        raw = self.form('Gender\t\t ☐ Male\t\t☐ Female\t\tAge   ................  years')
+        result, blank = self.fields(raw)
+        self.assertEqual(blank['label'], 'Age')
+        self.assertEqual(blank['source_questions'][0]['condition'], 'independent_unit')
+        choice = next(f for f in result['fields'] if f['kind'] == 'choice')
+        self.assertEqual(choice['options'], ['Male', 'Female'])
+        out = word_v3.fill(raw, result['fields'], {blank['key']: '42'})
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,
+                         'Gender\t\t ☐ Male\t\t☐ Female\t\tAge   42  years')
+        self.assertFalse(result['coverage_issues'])
+
+    def test_one_dotted_write_in_preserves_its_printed_option_and_independent_destination(self):
+        raw = self.form('☐ Acid\t…………………………..')
+        result, blank = self.fields(raw)
+        choice = next(f for f in result['fields'] if f['kind'] == 'checkbox')
+        self.assertEqual((choice['label'],choice['options'],blank['label']), ('Acid',['Acid'],'Acid'))
+        out = word_v3.fill(raw,result['fields'],{choice['key']:'checked',blank['key']:'Synthetic agent'})
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'☒ Acid\tSynthetic agent')
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[1].text,'Unrelated note: ______')
+
+    def test_stripped_or_copied_conditional_span_and_changed_owner_are_refused(self):
+        raw = self.form('Any symptoms? ☐ No ☐ Yes → if yes, describe: ______')
+        result, blank = self.fields(raw)
+        choice = next(f for f in result['fields'] if f['kind'] == 'choice')
+        for mutate in ('stripped', 'renamed', 'copied', 'widened', 'no_control'):
+            with self.subTest(mutate=mutate):
+                fields = deepcopy(result['fields']); target = next(f for f in fields if f['key'] == blank['key'])
+                if mutate == 'stripped': target.pop('source_questions')
+                if mutate == 'renamed': target['label'] = 'Another answer'
+                if mutate == 'copied': target['locator']['target']['copies'] = [deepcopy(target['locator'])]
+                if mutate == 'widened': target['locator']['target']['start'] = 0
+                if mutate == 'no_control': fields.remove(next(f for f in fields if f['key'] == choice['key']))
+                with self.assertRaises(word_v3.V3Failure) as error:
+                    word_v3.fill(raw, fields, {blank['key']: 'Synthetic description', choice['key']: 'Yes'})
+                self.assertEqual(error.exception.code, 'mapping_mismatch')
+
+    def test_two_blanks_and_actual_signing_sources_keep_their_coverage_holds(self):
+        for text in ('Any symptoms? ☐ No ☐ Yes → if yes, describe: ____ Location: ____',
+                     'Patient signature: ☐ Other, specify_________',
+                     'Witness attestation: ☐ No ☐ Yes → if yes, describe: ______',
+                     '☐ I certify_________', '☐ We hereby attest_________'):
+            with self.subTest(text=text):
+                raw = self.form(text); result = word_v3.inspect(raw)
+                self.assertFalse([f for f in result['fields'] if f.get('source_questions')
+                                  and f['source_questions'][0]['relation'] == 'adjacent_checkbox_answer'])
+                self.assertTrue(result['coverage_issues'])
+                if 'certify' in text or 'attest' in text:
+                    first = result['fields'][0]
+                    if first['label'] != 'Unrelated note':
+                        forged = deepcopy(first); forged.pop('write_protected', None)
+                        with self.assertRaises(word_v3.V3Failure):
+                            word_v3.fill(raw, [forged], {forged['key']: 'checked'})
 
 
 class SourceCoverage(unittest.TestCase):
