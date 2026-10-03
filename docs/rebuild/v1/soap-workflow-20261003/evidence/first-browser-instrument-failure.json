@@ -1,0 +1,12 @@
+{
+  "scope": "Production SOAP/library templates rendered with synthetic context; HTTP persisted controls tested separately",
+  "provider_requests": 0,
+  "complete": false,
+  "checks": [],
+  "started_at": "2026-10-03T22:36:26.843Z",
+  "failure": {
+    "name": "TimeoutError",
+    "message": "locator.inputValue: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Department', { exact: true })\u001b[22m\n"
+  },
+  "finished_at": "2026-10-03T22:36:58.355Z"
+}

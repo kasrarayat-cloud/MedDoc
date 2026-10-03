@@ -1,0 +1,16 @@
+{
+  "exit_code": 1,
+  "tests": 17,
+  "new_soap_tests": 12,
+  "existing_document_workflow_tests": 5,
+  "passed": 16,
+  "failed": 1,
+  "elapsed_seconds": 57.665,
+  "test_database_destroyed": true,
+  "worktree": "/opt/meddoc-pro/.worktrees/v1-storage-resume-ops-20261003",
+  "base_commit": "bb217b82aaf0ca1de47960c4a7de3ddacdd5d32a",
+  "profile": "original fixture defaults; not an eligible live Sonnet profile",
+  "first_failure_has_stored_answer_artifact": false,
+  "later_distinct_intended_profile_diagnostic_also_has_four_conflicts": true,
+  "provider_requests": 0
+}
