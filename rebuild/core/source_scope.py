@@ -484,6 +484,10 @@ def reserved_identity_source(reading, source, claim, field):
     own=reading['parsed'].get(source['id']);answer=reading['parsed'].get(claim['id'])
     if not own or not own[1] or not answer or field is None or answer[0]!=g.question_key(field['label']):return False
     if not reading['colon'].get(source['id']) or not reading['colon'].get(claim['id']):return False
+    target_docs=v3_syntax.docs([answer[1]]);target=target_docs[0] if target_docs else None
+    # A printed Plan label does not resolve SHE/HE/THEY back to the patient.
+    # Reviewed patient-default scope cannot erase an explicitly named person.
+    if target is None or any(a._personal(t) for t in target):return False
     matches=[f for f in reading.get('catalogue',()) if g.question_key(f.get('label'))==own[0]]
     if len(matches)!=1:return False
     protected=matches[0]

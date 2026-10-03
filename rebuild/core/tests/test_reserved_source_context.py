@@ -39,13 +39,13 @@ class ReservedSourceContext(SimpleTestCase):
         self.assertEqual(page['status'],expected)
         self.assertEqual(answers['f1']['text'],'')
         if expected=='supported':
-            self.assertEqual(answer['text'],'Rest.')
+            self.assertEqual(answer['text'],selected.split(':',1)[1].strip())
             self.assertEqual(answer['evidence'],[{'quote':selected,'start':notes.index(selected),
                                                 'end':notes.index(selected)+len(selected)}])
             self.assertEqual(g.governed_decisions(notes,fields,answers),[])
         else:
             self.assertEqual(answer['text'],'')
-            stale={**answer,'status':'supported','text':'Rest.'}
+            stale={**answer,'status':'supported','text':selected.split(':',1)[1].strip() if ':' in selected else selected}
             self.assertEqual(g.governed_decisions(notes,fields,{'f2':stale}),[fields[1]['label']])
         return body,answers
 
@@ -89,3 +89,20 @@ class ReservedSourceContext(SimpleTestCase):
         asked,context,_=g.v3_generation_fields(fields)
         body=fixture.body(NOTES,fields,asked,context)
         self.assertEqual(body['fields'][0]['context']['unresolved'],[1])
+
+    def test_printed_label_never_resolves_a_personal_pronoun_after_the_named_author(self):
+        for selected in ['Plan: She will rest.','Plan: He will rest.','Plan: They will rest.']:
+            for confirmed in (False,True):
+                with self.subTest(selected=selected,confirmed=confirmed):
+                    self.check(SOURCE+'\n'+selected,selected=selected,confirmed=confirmed,expected='conflict')
+
+    def test_prior_named_clinical_actor_family_and_speaker_context_remain_governing(self):
+        for prefix in ['Dr John Smith has asthma.\n','Her father has asthma.\n','Manager: I will rest.\n']:
+            for confirmed in (False,True):
+                with self.subTest(prefix=prefix,confirmed=confirmed):
+                    selected='Plan: She will rest.'
+                    self.check(prefix+SOURCE+'\n'+selected,selected=selected,confirmed=confirmed,expected='conflict')
+
+    def test_an_explicit_patient_source_does_not_need_an_invented_pronoun_resolution(self):
+        selected='Plan: The patient will rest.'
+        self.check(SOURCE+'\n'+selected,selected=selected)
