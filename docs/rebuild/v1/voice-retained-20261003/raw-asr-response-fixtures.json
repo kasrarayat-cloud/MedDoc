@@ -1,0 +1,786 @@
+{
+  "schema": "retained-raw-asr-model-response-controls-v1",
+  "provider_attempts_preserved": [
+    "003",
+    "005"
+  ],
+  "cases": [
+    {
+      "attempt": "003",
+      "transcription_attempt": "002",
+      "scope": "Retained synthetic raw-ASR source and real provider text response; offline regression never sends data or assumes original audio script replaces the transcript.",
+      "notes": "Symptoms. Left ankle soreness began after twisting the left ankle yesterday. Pertinent negatives. Denies fever, numbness, and right ankle pain. Pain score, six out of 10. Pain score correction three out of 10. The earlier six out of ten one entered in error. Examination mild swelling over the left lateral ankle. No open wound. Assessment. The clinician explicitly documents a left ankle strain. Plan. The clinician explicitly directs rest, eyes wrapped in cloth for fifteen minutes at a time, and follow-up in three days. No medication is prescribed.",
+      "catalogue": [
+        {
+          "context": "SOAP note > Subjective",
+          "key": "v3_1",
+          "kind": "text",
+          "label": "Subjective",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "SOAP note > Objective",
+          "key": "v3_2",
+          "kind": "text",
+          "label": "Objective",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[1]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "SOAP note > Assessment",
+          "key": "v3_3",
+          "kind": "text",
+          "label": "Assessment",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[2]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "SOAP note > Plan",
+          "key": "v3_4",
+          "kind": "long_text",
+          "label": "Plan",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[3]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        }
+      ],
+      "context_labels": [],
+      "source_units": [
+        {
+          "correction_value": null,
+          "end": 9,
+          "id": 1,
+          "quote": "Symptoms.",
+          "start": 0
+        },
+        {
+          "correction_value": null,
+          "end": 76,
+          "id": 2,
+          "quote": "Left ankle soreness began after twisting the left ankle yesterday.",
+          "start": 10
+        },
+        {
+          "correction_value": null,
+          "end": 97,
+          "id": 3,
+          "quote": "Pertinent negatives.",
+          "start": 77
+        },
+        {
+          "correction_value": null,
+          "end": 143,
+          "id": 4,
+          "quote": "Denies fever, numbness, and right ankle pain.",
+          "start": 98
+        },
+        {
+          "correction_value": null,
+          "end": 170,
+          "id": 5,
+          "quote": "Pain score, six out of 10.",
+          "start": 144
+        },
+        {
+          "correction_value": null,
+          "end": 209,
+          "id": 6,
+          "quote": "Pain score correction three out of 10.",
+          "start": 171
+        },
+        {
+          "correction_value": null,
+          "end": 258,
+          "id": 7,
+          "quote": "The earlier six out of ten one entered in error.",
+          "start": 210
+        },
+        {
+          "correction_value": null,
+          "end": 313,
+          "id": 8,
+          "quote": "Examination mild swelling over the left lateral ankle.",
+          "start": 259
+        },
+        {
+          "correction_value": null,
+          "end": 328,
+          "id": 9,
+          "quote": "No open wound.",
+          "start": 314
+        },
+        {
+          "correction_value": null,
+          "end": 340,
+          "id": 10,
+          "quote": "Assessment.",
+          "start": 329
+        },
+        {
+          "correction_value": null,
+          "end": 396,
+          "id": 11,
+          "quote": "The clinician explicitly documents a left ankle strain.",
+          "start": 341
+        },
+        {
+          "correction_value": null,
+          "end": 402,
+          "id": 12,
+          "quote": "Plan.",
+          "start": 397
+        },
+        {
+          "correction_value": null,
+          "end": 523,
+          "id": 13,
+          "quote": "The clinician explicitly directs rest, eyes wrapped in cloth for fifteen minutes at a time, and follow-up in three days.",
+          "start": 403
+        },
+        {
+          "correction_value": null,
+          "end": 552,
+          "id": 14,
+          "quote": "No medication is prescribed.",
+          "start": 524
+        }
+      ],
+      "request_model": "claude-sonnet-5-5",
+      "response_model": "claude-sonnet-5-5",
+      "response_stop_reason": "end_turn",
+      "response_text": "{\"fields\":[{\"key\":\"v3_1\",\"unit_ids\":[2,4,6],\"conflict\":false,\"context\":{\"answer\":[2,4,6],\"qualifier\":[],\"contrary\":[5,7],\"unresolved\":[],\"independent\":[1,3,8,9,10,11,12,13,14]}},{\"key\":\"v3_2\",\"unit_ids\":[8,9],\"conflict\":false,\"context\":{\"answer\":[8,9],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,10,11,12,13,14]}},{\"key\":\"v3_3\",\"unit_ids\":[11],\"conflict\":false,\"context\":{\"answer\":[11],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,12,13,14]}},{\"key\":\"v3_4\",\"unit_ids\":[13,14],\"conflict\":false,\"context\":{\"answer\":[13,14],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12]}}]}",
+      "reviewed_context_payload": {
+        "contract": "reviewed-transcript-patient-context-v1",
+        "default_subject": "encounter_patient",
+        "end": 552,
+        "reviewed_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+        "start": 0
+      },
+      "persisted_review_evidence": {
+        "applied": [
+          {
+            "corrected": false,
+            "corrected_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+            "mode": "replace",
+            "patient_default_context": true,
+            "raw_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+            "review": "ee743850-87dd-4f45-98bc-825748d8d06c",
+            "revision": 1
+          }
+        ],
+        "mode": "replace",
+        "notes_characters": 552,
+        "notes_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+        "patient_context_review_verified": true,
+        "revision": 1,
+        "status_code": 302,
+        "transcript_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678"
+      },
+      "first_answers": {
+        "v3_1": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 76,
+              "quote": "Left ankle soreness began after twisting the left ankle yesterday.",
+              "start": 10
+            },
+            {
+              "end": 143,
+              "quote": "Denies fever, numbness, and right ankle pain.",
+              "start": 98
+            },
+            {
+              "end": 209,
+              "quote": "Pain score correction three out of 10.",
+              "start": 171
+            }
+          ]
+        },
+        "v3_2": {
+          "status": "supported",
+          "text": "Examination mild swelling over the left lateral ankle.\nNo open wound.",
+          "evidence": [
+            {
+              "end": 313,
+              "quote": "Examination mild swelling over the left lateral ankle.",
+              "start": 259
+            },
+            {
+              "end": 328,
+              "quote": "No open wound.",
+              "start": 314
+            }
+          ]
+        },
+        "v3_3": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 396,
+              "quote": "The clinician explicitly documents a left ankle strain.",
+              "start": 341
+            }
+          ]
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 523,
+              "quote": "The clinician explicitly directs rest, eyes wrapped in cloth for fifteen minutes at a time, and follow-up in three days.",
+              "start": 403
+            },
+            {
+              "end": 552,
+              "quote": "No medication is prescribed.",
+              "start": 524
+            }
+          ]
+        }
+      },
+      "original_artifact_sha256": {
+        "case/form.docx": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+        "case/mapping.json": "642273bc1cb8dde4554e4a29bb093f80741ea2e8c03ab273554287fcee4e234d",
+        "case/notes.txt": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+        "request.json": "70029d32d4eee627e9ca6b07b9fce5de98b38ea7d773029d7c8bf54b3c72b7fb",
+        "provider-response.body": "904163dadc5e5cb8799951af27a3a449a3866862b2d939fe3680147b6dcaf577",
+        "answers-adopted.json": "f22b0c9b3bfc14aa8b5889c1a5b7680858c390835b1bfca798cf71c95cf6a072"
+      }
+    },
+    {
+      "attempt": "005",
+      "transcription_attempt": "004",
+      "scope": "Retained synthetic raw-ASR source and real provider text response; offline regression never sends data or assumes original audio script replaces the transcript.",
+      "notes": "Fictional software test only. Patient name, sample colonoscopy. Date of birth, 01/02/1980. Patient ID, sync, colon, AI 20260921. Procedure date, 09/21/2026. Endoscopist. Doctor. Synthetic enamples. Procedure. Diagnostic colonoscopy. Anesthesia. Monitored anesthesia care. Bowel preparation score. BBPS eight. The scope one advanced ten o second. Rectal bleeding. Sigmoid diverticulosis and small internal hemorrhoids. No polyps were seen. No specimens were collected. Estimated blood loss was zero milliliters. Less than one milliliter. There were no immediate complications. Recommendation, follow-up with the referring clinician in two weeks.",
+      "catalogue": [
+        {
+          "context": "Synthetic procedure findings worksheet > Procedure",
+          "key": "v3_1",
+          "kind": "text",
+          "label": "Procedure",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Anesthesia",
+          "key": "v3_2",
+          "kind": "text",
+          "label": "Anesthesia",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[1]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Bowel preparation score",
+          "key": "v3_3",
+          "kind": "text",
+          "label": "Bowel preparation score",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[2]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Extent reached",
+          "key": "v3_4",
+          "kind": "text",
+          "label": "Extent reached",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[3]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Indication",
+          "key": "v3_5",
+          "kind": "text",
+          "label": "Indication",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[4]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Findings",
+          "key": "v3_6",
+          "kind": "long_text",
+          "label": "Findings",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[5]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Polyps",
+          "key": "v3_7",
+          "kind": "text",
+          "label": "Polyps",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[6]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Specimens",
+          "key": "v3_8",
+          "kind": "text",
+          "label": "Specimens",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[7]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Estimated blood loss",
+          "key": "v3_9",
+          "kind": "text",
+          "label": "Estimated blood loss",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[8]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Immediate complications",
+          "key": "v3_10",
+          "kind": "text",
+          "label": "Immediate complications",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[9]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        },
+        {
+          "context": "Synthetic procedure findings worksheet > Recommendation",
+          "key": "v3_11",
+          "kind": "text",
+          "label": "Recommendation",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[10]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        }
+      ],
+      "context_labels": [],
+      "source_units": [
+        {
+          "correction_value": null,
+          "end": 29,
+          "id": 1,
+          "quote": "Fictional software test only.",
+          "start": 0
+        },
+        {
+          "correction_value": null,
+          "end": 63,
+          "id": 2,
+          "quote": "Patient name, sample colonoscopy.",
+          "start": 30
+        },
+        {
+          "correction_value": null,
+          "end": 90,
+          "id": 3,
+          "quote": "Date of birth, 01/02/1980.",
+          "start": 64
+        },
+        {
+          "correction_value": null,
+          "end": 128,
+          "id": 4,
+          "quote": "Patient ID, sync, colon, AI 20260921.",
+          "start": 91
+        },
+        {
+          "correction_value": null,
+          "end": 156,
+          "id": 5,
+          "quote": "Procedure date, 09/21/2026.",
+          "start": 129
+        },
+        {
+          "correction_value": null,
+          "end": 169,
+          "id": 6,
+          "quote": "Endoscopist.",
+          "start": 157
+        },
+        {
+          "correction_value": null,
+          "end": 177,
+          "id": 7,
+          "quote": "Doctor.",
+          "start": 170
+        },
+        {
+          "correction_value": null,
+          "end": 197,
+          "id": 8,
+          "quote": "Synthetic enamples.",
+          "start": 178
+        },
+        {
+          "correction_value": null,
+          "end": 208,
+          "id": 9,
+          "quote": "Procedure.",
+          "start": 198
+        },
+        {
+          "correction_value": null,
+          "end": 232,
+          "id": 10,
+          "quote": "Diagnostic colonoscopy.",
+          "start": 209
+        },
+        {
+          "correction_value": null,
+          "end": 244,
+          "id": 11,
+          "quote": "Anesthesia.",
+          "start": 233
+        },
+        {
+          "correction_value": null,
+          "end": 271,
+          "id": 12,
+          "quote": "Monitored anesthesia care.",
+          "start": 245
+        },
+        {
+          "correction_value": null,
+          "end": 296,
+          "id": 13,
+          "quote": "Bowel preparation score.",
+          "start": 272
+        },
+        {
+          "correction_value": null,
+          "end": 308,
+          "id": 14,
+          "quote": "BBPS eight.",
+          "start": 297
+        },
+        {
+          "correction_value": null,
+          "end": 345,
+          "id": 15,
+          "quote": "The scope one advanced ten o second.",
+          "start": 309
+        },
+        {
+          "correction_value": null,
+          "end": 362,
+          "id": 16,
+          "quote": "Rectal bleeding.",
+          "start": 346
+        },
+        {
+          "correction_value": null,
+          "end": 417,
+          "id": 17,
+          "quote": "Sigmoid diverticulosis and small internal hemorrhoids.",
+          "start": 363
+        },
+        {
+          "correction_value": null,
+          "end": 438,
+          "id": 18,
+          "quote": "No polyps were seen.",
+          "start": 418
+        },
+        {
+          "correction_value": null,
+          "end": 467,
+          "id": 19,
+          "quote": "No specimens were collected.",
+          "start": 439
+        },
+        {
+          "correction_value": null,
+          "end": 510,
+          "id": 20,
+          "quote": "Estimated blood loss was zero milliliters.",
+          "start": 468
+        },
+        {
+          "correction_value": null,
+          "end": 536,
+          "id": 21,
+          "quote": "Less than one milliliter.",
+          "start": 511
+        },
+        {
+          "correction_value": null,
+          "end": 575,
+          "id": 22,
+          "quote": "There were no immediate complications.",
+          "start": 537
+        },
+        {
+          "correction_value": null,
+          "end": 644,
+          "id": 23,
+          "quote": "Recommendation, follow-up with the referring clinician in two weeks.",
+          "start": 576
+        }
+      ],
+      "request_model": "claude-sonnet-5-5",
+      "response_model": "claude-sonnet-5-5",
+      "response_stop_reason": "end_turn",
+      "response_text": "{\"fields\":[{\"key\":\"v3_1\",\"unit_ids\":[10],\"conflict\":false,\"context\":{\"answer\":[10],\"qualifier\":[9],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,11,12,13,14,15,16,17,18,19,20,21,22,23]}},{\"key\":\"v3_2\",\"unit_ids\":[12],\"conflict\":false,\"context\":{\"answer\":[12],\"qualifier\":[11],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,13,14,15,16,17,18,19,20,21,22,23]}},{\"key\":\"v3_3\",\"unit_ids\":[14],\"conflict\":false,\"context\":{\"answer\":[14],\"qualifier\":[13],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,22,23]}},{\"key\":\"v3_4\",\"unit_ids\":[],\"conflict\":true,\"context\":{\"answer\":[],\"qualifier\":[],\"contrary\":[],\"unresolved\":[15],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23]}},{\"key\":\"v3_5\",\"unit_ids\":[16],\"conflict\":false,\"context\":{\"answer\":[16],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17,18,19,20,21,22,23]}},{\"key\":\"v3_6\",\"unit_ids\":[17,18],\"conflict\":false,\"context\":{\"answer\":[17,18],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,19,20,21,22,23]}},{\"key\":\"v3_7\",\"unit_ids\":[18],\"conflict\":false,\"context\":{\"answer\":[18],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19,20,21,22,23]}},{\"key\":\"v3_8\",\"unit_ids\":[19],\"conflict\":false,\"context\":{\"answer\":[19],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,21,22,23]}},{\"key\":\"v3_9\",\"unit_ids\":[20,21],\"conflict\":true,\"context\":{\"answer\":[],\"qualifier\":[],\"contrary\":[],\"unresolved\":[20,21],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,22,23]}},{\"key\":\"v3_10\",\"unit_ids\":[22],\"conflict\":false,\"context\":{\"answer\":[22],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23]}},{\"key\":\"v3_11\",\"unit_ids\":[23],\"conflict\":false,\"context\":{\"answer\":[23],\"qualifier\":[],\"contrary\":[],\"unresolved\":[],\"independent\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]}}]}",
+      "reviewed_context_payload": {
+        "contract": "reviewed-transcript-patient-context-v1",
+        "default_subject": "encounter_patient",
+        "end": 644,
+        "reviewed_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+        "start": 0
+      },
+      "persisted_review_evidence": {
+        "applied": [
+          {
+            "corrected": false,
+            "corrected_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+            "mode": "replace",
+            "patient_default_context": true,
+            "raw_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+            "review": "4761854e-1bb0-4d05-b5c1-1e818877d195",
+            "revision": 1
+          }
+        ],
+        "mode": "replace",
+        "notes_characters": 644,
+        "notes_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+        "patient_context_review_verified": true,
+        "revision": 1,
+        "status_code": 302,
+        "transcript_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735"
+      },
+      "first_answers": {
+        "v3_1": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 232,
+              "quote": "Diagnostic colonoscopy.",
+              "start": 209
+            }
+          ]
+        },
+        "v3_10": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 575,
+              "quote": "There were no immediate complications.",
+              "start": 537
+            }
+          ]
+        },
+        "v3_11": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 644,
+              "quote": "Recommendation, follow-up with the referring clinician in two weeks.",
+              "start": 576
+            }
+          ]
+        },
+        "v3_2": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 271,
+              "quote": "Monitored anesthesia care.",
+              "start": 245
+            }
+          ]
+        },
+        "v3_3": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 308,
+              "quote": "BBPS eight.",
+              "start": 297
+            }
+          ]
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": "",
+          "evidence": []
+        },
+        "v3_5": {
+          "status": "supported",
+          "text": "Rectal bleeding.",
+          "evidence": [
+            {
+              "end": 362,
+              "quote": "Rectal bleeding.",
+              "start": 346
+            }
+          ]
+        },
+        "v3_6": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 417,
+              "quote": "Sigmoid diverticulosis and small internal hemorrhoids.",
+              "start": 363
+            },
+            {
+              "end": 438,
+              "quote": "No polyps were seen.",
+              "start": 418
+            }
+          ]
+        },
+        "v3_7": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 438,
+              "quote": "No polyps were seen.",
+              "start": 418
+            }
+          ]
+        },
+        "v3_8": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 467,
+              "quote": "No specimens were collected.",
+              "start": 439
+            }
+          ]
+        },
+        "v3_9": {
+          "status": "conflict",
+          "text": "",
+          "evidence": [
+            {
+              "end": 510,
+              "quote": "Estimated blood loss was zero milliliters.",
+              "start": 468
+            },
+            {
+              "end": 536,
+              "quote": "Less than one milliliter.",
+              "start": 511
+            }
+          ]
+        }
+      },
+      "original_artifact_sha256": {
+        "case/form.docx": "1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e",
+        "case/mapping.json": "965d2c3b1045cb922394d929f3c3733c8ff61715ed8fe45f9917e787fedc2f97",
+        "case/notes.txt": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+        "request.json": "10e6553dadb487fdcc0376855ee04f2e51928f9cf7ebbed22668ef6297b0adcf",
+        "provider-response.body": "1761352196753c6acf9e4b55505a9869f5d0f8d7e37aef51f6f60a067e88a676",
+        "answers-adopted.json": "593a95c88fcf8d6cab95c681e6f728946e6081bc967ca1bebd34462ad5285e97"
+      }
+    }
+  ]
+}

@@ -46,6 +46,12 @@ INSTRUCTIONS = (
     'one list that states its relation to this field. '
     'No unit is omitted, repeated or implicitly independent. '
     'Every answer and qualifier must be selected in full. Contrary or unresolved context holds the answer. '
+    'For each field, unit_ids must be exactly the union of context.answer and context.qualifier, '
+    'without duplicates and in source order. Never select independent, contrary or unresolved units. '
+    'For example, context.answer [2] and context.qualifier [1] require unit_ids [1,2], not [2]. '
+    'A bare source heading that only repeats this field\'s complete printed label can be independent catalogue '
+    'context. A heading that adds a subject, negation, time, uncertainty or other clinical qualification cannot '
+    'be made independent merely because it is a heading. '
     'Independent means the complete statement cannot change the subject, time, negation, qualification or clinical '
     'meaning of this specific answer; another Assessment is not automatically independent. '
     'Only fields with printed options select option_ids; select only the option IDs bound to this original field '
@@ -539,6 +545,25 @@ def option_view(reading, units, valid=True):
             else u for u in units]
 
 
+def own_heading_reference(reading, field, chosen, related, literal_ids):
+    """An exact bare field heading cannot couple its own proved adjacent answer.
+
+    This discharges only the question-name reference, not a clinical qualifier
+    or source actor. The complete relation must already be valid; declared
+    unselected qualifiers still refuse before this helper can run.
+    """
+    extra=related-chosen
+    if (field.get('kind') not in ('text', 'long_text') or field.get('write_protected')
+            or len(extra)!=1 or not chosen or not chosen<=related
+            or len(reading['named'].get(g.question_key(field['label']),()))!=1):return False
+    heading=next(u for u in reading['units'] if u['id'] in extra)
+    if heading['quote'].casefold()!=field['label'].strip().rstrip(':').casefold()+'.':return False
+    positions=sorted(reading['position'][uid] for uid in chosen)
+    if positions!=list(range(reading['position'][heading['id']]+1,positions[-1]+1)):return False
+    return all((reading['actors'][uid]['kind']=='patient' and not reading['actors'][uid]['other_floor'])
+        or uid in reading.get('confirmed_patient',()) or uid in literal_ids for uid in chosen)
+
+
 def read(reading, label, evidence, record, *, text=None, field_key=None):
     """One revalidation on generation, review, save and finalization."""
     empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False, 'syntax_ids': set()}
@@ -671,10 +696,11 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         prefix=field['label'].strip().rstrip(':?').casefold()+' '
         named_nominal=bool(reviewed and any(u['id'] in reading.get('nominal_patient',())
             and u['quote'].casefold().startswith(prefix) for u in ordered))
-        self_reference = bool(chosen and related and len(group) == 1
+        headed = own_heading_reference(reading,field,chosen,related,literal_ids)
+        self_reference = bool(headed or (chosen and related and len(group) == 1
             and (related == chosen or (reviewed and related <= chosen) or named_nominal)
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
-                    and (reading['patients'].get(u['id']) or reviewed) for u in ordered))
+                    and (reading['patients'].get(u['id']) or reviewed) for u in ordered)))
         return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference, 'syntax_ids': literal_ids}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
