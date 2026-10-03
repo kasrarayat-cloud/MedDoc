@@ -603,3 +603,79 @@ observations retain their previous limited scope and do not become proof of a br
 `word7f-final-refutation/manifest.json` binds exact source/instrument/results and thirteen protected raw DOCX files
 (ten self-authored originals and three actual date exports). No raw binary was committed or declared disposable;
 no native Word or broader corpus acceptance is inferred. Prior Word5f and clinical failures remain retained.
+
+
+### Clinical FFF and 9dc finished-source refutations
+
+The frozen FFF diff `fff30c50f04c8f440895f3910e7931f1f8977913` received 84 whole-validator/current-governance/final-decision
+probes in 16.796s and eight baseline/parser controls in 4.388s, both exit 0, with 19 committed source hashes and HEAD
+unchanged. An initial run used a local virtualenv without the pinned parser; its 84 universal holds are retained as
+an UNQUALIFIED INSTRUMENT ENVIRONMENT FAILURE, not clinical success or failure. The qualified rerun used the shared
+verified parser environment. Sources were released to the author only after the actual measured exits.
+
+One concrete unsafe release remained: selected `Examination mild swelling over the left lateral ankle.` survived
+`The patient reports an absence of evidence of swelling over the left ankle.` with supported validation, supported
+current governance and no final-decision hold. The grammatical absence → OF evidence → OF swelling dependency was
+omitted beyond its immediate nominal container. One definite unnecessary hold also remained: otherwise supported
+`Takes warfarin 5 mg daily.` became conflict/empty beside `The patient switched from prone to supine positioning.`
+Double-negated absence/exclusivity raw flags were not promoted to unsafe findings; the source can be affirmative or
+ambiguous. Today's chronology and subjectless negative-side holds failed their standalone positive baselines and
+are not newly demonstrated unnecessary holds. The prior use-versus-possession accuracy withdrawal stays withdrawn.
+
+The repaired frozen 9dc diff `9dc386183a0c17b76c90c180ffb0de325936b1b2` received 98 probes in 21.345s and eight separate
+root/baseline/parser controls in 5.025s, both exit 0. All 20 exact committed component hashes and HEAD remained unchanged;
+sources were released after actual completion. The prior OF-chain failure and patient position-change false hold
+are repaired within this instrument. The original wrong-subject/stopped-medication controls remain held.
+
+Two outputs still breach the declared unresolved-medication-dependency policy: supported `Takes warfarin 5 mg daily.`
+remains supported with no final-decision hold beside either `She switched from an unknown medication to supine
+positioning.` or `The patient switched from an unknown medication to supine positioning.` These are classification/
+dependency contract failures, not proof that this explicitly named warfarin was stopped: the switched medication is
+unknown. The distinction is preserved rather than calling an unproven clinical contradiction an accuracy failure.
+An unknown substance is not proven medication and remains an ambiguous diagnostic, not another unsafe count.
+
+One definite unnecessary hold is reproduced for both subjectless and explicit-patient supported warfarin baselines:
+`Her father switched from prone to supine positioning.` holds the patient's otherwise supported medication. An
+explicit patient's position-only change releases correctly, while explicit warfarin→positioning remains held.
+The full parser witnesses and both instrument families remain protected; each manifest in `clinical-fff30c50-refutation`
+and `clinical-9dc38618-refutation` binds raw outputs, logs, instruments and exact copied-source manifests.
+
+Both frozen-source voice replays remain hypothetical deterministic evidence only: original raw output has zero useful
+answers without reviewed default context and only `v3_7` with exact context; adversarial `v3_2` and `v3_4` stay held.
+No provider request, database mutation, transcription first-pass, human microphone or new end-to-end pass is inferred.
+
+
+### Supplemental voice form and persistent QA signing identity
+
+Read-only measurement-fit inspection showed the old `r1-11` generic intake has no ordinary destinations for most of the
+frozen synthetic colonoscopy procedure facts. That limits coverage and does not itself prove zero adopted answers
+correct. Under the same existing standing authority, an isolated ops repair at `8aea7b783e8ba8b0ac1927fc2c277799cda708af`
+adds an explicitly declared per-recording form only for a new campaign with zero attempts. The new independently
+authored 11-field form is SUPPLEMENTAL ONLY, not owner 17/restricted-D02 qualification or a change to any 60/20 corpus
+denominator. Original form SHA is `1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e`; source JSON/generator
+and exact expected field locations are frozen. Historical defaults, attempts and ledgers retain their byte contract.
+The retained first-pass score uses 10 ordinary references and one EBL-conflict control, without clinician correction
+credit or claiming every unavailable reference an unnecessary hold. Eleven new plus 30 affected offline checks passed
+in 11.792s. That ops diff remains frozen pending independent lead/Word refutation; no real request was made here.
+
+Preparing a real-results demo exposed a separate prerequisite: `standing_qa.request_environment` previously chose a
+new random Django SECRET_KEY per request process. Immutable reviewed-transcript tokens require the original key;
+copying a database/state tree into a launcher with another key does not preserve current confirmation validity.
+Stored finalized export streaming remains independent of that key and never reparses the encounter.
+
+A separate prospective-only repair at `ea5b65d26fee94c682ccb12131768bb26d6eeb78` introduces an optional declaration
+`qa_signing_key_file: <campaignroot>/access/qa-signing-key`. The key stays private and no clinical review is resigned.
+Creation is under the campaign ledger lock before any preflight/run/attempt/clinical state. The protected metadata
+binds campaign, authority, database, route and SHA; append-only pins precede the preflight request and accompany every
+run and last-door attempt. Replacing both mutable files, dropping/retroactively adding the route or using an older
+process key is refused. Mode/owner/type/link/ancestor checks precede reads, and optional absence preserves historical
+random keys and record fields. Seventy-three offline checks, including 12 new checks and actual transcript-token
+verification, passed in 16.580s with no database/provider/service mutation. Initial fixture-only failures remain
+retained. The clean source is frozen for independent lead refutation before any prospective campaign key is created.
+
+The proposed final demo copy remains lead-owned and unexecuted by this specialist: NEW empty synthetic database,
+same exact final source/schema and immutable relative artifacts, original protected signing key, zero active jobs/
+batches/open campaign requests, source/target financial hashes and stored-export hashes checked, no welcome-credit
+reseeding or regeneration. The first helper refutation retained a concrete timeout witness with lost first stdout/
+stderr and identified missing extracted-source verification and nonterminal staged/batch admission. Those are
+pre-execution repair requirements, not permission to weaken a guard or mutate an existing database.

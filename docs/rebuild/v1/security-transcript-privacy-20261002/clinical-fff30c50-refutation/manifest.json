@@ -1,0 +1,58 @@
+{
+  "protected_canonical_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security",
+  "records": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fff30c50-source/manifest.json",
+      "sha256": "ffd9f8b5be6d9cfe1f09596b337b6a48f4dfecea8cd11945f62998b4f19b07f4",
+      "bytes": 3342
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_fff30c50.py",
+      "sha256": "cae54b35f6e66b2581086c61b23a298d7e0ee474111879860702e6343003e25e",
+      "bytes": 16443
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fff30c50.json",
+      "sha256": "6390fdb8c9267ba7820a2fc3e4a7ae198136a6f692ab52da7731c120cc4c6fad",
+      "bytes": 87309
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fff30c50.log",
+      "sha256": "ca1adcc20280abd832be9b1b1824ebd4e3ab704e02de8632677a8ba5f3d72583",
+      "bytes": 2371
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_fff30c50_sharedvenv.py",
+      "sha256": "d46525f50ea2dce4ee81e786664fe90cfe58ebba1f74801ea79fb077724c035b",
+      "bytes": 16545
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fff30c50-sharedvenv.json",
+      "sha256": "df10300e47e81ba4457044bd49b5b0f442a27130a7733fab46ea0380b1b5950b",
+      "bytes": 67786
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fff30c50-sharedvenv.log",
+      "sha256": "43da00b5d6bb95e7c175cc66a377623a0286d16b1fe4f275d80b2c85971513a5",
+      "bytes": 1253
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_fff30c50_controls.py",
+      "sha256": "96caa4c6a74dda75c198bdbda7fc43ec317d3e8459b382867bc4f9dab8e93f73",
+      "bytes": 6428
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fff30c50-controls.json",
+      "sha256": "43c1b243e32049dc38532ad1bd8e73814b36cc0a522089c70be7c1f0e2898452",
+      "bytes": 39524
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fff30c50-controls.log",
+      "sha256": "30abfbaa9414b1af0ec81da88fb9a82e9c41cd138248044001e9541031c79af2",
+      "bytes": 957
+    }
+  ],
+  "provider_requests": 0,
+  "database_connections": 0,
+  "source_mutations": 0
+}
