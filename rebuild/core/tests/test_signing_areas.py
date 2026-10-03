@@ -8,11 +8,63 @@ from django.test import TestCase, override_settings
 from lxml import etree
 
 from core import generation
-from core.models import Encounter
+from core.models import Encounter, Job, MappingConfirmation, Reservation, TemplateVersion, Usage
 from core.security import private_path
 from documents import word_v3
 from documents.test_signing_areas import signing_form
 from .test_word_v3_workflow import V3, V3Fixture
+
+
+def review_floating_table_exclusion(case, template, version):
+    """Reach the floating-layout checks after an actual, source-bound partial-coverage review.
+
+    This preserves the original and every mapped signing field. The table is explicitly left unchanged, not
+    reclassified as supported, and its original automatic mapping remains unconfirmed.
+    """
+    issues = version.import_manifest['coverage']['selected_engine_issues']
+    case.assertEqual([(row['code'], row['part'], row['slot']) for row in issues],
+                     [('unmapped_answer', 'word/document.xml', 'b/tbl[0]')])
+    original = private_path(template.original_path).read_bytes()
+    response = case.client.post(f'/templates/{template.pk}/', {
+        'action': 'v3_coverage', 'mapping_version': version.pk,
+        'exclude_' + issues[0]['id']: 'on'})
+    case.assertEqual(response.status_code, 302)
+    reviewed = case.latest(template)
+    case.assertEqual(reviewed.number, version.number + 1)
+    case.assertEqual((reviewed.fields, reviewed.document_backend, reviewed.import_manifest),
+                     (version.fields, version.document_backend, version.import_manifest))
+    case.assertEqual(reviewed.corrections['coverage_review'], [{
+        'id': issues[0]['id'], 'disposition': 'leave_unchanged',
+        'source_sha256': template.sha256, 'reviewed_by': str(case.user.pk)}])
+    case.assertEqual(private_path(template.original_path).read_bytes(), original)
+    case.assertIsNone(TemplateVersion.objects.get(pk=version.pk).confirmed)
+    return reviewed
+
+
+@override_settings(**V3)
+class SigningImportCoverage(V3Fixture, TestCase):
+    def test_unreviewed_floating_table_still_refuses_confirmation_without_a_job_or_charge(self):
+        original = signing_form()
+        template, version = self.uploaded(data=original, name='Synthetic unreviewed floating form')
+        issues = version.import_manifest['coverage']['selected_engine_issues']
+        self.assertEqual([(row['code'], row['part'], row['slot']) for row in issues],
+                         [('unmapped_answer', 'word/document.xml', 'b/tbl[0]')])
+        before = (version.fields, version.import_manifest)
+        response = self.client.post(f'/templates/{template.pk}/', {
+            'action': 'v3_confirm', 'mapping_version': version.pk, 'checked_every_field': 'on'})
+        self.assertContains(response, 'This import has unmapped answer areas', status_code=400)
+        # A checked confirmation alone does not review any exclusion. Omitting the exact exclusion still refuses.
+        response = self.client.post(f'/templates/{template.pk}/', {
+            'action': 'v3_coverage', 'mapping_version': version.pk})
+        self.assertContains(response, 'explicitly exclude every listed area', status_code=400)
+        version.refresh_from_db()
+        self.assertEqual((version.fields, version.import_manifest), before)
+        self.assertEqual(template.versions.count(), 1)
+        self.assertFalse(MappingConfirmation.objects.exists())
+        self.assertFalse(Job.objects.exists())
+        self.assertFalse(Reservation.objects.exists())
+        self.assertFalse(Usage.objects.exists())
+        self.assertEqual(private_path(template.original_path).read_bytes(), original)
 
 
 @override_settings(**V3)
@@ -117,6 +169,7 @@ class SigningWorkflow(V3Fixture, TestCase):
         self.template, self.version = self.uploaded(data=data, name='Synthetic floating signing form')
         page = self.client.get(f'/templates/{self.template.pk}/')
         self.assertContains(page, 'Filled export is unavailable')
+        self.version = review_floating_table_exclusion(self, self.template, self.version)
         encounter = self.start()
         page = self.client.get(f'/encounters/{encounter.pk}/')
         self.assertContains(page, 'data-export-refusal')
@@ -145,6 +198,7 @@ class SigningGenerationAdmission(V3Fixture, TestCase):
         super().setUp()
         self.original = signing_form()
         self.template, self.version = self.uploaded(data=self.original, name='Synthetic floating admission')
+        self.version = review_floating_table_exclusion(self, self.template, self.version)
         self.version = self.confirm(self.template, self.version)
         self.assertEqual(self.new_encounter(self.version, notes='Participant ID: SYNTHETIC-123').status_code, 302)
         self.encounter = Encounter.objects.latest('created_at')
