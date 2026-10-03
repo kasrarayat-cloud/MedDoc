@@ -162,17 +162,55 @@ class VoiceFormFitTests(Base):
                    if r['expected_status'] == 'supported' else ''} for r in manifest['expectations']}
         support = {key: {'problems': []} for key, answer in answers.items() if answer['status'] == 'supported'}
         score = vf.score(manifest, notes, answers, support)
-        self.assertEqual((score['reference_fields'], score['correct_adopted_answers'], score['correct_required_holds']), (11, 10, 1))
+        self.assertEqual(score['schema'], 'supplemental-literal-reference-v2')
+        self.assertEqual((score['reference_fields'], score['literal_reference_matches'], score['required_hold_shapes']), (11, 10, 1))
+        self.assertEqual((score['first_pass_supported_answers'], score['first_pass_unadopted_answers'],
+                          score['first_pass_missing_answers']), (10, 1, 0))
+        self.assertEqual(score['valid_citation_shapes'], 10)
+        self.assertIsNone(score['correct_answers'])
+        self.assertIsNone(score['unsafe_answers'])
         self.assertIsNone(score['unnecessarily_held_answers'])
         answers['v3_7'] = {'status': 'supported', 'text': 'No polyps were seen but a polyp was removed'}
-        self.assertEqual(vf.score(manifest, notes, answers, support)['correct_adopted_answers'], 9)
+        mismatched = vf.score(manifest, notes, answers, support)
+        self.assertEqual((mismatched['literal_reference_matches'], mismatched['literal_reference_mismatches']), (9, 1))
         answers['v3_7'] = {'status': 'missing', 'text': ''}
         score = vf.score(manifest, notes, answers, support)
-        self.assertEqual(score['available_reference_unadopted_answers'], 1)
+        self.assertEqual((score['available_reference_unadopted_answers'], score['available_reference_missing_answers']), (1, 1))
         absent = notes.replace('No polyps were seen', '')
         score = vf.score(manifest, absent, answers, support)
-        self.assertEqual((score['transcript_facts_available'], score['available_reference_unadopted_answers']), (10, 0))
-        self.assertEqual(vf.score(manifest, notes, answers, {})['correct_adopted_answers'], 0)
+        self.assertEqual((score['available_literal_references'], score['transcript_reference_words_missing'],
+                          score['available_reference_unadopted_answers']), (10, 1, 0))
+        self.assertEqual(vf.score(manifest, notes, answers, {})['valid_citation_shapes'], 0)
+
+    def test_exact_family_and_negated_plan_matches_never_certify_correctness(self):
+        tr = st.transcription_module(); manifest, _ = vf.frozen()
+        cases = (
+            ('ordinary-literal-positive', 'v3_7', 'No polyps were seen.', 'No polyps were seen'),
+            ('explicit-other-person', 'v3_7',
+             "The patient's father had colonoscopy. No polyps were seen in his examination.", 'No polyps were seen'),
+            ('explicit-negated-plan', 'v3_11', 'Do not follow up with the referring clinician in two weeks.',
+             'follow up with the referring clinician in two weeks'),
+        )
+        for name, key, notes, text in cases:
+            with self.subTest(case=name):
+                evidence = scratch(self)
+                first = {key: {'status': 'supported', 'text': text,
+                              'evidence': [{'start': 0, 'end': len(notes), 'quote': notes}]}}
+                (evidence / 'answers-adopted.json').write_text(json.dumps({'answers': first}))
+                _, findings, details = tr.TranscriptionRun.judge_transcript(notes, supplemental=manifest)(
+                    None, SimpleNamespace(fields=manifest['fields']), {key: {'status': 'supported'}}, b'', b'',
+                    raw={}, reviewed={}, evidence=evidence)
+                score = details['supplemental_first_pass']
+                self.assertEqual(findings, [])  # Existing exact-citation check is not a semantic grader.
+                self.assertEqual((score['literal_reference_matches'], score['valid_citation_shapes']), (1, 1))
+                self.assertIn('pending independent', score['semantic_adjudication'])
+                self.assertIsNone(score['correct_answers'])
+                self.assertIsNone(score['unsafe_answers'])
+                self.assertIsNone(score['unnecessarily_held_answers'])
+                self.assertNotIn('correct_adopted_answers', score)
+                self.assertNotIn('correct_required_holds', score)
+                self.assertNotIn('incorrect_adopted_answers', score)
+                self.assertEqual(score['clinician_corrected_answers_credited'], 0)
 
     def test_clinician_review_cannot_improve_the_saved_first_pass_score(self):
         tr = st.transcription_module(); manifest, _ = vf.frozen(); evidence = scratch(self)
@@ -184,6 +222,16 @@ class VoiceFormFitTests(Base):
             None, SimpleNamespace(fields=manifest['fields']), {ref['key']: {'status': 'missing'}}, b'', b'',
             raw={}, reviewed=reviewed, evidence=evidence)
         self.assertEqual(findings, [])
-        self.assertEqual(details['supplemental_first_pass']['correct_adopted_answers'], 0)
+        self.assertEqual(details['supplemental_first_pass']['literal_reference_matches'], 0)
         self.assertEqual(details['supplemental_first_pass']['clinician_corrected_answers_credited'], 0)
         self.assertEqual(json.loads((evidence / 'supplemental-first-pass-score.json').read_text()), details['supplemental_first_pass'])
+        adopted_evidence = scratch(self)
+        first = {ref['key']: {'status': 'supported', 'text': ref['accepted_answers'][0],
+                             'evidence': [{'start': 0, 'end': len(notes), 'quote': notes}]}}
+        (adopted_evidence / 'answers-adopted.json').write_text(json.dumps({'answers': first}))
+        _, _, details = tr.TranscriptionRun.judge_transcript(notes, supplemental=manifest)(
+            None, SimpleNamespace(fields=manifest['fields']), {ref['key']: {'status': 'supported'}}, b'', b'',
+            raw={}, reviewed={ref['key']: {'status': 'missing', 'text': ''}}, evidence=adopted_evidence)
+        self.assertEqual(details['supplemental_first_pass']['literal_reference_matches'], 1)
+        self.assertIsNone(details['supplemental_first_pass']['correct_answers'])
+        self.assertEqual(details['supplemental_first_pass']['clinician_corrected_answers_credited'], 0)

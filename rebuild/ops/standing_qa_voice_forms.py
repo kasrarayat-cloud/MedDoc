@@ -82,11 +82,12 @@ def _literal(text):
 
 
 def score(manifest, notes, answers, source_support):
-    """Reference usefulness on the raw transcript; no clinician edit is credited.
+    """Literal comparisons and output shapes, not clinical correctness.
 
-    Missing transcript facts are separate from generation omissions. Required
-    correction holds are separate from correct adopted ordinary answers. This
-    is a supplemental denominator and never alters the old r1-11 result.
+    Reference words and an exactly quoted answer can belong to another person,
+    a denied instruction or another time. Semantic source adjudication remains
+    pending even when every literal comparison matches. The saved first pass
+    is the only input; this supplemental denominator never alters r1-11.
     """
     rows = []
     for reference in manifest['expectations']:
@@ -95,25 +96,37 @@ def score(manifest, notes, answers, source_support):
                         for variants in reference['source_units'])
         status, text = answer.get('status'), answer.get('text') or ''
         expected = reference['expected_status']
-        supported = reference['key'] in source_support and not source_support[reference['key']]['problems']
-        correct = bool(available and supported and expected == 'supported' and status == 'supported'
-                       and _literal(text) in {_literal(value) for value in reference['accepted_answers']})
-        correct_hold = bool(available and expected == 'conflict' and status == 'conflict' and not text)
+        citation_shape = reference['key'] in source_support and not source_support[reference['key']]['problems']
+        literal_match = bool(expected == 'supported' and status == 'supported'
+                             and _literal(text) in {_literal(value) for value in reference['accepted_answers']})
+        hold_shape = bool(available and expected == 'conflict' and status == 'conflict' and not text)
         rows.append({'key': reference['key'], 'label': reference['label'], 'expected_status': expected,
-                     'transcript_fact_available': available, 'first_pass_status': status,
-                     'correct_adopted_answer': correct, 'correct_required_hold': correct_hold,
+                     'transcript_reference_words_present': available, 'first_pass_status': status,
+                     'literal_reference_match': literal_match, 'required_hold_shape': hold_shape,
+                     'citation_shape_valid': bool(status == 'supported' and citation_shape),
                      'unadopted_available_reference': bool(available and expected == 'supported'
                                                           and status != 'supported'),
-                     'incorrect_adopted_answer': bool(status == 'supported' and not correct)})
-    return {'scope': 'supplemental independently authored procedure form; not the owner form or frozen Word corpus',
+                     'missing_available_reference_answer': bool(available and expected == 'supported'
+                                                               and status in (None, 'missing')),
+                     'literal_reference_mismatch': bool(expected == 'supported' and status == 'supported'
+                                                        and not literal_match)})
+    return {'schema': 'supplemental-literal-reference-v2',
+            'scope': 'supplemental independently authored procedure form; not the owner form or frozen Word corpus',
             'form_id': FORM_ID, 'form_sha256': manifest['sha256'], 'reference_fields': len(rows),
-            'answerable_reference_fields': sum(r['expected_status'] == 'supported' for r in rows),
+            'expected_supported_reference_fields': sum(r['expected_status'] == 'supported' for r in rows),
             'expected_correction_holds': sum(r['expected_status'] == 'conflict' for r in rows),
-            'transcript_facts_available': sum(r['transcript_fact_available'] for r in rows),
-            'correct_adopted_answers': sum(r['correct_adopted_answer'] for r in rows),
-            'correct_required_holds': sum(r['correct_required_hold'] for r in rows),
+            'available_literal_references': sum(r['transcript_reference_words_present'] for r in rows),
+            'transcript_reference_words_missing': sum(not r['transcript_reference_words_present'] for r in rows),
+            'first_pass_supported_answers': sum(r['first_pass_status'] == 'supported' for r in rows),
+            'first_pass_unadopted_answers': sum(r['first_pass_status'] != 'supported' for r in rows),
+            'first_pass_missing_answers': sum(r['first_pass_status'] in (None, 'missing') for r in rows),
+            'literal_reference_matches': sum(r['literal_reference_match'] for r in rows),
+            'literal_reference_mismatches': sum(r['literal_reference_mismatch'] for r in rows),
+            'required_hold_shapes': sum(r['required_hold_shape'] for r in rows),
+            'valid_citation_shapes': sum(r['citation_shape_valid'] for r in rows),
             'available_reference_unadopted_answers': sum(r['unadopted_available_reference'] for r in rows),
+            'available_reference_missing_answers': sum(r['missing_available_reference_answer'] for r in rows),
+            'semantic_adjudication': 'pending independent source review of actor, polarity, time, certainty and corrections',
+            'correct_answers': None, 'unsafe_answers': None,
             'unnecessarily_held_answers': None,
-            'unnecessary_hold_adjudication': 'Reference words alone cannot prove actor/time/polarity or an unnecessary hold; review retained source and decisions.',
-            'incorrect_adopted_answers': sum(r['incorrect_adopted_answer'] for r in rows),
             'clinician_corrected_answers_credited': 0, 'fields': rows}
