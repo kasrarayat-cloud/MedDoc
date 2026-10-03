@@ -162,10 +162,57 @@ class DestinationRegressions(unittest.TestCase):
         self.assertEqual(out.tables[0].cell(0, 1).text, '')
         self.assertEqual(out.tables[0].cell(1, 1).text, 'Rest')
 
+    def test_retained_refutation_ownership_frames_refuse_precise_manager_writes(self):
+        # Six exposed 2de63efe failures: three ownership frames in two physical
+        # layouts. They are retained controls, never independent holdout cases.
+        for source in ('This section is for the line manager to write comments',
+                       'This section is reserved for the line manager to add comments',
+                       'Comments to be added by the line manager'):
+            for shape in ('table', 'paragraph'):
+                with self.subTest(source=source, shape=shape):
+                    doc = Document()
+                    if shape == 'table':
+                        table = doc.add_table(rows=2, cols=2)
+                        table.cell(0, 0).text = source
+                        table.cell(1, 0).text = 'Clinical reason'
+                    else:
+                        doc.add_paragraph(source + ': ______  Clinical reason: ______')
+                    raw = saved(doc); info = word_v3.inspect(raw)
+                    ordinary = next(f for f in info['fields'] if f['label'] == 'Clinical reason')
+                    assigned = next(f for f in info['fields'] if f['key'] != ordinary['key'])
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw, info['fields'], {assigned['key']: 'Synthetic finalizer'})
+                    forged = deepcopy(assigned)
+                    forged['kind'] = 'text'; forged['label'] = 'Unrelated answer'
+                    forged.pop('write_protected', None); forged.pop('review_reason', None)
+                    self.assertIn(forged['key'], word_v3.destination_roles(raw, [forged])['violations'])
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw, [forged], {forged['key']: 'Synthetic finalizer'})
+                    self.assertFalse(ordinary.get('write_protected'))
+                    self.assertEqual(word_v3.destination_roles(raw, [ordinary])['violations'], {})
+                    out = Document(io.BytesIO(word_v3.fill(raw, info['fields'], {ordinary['key']: 'Rest'})))
+                    if shape == 'table':
+                        self.assertEqual(out.tables[0].cell(0, 1).text, '')
+                        self.assertEqual(out.tables[0].cell(1, 1).text, 'Rest')
+                    else:
+                        self.assertEqual(out.paragraphs[0].text, source + ': ______  Clinical reason: Rest')
+
+    def test_complete_ownership_grammar_is_shared_by_checkbox_and_comment_areas(self):
+        for source in ('This section is for the radiology supervisor to dictate comments',
+                       'This section is reserved for Dr. Synthetic to supply a statement',
+                       'Concerns to be recorded by the nominated advocate'):
+            with self.subTest(source=source):
+                doc = Document(); doc.add_paragraph('☐ ' + source)
+                doc.add_paragraph('Clinical reason: ______')
+                _, out = self.assert_held(saved(doc))
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text, '☐ ' + source)
+
     def test_authorship_receipts_and_clinical_recording_remain_ordinary(self):
         for caption in ('Line manager comments received on',
                         'This section is for the clinician to record initial symptoms',
-                        'Clinical comments about the line manager'):
+                        'Clinical comments about the line manager',
+                        'Comments received by the line manager on',
+                        'This section is for the clinician to record signed document receipt'):
             with self.subTest(caption=caption):
                 doc = Document(); table = doc.add_table(rows=1, cols=2)
                 table.cell(0, 0).text = caption; raw = saved(doc)

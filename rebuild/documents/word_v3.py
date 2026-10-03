@@ -2947,6 +2947,8 @@ class Detector:
         requests from ordinary clinical questions and nonhuman observations.
         """
         source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        if cls.question_box_authorship(source):
+            return 'human_signing_action'
         # Quoting or qualifying a printed human act supplies no authority to
         # perform it. Read only a complete paired quotation / explicit clause;
         # ordinary quoted clinical statements retain their own arguments.
@@ -3128,7 +3130,11 @@ class Detector:
                    r'(?:received|recorded|filed|stored)\b')
         received_signed_object = (r'\b(?:received|recorded|filed|stored)\s+'
                                   r'(?:the|a|an|this|that|these|those)\s+signed\s+[^:?!\r\n]+')
+        # A terminal receipt object records delivery of a signed document;
+        # the action-caption guard already excluded any act of certification.
+        nominal_receipt = r'\bsigned\s+[^:?!\r\n]+?\s+receipt\s*[:.]?$'
         return any(re.search(receipt,source,re.I) or re.search(received_signed_object,source,re.I) or
+                   re.search(nominal_receipt,source,re.I) or
                    re.search(r'\b(?:recorded|documented)\b[^:?!]*\bsigned\b[^:?!]*\bstatus$',source,re.I)
                    for source in printed)
 
@@ -5974,12 +5980,19 @@ class Detector:
 
     @staticmethod
     def question_box_authorship(text):
-        # Read an ownership relation, not a list of job titles. The original
-        # appoints an author to supply their comments/statement; an unfamiliar
-        # role has the same authority as a familiar one. A caption asking about
-        # received comments or clinical findings has a different structure.
-        return re.match(r"^\s*this section is for\s+[^:;?!\r\n]+?\s+to (?:add|provide|record)\b"
-                        r"[^:;?!\r\n]*\b(?:comments|concerns|statement)\b", text, re.I)
+        # Complete prospective authorship frames appoint the author, without
+        # inferring a job title or enumerating ways they might write comments.
+        # An active section assignment has an author + infinitive predicate;
+        # its passive equivalent has a comment object + "to be" + "by" author.
+        # A receipt/status label lacks that relation. Read the whole caption:
+        # neither a later clinical question nor a neighboring answer belongs
+        # to this reservation. A period in an author's name stays permissible.
+        comment = r"(?:comments|concerns|statements?)"
+        active = (r"^\s*this section is (?:reserved\s+)?for\s+[^:;?!\r\n]+?\s+to\s+"
+                  r"[^.;:?!\r\n]+?\b" + comment + r"\b[^.;:?!\r\n]*\s*[:.]?\s*$")
+        passive = (r"^\s*" + comment + r"\s+to\s+be\s+[^.;:?!\r\n]+?\s+by\s+"
+                   r"[^:;?!\r\n]+?\s*[:.]?\s*$")
+        return re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I)
 
     def rule_question_boxes(self, *, list_only=False):
         """A printed body question followed by its own empty one-cell bordered table.
