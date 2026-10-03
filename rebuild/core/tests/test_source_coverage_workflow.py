@@ -131,7 +131,8 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
         fill_template(private_path(template.original_path),version.fields,{field['key']:'03/14/2026'},target)
         self.assertEqual(Document(target).paragraphs[0].text,'Date: 03/14/2026')
 
-    @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture'))
+    @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture',
+                             QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True))
     def test_adjacent_answers_real_upload_worker_review_finalization_and_export(self):
         from documents import word_v3
         from documents.test_source_coverage import AdjacentCheckboxAnswers
@@ -197,7 +198,29 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                 job = Job.objects.get(encounter=encounter)
                 self.assertEqual(job.state,'succeeded',job.error)
                 first = copy.deepcopy(encounter.answers)
-                if evidence: (evidence/'first-pass.json').write_text(json.dumps(first,indent=2))
+                if evidence:
+                    from core.models import ProviderReceipt,Usage,LedgerEntry
+                    import hashlib
+                    result=private_path(job.result_path).read_bytes()
+                    self.assertEqual(hashlib.sha256(result).hexdigest(),job.result_sha256)
+                    (evidence/'first-fixture-result.json').write_bytes(result)
+                    receipt=ProviderReceipt.objects.get(job=job);usage=Usage.objects.get(job=job)
+                    self.assertTrue(receipt.simulated);self.assertTrue(usage.simulated)
+                    self.assertEqual(receipt.actual_cost,0);self.assertEqual(usage.actual_cost,0)
+                    self.assertEqual(usage.charged_cost,0)
+                    (evidence/'fixture-accounting.json').write_text(json.dumps({
+                        'job':{key:getattr(job,key) for key in ('id','kind','state','request_key','revision',
+                               'provider','provider_request_id','provider_resource_id','result_sha256',
+                               'started_at','finished_at','error')},
+                        'receipt':{key:getattr(receipt,key) for key in ('id','provider','provider_request_id',
+                                   'provider_resource_id','actual_cost','units','rates','simulated')},
+                        'usage':{key:getattr(usage,key) for key in ('id','provider','provider_request_id',
+                                 'provider_resource_id','actual_cost','charged_cost','units','rates','simulated')},
+                        'reservations':list(Reservation.objects.filter(job=job).values('id','amount','state')),
+                        'ledger':list(LedgerEntry.objects.filter(job=job).values('id','amount','kind','key','balance_after')),
+                        'provider_requests':0,'billing_evidence':'synthetic fixture; no provider invoice'},
+                        indent=2,default=str))
+                    (evidence/'first-pass.json').write_text(json.dumps(first,indent=2))
                 print('ADJACENT_FIRST_PASS',shape,json.dumps({k:{'status':v.get('status'),'text':v.get('text')}
                                                            for k,v in first.items()},sort_keys=True))
                 # Field review may correct a fixture hold; preserve the first
@@ -229,6 +252,11 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                 self.assertEqual(response.status_code,200)
                 exported = b''.join(response.streaming_content)
                 if evidence:
+                    from core.models import AuditEvent
+                    (evidence/'workflow-audit.json').write_text(json.dumps(list(
+                        AuditEvent.objects.filter(department=encounter.department,target__in=[
+                            str(template.pk),str(version.pk),str(encounter.pk),str(job.pk)]).order_by('created_at','pk').values(
+                            'id','created_at','actor_id','action','target','details')),indent=2,default=str))
                     (evidence/'final.docx').write_bytes(exported)
                     (evidence/'review-actions.json').write_text(json.dumps({'answers':values,
                         'automatic_correct':sum(first.get(k,{}).get('status')=='supported' and first[k].get('text')==v
