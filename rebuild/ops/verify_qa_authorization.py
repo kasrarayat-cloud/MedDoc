@@ -8,6 +8,7 @@ Passwords, OTP keys, cookies and CSRF tokens remain in memory or a protected
 credential file. Reports contain hashes and synthetic identifiers only.
 """
 import argparse
+import copy
 import hashlib
 import http.cookiejar
 import json
@@ -77,6 +78,23 @@ class Served:
     def client(self):
         return urllib.request.build_opener(urllib.request.ProxyHandler({}),
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), NoRedirect())
+
+    def renamed_session_client(self, opener, original_name, destination_name):
+        """Exercise the role check with a real session, despite surface cookie isolation."""
+        original = next(handler.cookiejar for handler in opener.handlers
+                        if isinstance(handler, urllib.request.HTTPCookieProcessor))
+        client = self.client()
+        target = next(handler.cookiejar for handler in client.handlers
+                      if isinstance(handler, urllib.request.HTTPCookieProcessor))
+        session_found = False
+        for cookie in original:
+            duplicate = copy.copy(cookie)
+            if duplicate.name == original_name:
+                duplicate.name = destination_name
+                session_found = True
+            target.set_cookie(duplicate)
+        require(session_found, 'real_session_cookie_missing')
+        return client
 
     def request(self, opener, port, path, method='GET', data=None, host=None, label=''):
         require(time.monotonic() - self.started < DEADLINE_SECONDS, 'request_deadline')
@@ -389,9 +407,15 @@ def main():
             served.expect(owner, 9160, target.format(encounters['foreign'].pk), 404, label='foreign_clinical_denied')
         served.expect(owner, 9160, '/jobs/' + str(jobs['foreign', 'generation'].pk) + '/result/', 404,
                       label='foreign_job_result_denied')
+        nonstaff_admin_cookie = served.renamed_session_client(
+            owner, 'quillmd_doctor_session', 'quillmd_admin_session')
         for path in ['/billing/', '/console/', '/console/usage.csv',
                      '/console/jobs/' + str(jobs['foreign', 'generation'].pk) + '/']:
-            served.expect(owner, 9161, path, 404, label='nonadmin_alternate_surface_denied')
+            code, headers, body = served.request(owner, 9161, path, label='surface_cookie_isolation')
+            require(code == 302 and headers.get('Location') == '/login/?next=' + path and not body,
+                    'surface_cookie_isolation_failed')
+            served.expect(nonstaff_admin_cookie, 9161, path, 404,
+                          label='authenticated_nonadmin_alternate_surface_denied')
         # Existing clinical revocation policy: own financial history survives.
         with transaction.atomic():
             m.Membership.objects.filter(user_id=accounts['author_b']['id']).update(active=False)
@@ -409,7 +433,9 @@ def main():
         admin = served.login(accounts['admin'], 9161, otp=str(totp(key)).zfill(6))
         served.expect(admin, 9161, '/console/', 200, label='admin_mfa_positive')
         served.expect(admin, 9161, '/console/usage.csv', 200, label='admin_mfa_export_positive')
-        for caller in [served.client(), owner, admin]:
+        admin_doctor_cookie = served.renamed_session_client(
+            admin, 'quillmd_admin_session', 'quillmd_doctor_session')
+        for caller in [served.client(), owner, admin, admin_doctor_cookie]:
             for path in ['/console', '/console/', '/console/audit', '/console/usage.csv']:
                 served.expect(caller, 9160, path, 404, label='doctor_console_denied')
         for port, host in [(9160, 'admin.quillmd.com'), (9160, 'ADMIN.QUILLMD.COM.:9160'),
