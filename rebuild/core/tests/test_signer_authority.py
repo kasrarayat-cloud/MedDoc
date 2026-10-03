@@ -75,6 +75,21 @@ class WithdrawnSignerOffers(Legacy, TestCase):
         notes = '\n\n'.join(label + ': ' + value for label, value in desired.items())
         e = self.generated(notes)
         job=Job.objects.get(encounter=e,kind='generation')
+        # Capture actual first fixture output before assessing it; no correction
+        # can replace this file or qualify a live/native workflow.
+        import json,os
+        from pathlib import Path
+        state=Path(os.environ.get('QUILLMD_STATE_DIR','/unavailable'))
+        allowed=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/word')
+        capture=None
+        if state.is_relative_to(allowed):
+            capture=state.parent/'captures'/'ordinary-first-pass';capture.mkdir(mode=0o700,parents=True)
+            (capture/'original.docx').write_bytes(original)
+            (capture/'source-notes.txt').write_text(notes)
+            (capture/'first-answers.json').write_text(json.dumps({'scope':'synthetic fixture actual HTTP worker; no live/native qualification',
+                'answers':e.answers,'expected':desired,'mapping':self.version.fields,'import_manifest':self.version.import_manifest,
+                'job_state':job.state,'job_error':job.error,'configuration':job.config},indent=2,default=str))
+            if job.result_path:(capture/'first-worker-response.json').write_bytes(private_path(job.result_path).read_bytes())
         self.assertEqual(job.state,'succeeded',job.error)
         for label, value in desired.items():
             self.assertEqual(e.answers[self.key(label)]['text'], value)
@@ -86,6 +101,9 @@ class WithdrawnSignerOffers(Legacy, TestCase):
         with override_settings(QUILLMD_WORD_ENGINE='legacy'): self.finalized(e)
         self.assertEqual(e.status, 'finalized')
         exported = private_path(e.export_path).read_bytes()
+        if capture:
+            (capture/'final-export.docx').write_bytes(exported)
+            (capture/'reviewed-answers.json').write_text(json.dumps(e.answers,indent=2))
         import io
         document = Document(io.BytesIO(exported))
         for n, (label, value) in enumerate(desired.items()):
