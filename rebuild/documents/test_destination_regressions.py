@@ -162,6 +162,63 @@ class DestinationRegressions(unittest.TestCase):
                         self.assertEqual(word_v3.text_of(out.paragraphs[1]._p),
                                          'Witness: Synthetic witness recorded in history')
 
+    def test_retained_native_witness_continuity_crosses_plain_spacers_and_single_column_rows(self):
+        from .test_word_v3 import _sdt, ff_text_field
+        for prior_label in ('Consent obtained', 'I approve this document',
+                            'Signed document was received on', 'Clinical history'):
+            governed = prior_label in ('Consent obtained', 'I approve this document')
+            for native in ('sdt', 'ff'):
+                for shape in ('spacer', 'three_spacers', 'rows', 'history_boundary', 'heading_boundary', 'marked_boundary'):
+                    with self.subTest(prior=prior_label, native=native, shape=shape):
+                        doc = Document()
+                        if shape == 'rows':
+                            table = doc.add_table(rows=2, cols=1)
+                            prior, witness = (row.cells[0].paragraphs[0] for row in table.rows)
+                        else:
+                            prior = doc.add_paragraph()
+                            if shape == 'heading_boundary': doc.add_heading('Clinical history', level=2)
+                            elif shape == 'marked_boundary':
+                                p = doc.add_paragraph(); p.add_run('      ').underline = True
+                            else:
+                                for _ in range(3 if shape == 'three_spacers' else 1):
+                                    doc.add_paragraph('Clinical history' if shape == 'history_boundary' else '')
+                            witness = doc.add_paragraph()
+                        prior.add_run(prior_label + ': ')
+                        prior._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                        witness.add_run('Witness: ')
+                        if native == 'sdt': witness._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                        else: ff_text_field(witness, name='Witness')
+                        raw = saved(doc); field = next(f for f in word_v3.inspect(raw)['fields'] if f['label'] == 'Witness')
+                        if governed and shape in ('spacer', 'three_spacers', 'rows'):
+                            self.assertTrue(field.get('write_protected'))
+                            field = deepcopy(field); field['label'] = 'Clinical answer'; field.pop('write_protected', None)
+                            with self.assertRaises(word_v3.V3Failure):
+                                word_v3.fill(raw, [field], {field['key']: 'Dr Synthetic Finalizer'})
+                        else:
+                            self.assertFalse(field.get('write_protected'))
+                            out = word_v3.open_package(word_v3.fill(raw, [field], {field['key']: 'Synthetic history witness'}))
+                            self.assertIn(b'Synthetic history witness', out.zip.read('word/document.xml'))
+
+    def test_complex_table_witness_ownership_stays_held_instead_of_guessing_columns(self):
+        from .test_word_v3 import _sdt
+        for prior_label, held in (('Consent obtained', True), ('Signed document was received on', False)):
+            with self.subTest(prior=prior_label):
+                doc = Document(); table = doc.add_table(rows=2, cols=2)
+                prior = table.cell(0, 0).paragraphs[0]; prior.add_run(prior_label + ': ')
+                prior._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                table.cell(0, 1).text = 'Different column'
+                witness = table.cell(1, 1).paragraphs[0]; witness.add_run('Witness: ')
+                witness._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                raw = saved(doc); field = next(f for f in word_v3.inspect(raw)['fields'] if f['label'] == 'Witness')
+                if held:
+                    self.assertTrue(field.get('write_protected'))
+                    forged = deepcopy(field); forged.pop('write_protected', None)
+                    with self.assertRaises(word_v3.V3Failure): word_v3.fill(raw, [forged], {field['key']: 'Dr Synthetic Finalizer'})
+                else:
+                    self.assertFalse(field.get('write_protected'))
+                    self.assertIn(b'Synthetic history witness', word_v3.open_package(word_v3.fill(raw, [field],
+                        {field['key']: 'Synthetic history witness'})).zip.read('word/document.xml'))
+
     def test_counted_answer_restriction_is_not_a_person_granting_permission(self):
         for caption in ('Treatment(s) - only one answer allowed:',
                         'Treatment(s) - one option permitted:'):

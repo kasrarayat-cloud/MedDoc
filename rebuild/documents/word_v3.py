@@ -2471,14 +2471,50 @@ class Detector:
             self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
 
     def guard_action_participants(self):
-        """A native witness identity immediately belongs to its printed act.
+        """A native witness identity belongs to its physically continuous act.
 
         The complete source caption appoints a witness, and the immediately
-        preceding paragraph owns a protected document act. Both physical
+        preceding paragraph owns a protected document act. Plain spacers and
+        adjacent single-column table rows preserve that continuity. Both physical
         relations are required; a witness recorded in clinical history or a
         receipt has no such signing authority. Reviewed labels supply neither.
         """
         acts = [a for a in self.areas if a.source_action]
+        def previous_paragraph(host):
+            node = host.el.getprevious()
+            while node is not None and node.tag == q('w:p'):
+                candidate = self.index.by_el.get(id(node))
+                if candidate is None or candidate.parent is not host.parent or candidate.part != host.part:
+                    return None
+                if self.ptext(node)[0].strip():
+                    return candidate
+                if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                        or any(self.question_box_paragraph(node)[::2])):
+                    return None
+                node = node.getprevious()
+            # One-column, unmerged adjacent rows are a continuous printed
+            # document-act block. A different column, nested table, heading,
+            # intervening row or unresolved merge cannot appoint a witness.
+            cell = self.host_cell(host)
+            if (cell is None or host.parent is not cell or self.grid_cols(cell.parent) != 1
+                    or node is not None and node is not cell.el.find(q('w:tcPr'))):
+                return None
+            rows = self.grid(cell.parent); number = cell.info['row']
+            current, previous = rows.get(number, []), rows.get(number - 1, [])
+            if (number < 1 or len(current) != 1 or current[0] is not cell or len(previous) != 1
+                    or any(c.info['col'] != 0 or c.info['span'] != 1
+                           or c.el.find('./' + q('w:tcPr') + '/' + q('w:vMerge')) is not None
+                           or any(child.kind != 'p' for child in c.children)
+                           for c in current + previous)):
+                return None
+            paragraphs = [child for child in previous[0].children if child.kind == 'p']
+            for candidate in reversed(paragraphs):
+                if self.ptext(candidate.el)[0].strip():
+                    return candidate
+                if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                        or any(self.question_box_paragraph(candidate.el)[::2])):
+                    return None
+            return None
         for area in self.areas:
             if area.slot.kind not in ('sdt', 'ff') or area.source_action:
                 continue
@@ -2486,14 +2522,22 @@ class Detector:
                                 clean_label(area.label), re.I):
                 continue
             host = self.host_paragraph(area.slot)
-            before = self.index.by_el.get(id(host.el.getprevious())) if host is not None else None
-            if (before is None or before.kind != 'p' or before.parent is not host.parent
-                    or before.part != host.part
-                    or not any(self.host_paragraph(a.slot) is before for a in acts)):
+            before = previous_paragraph(host) if host is not None else None
+            ambiguous = False
+            if before is None and host is not None:
+                cell = self.host_cell(host)
+                # A nearby act in a complex table is evidence of an unresolved
+                # witness area, not permission to guess which column owns it.
+                if cell is not None:
+                    ambiguous = any((prior := self.host_cell(a.slot)) is not None
+                                    and prior.parent is cell.parent and prior.info['row'] == cell.info['row'] - 1
+                                    for a in acts)
+            if not ambiguous and (before is None or not any(self.host_paragraph(a.slot) is before for a in acts)):
                 continue
             area.source_action = True
-            area.protection = ('This witness identity belongs to the preceding human document act. '
-                               "Ordinary notes and the finalizer cannot supply this person's identity or act; "
+            area.protection = (('This witness area is beside a human document act in a table whose ownership cannot be resolved. '
+                                if ambiguous else 'This witness identity belongs to the preceding human document act. ')
+                               + "Ordinary notes and the finalizer cannot supply this person's identity or act; "
                                'complete it through the explicit human workflow.')
             self.coverage_issue(area.slot, 'human_document_participant',
                                 area.protection + ' Location: ' + area.slot.id)
