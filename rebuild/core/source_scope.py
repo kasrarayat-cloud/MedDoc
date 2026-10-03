@@ -202,7 +202,21 @@ def exclusive_reattributions(reading):
                 continue
             my_roots=[t for t in claim_doc if t.dep_=='ROOT']
             my_predicates=predicate_lemmas(my_roots[0]) if len(my_roots)==1 else set()
-            if len(my_roots)!=1 or not negations & predicate_negations(my_roots[0]):continue
+            if len(my_roots)!=1:continue
+            my_topics=mine.get('claim_keys',frozenset())|mine.get('named_keys',frozenset())
+            own_property=clinical_polarities.get(claim['id'],{})
+            other_property=clinical_polarities.get(other['id'],{})
+            own_negative=own_property.get('negative',frozenset()) & topic
+            other_negative=other_property.get('negative',frozenset()) & my_topics
+            own_ambiguous=own_property.get('ambiguous',frozenset()) & topic
+            other_ambiguous=other_property.get('ambiguous',frozenset()) & my_topics
+            # Polarity belongs to the affected clinical PROPERTY. Its enclosing
+            # light verb can stay affirmative ('has an absence of swelling').
+            # Unresolved negative relations establish no polarity and cannot
+            # prove an exclusive same-topic statement independent.
+            my_polarity={False,True} if own_ambiguous else ({True} if own_negative else predicate_negations(my_roots[0]))
+            other_polarity={False,True} if other_ambiguous else ({True} if other_negative else negations)
+            if not my_polarity & other_polarity:continue
             my_heads=frozenset().union(frozenset(),*(p[0] for p in mine.get('predicates',())))
             mine_sole=mine.get('sole') or {};other_sole=info.get('sole') or {}
             my_sides=mine_sole.get('sides',frozenset());other_sides=other_sole.get('sides',frozenset())
@@ -239,8 +253,10 @@ def exclusive_reattributions(reading):
                 clinical_polarities.get(claim['id'],{}).get('negative',frozenset())
                 & clinical_polarities.get(other['id'],{}).get('negative',frozenset())
                 and (a._lemma(root) in a.LIGHT_VERBS or negative_operator(root,a) is not None))
+            unresolved_property=bool((own_ambiguous or other_ambiguous)
+                and (a._lemma(root) in a.LIGHT_VERBS or negative_operator(root,a) is not None))
             if ((predicates-{'be'}) & (my_predicates-{'be'}) or heads & my_heads
-                    or same_assertion or nominal_reference or anatomical_parse or same_negative_property) and topic & (
+                    or same_assertion or nominal_reference or anatomical_parse or same_negative_property or unresolved_property) and topic & (
                     mine.get('claim_keys',frozenset())|mine.get('named_keys',frozenset())):
                 causes.setdefault(claim['id'],[]).append(other)
     reading[key]=causes
@@ -285,7 +301,7 @@ def separate_sides(reading, first, second, shared):
         return sides
     def occurrences(unit):
         info=reading['actors'][unit['id']]
-        if not info.get('readable') or info.get('other_floor'):return None
+        if not info.get('readable'):return None
         doc=docs[reading['position'][unit['id']]]
         if doc is None:return None
         matched={key:[] for key in shared}
@@ -294,6 +310,19 @@ def separate_sides(reading, first, second, shared):
             if token.pos_ not in ('NOUN','PROPN') and not nominal_gerund and not negative_clinical_modifiers(token,a):continue
             keys=a.keys({a._lemma(token),a._fold(token.text)}) & shared
             if keys:
+                # An outer foreign speaker can deny an explicitly patient-owned
+                # content clause. Only that matching argument's nearest direct
+                # grammatical subject can prove whose side this is; a subject
+                # elsewhere in the sentence cannot qualify it.
+                if info.get('other_floor'):
+                    current=token;patient_argument=False
+                    for _ in range(6):
+                        subjects=[t for t in current.children if t.dep_ in ('nsubj','nsubjpass','csubj','csubjpass')]
+                        if subjects:
+                            patient_argument=bool(len(subjects)==1 and a.this_patient(subjects[0]));break
+                        if current.head==current:break
+                        current=current.head
+                    if not patient_argument:return None
                 sides=local_sides(token)
                 if len(sides)!=1:return None
                 for key in keys:matched[key].append(sides)
@@ -482,6 +511,31 @@ def ambiguous_negative_complements(token,a):
     return negative
 
 
+def uncertain_negative_arguments(token,a):
+    """Negative operator bound to a named topic through an unresolved relation.
+
+    A negative unknown nominal container's OF argument ('no evidence of
+    swelling') and a negative predicate's explicit patient content clause cannot
+    prove that same clinical topic independent. They establish review dependencies,
+    never absence, diagnosis or current treatment. A known separate treatment
+    predicate or an explicitly foreign content-clause subject is not this edge.
+    """
+    classes=a.SOLE_CLASSES.get(a._lemma(token),frozenset()) | a.SOLE_CLASSES.get(a._fold(token.text),frozenset())
+    if not classes & a.SOLE_CLINICAL:return []
+    result=[]
+    if token.dep_ in ('pobj','pcomp') and token.head.pos_=='ADP' and a._lemma(token.head)=='of':
+        container=token.head.head
+        container_classes=a.SOLE_CLASSES.get(a._lemma(container),frozenset()) | a.SOLE_CLASSES.get(a._fold(container.text),frozenset())
+        if container.pos_=='NOUN' and not container_classes and a._negates(container):result.append(container)
+    clause=token if token.dep_=='ccomp' else token.head if token.dep_ in (
+        'dobj','obj','nsubj','nsubjpass','csubj','csubjpass') else None
+    if clause is not None and clause.dep_=='ccomp' and negative_operator(clause.head,a) is not None:
+        subjects=[t for t in clause.children if t.dep_ in ('nsubj','nsubjpass','csubj','csubjpass')]
+        foreign=bool(subjects and all(a.names_person(t) and not a.this_patient(t) for t in subjects))
+        if not foreign:result.append(clause.head)
+    return result
+
+
 def negative_phrase_anchor(token,a):
     """The explicit anatomy in the SAME direct absence phrase, when unique.
 
@@ -534,7 +588,7 @@ def clinical_modifier_negations(reading):
             nominal_operator=bool(noun.tag_=='VBG'
                 and a.SOLE_CLASSES.get(a._fold(noun.text),frozenset()) & a.SOLE_CLINICAL
                 and any(t.dep_ in ('dobj','obj','attr') and negative_operator(t,a) is not None for t in noun.children))
-            if ambiguous_negative_complements(noun,a) or nominal_operator:
+            if ambiguous_negative_complements(noun,a) or uncertain_negative_arguments(noun,a) or nominal_operator:
                 ambiguous |= a.keys({a._lemma(noun),a._fold(noun.text)})
             modifiers=negative_clinical_modifiers(noun,a)
             if modifiers:
