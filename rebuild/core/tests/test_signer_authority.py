@@ -7,11 +7,12 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from core import destination_roles, generation
 from core.jobs import enqueue, run_one
-from core.models import AuditEvent, Encounter, Job, LedgerEntry, Usage
+from core.models import AuditEvent, Encounter, Job, LedgerEntry, MappingConfirmation, TemplateVersion, Usage
 from core.tab_review import another_signers_line, clinician_identity, validate_identity
-from core.tests.test_destination_roles import legacy_rows
+from core.tests.test_destination_roles import Walk, legacy_rows, lines
 from core.tests.test_role_suggestions import ACTION, Legacy, LIVE, NOTES, ON, labelled_provider
 from core.tests.test_v3_supersession_floor import SONNET_55_DEFAULT
+from core.tests.test_word_v3_workflow import V3Fixture
 
 
 class SignerOwnership(SimpleTestCase):
@@ -190,3 +191,53 @@ class WithdrawnSignerOffers(Legacy, TestCase):
                 from core.security import private_path
                 from docx import Document
                 self.assertEqual(Document(private_path(e.export_path)).tables[0].cell(0, 1).text, '')
+
+
+@override_settings(**dict(ON,QUILLMD_WORD_ENGINE='v3'))
+class V3HumanAuthority(Walk,V3Fixture,TestCase):
+    def test_physical_manager_authorisation_never_appoints_finalizer_from_old_policy(self):
+        import json,os
+        from pathlib import Path
+        from docx import Document
+        from core import import_binding
+        from core.security import private_path
+        template,version=self.uploaded(data=lines('Manager permission','Manager authorisation: ____________________',
+                                                  'Plan: ______'),name='Synthetic manager human authority')
+        original=private_path(template.original_path).read_bytes()
+        key=self.by_label(version)['Manager authorisation']['key']
+        self.assertTrue(self.by_label(version)['Manager authorisation']['write_protected'])
+        issues=version.import_manifest['coverage']['selected_engine_issues']
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/',{'action':'v3_coverage','mapping_version':version.pk,
+            **{'exclude_'+row['id']:'on' for row in issues}}).status_code,302)
+        reviewed=self.latest(template)
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/',{'action':'v3_save','mapping_version':reviewed.pk,
+            'label_'+key:'Clinician reviewed'}).status_code,302)
+        renamed=self.latest(template)
+        fields=[{**f,**({'answer_policy':'clinician_identity'} if f['key']==key else {})} for f in renamed.fields]
+        # Synthetic immutable old-state representation, preserving source,
+        # geometry and protection. No existing stored/finalized record changes.
+        old=TemplateVersion.objects.create(template=template,number=renamed.number+1,contract='v3',fields=fields,
+            created_by=self.user,corrections=renamed.corrections,import_manifest=import_binding.for_mapping(renamed.import_manifest,fields))
+        MappingConfirmation.objects.create(version=old,confirmed_by=self.user)
+        import_binding.verify(old)
+        e=self.generated(old,'Clinician reviewed: Synthetic Alpha Clinician\nPlan: Rest.')
+        self.assertEqual((e.answers[key]['status'],e.answers[key]['text']),('missing',''))
+        row=next(r for r in self.client.get(f'/encounters/{e.pk}/').context['answer_rows'] if r['key']==key)
+        state=Path(os.environ.get('QUILLMD_STATE_DIR','/unavailable'))
+        allowed=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/word')
+        if state.is_relative_to(allowed):
+            capture=state.parent/'captures'/'manager-authority';capture.mkdir(mode=0o700,parents=True)
+            (capture/'original.docx').write_bytes(original)
+            (capture/'first-ui-state.json').write_text(json.dumps({'source_sha256':template.sha256,'fields':old.fields,
+                'import_manifest':old.import_manifest,'first_answers':e.answers,'row_identity':row['identity'],
+                'row_blank_eligible':row['blank_eligible']},indent=2,default=str))
+        self.assertFalse(row['identity'])
+        self.assertFalse(row.get('role_offer'))
+        self.assertEqual(self.reviewed(e,old).status_code,302)
+        self.finalized(e);self.assertEqual(e.status,'finalized')
+        exported=private_path(e.export_path).read_bytes()
+        self.assertIn('Manager authorisation: ____________________',[p.text for p in Document(__import__('io').BytesIO(exported)).paragraphs])
+        self.assertEqual(private_path(template.original_path).read_bytes(),original)
+        download=self.client.get(f'/encounters/{e.pk}/export/')
+        self.assertEqual(download.status_code,200);self.assertEqual(b''.join(download.streaming_content),exported)
+        if state.is_relative_to(allowed):(capture/'final-export.docx').write_bytes(exported)
