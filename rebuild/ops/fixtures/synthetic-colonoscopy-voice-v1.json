@@ -1,0 +1,370 @@
+{
+  "schema_version": 1,
+  "id": "synthetic-colonoscopy-voice-v1",
+  "sha256": "1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e",
+  "audio_id": "colonoscopy-speech",
+  "audio_sha256": "dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c",
+  "script_sha256": "038bae1345badb1ee111538347464ee1a47f45768045ad0a49f8ac945cc0356d",
+  "independently_authored": true,
+  "provider_upload_allowed": true,
+  "corpus_qualification": false,
+  "rights_basis": "New synthetic blank questionnaire independently authored 2026-10-03 for this authorized private test. No owner/development/holdout original was read or copied.",
+  "qualification_scope": "SUPPLEMENTAL synthetic audio-to-form engineering result; not owner17, restricted D02, original 60 or held-back20 qualification.",
+  "reference_source": "Existing allowlisted synthesized colonoscopy script, not human recording; exact original script hash retained.",
+  "engine": "v3",
+  "fields": [
+    {
+      "key": "v3_1",
+      "label": "Procedure",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Procedure",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_2",
+      "label": "Anesthesia",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Anesthesia",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_3",
+      "label": "Bowel preparation score",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Bowel preparation score",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_4",
+      "label": "Extent reached",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Extent reached",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_5",
+      "label": "Indication",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Indication",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[4]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_6",
+      "label": "Findings",
+      "kind": "long_text",
+      "context": "Synthetic procedure findings worksheet > Findings",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[5]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_7",
+      "label": "Polyps",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Polyps",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[6]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_8",
+      "label": "Specimens",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Specimens",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[7]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_9",
+      "label": "Estimated blood loss",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Estimated blood loss",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[8]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_10",
+      "label": "Immediate complications",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Immediate complications",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[9]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    },
+    {
+      "key": "v3_11",
+      "label": "Recommendation",
+      "kind": "text",
+      "context": "Synthetic procedure findings worksheet > Recommendation",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[10]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+      }
+    }
+  ],
+  "expectations": [
+    {
+      "key": "v3_1",
+      "label": "Procedure",
+      "destination": "b/tbl[0]/tr[0]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "diagnostic colonoscopy"
+        ]
+      ],
+      "accepted_answers": [
+        "diagnostic colonoscopy"
+      ]
+    },
+    {
+      "key": "v3_2",
+      "label": "Anesthesia",
+      "destination": "b/tbl[0]/tr[1]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "monitored anesthesia care"
+        ]
+      ],
+      "accepted_answers": [
+        "monitored anesthesia care"
+      ]
+    },
+    {
+      "key": "v3_3",
+      "label": "Bowel preparation score",
+      "destination": "b/tbl[0]/tr[2]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "BBPS eight",
+          "BBPS 8"
+        ]
+      ],
+      "accepted_answers": [
+        "BBPS eight",
+        "BBPS 8",
+        "eight",
+        "8"
+      ]
+    },
+    {
+      "key": "v3_4",
+      "label": "Extent reached",
+      "destination": "b/tbl[0]/tr[3]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "advanced to the cecum"
+        ]
+      ],
+      "accepted_answers": [
+        "cecum",
+        "The scope was advanced to the cecum",
+        "advanced to the cecum"
+      ]
+    },
+    {
+      "key": "v3_5",
+      "label": "Indication",
+      "destination": "b/tbl[0]/tr[4]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "rectal bleeding"
+        ]
+      ],
+      "accepted_answers": [
+        "rectal bleeding"
+      ]
+    },
+    {
+      "key": "v3_6",
+      "label": "Findings",
+      "destination": "b/tbl[0]/tr[5]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "sigmoid diverticulosis and small internal hemorrhoids"
+        ]
+      ],
+      "accepted_answers": [
+        "sigmoid diverticulosis and small internal hemorrhoids"
+      ]
+    },
+    {
+      "key": "v3_7",
+      "label": "Polyps",
+      "destination": "b/tbl[0]/tr[6]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "No polyps were seen"
+        ]
+      ],
+      "accepted_answers": [
+        "No polyps were seen",
+        "No polyps"
+      ]
+    },
+    {
+      "key": "v3_8",
+      "label": "Specimens",
+      "destination": "b/tbl[0]/tr[7]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "No specimens were collected"
+        ]
+      ],
+      "accepted_answers": [
+        "No specimens were collected",
+        "No specimens"
+      ]
+    },
+    {
+      "key": "v3_9",
+      "label": "Estimated blood loss",
+      "destination": "b/tbl[0]/tr[8]/tc[1]",
+      "expected_status": "conflict",
+      "reason": "Retain original zero-millilitre statement and explicit less-than-one correction for review; no automatic old value is credited.",
+      "source_units": [
+        [
+          "blood loss was zero millilitres",
+          "blood loss was 0 millilitres",
+          "blood loss was zero milliliters",
+          "blood loss was 0 milliliters"
+        ],
+        [
+          "correction"
+        ],
+        [
+          "less than one millilitre",
+          "less than 1 millilitre",
+          "less than one milliliter",
+          "less than 1 milliliter"
+        ]
+      ],
+      "accepted_answers": []
+    },
+    {
+      "key": "v3_10",
+      "label": "Immediate complications",
+      "destination": "b/tbl[0]/tr[9]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "There were no immediate complications"
+        ]
+      ],
+      "accepted_answers": [
+        "There were no immediate complications",
+        "No immediate complications"
+      ]
+    },
+    {
+      "key": "v3_11",
+      "label": "Recommendation",
+      "destination": "b/tbl[0]/tr[10]/tc[1]",
+      "expected_status": "supported",
+      "reason": "Only the exact named source fact belongs in this answer location.",
+      "source_units": [
+        [
+          "follow up with the referring clinician in two weeks",
+          "follow up with the referring clinician in 2 weeks"
+        ]
+      ],
+      "accepted_answers": [
+        "follow up with the referring clinician in two weeks",
+        "follow up with the referring clinician in 2 weeks"
+      ]
+    }
+  ]
+}
