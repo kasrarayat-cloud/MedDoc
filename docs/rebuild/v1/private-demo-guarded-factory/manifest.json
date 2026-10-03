@@ -1,0 +1,44 @@
+{
+  "scope": "Prepared source helper only; pure synthetic factory controls; no actual campaign/key/database/container/service/provider actions. Root must independently refute/adopt before execution.",
+  "checks": 17,
+  "exit_code": 0,
+  "seconds": 0.639064,
+  "artifacts": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/prepare_demo_guarded.py",
+      "sha256": "debfe3dfc4116828748151ffe3835f6160db122d37dc694a21cee8ed9ab43b1f",
+      "bytes": 16028,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/test_prepare_demo_guarded.py",
+      "sha256": "c6dadf3537c1a0a071f9e011a99e47a23a36deeeff91a9c4ced7d8aa8745aeb0",
+      "bytes": 12063,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/factory-frozen.json",
+      "sha256": "300eadf7d7e1d73f2a4f39182a19832ce69fb864f1a8464a4475f7a578d8e2be",
+      "bytes": 1137,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/factory-frozen-test.log",
+      "sha256": "25494040abcf979f49474ce7f6a8732b9f402e840d743b35cbcf6ff1d62115e7",
+      "bytes": 2304,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/factory-pure-first.log",
+      "sha256": "ffcd3f034956686d4ca30ef7b2c0f85683ac731cce94baecfb5da277d155654e",
+      "bytes": 1927,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/factory-pure-final.log",
+      "sha256": "3327d9f7fd867a894a71b109d81a2dba92f124d449eb7cae2dae9699e69a2831",
+      "bytes": 2304,
+      "mode": "0600"
+    }
+  ]
+}

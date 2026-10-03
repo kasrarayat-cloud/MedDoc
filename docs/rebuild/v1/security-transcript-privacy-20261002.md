@@ -834,3 +834,21 @@ No campaign, real key, database, container, service or provider is accessed. Thi
 controls; it refutes the previously unmeasured inherited factory. A descriptor-bound creation/extraction path must
 be qualified before actual preparation. `private-demo-factory-refutation/manifest.json` binds the original source,
 instrument and outcome; the substituted-directory fixture is retained. The lead was notified before execution.
+
+### Guarded factory prepared for independent lead refutation
+
+The owned replacement `security/qa-demo-copy/prepare_demo_guarded.py` is frozen at SHA256
+`debfe3dfc4116828748151ffe3835f6160db122d37dc694a21cee8ed9ab43b1f`. The old helper transformations and prepared
+record remain byte-identical on a positive synthetic run, including full source SHA, database/ports, Sonnet5.5,
+automatic Word preference, relations enabled and suggestions disabled. Creation, source directories, extraction,
+helpers and metadata now use exclusive descriptor-relative operations under the pinned new destination. The archive
+is bounded, canonical, regular-file/directory only and excludes environment files. Exact source directory/file sets
+and content hashes are checked, and every written helper is read back through its checked descriptor-relative name.
+
+Seventeen pure controls pass in0.639s with exact source/test/helper8cf hashes unchanged: functional equality with the
+original, the reproduced root substitution and outer/nested parent changes, replaced leaves/hardlinks/mounts, source
+tampering and unexpected directories, linked/duplicate/traversal/private/missing-parent/oversized archive cases and
+descriptor closure. The first14-pass and final17-pass logs are retained. This prepares a concrete helper for the
+lead's independent refutation; it is not an executed campaign or demo preparation. The actual factory, credentials,
+database, container and services remain untouched. `private-demo-guarded-factory/manifest.json` binds all frozen
+source, tests and evidence. The earlier unguarded factory failure remains failed.
