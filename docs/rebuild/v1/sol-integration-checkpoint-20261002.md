@@ -170,3 +170,26 @@ re-signing. Current served private demo remains789c0372; installeddedac162 and
 originalQA14ed2459 remain unchanged. Final CI/live voice/private rebuild remain
 required. New provider requests0. Current filesystem90%, approximately29GB
 available; measured net disposable artifact allocation reduction5412282368B.
+
+### 2026-10-03 continuation: disk gate and independently reproduced failures
+
+At 05:30 UTC the unchanged preflight disk gate returned BLOCK (91%); report
+`docs/preflight-reports/preflight-20261003T053034Z.md`. Heavy suites, builds,
+migrations and paid qualification are paused while authorized cleanup is prepared.
+No new provider sends have occurred. Main/installed dedac162, restored QA14ed2459,
+and provisional fixture demo789c0372 remain unchanged.
+
+Exact clinical574: root104 controls found six unnecessary holds; a separate
+root12 denial pass independently reproduced four unsafe releases (two concrete
+denials under two medication headings), zero instrument errors. Exact Word6255:
+root seven original-to-export controls reproduced human attestation writes and
+empty source-role violations; all49 archived Python source hashes stayed fixed.
+Those candidates remain unqualified. Their failed results are retained separately
+from later repairs and the prior narrow passing evidence.
+
+The guarded demo factory debfe and copy helper8cf are also unqualified: a distinct
+same-owner directory could replace an earlier created destination and receive
+writes before eventual refusal. No actual preparation, cloning or activation ran.
+Protected witnesses and current worker checkpoints remain under
+`rebuild/.runtime/v1-sol-continuation-20261002/`. Prior measured net artifact reclaim
+remains5412282368B; the later65 cache targets were all refused, removing0B.
