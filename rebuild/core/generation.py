@@ -2946,11 +2946,16 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                                 if own_part and own_part[2] <= len(text) else None)
                         shift = part[2] if part else 0
                         instruction = text[shift:]
+                        from .source_scope import conditional_plan_scope
+                        plan_condition = conditional_plan_scope(instruction) if part and part[0]==owner else None
                         if (RETURN_IF_INSTRUCTION.fullmatch(instruction)
                                 and not any(UNSETTLED.search(r) or SELF_CORRECTION.search(r)
                                             or SCOPE_POINTER.search(r) for r in readings(instruction))):
                             span = (unit['start'] + low + shift, unit['start'] + high)
                             found.append((low, high)); local_conditional.append(span)
+                            conditional_units.add(unit['id'])
+                        elif plan_condition is not None:
+                            local_conditional.append(tuple(unit['start']+low+shift+at for at in plan_condition))
                             conditional_units.add(unit['id'])
                     # A labelled Plan's retained tail can contain its complete return
                     # instruction on the same line. Only that exact two-part form is relaxed.
@@ -3874,7 +3879,10 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         if first_other is not None:
             causes.append((first_other, None))
     # BOUNDED
-    if not elicited and any(not (field is not None and v3_bound_by_destination(field, unit, at)) for at in info['bounded']):
+    if not elicited and any(not ((field is not None and v3_bound_by_destination(field, unit, at))
+            or (label in PLAN_FIELDS and uid in reading['conditional_units']
+                and any(low <= unit['start']+at < high for low,high in reading['conditional_spans'])))
+            for at in info['bounded']):
         causes.append((unit, 'syntax_incomplete'))
     # DATED PAST
     if field is not None and (
