@@ -821,3 +821,16 @@ while27 deliberate attack fixtures explicitly refuse automatic cleanup pending e
 Canonical original/final helpers, tests, first failed/final logs and all campaign/financial evidence remain retained.
 No cleanup occurred here; the lead must check references/processes and each current target before authorized removal,
 then measure actual recovered bytes. The prior11 ignored Word copies remain separate proposals.
+
+### Inherited source-factory boundary remains unqualified
+
+A separate pure witness exercises the actual `prepare_demo.main` factory that v3 calls before pinning the directory.
+At source SHA256 `1a2aec0a19664ad4bfa652d26dced1ececdf44f962811fae08960f36dc525d04`, lines100-104 create the new
+directory and then use pathname-based nested creation, writes and extraction. Swapping that new directory for a
+symlink immediately before `src` creation makes the factory return success while writing ten new helper/source/
+metadata files into a foreign synthetic directory. The v3 wrapper's later directory check cannot prevent those
+earlier writes. The actual witness exits0 in0.044s (0.0235s body); the factory source is unchanged and retained.
+No campaign, real key, database, container, service or provider is accessed. This does not invalidate the v3 binding
+controls; it refutes the previously unmeasured inherited factory. A descriptor-bound creation/extraction path must
+be qualified before actual preparation. `private-demo-factory-refutation/manifest.json` binds the original source,
+instrument and outcome; the substituted-directory fixture is retained. The lead was notified before execution.
