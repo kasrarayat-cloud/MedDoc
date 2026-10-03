@@ -1,0 +1,13 @@
+{
+  "status": "independent_pre_execution_finding_repaired",
+  "reviewer": "/root",
+  "finding": "health guard expected synthetic but actual health_data_mode returns synthetic-only",
+  "code_location": "verify_qa_authorization.py: served identity assertion",
+  "source_positive": "core/views.py health_data_mode SYNTHETIC_ONLY => synthetic-only",
+  "served_positive": "root reports old restored9140fresh GET200synthetic-only; not measured by this writer",
+  "repair": "guard exactsynthetic-only; failclosed profile/process/database/source checks unchanged",
+  "executed_new_demo": false,
+  "provider_requests": 0,
+  "database_mutations": 0,
+  "source_freeze_refusal": "sixth mixed-context refused; no clinical probes run"
+}

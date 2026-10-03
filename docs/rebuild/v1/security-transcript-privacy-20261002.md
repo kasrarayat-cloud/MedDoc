@@ -172,3 +172,37 @@ new repair. The 21 probes are a counterexample set, not an accuracy denominator.
 unchanged, and zero provider requests or database connections occurred. `fourth-refutation-evidence.json` binds
 the raw outputs, probe source and pre-run source witness. Lead and clinical writer received the new findings before
 any live qualification; actual served authorization/host verification awaits the final qualified demonstration.
+
+### Fifth clinical refutation and prepared served authorization
+
+The fifth scope SHA `169f2144383d66a1a8818c731db6b03d8ca837cbb0ac35b9c0c46ea570946f5d` was frozen and copied
+before16 bounded whole-validator/current-governance probes, exit0. Generation77e123 and context3b925 were unchanged.
+The fourth definite-article failure is held; its three negated-exclusive unnecessary holds now preserve the original
+patient claim. Two fresh unnecessary holds remain: after `Takes warfarin 5 mg daily`, `Her father is the only person
+without warfarin` and `Only her father used to take warfarin` both conflict the patient's current claim. Explicit
+negative possession and explicitly historical other-person use do not contradict it. A `my daily medication`
+variant remains supported, but no definite unsafe assertion is made because its explicit speaker may fall outside
+the patient-default grant. Exact output and source witness remain failed fifth-source evidence.
+
+The proposed sixth whole-governance probe was refused before copying sources or running cases: scopebb72 and
+generation77e123 matched, but the transcript context had changed from declared3b925 todf959 during the nominal repair.
+The setup refusal1 and accidental launch of the absent probe2 are retained. Neither is a clinical test result. The
+writer acknowledged the mixed-source refusal and will announce the completed full source freeze.
+
+`rebuild/ops/verify_qa_authorization.py` is a prepared bounded actual-served harness. No new demo was executed by this
+writer yet. The harness requires lead-confirmed process IDs, exact archive/extracted source, release and synthetic
+fixture database on55731; it targets only9160/9161. It seeds separately named synthetic authorization accounts, a payer
+and two departments, six held and two simulated settled jobs, and direct synthetic finalized files for real export
+authorization positive controls. These direct fixtures do not qualify generation or clinical finalization. Existing
+accounts, wallets, grants and services stay untouched; all read-window financial fingerprints must remain equal.
+Actual owner/dual-owner/manager scopes, list totals and metadata, detail GET/HEAD/valid-CSRFPOST, API/export, membership
+revocation with personal-history preservation, password-only admin refusal, actual MFA, and host/path404 without
+redirect are measured. Only these seeded accounts are retired with session-version increments; clinical/financial
+fixture evidence is retained. No welcome grant or provider request is performed.
+
+The lead's independent prepared-source pass found a wrong health literal before execution: the harness expected
+`synthetic`, while the actual endpoint returns `synthetic-only`. The finding and repaired exact literal are preserved;
+syntax, prepare-only and diff checks pass. These checks prove preparation only. Actual served results await the lead's
+confirmed idle new-demo window. The harness bounds150HTTP requests/180seconds with6second request deadlines and
+3second lock/8second statement limits; source preparation and financial snapshots have their own finite work rather
+than being advertised as covered by the HTTP clock. Raw HTTP credentials/tokens remain unrecorded.
