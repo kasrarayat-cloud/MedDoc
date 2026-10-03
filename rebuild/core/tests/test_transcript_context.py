@@ -308,6 +308,27 @@ class PatientDefault(SimpleTestCase):
         self.check(source+" Swelling over her father's and the patient's left ankle was found to be absent.",
                    'Examination',[source],'conflict')
 
+    def test_negative_operator_argument_and_property_polarity_refutations(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['The patient reports no evidence of swelling over the left ankle.',
+                     'Her father denies that the patient has swelling over the left ankle.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source],'conflict')
+        for tail in ['The patient reports no evidence of swelling over the right ankle.',
+                     'Her father reports no evidence of swelling over the left ankle.',
+                     'Her father denies that the patient has swelling over the right ankle.',
+                     'Only her father has an absence of swelling over the left ankle.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source])
+        negative='No swelling over the left ankle.'
+        self.check(negative+' Only her father has an absence of swelling over the left ankle.',
+                   'Examination',[negative],'conflict')
+        self.check(negative+' Only her father has an absence of swelling over the right ankle.',
+                   'Examination',[negative])
+        # Withdrawn refutation: lack/possession and taking are distinct claims.
+        # The patient can possess medication without taking it. Do not widen
+        # a guard on an unsupported claim that this is a contradiction.
+        medication='The patient takes no warfarin.'
+        self.check(medication+' Only her father lacks warfarin.','Current medications',[medication])
+
     def test_independent_refutation_ellipses_cannot_retract_a_patient_claim_silently(self):
         source='Takes warfarin 5 mg daily.'
         for tail,label in [('Only her father does.','Medications'),('Not today.','Medications taken today'),
