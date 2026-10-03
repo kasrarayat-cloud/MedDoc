@@ -715,3 +715,46 @@ stays withdrawn. Original voice replay still has zero useful values without revi
 exact context; `v3_2` and `v3_4` remain held. No paid/audio/human or browser-to-export qualification is inferred.
 `clinical-acdd1f2f-refutation/manifest.json` binds the retained exact source manifest, instruments, logs, outputs and
 parser/scope witnesses. The finished-source qualification is refuted pending repair and a fresh independent pass.
+
+
+### Protected campaign demo-copy preparation and residual catalog defect
+
+The separately owned helper `security/qa-demo-copy/clone_campaign_demo.py` is frozen at SHA256
+`8cfec541c69cc26cdb4968e4ea6e7f4d7b65e6410f9443b22140d4538b6fcf07`, pending independent lead refutation and
+an exact mutation declaration before any execution. Forty-six pure checks passed in0.315s (0.116s test body).
+The first41-check invocation retained four fixture-parent-mode failures; the fixture explicitly sets a private
+umask, preserving all product protections. The following45-check run also passed. No database, container,
+provider, service, campaign signing key or installed environment was accessed by these tests.
+
+Descriptor reads open every ancestor without following links, compare original and named file identity before/
+after reading, bind inode/owner/mode/link count/mount/size/time to the source inventory, and check content SHA
+before copying. Bounded source inventories and archive member sets refuse links, substitutions, noncanonical
+paths and mount changes. Writes are exclusive and protected. Timeout/nonzero stdout, stderr and real exit records
+are retained; credential-bearing output is withheld. Terminal job/batch states are affirmative, including the
+existing documented `not_adopted` terminal batch state; a target containing tables, functions, types or custom
+schemas refuses. All source/target public-table hashes include clinical, audit, mapping and session rows in
+addition to the nine financial models. Original templates, provider results, finalized exports, raw transcripts
+and immutable reviewed-text payloads are hash/identity bound. Review signatures are validated with the ORIGINAL
+campaign key; a stale notes digest remains historical and is never resigned or turned into current confirmation.
+Source, key pins and prepared launcher bytes are rechecked inside the held campaign/global copy locks.
+
+The lead's separate new preparation wrapper at SHA256
+`cff879ef48c718ca8043a5f929f9beb9ab19eb0e1e9906177e8d1f4908ba7b09` is REFUTED before execution. A pure fixture
+swaps the demo directory for a symlink after the launcher leaf lstat: later ordinary path reads/writes and atomic
+replacements follow that parent, replace another owned synthetic tree's launcher and prepared metadata, and report
+success. Actual witness exit0/0.012s; original wrapper bytes remained unchanged. That failure is a pre-execution
+repair requirement, not permission to bypass a path check. The lead owns its repair and fresh finished-source pass.
+
+Read-only V1 matrix/handoff reconciliation at exact `b1b604551b847aeca9f0f96a67d6aadb07b9faff` found one concrete
+retention preparation regression: `retention_readiness.CATALOG` correctly requires protected `reviewed_transcripts`,
+but the published `ops/retention/policy.unset.json` and `policy.schema.json` omit it. The shipped unset policy fails
+actual `parse_policy` as `policy_invalid_or_incomplete`, whereas the canonical generated unresolved policy validates.
+The pure witness exits0/0.328s with no database/network calls. This requires canonical published-artifact regeneration;
+it does not weaken preservation or authorize a retention schedule. Role/department/host enforcement matches the
+retained124 actual served controls on789c0372. Recovery/session revocation and declared second-administrator MFA
+recovery remain enforced in the inspected source. A final exact candidate CI/served pass is still distinct from
+that evidence. Sole-administrator custody, approved retention schedule/external copies and independent security
+remain explicit gates, not invented available owner decisions.
+
+`qa-demo-copy-preparation/manifest.json` binds all protected helper/test/log/wrapper and policy witnesses. All
+reproducible fixture directories are retained pending lead manifest review; no cleanup or live copy occurred here.

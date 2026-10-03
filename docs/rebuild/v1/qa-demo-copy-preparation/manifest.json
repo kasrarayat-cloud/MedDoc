@@ -1,0 +1,68 @@
+{
+  "contract": "quillmd-private-preparation-evidence-v1",
+  "database_calls": 0,
+  "container_calls": 0,
+  "provider_calls": 0,
+  "files": {
+    "qa-demo-copy/frozen.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/frozen.json",
+      "sha256": "926c87655fd5597f51736895d30f654e30bfd0b58fc201ecd719175f517863cd",
+      "bytes": 1245,
+      "allocated_bytes": 4096
+    },
+    "qa-demo-copy/clone_campaign_demo.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/clone_campaign_demo.py",
+      "sha256": "8cfec541c69cc26cdb4968e4ea6e7f4d7b65e6410f9443b22140d4538b6fcf07",
+      "bytes": 25357,
+      "allocated_bytes": 28672
+    },
+    "qa-demo-copy/test_clone_campaign_demo.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/test_clone_campaign_demo.py",
+      "sha256": "acffa758e4ade163c423f1832503003ec09705e4fd936c2c399ed14a335d5c58",
+      "bytes": 20965,
+      "allocated_bytes": 24576
+    },
+    "qa-demo-copy/original-root-draft.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/original-root-draft.py",
+      "sha256": "d1464a56ee4a104ce34e9aba15775e3034f9ba5362e9e54a6690e3c760877734",
+      "bytes": 11623,
+      "allocated_bytes": 12288
+    },
+    "qa-demo-copy/pure-first.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/pure-first.log",
+      "sha256": "2edfe18f8c698f0b25fe95c7d8ece79e8a55bc627784a534658ae8dc19e21619",
+      "bytes": 8451,
+      "allocated_bytes": 12288
+    },
+    "qa-demo-copy/pure-second.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/pure-second.log",
+      "sha256": "8c4c61b7032abc717a295fe2ee254cd1f198b72495bae17f97d92118d163cbb6",
+      "bytes": 4983,
+      "allocated_bytes": 8192
+    },
+    "qa-demo-copy/pure-final.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/qa-demo-copy/pure-final.log",
+      "sha256": "fe55d384d510d337acf5301437f927998ac8be4ed5112b9398526d773eec84a5",
+      "bytes": 5121,
+      "allocated_bytes": 8192
+    },
+    "refute_prepare_campaign_demo_parent.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_prepare_campaign_demo_parent.py",
+      "sha256": "bc8bcb01e0552f309c676ba1d033525e7c333decc54ef53e632fb17f201dbab3",
+      "bytes": 4233,
+      "allocated_bytes": 8192
+    },
+    "refute-prepare-campaign-parent.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-prepare-campaign-parent.json",
+      "sha256": "1aefe59f2c17b26e21c2667714c048f4dc52317e71dc93ef938e980234ea901e",
+      "bytes": 700,
+      "allocated_bytes": 4096
+    },
+    "retention-policy-catalog-drift.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/retention-policy-catalog-drift.json",
+      "sha256": "5e1da54f4b9fb30d043fba71b6d31b8b6be76df427e70bbe6e111c1f0895079b",
+      "bytes": 574,
+      "allocated_bytes": 4096
+    }
+  }
+}
