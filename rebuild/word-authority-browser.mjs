@@ -1,18 +1,12 @@
 /**
  * Word destination-authority regression — known failure L01 (legacy default path, fixture AI).
  *
- * The legacy Word inspector types a 'Patient signature' or 'Initials' table row as an ordinary text
- * question (documents/engine.py:336-337), generation asks every non-v3 field and excludes only clinician
- * identity (core/generation.py:3736-3737, :3299, :3516; 'Patient signature' is explicitly NOT the
- * clinician at core/tab_review.py NOT_THE_CLINICIAN), and the legacy fill writes by locator with no role
- * check (documents/engine.py:719-732). So a labelled note line lands in the exported document's signing
- * place. This walk does what a doctor does and asserts, on the exported original-format DOCX, that it
- * does NOT:
- *   (a) the ordinary rows carry their note values;
- *   (b) the signature/initials values are nowhere in the export and those answer cells are unchanged;
- *   (c) the heading and the instruction paragraph are preserved.
- * Reproduced on 43fcf214 (legacy default path): (b) FAILED there, (a) and (c) passed. Since the destination-roles
- * integration every check must pass; CI runs it in 'Private browser and accessibility'.
+ * The retained eight-row fixture includes an unresolved human-consent destination and must refuse
+ * generation without jobs or charges. It remains separate from the seven-row positive control, which
+ * keeps the patient-signature and initials attacks and ordinary "Initial assessment" counterexample.
+ * Only that explicitly named control is exported; its assertions prove ordinary values, unchanged
+ * signing cells and surrounding text. This is supplemental safety evidence, not Word corpus acceptance.
+ * The original CI failure and historical L01 export failure remain in their own retained records.
  *
  * Prepare first (candidate venv python, no Django, no network):
  *   <venv>/bin/python -B prepare-word-authority-browser.py   -> .runtime/word-authority-{form.docx,input.json}
@@ -59,7 +53,7 @@ const control = process.env.QUILLMD_WORD_AUTHORITY_CONTROL || '';
 assert(['', 'clinician-leaves-signing-blank'].includes(control), 'Unknown control mode.');
 const checks = [];
 const result = {
-  regression: 'word-authority L01 (legacy signing rows filled from labelled notes)',
+  regression: 'word-authority L01: retained incomplete consent refusal plus separate signing/export control',
   expected_on_43fcf214: '(b) FAILS — the known defect reproduces; (a) and (c) pass',
   synthetic_only: true, generation: 'fixture, no provider requests', base_url: base.origin, run: runName,
   control_mode: control || null,
@@ -135,10 +129,11 @@ try {
   const credentialPath = process.env.QUILLMD_BROWSER_CREDENTIALS || path.join(appDirectory, '.runtime', 'private-access.json');
   const credentials = JSON.parse(await fs.readFile(credentialPath, 'utf8'));
   assert(credentials.doctor?.email.endsWith('@synthetic.quillmd.invalid'), 'Use freshly seeded synthetic accounts.');
-  const input = JSON.parse(await fs.readFile(path.join(runtime, 'word-authority-input.json'), 'utf8'));
+  const inputDirectory = process.env.QUILLMD_WORD_AUTHORITY_INPUT_DIR || runtime;
+  let input = JSON.parse(await fs.readFile(path.join(inputDirectory, 'word-authority-input.json'), 'utf8'));
   assert(input.synthetic_only === true && input.rows.length === 8, 'Run prepare-word-authority-browser.py first.');
-  const formPath = path.join(runtime, input.form);
-  const originalBytes = await fs.readFile(formPath);
+  let formPath = path.join(inputDirectory, input.form);
+  let originalBytes = await fs.readFile(formPath);
   assert.equal(sha256(originalBytes), input.original_sha256, 'The prepared blank form changed after preparation.');
   await fs.mkdir(artifacts, { recursive: true, mode: 0o700 });
   browser = await chromium.launch({ headless: true });
@@ -147,7 +142,7 @@ try {
   const scriptErrors = [];
   page.on('pageerror', () => scriptErrors.push('Client script error'));
   page.setDefaultTimeout(30_000);
-  const templateName = 'Synthetic legacy signing rows ' + Date.now();
+  let templateName;
   let templateURL; let exportBytes; let originalDownload;
 
   await check('Server is synthetic-only and reports its release', async () => {
@@ -169,61 +164,101 @@ try {
   await context.tracing.start({ screenshots: true, snapshots: true, sources: false, title: 'word-authority L01' });
   tracing = true;
 
-  await check('Upload the blank synthetic legacy form through the upload page', async () => {
-    await page.goto(new URL('/templates/upload/', base).href);
-    await page.locator('[name=name]').fill(templateName);
-    const options = await page.locator('[name=department] option').allTextContents();
-    const label = options.find(text => text.includes('X-ray'));
-    assert(label, 'The seeded X-ray department is not offered.');
-    await page.locator('[name=department]').selectOption({ label });
-    await page.locator('[name=file]').setInputFiles(formPath);
-    await page.locator('[name=synthetic_only]').check();
-    await page.getByRole('button', { name: 'Upload and inspect form', exact: true }).click();
+  async function uploadAndStart(caseInput, caseName) {
+    input = caseInput;
+    formPath = path.join(inputDirectory, input.form);
+    originalBytes = await fs.readFile(formPath);
+    assert.equal(sha256(originalBytes), input.original_sha256, 'Prepared original changed.');
+    templateName = 'Synthetic legacy ' + caseName + ' ' + Date.now();
+    await check(caseName + ': upload the blank synthetic legacy form through the upload page', async () => {
+      await page.goto(new URL('/templates/upload/', base).href);
+      await page.locator('[name=name]').fill(templateName);
+      const options = await page.locator('[name=department] option').allTextContents();
+      const label = options.find(text => text.includes('X-ray'));
+      assert(label, 'The seeded X-ray department is not offered.');
+      await page.locator('[name=department]').selectOption({ label });
+      await page.locator('[name=file]').setInputFiles(formPath);
+      await page.locator('[name=synthetic_only]').check();
+      await page.getByRole('button', { name: 'Upload and inspect form', exact: true }).click();
+      await page.waitForLoadState();
+      if (!/\/templates\/[0-9a-f-]+\/$/.test(new URL(page.url()).pathname)) {
+        // Application refusal text only (it names the reason), never form or note content.
+        result.upload_refusal = (await page.locator('.errorlist, .notice.error, .error-text').allInnerTexts()).map(t => t.trim());
+        await screenshot('upload-refused.png');
+        throw new Error('Upload refused');
+      }
+      templateURL = page.url();
+    });
+    await check(caseName + ': mapping review lists every legacy row and keeps the original', async () => {
+      const rows = await page.locator('.table-wrap tbody tr').evaluateAll(trs => trs.map(tr => ({
+        label: tr.cells[0].childNodes[0]?.textContent.trim() ?? '',
+        notes: tr.cells[0].querySelectorAll('p').length,
+        location: tr.cells[1].childNodes[0]?.textContent.trim() ?? '',
+        key: tr.cells[1].querySelector('.mono')?.textContent.trim() ?? '',
+      })));
+      result.mapping_review = {
+        rows: rows.map(row => ({ label: row.label, key: row.key, location: row.location, review_notes: row.notes,
+          signing_row: Object.hasOwn(input.signing, row.label) })),
+        signing_rows_offered_as_ordinary_fields: Object.keys(input.signing).every(label =>
+          rows.some(row => row.label === label && row.notes === 0)),
+        use_this_form_offered: await page.getByRole('link', { name: /Use this form/ }).count() === 1,
+      };
+      await screenshot(caseName + '-mapping-review.png');
+      assert.equal(rows.length, input.rows.length);
+      assert.deepEqual(rows.map(row => row.label), input.rows);
+      const href = await page.getByRole('link', { name: 'Download original', exact: true }).getAttribute('href');
+      const response = await context.request.get(new URL(href, base).href);
+      assert.equal(response.status(), 200);
+      originalDownload = await response.body();
+      assert.equal(sha256(originalDownload), input.original_sha256);
+    });
+    await check(caseName + ': start a document from the inspected mapping', async () => {
+      // A legacy mapping needs no confirmation (TemplateVersion.needs_confirmation is v3-only), so the
+      // form page offers "Use this form" at once; that link is the activation a doctor sees.
+      await page.getByRole('link', { name: /Use this form/ }).click();
+      await page.waitForURL(/\/encounters\/new\/\?template=/);
+      await page.locator('[name=patient]').selectOption({ label: 'Synthetic Example X-ray · X-ray' });
+      await page.locator('[name=template_version]').selectOption({ label: templateName + ' · mapping 1' });
+      await page.locator('[name=notes]').fill(input.notes);
+      await page.locator('[name=synthetic_only]').check();
+      await page.getByRole('button', { name: 'Create document', exact: true }).click();
+      await page.waitForURL(/\/encounters\/[0-9a-f-]+\/$/);
+      result.encounter_path = new URL(page.url()).pathname;
+    });
+  }
+  await uploadAndStart(input, 'retained-eight-row');
+  await check('Retained eight-row human-consent mapping refuses generation before a job', async () => {
+    const mapping = result.mapping_review;
+    const encounterPath = result.encounter_path;
+    await page.getByRole('button', { name: 'Generate supported answers', exact: true }).click();
     await page.waitForLoadState();
-    if (!/\/templates\/[0-9a-f-]+\/$/.test(new URL(page.url()).pathname)) {
-      // Application refusal text only (it names the reason), never form or note content.
-      result.upload_refusal = (await page.locator('.errorlist, .notice.error, .error-text').allInnerTexts()).map(t => t.trim());
-      await screenshot('upload-refused.png');
-      throw new Error('Upload refused');
-    }
-    templateURL = page.url();
-  });
-  await check('Mapping review lists every legacy row and keeps the original', async () => {
-    const rows = await page.locator('.table-wrap tbody tr').evaluateAll(trs => trs.map(tr => ({
-      label: tr.cells[0].childNodes[0]?.textContent.trim() ?? '',
-      notes: tr.cells[0].querySelectorAll('p').length,
-      location: tr.cells[1].childNodes[0]?.textContent.trim() ?? '',
-      key: tr.cells[1].querySelector('.mono')?.textContent.trim() ?? '',
-    })));
-    result.mapping_review = {
-      rows: rows.map(row => ({ label: row.label, key: row.key, location: row.location, review_notes: row.notes,
-        signing_row: Object.hasOwn(input.signing, row.label) })),
-      signing_rows_offered_as_ordinary_fields: Object.keys(input.signing).every(label =>
-        rows.some(row => row.label === label && row.notes === 0)),
-      use_this_form_offered: await page.getByRole('link', { name: /Use this form/ }).count() === 1,
-    };
-    await screenshot('mapping-review.png');
-    assert.equal(rows.length, input.rows.length);
-    assert.deepEqual(rows.map(row => row.label), input.rows);
-    const href = await page.getByRole('link', { name: 'Download original', exact: true }).getAttribute('href');
-    const response = await context.request.get(new URL(href, base).href);
+    const refusals = (await page.locator('.notice.warning, .notice.error, .errorlist').allInnerTexts()).map(t => t.trim());
+    assert(refusals.some(t => t.includes('This import has unmapped answer areas. No generation or charge is allowed')),
+      'Expected precise incomplete-import refusal.');
+    assert.equal(await page.locator('section.answer').count(), 0);
+    assert.equal(await page.locator('.source-panel .badge').filter({ hasText: /^(queued|running|succeeded|failed|reconciliation)$/ }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'Export original format' }).count(), 0);
+    const id = encounterPath.split('/').filter(Boolean).at(-1);
+    const response = await context.request.get(new URL('/api/encounters/' + id + '/', base).href);
     assert.equal(response.status(), 200);
-    originalDownload = await response.body();
-    assert.equal(sha256(originalDownload), input.original_sha256);
+    const persisted = await response.json();
+    assert.equal(persisted.status, 'draft');
+    assert.deepEqual(persisted.answers, {});
+    await fs.writeFile(path.join(artifacts, 'retained-eight-row-original.docx'), originalBytes, { mode: 0o600 });
+    result.original_refusal = { case: 'retained-eight-row-human-consent-refusal', original_sha256: input.original_sha256,
+      rows: input.rows.length, encounter_path: encounterPath, mapping_review: mapping, refusals,
+      persisted_status: persisted.status, persisted_answer_count: Object.keys(persisted.answers).length,
+      visible_jobs: 0, export_available: false, supported_coverage: false,
+      export_assertions: { a: { evaluated: false }, b: { evaluated: false }, c: { evaluated: false } } };
+    await screenshot('retained-eight-row-refusal.png');
   });
-  await check('Activate the mapping and start a document from it', async () => {
-    // A legacy mapping needs no confirmation (TemplateVersion.needs_confirmation is v3-only), so the
-    // form page offers "Use this form" at once; that link is the activation a doctor sees.
-    await page.getByRole('link', { name: /Use this form/ }).click();
-    await page.waitForURL(/\/encounters\/new\/\?template=/);
-    await page.locator('[name=patient]').selectOption({ label: 'Synthetic Example X-ray · X-ray' });
-    await page.locator('[name=template_version]').selectOption({ label: templateName + ' · mapping 1' });
-    await page.locator('[name=notes]').fill(input.notes);
-    await page.locator('[name=synthetic_only]').check();
-    await page.getByRole('button', { name: 'Create document', exact: true }).click();
-    await page.waitForURL(/\/encounters\/[0-9a-f-]+\/$/);
-    result.encounter_path = new URL(page.url()).pathname;
-  });
+  const usableInput = JSON.parse(await fs.readFile(path.join(inputDirectory, 'word-authority-usable-control-input.json'), 'utf8'));
+  assert(usableInput.synthetic_only === true && usableInput.rows.length === 7);
+  assert.deepEqual(usableInput.rows, input.rows.filter(label => label !== 'Consent form signed'));
+  assert.deepEqual(usableInput.signing, input.signing);
+  assert.equal(usableInput.notes, input.notes.split('\n').filter(line => !line.startsWith('Consent form signed:')).join('\n'));
+  result.export_case = 'separate-seven-row-signing-export-positive-control';
+  await uploadAndStart(usableInput, 'separate-seven-row-control');
   await check('Generate with the synthetic fixture at zero charge', async () => {
     assert.equal(await page.getByText('Synthetic fixture · $0 charge. No live AI service is called.', { exact: true }).isVisible(), true);
     await page.getByRole('button', { name: 'Generate supported answers', exact: true }).click();
