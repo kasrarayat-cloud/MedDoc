@@ -1,0 +1,103 @@
+[
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-5a-first-20261003/result.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/5a-first-20261003-result.json",
+    "sha256": "2cbf95530d90bc5ae66294d96e11ea6f81f62b18cc8d9dc99f736fb53c212621",
+    "bytes": 6709,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-5a-second-20261003/result.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/5a-second-20261003-result.json",
+    "sha256": "22e07c9a04283edd8dc9e9fa0f0c16265536869ce18a20b2edaa4586df7a8e30",
+    "bytes": 10558,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-5a-third-20261003/result.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/5a-third-20261003-result.json",
+    "sha256": "59ea94b2ca394ca082ca7b6f9dcc24705bb27273bb86ec5299f52c07b5705393",
+    "bytes": 31397,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-5a-fourth-20261003/result.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/5a-fourth-20261003-result.json",
+    "sha256": "b3ed7b269c27ed73fbffe4e44a961935ad3d2c0509c4ac367f4712899fb97b1e",
+    "bytes": 36414,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-first-rollback-verification.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/served-auth-first-rollback-verification.json",
+    "sha256": "5e15cb39cc383b9b7f76ec4e0867a1cda6f6efff9ffffe6f3d1eba6fc950e893",
+    "bytes": 1337,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-job-original-guard-refusal.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/served-job-original-guard-refusal.json",
+    "sha256": "98d43cb6c31dff16fe9887b4e91d1d617a1888dc9377c3f214598903d3935701",
+    "bytes": 1139,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-job-insert-readonly-diagnosis.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/served-job-insert-readonly-diagnosis.json",
+    "sha256": "2eb00cd6023da344f108a0d7a0f509204d94514aa5b17a5eeb7be06b79fb12da",
+    "bytes": 13286,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-fourth-admin-500-readonly.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/served-auth-fourth-admin-500-readonly.json",
+    "sha256": "c9cf5a3d36a2a8ab7ec5deec31100f09035133ed90d62352f68fe6f3fac3bda8",
+    "bytes": 5852,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-scratch-protection-repair.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/served-auth-scratch-protection-repair.json",
+    "sha256": "bd9e75c25520043673490b25c716d6a401829309b46d4d4d2f462a6b41630eaf",
+    "bytes": 298,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/console-mapping-red.log",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/console-mapping-red.log",
+    "sha256": "97bd4bea3abe5ba56a4db520906423858456eadef727e87bfd4499909a60e9f9",
+    "bytes": 10823,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/console-mapping-green.log",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-5a-first-through-fourth/console-mapping-green.log",
+    "sha256": "b05ac77f047e1b5b97667b69bb741eb0f5eb7ad286f8e6ad680bf6983dff7027",
+    "bytes": 933,
+    "classification": "synthetic raw failed/passed authorization evidence; retain"
+  },
+  {
+    "run": "first",
+    "harness_commit": "9626aed184d3820d3543d30d39d43aa334dcc259",
+    "harness_sha256": "7241277fcfdaefdd018597f101deb19a4c684dfb8e05bfba1fcba5a03f921ae0",
+    "application_commit": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5"
+  },
+  {
+    "run": "second",
+    "harness_commit": "0a5a54f1a15778ecf1d1524220760d9d7fab8663",
+    "harness_sha256": "c158c569948b6fb0526bc238bd63d85bd3600f706803d3152290cec07dfba1c8",
+    "application_commit": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5"
+  },
+  {
+    "run": "third",
+    "harness_commit": "514ba66e1a4875f1fe061f389d6982b5e23916c6",
+    "harness_sha256": "357291aab7d3f1d17fa408c5515d3d92dd0a050cd8481087da0c103d49b9471f",
+    "application_commit": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5"
+  },
+  {
+    "run": "fourth",
+    "harness_commit": "34ea6f1784f68794862062bc810ce27e502c5db4",
+    "harness_sha256": "4f302009fcef6590faa8e0dca7c05e19f06c496b92a1ea6ed48a1cd75ca7b2e2",
+    "application_commit": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5"
+  }
+]

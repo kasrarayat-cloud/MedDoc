@@ -1,0 +1,186 @@
+{
+  "before_fixture_financial": {
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Job": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "LedgerEntry": {
+      "count": 5,
+      "sha256": "59ee6534794a205981e74fa6cbdabb2e39341da7358a3221d78174258e91560b"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Reservation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Usage": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Wallet": {
+      "count": 10,
+      "sha256": "63fd7a253fa70fe75ce264244f45c92a5cd0706d1d930e71b55f4206816f7a8c"
+    }
+  },
+  "credentials_recorded": false,
+  "database": "quillmd_qa_int_sol_5a06295a",
+  "elapsed_seconds": 0.755,
+  "failure_frames": [
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/ops/verify_qa_authorization.py",
+      "function": "main",
+      "line": 306
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py",
+      "function": "manager_method",
+      "line": 87
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py",
+      "function": "create",
+      "line": 665
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py",
+      "function": "save",
+      "line": 902
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py",
+      "function": "save_base",
+      "line": 1008
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py",
+      "function": "_save_table",
+      "line": 1169
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py",
+      "function": "_do_insert",
+      "line": 1210
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py",
+      "function": "manager_method",
+      "line": 87
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py",
+      "function": "_insert",
+      "line": 1873
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py",
+      "function": "execute_sql",
+      "line": 1882
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py",
+      "function": "execute",
+      "line": 79
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py",
+      "function": "_execute_with_wrappers",
+      "line": 92
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py",
+      "function": "_execute",
+      "line": 100
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py",
+      "function": "__exit__",
+      "line": 91
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py",
+      "function": "_execute",
+      "line": 105
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py",
+      "function": "execute",
+      "line": 117
+    }
+  ],
+  "failure_type": "ProgrammingError",
+  "financial_history_deleted": false,
+  "fixture_scope": "Direct synthetic authorization rows/files; no clinical workflow qualification",
+  "http_evidence": [
+    {
+      "body_sha256": "19ec214cc4392e1aae3ccd5d2b09209bb548a3aa68dba86a983105c885babd65",
+      "host": "127.0.0.1:9160",
+      "label": "synthetic_health",
+      "location": null,
+      "method": "GET",
+      "path": "/health/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "bb1369b54f667389c4d57b166a6e374b4928049956eb7a2e3404c3a320c5407d",
+      "host": "127.0.0.1:9161",
+      "label": "synthetic_health",
+      "location": null,
+      "method": "GET",
+      "path": "/health/",
+      "port": 9161,
+      "status": 200
+    }
+  ],
+  "processes": [
+    {
+      "command_sha256": "f8f7f425763f76f193fa7941bb36ab8c0a031e39b5f4158de2773bf4aac3fce6",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160039,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352256",
+      "surface": "doctor"
+    },
+    {
+      "command_sha256": "3f00328e6cee338d519c584e2c4cd1635e49f81e8e8989058e983ee0be0a3fae",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160043,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352279",
+      "surface": "admin"
+    },
+    {
+      "command_sha256": "8d6685b1f4fab45c105c4b02b46b1cadcd31720fac04a08329b8a218ad8c227d",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160044,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352279",
+      "surface": "doctor"
+    }
+  ],
+  "provider_requests": 0,
+  "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+  "request_count": 2,
+  "run_id": "5a-first-20261003",
+  "source_manifest_sha256": "af423f03ba96dcc2a89504cab88a3beaf9aa28d7a409970177fea42b5169ba33",
+  "source_members": 629,
+  "status": "failed"
+}

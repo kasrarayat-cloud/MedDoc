@@ -1,0 +1,123 @@
+{
+  "job_triggers": [
+    {
+      "trigger": "CREATE TRIGGER generation_batch_job_identity BEFORE UPDATE ON public.core_job FOR EACH ROW EXECUTE FUNCTION quillmd_batch_job_guard()",
+      "function_name": "quillmd_batch_job_guard",
+      "body": "CREATE OR REPLACE FUNCTION public.quillmd_batch_job_guard()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n IF OLD.kind='generation_part' AND (NEW.request_key IS DISTINCT FROM OLD.request_key\n OR (OLD.result_path<>'' AND (NEW.result_path IS DISTINCT FROM OLD.result_path OR NEW.result_sha256 IS DISTINCT FROM OLD.result_sha256)))\n THEN RAISE EXCEPTION 'A batch attempt or recorded result cannot be replaced'; END IF;\n RETURN NEW;\nEND; $function$\n"
+    },
+    {
+      "trigger": "CREATE TRIGGER job_disposition BEFORE INSERT OR UPDATE ON public.core_job FOR EACH ROW EXECUTE FUNCTION quillmd_disposition_reference()",
+      "function_name": "quillmd_disposition_reference",
+      "body": "CREATE OR REPLACE FUNCTION public.quillmd_disposition_reference()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n IF TG_OP='UPDATE' AND NEW.encounter_id IS NOT DISTINCT FROM OLD.encounter_id THEN\n  IF EXISTS(SELECT 1 FROM core_dispositiontombstone WHERE target_id=NEW.encounter_id)\n  THEN RAISE EXCEPTION 'A disposed target cannot process clinical work'; END IF;\n  RETURN NEW;\n END IF;\n -- Source row first: an insert that waited for disposition observes its committed\n -- tombstone before creating any job, reservation-bearing batch, or suggestion.\n IF NEW.encounter_id IS NOT NULL THEN\n  PERFORM id FROM core_encounter WHERE id=NEW.encounter_id FOR KEY SHARE;\n  IF EXISTS(SELECT 1 FROM core_dispositiontombstone WHERE target_id=NEW.encounter_id)\n  THEN RAISE EXCEPTION 'A disposed target cannot acquire clinical work'; END IF;\n END IF;\n RETURN NEW;\nEND; $function$\n"
+    },
+    {
+      "trigger": "CREATE TRIGGER job_financial_immutable BEFORE UPDATE ON public.core_job FOR EACH ROW EXECUTE FUNCTION quillmd_job_financial_guard()",
+      "function_name": "quillmd_job_financial_guard",
+      "body": "CREATE OR REPLACE FUNCTION public.quillmd_job_financial_guard()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n            BEGIN\n              IF NEW.config IS DISTINCT FROM OLD.config OR (OLD.payer <> '' AND NEW.payer IS DISTINCT FROM OLD.payer)\n              THEN RAISE EXCEPTION 'Authorized job pricing and payer are immutable'; END IF;\n              RETURN NEW;\n            END; $function$\n"
+    },
+    {
+      "trigger": "CREATE TRIGGER job_no_truncate BEFORE TRUNCATE ON public.core_job FOR EACH STATEMENT EXECUTE FUNCTION quillmd_preservation_no_truncate()",
+      "function_name": "quillmd_preservation_no_truncate",
+      "body": "CREATE OR REPLACE FUNCTION public.quillmd_preservation_no_truncate()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN RAISE EXCEPTION 'Preservation and clinical records cannot be truncated'; END; $function$\n"
+    },
+    {
+      "trigger": "CREATE TRIGGER job_preservation BEFORE DELETE OR UPDATE ON public.core_job FOR EACH ROW EXECUTE FUNCTION quillmd_preserve_clinical_row()",
+      "function_name": "quillmd_preserve_clinical_row",
+      "body": "CREATE OR REPLACE FUNCTION public.quillmd_preserve_clinical_row()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE prior jsonb; dept uuid; pat uuid; enc uuid; org uuid; held jsonb; matched uuid[];\nBEGIN\n IF current_setting('transaction_isolation') <> 'read committed' THEN\n  RAISE EXCEPTION 'Preservation requires read committed isolation';\n END IF;\n PERFORM pg_advisory_xact_lock(716849203517);\n prior=to_jsonb(OLD);\n IF TG_TABLE_NAME='core_encounter' THEN\n  IF TG_OP='DELETE' AND OLD.status='finalized' THEN RAISE EXCEPTION 'Finalized document cannot be deleted'; END IF;\n  dept=OLD.department_id; pat=OLD.patient_id; enc=OLD.id;\n ELSIF TG_TABLE_NAME='core_patient' THEN dept=OLD.department_id; pat=OLD.id;\n ELSIF TG_TABLE_NAME='core_template' THEN dept=OLD.department_id;\n ELSIF TG_TABLE_NAME='core_department' THEN dept=OLD.id; org=OLD.organization_id;\n ELSIF TG_TABLE_NAME='core_job' THEN\n  enc=OLD.encounter_id;\n  IF enc IS NULL THEN\n   SELECT t.department_id INTO dept FROM core_templateversion v JOIN core_template t ON t.id=v.template_id WHERE v.id=OLD.mapping_version_id;\n  END IF;\n ELSIF TG_TABLE_NAME IN ('core_codesuggestion','core_generationbatch') THEN enc=OLD.encounter_id;\n END IF;\n IF enc IS NOT NULL AND dept IS NULL THEN SELECT department_id,patient_id INTO dept,pat FROM core_encounter WHERE id=enc; END IF;\n IF org IS NULL AND dept IS NOT NULL THEN SELECT organization_id INTO org FROM core_department WHERE id=dept; END IF;\n -- Historical identity remains fixed: releasing a hold is not an instruction\n -- to transfer its evidence to another patient/department. Include ancestor\n -- metadata whose movement would detach a held descendant from its old scope.\n SELECT array_agg(h.id ORDER BY h.id) INTO matched FROM core_retentionhold h\n WHERE h.scope='global' OR h.organization_id=org OR h.department_id=dept OR h.patient_id=pat OR h.encounter_id=enc\n OR (TG_TABLE_NAME='core_patient' AND h.encounter_id IN (SELECT id FROM core_encounter WHERE patient_id=pat))\n OR (TG_TABLE_NAME='core_department' AND (\n   h.patient_id IN (SELECT id FROM core_patient WHERE department_id=dept)\n   OR h.encounter_id IN (SELECT id FROM core_encounter WHERE department_id=dept)))\n OR (TG_TABLE_NAME='core_template' AND (\n   h.encounter_id IN (SELECT e.id FROM core_encounter e JOIN core_templateversion v ON v.id=e.template_version_id WHERE v.template_id=OLD.id)\n   OR h.patient_id IN (SELECT e.patient_id FROM core_encounter e JOIN core_templateversion v ON v.id=e.template_version_id WHERE v.template_id=OLD.id)));\n IF matched IS NOT NULL AND TG_OP='UPDATE' AND (\n    (prior->'department_id') IS DISTINCT FROM (to_jsonb(NEW)->'department_id') OR\n    (prior->'organization_id') IS DISTINCT FROM (to_jsonb(NEW)->'organization_id') OR\n    (prior->'patient_id') IS DISTINCT FROM (to_jsonb(NEW)->'patient_id') OR\n    (prior->'encounter_id') IS DISTINCT FROM (to_jsonb(NEW)->'encounter_id') OR\n    (prior->'mapping_version_id') IS DISTINCT FROM (to_jsonb(NEW)->'mapping_version_id')\n ) THEN RAISE EXCEPTION 'Preserved clinical scope cannot move'; END IF;\n SELECT jsonb_agg(h.id ORDER BY h.id) INTO held FROM core_retentionhold h\n WHERE h.id=ANY(matched) AND NOT EXISTS (SELECT 1 FROM core_retentionholdrelease r WHERE r.hold_id=h.id);\n IF held IS NOT NULL THEN\n  INSERT INTO core_preservedrecord(id,created_at,source_table,source_id,operation,hold_ids,prior_record)\n   VALUES(gen_random_uuid(),clock_timestamp(),TG_TABLE_NAME,OLD.id,TG_OP,held,prior);\n END IF;\n IF TG_OP='DELETE' THEN RETURN OLD; END IF;\n RETURN NEW;\nEND; $function$\n"
+    },
+    {
+      "trigger": "CREATE TRIGGER job_redaction BEFORE INSERT ON public.core_job FOR EACH ROW EXECUTE FUNCTION quillmd_redaction_guard()",
+      "function_name": "quillmd_redaction_guard",
+      "body": "CREATE OR REPLACE FUNCTION public.quillmd_redaction_guard()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE target core_encounter; body jsonb; org uuid;\nBEGIN\n IF current_setting('transaction_isolation') <> 'read committed' THEN\n  RAISE EXCEPTION 'Redaction requires read committed isolation';\n END IF;\n IF TG_TABLE_NAME='core_redactionrequest' THEN\n  IF NOT EXISTS(SELECT 1 FROM core_user WHERE id=NEW.created_by_id AND is_active AND is_staff AND verified_at IS NOT NULL)\n  THEN RAISE EXCEPTION 'A verified redaction custodian is required'; END IF;\n  SELECT * INTO target FROM core_encounter WHERE id=NEW.encounter_id;\n  IF target.id IS NULL OR target.department_id IS DISTINCT FROM NEW.department_id OR target.status NOT IN ('draft','review')\n     OR NEW.reason_sha256 !~ '^[0-9a-f]{64}$' OR NEW.content_sha256 !~ '^[0-9a-f]{64}$'\n  THEN RAISE EXCEPTION 'Only an unfinalized document of its own department can be requested for redaction'; END IF;\n  RETURN NEW;\n END IF;\n IF TG_TABLE_NAME='core_redactiontombstone' THEN\n  -- Source row first, then the preservation lock: the global lock order of core/retention.py.\n  PERFORM id FROM core_encounter WHERE id=NEW.target_id FOR UPDATE;\n  PERFORM pg_advisory_xact_lock(716849203517);\n  body=NEW.journal_entry->'body'->'redaction';\n  IF NEW.entry_sha256 !~ '^[0-9a-f]{64}$' OR COALESCE(NEW.journal_entry->>'signature','') !~ '^[0-9a-f]{128}$'\n     OR NEW.journal_entry->'body'->>'contract' IS DISTINCT FROM 'redaction-journal-entry-v1'\n     OR body->>'id' IS DISTINCT FROM NEW.id::text OR body->>'target_id' IS DISTINCT FROM NEW.target_id::text\n     OR body->>'department_id' IS DISTINCT FROM NEW.department_id::text\n     OR body->>'request_id' IS DISTINCT FROM NEW.request_id::text\n     OR body->>'content_sha256' IS DISTINCT FROM NEW.content_sha256 OR (body->'files') IS DISTINCT FROM NEW.files\n     OR body->>'requested_by' IS NOT DISTINCT FROM body->>'approved_by'\n  THEN RAISE EXCEPTION 'Invalid redaction tombstone identity'; END IF;\n  SELECT * INTO target FROM core_encounter WHERE id=NEW.target_id;\n  IF target.id IS NOT NULL THEN\n   IF target.status NOT IN ('draft','review') OR target.department_id IS DISTINCT FROM NEW.department_id\n   THEN RAISE EXCEPTION 'Only an unfinalized document of its own department can be redacted'; END IF;\n   SELECT organization_id INTO org FROM core_department WHERE id=target.department_id;\n   IF EXISTS(SELECT 1 FROM core_retentionhold h WHERE NOT EXISTS(SELECT 1 FROM core_retentionholdrelease r WHERE r.hold_id=h.id)\n      AND (h.scope='global' OR h.organization_id=org OR h.department_id=target.department_id\n           OR h.patient_id=target.patient_id OR h.encounter_id=target.id))\n   THEN RAISE EXCEPTION 'A retention hold applies; this content cannot be redacted'; END IF;\n   IF EXISTS(SELECT 1 FROM core_generationbatch b WHERE b.encounter_id=target.id)\n   THEN RAISE EXCEPTION 'A generation batch keeps this document''s notes; it cannot be redacted'; END IF;\n  END IF;\n  RETURN NEW;\n END IF;\n IF TG_TABLE_NAME='core_encounter' THEN\n  IF EXISTS(SELECT 1 FROM core_redactiontombstone WHERE target_id=NEW.id) AND (NEW.status IS DISTINCT FROM 'redacted'\n     OR NEW.notes<>'' OR NEW.answers IS DISTINCT FROM '{}'::jsonb OR NEW.template_review IS DISTINCT FROM '{}'::jsonb\n     OR NEW.export_path<>'' OR NEW.export_sha256<>'')\n  THEN RAISE EXCEPTION 'A redacted document cannot regain clinical content'; END IF;\n  RETURN NEW;\n END IF;\n IF NEW.encounter_id IS NOT NULL THEN\n  PERFORM id FROM core_encounter WHERE id=NEW.encounter_id FOR KEY SHARE;\n  IF EXISTS(SELECT 1 FROM core_redactiontombstone WHERE target_id=NEW.encounter_id)\n  THEN RAISE EXCEPTION 'A redacted document cannot acquire clinical work'; END IF;\n END IF;\n RETURN NEW;\nEND; $function$\n"
+    },
+    {
+      "trigger": "CREATE TRIGGER mapping_job_scope BEFORE INSERT OR UPDATE ON public.core_job FOR EACH ROW EXECUTE FUNCTION quillmd_mapping_job_scope_guard()",
+      "function_name": "quillmd_mapping_job_scope_guard",
+      "body": "CREATE OR REPLACE FUNCTION public.quillmd_mapping_job_scope_guard()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE source_hash text; scope_id uuid;\nBEGIN\n IF TG_OP='UPDATE' AND (NEW.encounter_id IS DISTINCT FROM OLD.encounter_id\n   OR NEW.mapping_version_id IS DISTINCT FROM OLD.mapping_version_id OR NEW.user_id IS DISTINCT FROM OLD.user_id\n   OR NEW.kind IS DISTINCT FROM OLD.kind) THEN RAISE EXCEPTION 'Job scope is immutable'; END IF;\n IF NEW.kind='mapping' THEN\n   SELECT t.sha256,t.department_id INTO source_hash,scope_id FROM core_template t\n     JOIN core_templateversion v ON v.template_id=t.id WHERE v.id=NEW.mapping_version_id;\n   IF NEW.config->>'source_sha256' IS DISTINCT FROM source_hash\n     OR NEW.config->>'department_id' IS DISTINCT FROM scope_id::text\n     OR NEW.config->>'mapping_version_id' IS DISTINCT FROM NEW.mapping_version_id::text\n   THEN RAISE EXCEPTION 'Mapping job source and tenant binding mismatch'; END IF;\n END IF;\n RETURN NEW;\nEND; $function$\n"
+    }
+  ],
+  "job_columns": [
+    [
+      "id",
+      "uuid"
+    ],
+    [
+      "created_at",
+      "timestamp with time zone"
+    ],
+    [
+      "kind",
+      "character varying"
+    ],
+    [
+      "state",
+      "character varying"
+    ],
+    [
+      "request_key",
+      "character varying"
+    ],
+    [
+      "revision",
+      "integer"
+    ],
+    [
+      "provider",
+      "character varying"
+    ],
+    [
+      "provider_request_id",
+      "character varying"
+    ],
+    [
+      "error",
+      "character varying"
+    ],
+    [
+      "input_path",
+      "character varying"
+    ],
+    [
+      "started_at",
+      "timestamp with time zone"
+    ],
+    [
+      "finished_at",
+      "timestamp with time zone"
+    ],
+    [
+      "encounter_id",
+      "uuid"
+    ],
+    [
+      "user_id",
+      "uuid"
+    ],
+    [
+      "payer",
+      "character varying"
+    ],
+    [
+      "config",
+      "jsonb"
+    ],
+    [
+      "result_path",
+      "character varying"
+    ],
+    [
+      "result_sha256",
+      "character varying"
+    ],
+    [
+      "provider_resource_id",
+      "character varying"
+    ],
+    [
+      "mapping_version_id",
+      "uuid"
+    ]
+  ],
+  "rolled_back_fixture_accounts": 0,
+  "jobs": 0
+}

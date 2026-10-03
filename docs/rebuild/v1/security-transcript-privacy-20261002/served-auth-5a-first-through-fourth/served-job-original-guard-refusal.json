@@ -1,0 +1,9 @@
+{
+  "container_id": "31d0720a3a4d",
+  "scope": "QA55731 only; strict-filtered own failedmapping job SQL plus exact guard refusal",
+  "selected_lines": [
+    "2026-10-03T00:46:14.171932388Z 2026-10-03 00:46:14.171 UTC [160549] ERROR:  Mapping job source and tenant binding mismatch",
+    "2026-10-03T00:46:14.172056101Z 2026-10-03 00:46:14.171 UTC [160549] STATEMENT:  INSERT INTO \"core_job\" (\"id\", \"created_at\", \"encounter_id\", \"mapping_version_id\", \"user_id\", \"kind\", \"state\", \"request_key\", \"revision\", \"provider\", \"payer\", \"config\", \"result_path\", \"result_sha256\", \"provider_request_id\", \"provider_resource_id\", \"error\", \"input_path\", \"started_at\", \"finished_at\") VALUES ('daa84684de304a67935071d8b599eba7'::uuid, '2026-10-03 00:46:14.170204+00:00'::timestamptz, NULL, 'a62f6128cd1d4cb48815d02748efe262'::uuid, 'fa259ce6cf8f43bc9628cc6a1705ca53'::uuid, 'mapping', 'reconciliation', 'SEC-5a-first-20261003:authorized:mapping', 0, '', 'organization:7b21d6a7-6c88-445d-9da6-b98b3c7af680', '{\"mode\": \"fixture\"}'::jsonb, '', '', '', '', '', '', NULL, NULL)"
+  ],
+  "whole_logs_retained": false
+}

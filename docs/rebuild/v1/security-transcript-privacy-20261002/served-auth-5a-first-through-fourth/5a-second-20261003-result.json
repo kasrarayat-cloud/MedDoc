@@ -1,0 +1,341 @@
+{
+  "after_fixture_financial": {
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Job": {
+      "count": 8,
+      "sha256": "3d664d6ea5e729f1471af604b6c1dc79cedd4d315df13952620a3c0d30b2a42e"
+    },
+    "LedgerEntry": {
+      "count": 8,
+      "sha256": "5a1c6588a48ef2cf014c0fa76b0732aabfc705ffde66395c9831cdf308cd59bd"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Reservation": {
+      "count": 6,
+      "sha256": "48bd160c43faabd6bc28ffe8cc9603750179dfbc690fe615caf92e382c5f2a0e"
+    },
+    "Usage": {
+      "count": 2,
+      "sha256": "01bc9f0db7e9d8eb77003e897f33b9166acd475cd3a8ef43912ce095d5792cdc"
+    },
+    "Wallet": {
+      "count": 11,
+      "sha256": "2301387695962a127918e184a92b5af7072753670008bdd713fa3e1f57c60ff5"
+    }
+  },
+  "at_exit_financial": {
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Job": {
+      "count": 8,
+      "sha256": "3d664d6ea5e729f1471af604b6c1dc79cedd4d315df13952620a3c0d30b2a42e"
+    },
+    "LedgerEntry": {
+      "count": 8,
+      "sha256": "5a1c6588a48ef2cf014c0fa76b0732aabfc705ffde66395c9831cdf308cd59bd"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Reservation": {
+      "count": 6,
+      "sha256": "48bd160c43faabd6bc28ffe8cc9603750179dfbc690fe615caf92e382c5f2a0e"
+    },
+    "Usage": {
+      "count": 2,
+      "sha256": "01bc9f0db7e9d8eb77003e897f33b9166acd475cd3a8ef43912ce095d5792cdc"
+    },
+    "Wallet": {
+      "count": 11,
+      "sha256": "2301387695962a127918e184a92b5af7072753670008bdd713fa3e1f57c60ff5"
+    }
+  },
+  "before_fixture_financial": {
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Job": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "LedgerEntry": {
+      "count": 5,
+      "sha256": "59ee6534794a205981e74fa6cbdabb2e39341da7358a3221d78174258e91560b"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Reservation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Usage": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Wallet": {
+      "count": 10,
+      "sha256": "63fd7a253fa70fe75ce264244f45c92a5cd0706d1d930e71b55f4206816f7a8c"
+    }
+  },
+  "credentials_recorded": false,
+  "database": "quillmd_qa_int_sol_5a06295a",
+  "elapsed_seconds": 2.369,
+  "failure_frames": [
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/ops/verify_qa_authorization.py",
+      "function": "main",
+      "line": 343
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/ops/verify_qa_authorization.py",
+      "function": "protected_file",
+      "line": 60
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/ops/verify_qa_authorization.py",
+      "function": "require",
+      "line": 36
+    }
+  ],
+  "failure_reason": "unsafe_private_parent_metadata",
+  "failure_type": "RuntimeError",
+  "financial_history_deleted": false,
+  "fixture_ids": {
+    "departments": [
+      "cc9a4517-e763-427f-a7d9-81ecc6e1dbda",
+      "7ade5687-b795-4ed1-9038-b16487ebfa64"
+    ],
+    "encounters": [
+      "916e4397-6eeb-4ceb-bda4-0d55f9acb10e",
+      "bc894934-0e6d-4e97-bcb2-05aef6d48c73"
+    ],
+    "file_sha256": "3c0936aee4618cdd57cbf7d396f535e1dbbb9b3d3b2e8d06d4d54fc7ec65adff",
+    "jobs": [
+      "a07bc536-27a3-4678-9f4e-df9a3071a71e",
+      "189a0649-5bd0-45d1-854a-4951285af00f",
+      "42512f11-fc48-4c8d-8a6f-3039f2733d59",
+      "002d0b8a-ea2e-4785-9845-6f920cd80452",
+      "44170f33-36da-49a2-8858-4b7b30425dd8",
+      "214e8641-601d-470f-af4c-6e8cf9b0afa5",
+      "670670f0-5c87-463f-8b54-9a24134db40a",
+      "2d67524c-1a72-4294-b6cf-cd0e1c102552"
+    ],
+    "organization": "47c17c46-8a63-470c-97fd-79a14265ae66",
+    "users": [
+      "e2104180-823b-4d89-805e-b76b90ed1c6e",
+      "cfe74af5-6a1d-4a83-9238-58581460f877",
+      "d770b825-b49c-431b-83c4-5494ac428d64",
+      "2b1d430b-8139-4873-a27b-dda0a2aefb06",
+      "012be46b-5b7a-4933-bd22-4957878c8331",
+      "41839dba-5f2f-4d73-b973-1bb72834fc9d"
+    ]
+  },
+  "fixture_scope": "Direct synthetic authorization rows/files; no clinical workflow qualification",
+  "fixture_stage": "foreign:settled",
+  "http_evidence": [
+    {
+      "body_sha256": "19ec214cc4392e1aae3ccd5d2b09209bb548a3aa68dba86a983105c885babd65",
+      "host": "127.0.0.1:9160",
+      "label": "synthetic_health",
+      "location": null,
+      "method": "GET",
+      "path": "/health/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "bb1369b54f667389c4d57b166a6e374b4928049956eb7a2e3404c3a320c5407d",
+      "host": "127.0.0.1:9161",
+      "label": "synthetic_health",
+      "location": null,
+      "method": "GET",
+      "path": "/health/",
+      "port": 9161,
+      "status": 200
+    },
+    {
+      "body_sha256": "9cf55ae525cb7ffaa6f23a3150a25c690b976a01f29dbc37ee80584c0304cd14",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    },
+    {
+      "body_sha256": "130f04cec3a38fa42aafa0d83735641d9add687cb2175b8bce296ece82245e1f",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    },
+    {
+      "body_sha256": "7859294004226034c8f5881e3b2030a7a0ac74b399dfe5da6b40decca8266b98",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    },
+    {
+      "body_sha256": "75e99a056f143ac2ad32c080b25073612eb66c3b4ead91e00c1ed4b1ba24d29b",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    }
+  ],
+  "processes": [
+    {
+      "command_sha256": "f8f7f425763f76f193fa7941bb36ab8c0a031e39b5f4158de2773bf4aac3fce6",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160039,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352256",
+      "surface": "doctor"
+    },
+    {
+      "command_sha256": "3f00328e6cee338d519c584e2c4cd1635e49f81e8e8989058e983ee0be0a3fae",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160043,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352279",
+      "surface": "admin"
+    },
+    {
+      "command_sha256": "8d6685b1f4fab45c105c4b02b46b1cadcd31720fac04a08329b8a218ad8c227d",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160044,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352279",
+      "surface": "doctor"
+    }
+  ],
+  "provider_requests": 0,
+  "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+  "request_count": 10,
+  "retired_accounts": [
+    {
+      "id": "2b1d430b-8139-4873-a27b-dda0a2aefb06",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "41839dba-5f2f-4d73-b973-1bb72834fc9d",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "e2104180-823b-4d89-805e-b76b90ed1c6e",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "cfe74af5-6a1d-4a83-9238-58581460f877",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "d770b825-b49c-431b-83c4-5494ac428d64",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "012be46b-5b7a-4933-bd22-4957878c8331",
+      "is_active": false,
+      "session_version": 1
+    }
+  ],
+  "run_id": "5a-second-20261003",
+  "source_manifest_sha256": "af423f03ba96dcc2a89504cab88a3beaf9aa28d7a409970177fea42b5169ba33",
+  "source_members": 629,
+  "status": "failed"
+}

@@ -1,0 +1,15 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-sol-security; database=quillmd_qa_sol_sec_console_green
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.Forbidden (CSRF cookie not set.): /console/accounts/70aa9499-a284-440b-ab33-c6b24cbef41d/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/454d4d7b-db1b-4c0f-9b4f-f7f5d6d1b39f/
+Forbidden (CSRF cookie not set.): /console/departments/cdb96b52-82fe-4680-b6b3-5a90dce8b0e1/payer/
+....
+----------------------------------------------------------------------
+Ran 5 tests in 1.121s
+
+OK
+Destroying test database for alias 'default'...
+Found 5 test(s).
+System check identified no issues (0 silenced).

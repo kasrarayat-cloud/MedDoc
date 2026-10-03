@@ -230,3 +230,54 @@ The first instrument failed before probing because it imported a transcript modu
 exit1 remains retained. A distinct instrument removed that irrelevant import and completed exit0; no measured tree
 was changed. `fixture5a-refutation-evidence.json` binds the exact outcomes, source witness and first failure. The
 full clinical context freeze and actual new-demo served authorization execution remain pending lead coordination.
+
+### Actual served authorization: preserved failures and repaired dashboard
+
+On 2026-10-03 the lead authorized the provisional fixture-only demo at exact application commit
+`5a06295a6bcfa7aca82f024e761c0a53f2b92ab5`, doctor9160 PID1160039, admin9161 PID1160043 and worker1160044.
+Each run independently verified source archive and all629 extracted source files, process ownership/CWD/start
+identity, release, fixture mode, protected QA connection and synthetic database `quillmd_qa_int_sol_5a06295a`.
+Installed9130/9131 and the previous9140/9141 demo were not mutated. These are authorization fixtures, not clinical
+workflow or model qualification. Four terminal runs remain failed; none has been rewritten or reclassified.
+
+| Run | HTTP requests | Actual stopping condition | Fixture retirement / preservation |
+| --- | ---: | --- | --- |
+| `5a-first-20261003` | 2 | Mapping fixture lacked the existing source/tenant config binding; SQL guard refused it. | Seed transaction rolled back: zero own accounts/jobs; independently verified all nine financial hashes unchanged. |
+| `5a-second-20261003` | 10 | Credential-route guard refused inherited own scratch parent mode775. | All six accounts inactive, session version1; all nine financial hashes unchanged from post-fixture baseline. |
+| `5a-third-20261003` | 73 | Harness incorrectly expected authenticated404 from a doctor cookie ignored by the admin surface; actual empty302 went to login. | All six accounts inactive, session version1; all nine financial hashes unchanged. |
+| `5a-fourth-20261003` | 89 | Actual MFA login succeeded, then the real admin dashboard returned500 for a legitimate held mapping job. | All six accounts inactive, session version1; all nine financial hashes unchanged. |
+
+Across these174 actual HTTP requests there were zero provider requests. The first mapping refusal remains raw
+evidence; a distinct fixture repair supplied the exact template hash, department and mapping-version identity.
+The owned scratch directory was metadata-verified and protected700; the harness now checks both private parents
+before any fixture account or money row. The cookie correction preserves the third failure and strengthens the
+control: normal doctor cookies produce an exact empty login redirect, while the same real nonstaff session under
+the destination cookie name must receive404. No product permission/host/financial guard changed for these repairs.
+
+The fourth run measured four owner list/search/pagination requests with three scoped held requests and configured
+cost$0.02/original charges$0.03; a dual-department owner positively saw six holds and$0.04/$0.06. A manager's list
+contained no owner financial rows. Four owned detail requests and four authorized second-department owner details
+returned200. All32 foreign GET/HEAD requests across four Host variants, four valid-CSRF foreign POSTs and four
+manager detail requests returned404. Own API, encounter page and genuine original-hash DOCX export returned200;
+all three foreign equivalents and the foreign job result returned404. Four surface cookie-isolation redirects
+and four authenticated nonstaff admin-surface404 controls passed. Revoking the other author's membership retained
+their personal billing/list/detail200 while their clinical API returned404. Password-only admin login failed and
+console access redirected; actual TOTP login then succeeded302 to `/console/`, whose subsequent500 remains failed.
+The later doctor-console/wrong-public-host/MFA CSV controls were not reached and are still pending a fresh archive.
+
+Read-only reproduction against the exact served archive, with a database READ ONLY transaction and only audit
+emission suppressed, found `VariableDoesNotExist: Failed lookup for key [created_by] in None`. At
+`templates/admin_dashboard.html:27`, Django eagerly resolves `job.encounter.created_by.email` as the default-filter
+argument even when the required `job.user.email` is populated. Mapping requests correctly have no encounter.
+App repair `52f68707d1b07b2e622a45632d51a27187d907aa` renders the required bound requester directly. The real
+mapping/held-reservation/MFA regression first reproduced the exception (one test, exit1,0.384s); the repaired
+`ConsoleAccessControl` class passed five tests (exit0,1.121s), including existing role/MFA/CSRF controls and exact
+preservation of all nine financial tables. This component result does not substitute for a served rerun. The lead
+owns a new archive and restart; no running application source was edited. Finished clinical source refutation also
+still awaits an announced complete freeze.
+
+`served-auth-5a-first-through-fourth/manifest.json` hashes the11 retained raw results/diagnostics/RED/GREEN files
+and binds each historical harness source commit. Original protected credentials, synthetic DOCX files, job/hold/
+usage/ledger rows, audit events and all failed runs remain retained; credentials were not copied into this report
+or repository. No financial history was deleted and no grant was fabricated. Evidence-backed retirement covered
+all18 committed accounts from the second through fourth runs; the first committed none.
