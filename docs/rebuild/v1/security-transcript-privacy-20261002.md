@@ -554,3 +554,19 @@ with exact context; original wrong picks `v3_2` and `v3_4` stay conflict/empty. 
 billing, human microphone or whole-workflow result. `clinical-8a030d4c-refutation/manifest.json` binds the exact
 instrument/result/log and19-component manifest; complete source copies remain in protected scratch. All prior
 failures remain retained, and finished clinical qualification stays failed pending repair and a new immutable pass.
+
+
+### Ninth refutation correction: medication possession is not medication use
+
+The lead refuted one of the four asserted8a accuracy failures: `The patient takes no warfarin.` and
+`Only her father lacks warfarin.` describe use and possession separately. The patient may possess unused medication,
+so the retained sources do not prove that the released negative-use answer is wrong. The medication accuracy claim
+is withdrawn; its actual supported output remains an immutable distinct-predicate/ambiguous-policy observation,
+without requesting a wider clinical hold. This correction does not authorize converting possession into use.
+
+The raw instrument still has four flags and its original manifest/report remain preserved. After this independent
+refutation, the qualified finding count is THREE unsafe swelling-source failures, with zero new definite unnecessary
+holds. Those three remain the explicit patient's no-evidence clause, the father's embedded denial about the explicit
+patient, and the exclusive father's nominal absence of the same swelling property. `classification-addendum.json`
+binds this correction to the original manifest and raw-result hashes. Clinical8a qualification remains failed;
+a withdrawn finding is not reinstated by the raw flag or the previous summary count.
