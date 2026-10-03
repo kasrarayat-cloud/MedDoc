@@ -137,6 +137,31 @@ class DestinationRegressions(unittest.TestCase):
         self.assertEqual(actual.paragraphs[2].text, 'Neighbor: ______')
         self.assertEqual(actual.paragraphs[0]._p.find(qn('w:hyperlink')).get(qn('w:anchor')), 'retained_reference')
 
+    def test_native_witness_identity_requires_its_immediate_source_document_act(self):
+        from .test_word_v3 import _sdt, ff_text_field
+        for governed in (True, False):
+            for native in ('sdt', 'ff'):
+                with self.subTest(governed=governed, native=native):
+                    doc = Document(); prior = doc.add_paragraph('Consent obtained: ' if governed else 'Signed document was received on: ______')
+                    if governed: prior._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                    p = doc.add_paragraph('Witness: ')
+                    if native == 'sdt': p._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                    else: ff_text_field(p, name='Witness')
+                    raw = saved(doc); info = word_v3.inspect(raw)
+                    field = next(f for f in info['fields'] if f['label'] == 'Witness')
+                    if governed:
+                        with self.assertRaises(word_v3.V3Failure):
+                            word_v3.locate(raw, [{'slot': field['locator']['part'] + '#' + field['locator']['slot'],
+                                                 'label': 'Clinical answer', 'kind': 'text'}])
+                        forged = deepcopy(field); forged.pop('write_protected', None); forged.pop('review_reason', None)
+                        with self.assertRaises(word_v3.V3Failure):
+                            word_v3.fill(raw, [forged], {forged['key']: 'Synthetic finalizer'})
+                    else:
+                        self.assertFalse(field.get('write_protected'))
+                        out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: 'Synthetic witness recorded in history'})))
+                        self.assertEqual(word_v3.text_of(out.paragraphs[1]._p),
+                                         'Witness: Synthetic witness recorded in history')
+
     def test_counted_answer_restriction_is_not_a_person_granting_permission(self):
         for caption in ('Treatment(s) - only one answer allowed:',
                         'Treatment(s) - one option permitted:'):

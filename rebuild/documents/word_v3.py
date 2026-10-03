@@ -2354,6 +2354,7 @@ class Detector:
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
+        self.guard_action_participants()
         self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
@@ -2468,6 +2469,34 @@ class Detector:
             extent = ({'start': area.target['start'], 'end': area.target['end']}
                       if area.target.get('type') == 'span' else {})
             self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
+
+    def guard_action_participants(self):
+        """A native witness identity immediately belongs to its printed act.
+
+        The complete source caption appoints a witness, and the immediately
+        preceding paragraph owns a protected document act. Both physical
+        relations are required; a witness recorded in clinical history or a
+        receipt has no such signing authority. Reviewed labels supply neither.
+        """
+        acts = [a for a in self.areas if a.source_action]
+        for area in self.areas:
+            if area.slot.kind not in ('sdt', 'ff') or area.source_action:
+                continue
+            if not re.fullmatch(r'(?:name of (?:the )?witness|(?:the )?witness(?: name)?)',
+                                clean_label(area.label), re.I):
+                continue
+            host = self.host_paragraph(area.slot)
+            before = self.index.by_el.get(id(host.el.getprevious())) if host is not None else None
+            if (before is None or before.kind != 'p' or before.parent is not host.parent
+                    or before.part != host.part
+                    or not any(self.host_paragraph(a.slot) is before for a in acts)):
+                continue
+            area.source_action = True
+            area.protection = ('This witness identity belongs to the preceding human document act. '
+                               "Ordinary notes and the finalizer cannot supply this person's identity or act; "
+                               'complete it through the explicit human workflow.')
+            self.coverage_issue(area.slot, 'human_document_participant',
+                                area.protection + ' Location: ' + area.slot.id)
 
     def guard_fixed_containers(self):
         """Unqualified fixed geometry remains visible, source-held and unwritable.
