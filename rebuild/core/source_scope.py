@@ -162,8 +162,14 @@ def exclusive_reattributions(reading):
             relations=[p for attr in root.children if attr.dep_ in ('attr','oprd')
                 for p in attr.subtree if p.dep_=='prep' and a._fold(p.text) in a.SOLE_NEGATION]
             if relations:return {not a._negates(p) for p in relations}
-        return {a._negates(t) for t in nodes or [root]}
+        # The predicate's own object determiner also supplies polarity ('has
+        # no swelling'). A lexical absence predicate supplies the same negative
+        # relation ('lacks swelling'), unless that predicate itself is negated.
+        # Merely reading syntactic neg children loses both of those relations.
+        return {bool(record[1]) ^ (negative_operator(t,a) is not None)
+            for t in nodes or [root] for record in a._predicates(t)}
     causes={}
+    clinical_polarities=clinical_modifier_negations(reading)
     for other,doc in zip(units,docs or [None]*len(units)):
         info=reading['actors'][other['id']]
         if doc is None or not info.get('other_floor'):continue
@@ -225,8 +231,16 @@ def exclusive_reattributions(reading):
             anatomical_parse=bool(root.pos_=='VERB' and a._fold(root.text) in a.SOLE_SIDES
                 and any(t.dep_=='aux' and a._lemma(t) in a.LIGHT_VERBS for t in root.children)
                 and mine_sole.get('classes',frozenset()) & other_sole.get('classes',frozenset()))
+            # A nominal clinical property ('No swelling') and a directly
+            # governed absence of that SAME property ('lacks swelling' / 'has
+            # no swelling') need not share a light-verb spelling. Exclusivity
+            # reattributes only their already-established negative relation.
+            same_negative_property=bool(
+                clinical_polarities.get(claim['id'],{}).get('negative',frozenset())
+                & clinical_polarities.get(other['id'],{}).get('negative',frozenset())
+                and (a._lemma(root) in a.LIGHT_VERBS or negative_operator(root,a) is not None))
             if ((predicates-{'be'}) & (my_predicates-{'be'}) or heads & my_heads
-                    or same_assertion or nominal_reference or anatomical_parse) and topic & (
+                    or same_assertion or nominal_reference or anatomical_parse or same_negative_property) and topic & (
                     mine.get('claim_keys',frozenset())|mine.get('named_keys',frozenset())):
                 causes.setdefault(claim['id'],[]).append(other)
     reading[key]=causes
@@ -252,10 +266,17 @@ def separate_sides(reading, first, second, shared):
         while phrase.dep_ in ('compound','amod') and phrase.head.pos_ in ('NOUN','PROPN'):
             phrase=phrase.head
         sides=set()
+        # A clinical nominal gerund can own an open copular complement whose
+        # negative adjective carries its anatomy ('swelling to be absent over
+        # the right ankle'). That bound copula has no actor/object of its own;
+        # arbitrary embedded actions and clauses remain excluded.
+        complements={t for t in phrase.subtree if t.dep_=='xcomp' and a._lemma(t)=='be'
+            and not any(c.dep_ in ('nsubj','nsubjpass','csubj','csubjpass','dobj','obj','iobj') for c in t.children)
+            and any(c.dep_=='acomp' and c.pos_=='ADJ' and negative_operator(c,a) is not None for c in t.children)}
         for member in phrase.subtree:
             path=member
             while path!=phrase and path.head!=path:
-                if path.dep_ in ('conj','advcl','ccomp','xcomp','relcl','acl'):break
+                if path.dep_ in ('conj','advcl','ccomp','relcl','acl') or (path.dep_=='xcomp' and path not in complements):break
                 path=path.head
             if path!=phrase:continue
             side=a.SOLE_SIDES.get(a._fold(member.text))
@@ -370,14 +391,41 @@ def pure_foreign_clause(reading,unit):
             and (t.dep_=='poss' or (t.dep_ in ('nsubj','nsubjpass')
                 and any(c.dep_=='case' and a._fold(c.text) in ("'s",'’s') for c in t.children)))]
         possessed=bool(len(owners)==1 and set(subjects)==({subject,owners[0]} if owners[0] in subjects else {subject}))
+    if len(clinical_subjects)==1 and not possessed:
+        subject=clinical_subjects[0]
+        body=frozenset(a.SOLE_LEXICON['body'].split())
+        # Explicit possession of the anatomical object establishes the actor
+        # of this clinical subject even through a passive open complement:
+        # swelling over her father's ankle was found to be absent. A body
+        # pronoun, another actor or a patient reference supplies no such proof.
+        owners=[t for t in subject.subtree if t.dep_=='poss' and a.names_person(t)
+            and t.head.pos_ in ('NOUN','PROPN') and {a._lemma(t.head),a._fold(t.head.text)} & body
+            and any(c.dep_=='case' and a._fold(c.text) in ("'s",'’s') for c in t.children)]
+        possessed=bool(len(owners)==1 and set(subjects)=={subject}
+            and not any(t.dep_ in ('conj','ccomp','xcomp','advcl','relcl','acl') for t in subject.subtree))
     # A clinical gerund parsed as an open complement has the same sole
     # explicit actor when it contains no subject or another person of its own.
     inline={t for t in root.children if t.dep_=='xcomp' and t.tag_=='VBG'
         and a.SOLE_CLASSES.get(a._fold(t.text),frozenset()) & a.SOLE_CLINICAL
         and not any(c.dep_ in ('nsubj','nsubjpass','csubj','csubjpass') or a.names_person(c) for c in t.subtree)}
+    inline |= {t for t in root.children if t.dep_=='xcomp' and a._lemma(t)=='be'
+        and not any(c.dep_ in ('nsubj','nsubjpass','csubj','csubjpass','dobj','obj','iobj') for c in t.children)
+        and any(c.dep_=='acomp' and c.pos_=='ADJ' and negative_operator(c,a) is not None for c in t.children)}
     return bool((direct or possessed) and root.pos_ in ('VERB','AUX') and not any(t.tag_=='MD' for t in doc)
         and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in doc)
         and not any(t.dep_ in ('ccomp','advcl','conj','relcl','acl') or (t.dep_=='xcomp' and t not in inline) for t in doc))
+
+
+def negative_operator(token,a):
+    """Canonical existing absence operator, including its explicit noun form.
+
+    The nominalization keeps the same grammatical relation; it establishes no
+    clinical state and is used only to retain the affected claim for review.
+    """
+    word=a._lemma(token)
+    if word in a.SOLE_NEGATION:return word
+    if token.pos_=='NOUN' and word=='absence':return 'absent'
+    return None
 
 
 def negative_clinical_modifiers(token,a):
@@ -390,16 +438,16 @@ def negative_clinical_modifiers(token,a):
     """
     classes=a.SOLE_CLASSES.get(a._lemma(token),frozenset()) | a.SOLE_CLASSES.get(a._fold(token.text),frozenset())
     if not classes & a.SOLE_CLINICAL:return []
-    modifiers=[t for t in token.children if t.dep_ in ('amod','det','acomp','oprd') and a._lemma(t) in a.SOLE_NEGATION]
+    modifiers=[t for t in token.children if t.dep_ in ('amod','det','acomp','oprd') and negative_operator(t,a) is not None]
     if (token.dep_ in ('compound','npadvmod','acl','xcomp','nsubj','nsubjpass','csubj','csubjpass','dobj','obj')
-            and token.head.pos_ in ('ADJ','NOUN','VERB','AUX') and a._lemma(token.head) in a.SOLE_NEGATION):modifiers.append(token.head)
+            and token.head.pos_ in ('ADJ','NOUN','VERB','AUX') and negative_operator(token.head,a) is not None):modifiers.append(token.head)
     if token.dep_ in ('nsubj','nsubjpass','csubj','csubjpass') and a._lemma(token.head)=='be':
         modifiers.extend(t for t in token.head.children if t.dep_=='acomp'
-            and t.pos_=='ADJ' and a._lemma(t) in a.SOLE_NEGATION)
+            and t.pos_=='ADJ' and negative_operator(t,a) is not None)
     if token.dep_ in ('pobj','pcomp') and token.head.pos_=='ADP':
         prep=token.head
-        if a._lemma(prep) in a.SOLE_NEGATION:modifiers.append(prep)
-        elif prep.dep_=='prep' and prep.head.pos_ in ('ADJ','NOUN') and a._lemma(prep.head) in a.SOLE_NEGATION:
+        if negative_operator(prep,a) is not None:modifiers.append(prep)
+        elif prep.dep_=='prep' and prep.head.pos_ in ('ADJ','NOUN') and negative_operator(prep.head,a) is not None:
             modifiers.append(prep.head)
     return modifiers
 
@@ -413,18 +461,21 @@ def ambiguous_negative_complements(token,a):
     review dependency, never evidence of an inferred clinical value.
     """
     classes=a.SOLE_CLASSES.get(a._lemma(token),frozenset()) | a.SOLE_CLASSES.get(a._fold(token.text),frozenset())
-    if not classes & a.SOLE_CLINICAL or token.dep_ not in ('nsubj','nsubjpass','csubj','csubjpass','dobj','obj'):
-        return []
-    predicate=token.head
-    if predicate.pos_ not in ('VERB','AUX') or a._lemma(predicate)=='be':return []
-    pending=[(predicate,0)];seen=set();negative=[]
+    if not classes & a.SOLE_CLINICAL:return []
+    # A nominal clinical gerund can itself govern an open complement even when
+    # the parser attaches it as acl/xcomp to a report noun or another verb.
+    nominal_gerund=bool(token.tag_=='VBG' and a.SOLE_CLASSES.get(a._fold(token.text),frozenset()) & a.SOLE_CLINICAL)
+    predicates=[token] if nominal_gerund else []
+    if token.dep_ in ('nsubj','nsubjpass','csubj','csubjpass','dobj','obj') and token.head.pos_ in ('VERB','AUX') and a._lemma(token.head)!='be':
+        predicates.append(token.head)
+    pending=[(predicate,0) for predicate in predicates];seen=set();negative=[]
     while pending:
         current,depth=pending.pop()
         if current.i in seen or depth>4:continue
         seen.add(current.i)
         for child in current.children:
             if child.dep_ not in ('xcomp','acomp','oprd'):continue
-            if child.pos_=='ADJ' and a._lemma(child) in a.SOLE_NEGATION:negative.append(child)
+            if child.pos_=='ADJ' and negative_operator(child,a) is not None:negative.append(child)
             elif child.pos_ in ('VERB','AUX') and not any(t.dep_ in (
                     'nsubj','nsubjpass','csubj','csubjpass','dobj','obj','iobj') for t in child.children):
                 pending.append((child,depth+1))
@@ -480,9 +531,9 @@ def clinical_modifier_negations(reading):
             # An actual noncopular predicate may change whether its negative
             # complement is an observation, report or intention. Never infer
             # which; the same named clinical claim remains reviewable.
-            nominal_operator=bool(noun.dep_=='ROOT' and noun.tag_=='VBG'
+            nominal_operator=bool(noun.tag_=='VBG'
                 and a.SOLE_CLASSES.get(a._fold(noun.text),frozenset()) & a.SOLE_CLINICAL
-                and any(t.dep_ in ('dobj','obj','attr') and a._lemma(t) in a.SOLE_NEGATION for t in noun.children))
+                and any(t.dep_ in ('dobj','obj','attr') and negative_operator(t,a) is not None for t in noun.children))
             if ambiguous_negative_complements(noun,a) or nominal_operator:
                 ambiguous |= a.keys({a._lemma(noun),a._fold(noun.text)})
             modifiers=negative_clinical_modifiers(noun,a)
