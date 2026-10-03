@@ -98,6 +98,8 @@ if QUILLMD_WORD_ENGINE not in ('legacy','v3','auto'):
 # every V1 0/1 switch (application_profile.flag): unset or empty is '0', anything but 0/1 refuses to start.
 try:
     QUILLMD_ROLE_SUGGESTIONS='1' if _profile.flag(os.environ,'QUILLMD_ROLE_SUGGESTIONS','0') else '0'
+    # NEW auto imports only, with strict source/destination parity in the parser.
+    QUILLMD_WORD_AUTO_PREFER_V3=_profile.flag(os.environ,'QUILLMD_WORD_AUTO_PREFER_V3','0')
 except _profile.ProfileError as exc:
     raise ImproperlyConfigured(str(exc)) from None
 QUILLMD_EMAIL_MODE=os.getenv('QUILLMD_EMAIL_MODE','file')

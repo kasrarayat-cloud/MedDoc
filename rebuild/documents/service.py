@@ -95,6 +95,12 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         (workspace / ("input" + suffix)).write_bytes(payload)
         request = {"operation": operation, "format": suffix[1:], "mapping": mapping, "answers": answers,
                    "engine": engine or "legacy", "targets": targets}
+        if operation == 'inspect' and engine == 'auto':
+            try:
+                from django.conf import settings
+                request['prefer_v3_parity'] = getattr(settings,'QUILLMD_WORD_AUTO_PREFER_V3',False) is True
+            except Exception:
+                request['prefer_v3_parity'] = False
         raw_request = json.dumps(request, ensure_ascii=False).encode()
         if len(raw_request) > 2 * 1024 * 1024:
             raise DocumentError("Mapping and answers exceed the 2 MiB processing limit.", "answer_limit")

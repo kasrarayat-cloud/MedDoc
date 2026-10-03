@@ -83,6 +83,42 @@ def covered(place, regions):
     return False
 
 
+def ordinary_parity(legacy, advanced, legacy_regions, reader, *, source_roles=()):
+    """A narrow NEW-import preference, requiring exact one-to-one ordinary places.
+
+    Containment used for omission diagnosis is insufficient here. Each old cell
+    must be the same complete cell; each span the same complete span. Full labels
+    and their governing context must agree, without dropping an actor/instruction.
+    Text and long text share the same unrestricted text answer representation.
+    Other kinds, extra source rules and human-owned places keep the legacy route.
+    """
+    old, new = legacy['fields'], advanced['fields']
+    if (not old or len(old) != len(new) or len(old) != len(legacy_regions) or source_roles
+            or advanced.get('coverage_issues') or advanced.get('layout_pending')
+            or any('not mapped' in note.casefold() or 'not be placed' in note.casefold()
+                   for note in legacy.get('warnings',[]))):
+        return False
+    indexed = {}
+    for field, place in zip(old,legacy_regions):
+        if field.get('kind') != 'text' or place in indexed:
+            return False
+        indexed[place] = field
+    used=set()
+    for field in new:
+        places=reader.of(field)
+        if len(places) != 1 or places[0] not in indexed or places[0] in used:
+            return False
+        old_field=indexed[places[0]]
+        if (field.get('kind') not in ('text','long_text') or field.get('write_protected')
+                or any(field.get(key) for key in ('options','copies','source_questions','source_instructions',
+                                                 'answer_policy','layout_candidate'))
+                or field['label'].strip() != old_field['label'].strip()
+                or field.get('context','').strip() not in ('',field['label'].strip())):
+            return False
+        used.add(places[0])
+    return len(used)==len(indexed)
+
+
 def choose(legacy, advanced, legacy_regions, reader, *, ordinary_roles=()):
     """Return the selected engine and explicit physical differences, including omissions.
 

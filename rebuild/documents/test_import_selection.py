@@ -11,6 +11,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from lxml import etree
+from django.test import override_settings
 from .service import DocumentError, engine_fingerprint, fill_template, inspect_template
 
 
@@ -38,6 +39,49 @@ class ImportSelection(unittest.TestCase):
         self.assertEqual(new['import_manifest']['engine'],'legacy')
         self.assertEqual(new['import_manifest']['source_sha256'],hashlib.sha256(path.read_bytes()).hexdigest())
         self.assertFalse(new['import_manifest']['coverage']['automatic_complete'])
+
+    @override_settings(QUILLMD_WORD_AUTO_PREFER_V3=True)
+    def test_new_ordinary_preference_requires_exact_parity_and_keeps_existing_legacy_fill(self):
+        path=self.save(self.simple());old=inspect_template(path,engine='legacy');new=inspect_template(path,engine='auto')
+        self.assertEqual(new['import_manifest']['engine'],'v3')
+        self.assertTrue(new['import_manifest']['coverage']['new_import_v3_preference']['exact_ordinary_parity'])
+        self.assertEqual([f['label'] for f in new['fields']],[f['label'] for f in old['fields']])
+        output=self.root/'old-mapping.docx';fill_template(path,old['fields'],{'cell_0':'SYNTHETIC existing encounter'},output)
+        self.assertEqual(Document(output).tables[0].cell(0,1).text,'SYNTHETIC existing encounter')
+        self.assertNotIn('contract',inspect_template(path,engine='legacy'))
+
+    @override_settings(QUILLMD_WORD_AUTO_PREFER_V3=True)
+    def test_preference_does_not_drop_governing_context_roles_or_owner_contract(self):
+        owner=Path(__file__).with_name('__fixtures__')/'Colonoscopy_Operative_Template.docx'
+        self.assertEqual(inspect_template(owner,engine='auto')['import_manifest']['engine'],'legacy')
+        for case in ('context','signing'):
+            with self.subTest(case=case):
+                doc=self.simple()
+                if case=='context':
+                    heading=doc.add_paragraph('Family history',style='Heading 1')
+                    doc._body._body.insert(0,heading._p)
+                else:doc.tables[0].cell(0,0).text='Parent attestation:'
+                result=inspect_template(self.save(doc),engine='auto')
+                self.assertEqual(result['import_manifest']['engine'],'legacy')
+                self.assertFalse(result['import_manifest']['coverage']['new_import_v3_preference']['exact_ordinary_parity'])
+
+    def test_parity_rejects_wrong_label_kind_context_and_overlapping_or_broader_places(self):
+        import copy
+        from . import import_selection as selection
+        old={'fields':[{'key':'old1','label':'Finding','kind':'text'}, {'key':'old2','label':'Plan','kind':'text'}]}
+        places=[('p#cell1',None,None),('p#cell2',None,None)]
+        new={'fields':[{'key':'v3_1','label':'Finding','kind':'text','context':'Finding'},
+                       {'key':'v3_2','label':'Plan','kind':'long_text','context':'Plan'}]}
+        class Reader:
+            def of(self,field):return [places[int(field['key'][-1])-1]]
+        self.assertTrue(selection.ordinary_parity(old,new,places,Reader()))
+        for key,value in (('label','Unrelated finding'),('kind','date'),('context','Father > Finding'),
+                          ('answer_policy',{'source_author':'patient'}),('copies',[{'part':'word/header1.xml'}])):
+            altered=copy.deepcopy(new);altered['fields'][0][key]=value
+            self.assertFalse(selection.ordinary_parity(old,altered,places,Reader()))
+        altered=copy.deepcopy(new);altered['fields'][1]['key']='v3_1'
+        self.assertFalse(selection.ordinary_parity(old,altered,places,Reader()))
+        self.assertFalse(selection.ordinary_parity(old,new,[('p#cell1/p[0]',0,8),places[1]],Reader()))
 
     def test_explicit_engine_imports_are_bound_and_legacy_omissions_stop_generation(self):
         doc=self.simple();doc.add_paragraph('Current medications: ____________')

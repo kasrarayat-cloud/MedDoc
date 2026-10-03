@@ -704,7 +704,8 @@ def process(workspace, request):
     path = workspace / ("input." + fmt)
     warnings = []
     if fmt == 'docx' and request.get('operation') == 'inspect':
-        return inspect_auto(workspace, preferred=request.get('engine', 'legacy'))
+        return inspect_auto(workspace, preferred=request.get('engine', 'legacy'),
+                            prefer_v3_parity=request.get('prefer_v3_parity') is True)
     if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles", "places", "layout_coverage")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
@@ -779,7 +780,7 @@ def process(workspace, request):
     return {**result, "filled": sum(bool(answers.get(field["key"])) for field in fields), "missing": [field["key"] for field in fields if not answers.get(field["key"])]}
 
 
-def inspect_auto(workspace, *, preferred='auto'):
+def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
     """Select once at import, under the sandbox, against one immutable byte snapshot."""
     path = workspace / 'input.docx'
     legacy, advanced = None, None
@@ -830,6 +831,15 @@ def inspect_auto(workspace, *, preferred='auto'):
                 ordinary = candidates - set(roles.get('violations', {}))
             selected, coverage = import_selection.choose(legacy, advanced, places,
                                                          word_v3._PlaceReader(detector.index), ordinary_roles=ordinary)
+            if preferred == 'auto' and prefer_v3_parity:
+                roles=word_v3.destination_roles(path.read_bytes(),advanced['fields'])
+                parity=(advanced.get('warnings') == V3_WARNINGS and not roles.get('violations') and not any(
+                    word_v3.Detector.question_box_signing(field['label']) for field in legacy['fields'])
+                    and import_selection.ordinary_parity(legacy,advanced,places,
+                        word_v3._PlaceReader(detector.index),source_roles=roles.get('roles',[])))
+                coverage['new_import_v3_preference']={'enabled':True,'exact_ordinary_parity':bool(parity)}
+                if selected == 'legacy' and parity:
+                    selected='v3'
         except (ValueError, KeyError, IndexError, StopIteration):
             selected, coverage = 'legacy', {'legacy_omissions': [], 'legacy_unmapped': [],
                                             'comparison_unresolved': True,

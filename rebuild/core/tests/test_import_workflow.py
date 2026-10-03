@@ -298,3 +298,57 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         reviewed.fields=altered
         reviewed.import_manifest=import_binding.for_mapping(reviewed.import_manifest,altered)
         self.assertFalse(import_binding.coverage_reviewed(reviewed))
+
+
+@override_settings(**dict(TEST_SETTINGS,QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True,
+    QUILLMD_ROLE_SUGGESTIONS=False,V3_FIELD_RELATIONS=True,V3_GENERATION_BATCHES=False,
+    AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-5-5',AI_INPUT_RATE='2',AI_OUTPUT_RATE='10',
+    AI_CACHED_RATE='0.20',AI_THINKING='between_tools',AI_EFFORT='medium',AI_INFERENCE_GEO=''))
+class OrdinaryDefaultImport(V3Fixture,TestCase):
+    def test_real_new_upload_and_quote_compile_the_frozen_note_on_the_v4_default_route(self):
+        from core import generation as g,v3_field_relations as r
+        from ops import sonnet5_stages as stages
+        frozen=stages.frozen_inputs()
+        case=next(c for c in frozen['cases']['cases'] if c['id']=='N01')
+        built=stages.build_forms(Path(self.directory.name)/'frozen_forms','ordinary_notes',frozen)
+        # The original frozen form uses its existing advanced omission/rejection
+        # route. This separately authored simple table proves the new preference;
+        # it is supplemental reachability, never a regraded frozen case.
+        basic=Document();table=basic.add_table(rows=8,cols=2)
+        labels=('Chief complaint','History of present illness','Past medical history','Medications',
+                'Allergies','Examination','Assessment','Plan')
+        for row,label in zip(table.rows,labels):row.cells[0].text=label
+        records=[]
+        for name,original in (('frozen N01 form',built[case['form']]),('supplemental basic table',raw(basic))):
+            template,version=self.uploaded(data=original,name=name)
+            self.assertEqual(version.contract,'v3');self.assertEqual(version.import_manifest['engine'],'v3')
+            if name.startswith('supplemental'):
+                self.assertTrue(version.import_manifest['coverage']['new_import_v3_preference']['exact_ordinary_parity'])
+                self.assertEqual([f['label'] for f in version.fields],list(labels))
+            self.confirm(template,version)
+            self.assertEqual(self.new_encounter(version,case['notes']).status_code,302)
+            encounter=Encounter.objects.get(template_version=version)
+            page=self.client.get(f'/encounters/{encounter.pk}/')
+            self.assertIsNotNone(page.context['generation_max_charge'])
+            config=g.configuration(version.fields)
+            self.assertEqual(config['model'],'claude-sonnet-5-5')
+            self.assertEqual(config['ordinary_field_contract'],r.CONTRACT)
+            compiled=r.compile_request(encounter.notes,version.fields,config)
+            wire=compiled['wire'];payload=json.loads(wire['messages'][0]['content'])
+            self.assertEqual(payload['contract'],'ordinary-field-relations-v4')
+            self.assertEqual(payload['catalogue'],version.fields)
+            self.assertEqual(payload['notes'],case['notes'])
+            marker=object()
+            with patch('core.v3_field_relations.generate',return_value=marker) as dispatch:
+                self.assertIs(g.generate(encounter.notes,version.fields,config),marker)
+                dispatch.assert_called_once()
+            records.append({'scope':'authenticated upload/confirm/encounter/quote and exact request compilation; no provider',
+                'form':name,'source_sha256':template.sha256,'mapping':version.fields,'manifest':version.import_manifest,
+                'notes_case':'N01','notes_sha256':hashlib.sha256(case['notes'].encode()).hexdigest(),
+                'freeze_manifest_sha256':frozen['freeze']['manifest_sha256'],'request':wire,'config':config})
+        state=Path(os.environ.get('QUILLMD_STATE_DIR','/unavailable'))
+        allowed=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word')
+        if state.is_relative_to(allowed):
+            capture=state.parent/'captures'/('ordinary-default-'+str(encounter.pk))
+            capture.mkdir(mode=0o700,parents=True)
+            (capture/'route.json').write_text(json.dumps(records,indent=2,default=str))
