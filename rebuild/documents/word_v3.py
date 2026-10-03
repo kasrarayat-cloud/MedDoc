@@ -7879,6 +7879,13 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 states = constrained_option_states(index, control)
                 selected = position < len(states) and states[position] is True
+                if control['kind'] == 'choice':
+                    # The original's tick is usable only when this single-choice
+                    # control has one unambiguous, readable selection. A pair of
+                    # printed ticks is not the clinician resolving that conflict.
+                    selected = (selected and len(states) == len(control['options'])
+                                and all(state is True or state is False for state in states)
+                                and sum(state is True for state in states) == 1)
             if not selected:
                 fail('This write-in is conditional on its own printed option being selected. '
                      'Review the controlling choice; no tick was inferred.', 'conditional_answer_unselected')

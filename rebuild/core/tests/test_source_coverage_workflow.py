@@ -174,11 +174,18 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                 # distinct contexts; this fixture does not guess between them.
                 values = {f['key']: ('Synthetic location' if f['key'] == blank['key'] and shape == 'native_other'
                                     else expected.get(f['label'],'')) for f in version.fields}
+                reference_values = {key:value for key,value in values.items() if value}
                 notes = '\n\n'.join(f"{f['context']} > {f['label']}: {values[f['key']]}" if shape == 'native_other'
                                    else f"{f['label']}: {values[f['key']]}" for f in version.fields if values[f['key']])
+                # This unrelated printed tick is a preservation control, not a
+                # patient fact in the notes or a generated answer expectation.
+                preserved_tick = next(f for f in version.fields if f.get('printed_ticked')
+                                      and f.get('options') == ['Printed'])
+                values[preserved_tick['key']] = 'checked'
                 if evidence:
                     (evidence/'mapping.json').write_text(json.dumps({'fields':version.fields,
-                        'import_manifest':version.import_manifest,'input_notes':notes,'expected':values},indent=2))
+                        'import_manifest':version.import_manifest,'input_notes':notes,'expected':reference_values,
+                        'reviewed_values':values},indent=2))
                 self.assertEqual(self.new_encounter(version, notes).status_code, 302)
                 encounter = Encounter.objects.get(template_version=version)
                 page = self.client.get(f'/encounters/{encounter.pk}/')
@@ -206,8 +213,10 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     encounter.refresh_from_db()
                     refused = self.client.post(f'/encounters/{encounter.pk}/finalize/',
                         {'revision':encounter.revision,'reviewed':'on'})
-                    self.assertEqual(refused.status_code,200); encounter.refresh_from_db()
-                    self.assertEqual(encounter.status,'draft'); self.assertFalse(encounter.export_path)
+                    self.assertEqual(refused.status_code,302); encounter.refresh_from_db()
+                    self.assertEqual(encounter.status,'review'); self.assertFalse(encounter.export_path)
+                    shown=self.client.get(f'/encounters/{encounter.pk}/')
+                    self.assertContains(shown,'This write-in is conditional on its own printed option being selected.')
                     if evidence: (evidence/'unselected-finalization.json').write_text(json.dumps(
                         {'status_code':refused.status_code,'encounter_status':encounter.status,'export_path':''}))
                 payload['revision'] = encounter.revision
@@ -223,9 +232,10 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     (evidence/'final.docx').write_bytes(exported)
                     (evidence/'review-actions.json').write_text(json.dumps({'answers':values,
                         'automatic_correct':sum(first.get(k,{}).get('status')=='supported' and first[k].get('text')==v
-                                                for k,v in values.items() if v),'expected_count':sum(bool(v) for v in values.values()),
+                                                for k,v in reference_values.items()),'expected_count':len(reference_values),
                         'corrections_count':sum(first.get(k,{}).get('status')!='supported' or first[k].get('text')!=v
-                                               for k,v in values.items() if v),'fixture_only':True},indent=2))
+                                               for k,v in reference_values.items()),'fixture_only':True,
+                        'preserved_tick_reviewed_explicitly':preserved_tick['key']},indent=2))
                 final = Document(io.BytesIO(exported))
                 self.assertEqual(final.paragraphs[-4].text,'Unrelated note: Synthetic review')
                 self.assertEqual(final.paragraphs[-3].text,'Clinician signature: ______')

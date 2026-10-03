@@ -98,6 +98,22 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
                 if original_checked:
                     word_v3.fill(raw, result['fields'], {blank['key']: 'Synthetic location'})
 
+    def test_contradictory_printed_single_choice_requires_explicit_resolution(self):
+        for text in ('Any symptoms? ☒ No ☒ Yes → if yes, describe: ______',
+                     'Any symptoms? ☒ Yes ☒ No → if no, describe: ______'):
+            with self.subTest(text=text):
+                raw = self.form(text); result, blank = self.fields(raw)
+                choice = next(f for f in result['fields'] if f['kind'] == 'choice')
+                selected = blank['source_questions'][0]['printed_option']
+                with self.assertRaises(word_v3.V3Failure) as error:
+                    word_v3.fill(raw, result['fields'], {blank['key']: 'Synthetic detail'})
+                self.assertEqual(error.exception.code,'conditional_answer_unselected')
+                out = word_v3.fill(raw,result['fields'],{choice['key']:selected,blank['key']:'Synthetic detail'})
+                index = word_v3.SlotIndex(word_v3.open_package(out))
+                states = word_v3.constrained_option_states(index,choice)
+                self.assertEqual(sum(state is True for state in states),1)
+                self.assertTrue(states[choice['options'].index(selected)])
+
     def test_unit_labelled_answer_does_not_depend_on_adjacent_gender_choice(self):
         raw = self.form('Gender\t\t ☐ Male\t\t☐ Female\t\tAge   ................  years')
         result, blank = self.fields(raw)
