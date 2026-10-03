@@ -852,3 +852,27 @@ descriptor closure. The first14-pass and final17-pass logs are retained. This pr
 lead's independent refutation; it is not an executed campaign or demo preparation. The actual factory, credentials,
 database, container and services remain untouched. `private-demo-guarded-factory/manifest.json` binds all frozen
 source, tests and evidence. The earlier unguarded factory failure remains failed.
+
+### Fourteenth clinical source refuted on mixed patient denials
+
+Finished `5748175ad2b0dccfa364eb0257cc25e0540d8764` remains unqualified. The primary57 whole-validator/current-
+governance/final-decision probes and original voice replay exit0 (14.756s body), with all20 committed source bytes
+unchanged. A separate13-case baseline/parser witness on the exact immutable archive exits0 (6.706s body). These
+overlapping diagnostic controls are not a new accuracy denominator. The earlier reported patient ACL cessation
+cases now hold correctly, and the ordinary foreign reporting-position cases are useful again.
+
+Two definite unsafe releases survive: selected `Takes warfarin 5 mg daily.` followed by `Her father denies that the
+patient takes warfarin.`, or by `Her father switched from prone to supine positioning and the patient does not take
+warfarin.` Each is supported after validation and current governance, with no final-decision hold. The same patient
+negative-use clause by itself is correctly held. At `generation.py:3904`, the mixed unit's `other_floor` skips the
+opposed-predicate/negative-key checks; its explicit patient negative claim does not become a cessation dependency
+at `source_scope.py:225`. The reporting denial has an actual warfarin negative key and is not a pure foreign clause,
+yet the same early skip drops it. Different-drug/actual foreign negative-use and negated-STOP controls still release.
+
+Five definite unnecessary holds are retained: foreign inherited stopping, passive withholding explicitly from the
+father, passive withholding of different apixaban, a reported possible future cessation and an independent patient
+knee-pain denial after foreign positioning. This does not justify a broad class release. Exact parser/scope witnesses
+were supplied to the author and the lead, and the measured source was released only after actual exit. Original
+voice replay remains raw0 supported / confirmed-context onlyv3_7; originalv3_2/v3_4 stay held. No provider, database,
+fresh transcription, billing or browser-export qualification occurred. `clinical-5748175a-refutation/manifest.json`
+binds the first outcomes, immutable source manifest and narrow baseline witnesses.
