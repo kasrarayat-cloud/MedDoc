@@ -710,6 +710,32 @@ class FloorCost(Floors, SimpleTestCase):
                     self.assertEqual(answers(notes, fields, picks, choices=choices), indexed)
                 self.assertTrue(brute.called or all(v['status'] != 'supported' for v in indexed.values()))
 
+    def test_an_outer_denial_still_opposes_its_owned_patient_content(self):
+        # Filtering the outer unit by its original polarity would miss the
+        # explicit patient's content clause governed by this denial.
+        source = 'The patient takes warfarin.'
+        fields = one('Medications')
+        tail = 'Her father denies that the patient takes warfarin.'
+        real = g.v3_opposed_predicates
+        opposed = []
+
+        def compare(first, second):
+            answer = real(first, second)
+            if answer:
+                opposed.append((first, second))
+            return answer
+
+        with patch.object(g, 'v3_opposed_predicates', side_effect=compare):
+            self.assert_held(source + ' ' + tail, fields, {'f': [source]}, 'f', shown=tail)
+        self.assertTrue(opposed)
+        # A foreign content actor, another medication, or possession rather
+        # than taking cannot negate the retained patient's taking claim.
+        for independent in ('Her father denies that her mother takes warfarin.',
+                            'Her father denies that the patient takes apixaban.',
+                            'Her father denies that the patient has warfarin.'):
+            with self.subTest(independent=independent):
+                self.assert_filled(source + ' ' + independent, fields, {'f': [source]}, {'f': source})
+
 
 @override_settings(**DEFAULT)
 class DefaultPathUntouched(SimpleTestCase):
