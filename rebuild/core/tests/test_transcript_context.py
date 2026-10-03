@@ -329,6 +329,21 @@ class PatientDefault(SimpleTestCase):
         medication='The patient takes no warfarin.'
         self.check(medication+' Only her father lacks warfarin.','Current medications',[medication])
 
+    def test_bound_negative_nominal_chain_keeps_the_same_clinical_dependency(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for nominal in ['an absence of evidence of swelling',
+                        'an absence of evidence of signs of swelling',
+                        'an absence of documentation of evidence of signs of swelling']:
+            left='The patient reports '+nominal+' over the left ankle.'
+            right='The patient reports '+nominal+' over the right ankle.'
+            with self.subTest(nominal=nominal):
+                self.check(source+' '+left,'Examination',[source],'conflict')
+                self.check(source+' '+right,'Examination',[source])
+        self.check(source+' Her father reports an absence of evidence of swelling over the left ankle.',
+                   'Examination',[source])
+        self.check(source+' The patient reports an absence of evidence of pain over the left ankle.',
+                   'Examination',[source])
+
     def test_independent_refutation_ellipses_cannot_retract_a_patient_claim_silently(self):
         source='Takes warfarin 5 mg daily.'
         for tail,label in [('Only her father does.','Medications'),('Not today.','Medications taken today'),
