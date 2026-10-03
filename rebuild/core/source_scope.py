@@ -45,7 +45,8 @@ def transition_scope(reading,unit,*,clause=None):
                         or a._fold(t.text) in a.SOLE_UNCERTAIN for t in adjectival))
                 noun_source=bool(len(objects)==1 and position_argument(objects[0],set(target_prep.subtree)))
                 positional=bool((adjective_source or noun_source)
-                    and (target_prep.head==root or (noun_source and target_prep.head==objects[0])))
+                    and (target_prep.head==root or (adjective_source and target_prep.head==source)
+                         or (noun_source and target_prep.head==objects[0])))
             if (positional and a._lemma(root) in ('switch','change') and len(verbs)==1
                     and all(a.this_patient(t) or a.names_person(t) or a._fold(t.text) in ('he','she') for t in subjects)
                     and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in children)
@@ -98,14 +99,25 @@ def medication_affects(reading,claim):
     return bool(classes & {'medication','therapy','test','care'})
 
 
+def nominal_carrier(token):
+    """The pinned parser's nominal reporting head still owns a finite clause."""
+    from . import v3_actors as a
+    return bool(token.pos_=='NOUN' and token.dep_=='conj' and a._lemma(token) in a.LIGHT_VERBS
+        and any(c.dep_=='acl' and c.pos_ in ('VERB','AUX')
+            and any(s.dep_ in ('nsubj','nsubjpass') for s in c.children)
+            and any(m.dep_=='mark' and a._fold(m.text)=='that' for m in c.children) for c in token.children))
+
+
 def owned_clause(predicate):
     """A grammatical clause excludes separately owned coordinated assertions."""
     excluded=set()
     for token in predicate.subtree:
         if token==predicate:continue
-        if ((token.pos_ in ('VERB','AUX') and token.dep_ in ('conj','ccomp','advcl','relcl','acl','parataxis'))
+        if (nominal_carrier(token) or (token.pos_ in ('VERB','AUX') and token.dep_ in ('conj','ccomp','advcl','relcl','acl','parataxis'))
                 or (token.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in token.children))):
             excluded.update(token.subtree)
+            if token.dep_=='conj':
+                excluded.update(c for c in token.head.children if c.dep_=='cc')
     return [t for t in predicate.subtree if t not in excluded]
 
 
@@ -126,9 +138,9 @@ def clause_readings(reading,unit):
     result=[]
     if doc is not None:
         lem={t.i:a._lemma(t) for t in doc};txt={t.i:a._fold(t.text) for t in doc}
-        predicates=[t for t in doc if t.pos_ in ('VERB','AUX') and (t.dep_=='ROOT'
-            or t.dep_ in ('conj','ccomp','advcl','parataxis')
-            or (t.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in t.children)))]
+        predicates=[t for t in doc if nominal_carrier(t) or (t.pos_ in ('VERB','AUX') and (t.dep_=='ROOT'
+            or t.dep_ in ('conj','ccomp','advcl','parataxis','acl','relcl')
+            or (t.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in t.children))))]
         for predicate in predicates:
             words=owned_clause(predicate);inside=set(words)
             subjects=[t for t in predicate.children if t in inside and t.dep_ in ('nsubj','nsubjpass')]
@@ -143,7 +155,7 @@ def clause_readings(reading,unit):
             # The pinned parser can use an object-predicate slot for a named
             # medication ('stopped apixaban'). Its positively typed argument
             # remains named; arbitrary adjectival complements do not qualify.
-            nominal=[t for t in predicate.children if t in inside and t.dep_ in ('oprd','attr')
+            nominal=[t for t in predicate.children if t in inside and t.dep_ in ('oprd','attr','acomp')
                 and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())]
             repaired_argument=bool(a._lemma(predicate) in a.CESSATION_VERBS and nominal)
             if repaired_argument:
@@ -165,10 +177,23 @@ def clause_readings(reading,unit):
             separate=bool(sole.get('nouns_ok') and not sole.get('unknown') and not sole.get('reach')
                 and sole.get('classes') and not sole.get('classes') & {'medication','therapy','test','care','allergy'}
                 and a._lemma(predicate) in a.SOLE_CURRENT_VERBS and not floor['bare_cessation'] and not topics)
+            # A finite content clause owns its explicit subject, not its outer
+            # speaker. Its carrier has no independent clinical argument here.
+            # Unknown modifiers, negation, intention and ending operators cannot
+            # establish this bounded carrier. No reporting-verb release list.
+            complements=[c for c in predicate.children if c.dep_=='ccomp'
+                or (nominal_carrier(predicate) and c.dep_=='acl')]
+            subject_words={t for subject in subjects for t in subject.subtree if t in inside}
+            carrier=bool(len(complements)==1 and complements[0] in predicates
+                and any(c.dep_ in ('nsubj','nsubjpass') for c in complements[0].children)
+                and (nominal_carrier(predicate) or (len(subjects)==1 and (direct_patient or foreign)))
+                and all(t==predicate or t in subject_words or t.is_punct or t.dep_=='aux' for t in words)
+                and not cancelled and not floor['intention'] and not floor['quantified_denial']
+                and not floor['bare_cessation'] and not topics and negative_operator(predicate,a) is None)
             result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed,
                 'foreign':foreign,'topics':topics,'generic':generic,'cancelled':cancelled,
                 'bare':floor['bare_cessation'] and not repaired_argument,'position':transition_scope(reading,unit,clause=words)=='position',
-                'separate':separate,'bounded_end':bool(topics and (generic or all(
+                'separate':separate,'carrier':carrier,'bounded_end':bool(topics and (generic or all(
                     {a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN for t in words
                     if a.keys({a._lemma(t)}) & topics and t.pos_ in a.CONTENT)))})
     cache[unit['id']]=result
@@ -176,9 +201,11 @@ def clause_readings(reading,unit):
 
 
 def ending_affects(reading,ending,claim):
-    if ending['foreign'] or ending['cancelled'] or ending['position'] or ending['separate']:return False
-    if not ending['patient']:return True
+    if ending['foreign'] or ending['cancelled'] or ending['position'] or ending['separate'] or ending['carrier']:return False
     info=reading['actors'][claim['id']]
+    if not ending['patient']:
+        if not ending['bounded_end'] or ending['generic']:return True
+        return bool(ending['topics'] & (reading['claim_keys'][claim['id']] | info.get('named_keys',frozenset())))
     if ending['generic']:
         from . import v3_actors as a
         if a._lemma(ending['predicate']) in a.SUPERSEDED_PREPOSITIONS:
@@ -189,18 +216,23 @@ def ending_affects(reading,ending,claim):
 
 def bounded_mixed_endings(reading,unit):
     clauses=clause_readings(reading,unit)
-    if len(clauses)<2 or not any(c['position'] for c in clauses):return None
-    if not all(c['position'] or c['separate'] or ((c['patient'] or c['foreign'])
-        and (c['bounded_end'] or c['cancelled']) and not c['bare']) for c in clauses):return None
+    if len(clauses)<2 or not any(c['position'] or c['foreign'] for c in clauses):return None
+    if not all(c['foreign'] or c['position'] or c['separate'] or c['carrier'] or (not c['bare']
+        and (c['bounded_end'] or ((c['patient'] or c['foreign']) and c['cancelled']))) for c in clauses):return None
     return clauses
 
 
 def explicit_patient_endings(reading,claim):
     result=[]
+    keys=reading['claim_keys'][claim['id']] | reading['actors'][claim['id']].get('named_keys',frozenset())
     for unit in reading['units']:
         if unit['id']==claim['id']:continue
         for ending in clause_readings(reading,unit):
-            if ending['patient'] and not ending['cancelled'] and ending_affects(reading,ending,claim):
+            # An unresolved subject cannot make this same named ending
+            # independent. Retain it for review; do not assign a patient actor.
+            uncertain=bool(not ending['foreign'] and not ending['patient'] and ending['bounded_end']
+                and (ending['topics'] & keys or (ending['generic'] and medication_affects(reading,claim))))
+            if not ending['cancelled'] and ((ending['patient'] and ending_affects(reading,ending,claim)) or uncertain):
                 if unit not in result:result.append(unit)
     return result
 

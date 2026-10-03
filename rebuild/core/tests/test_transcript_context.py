@@ -169,6 +169,34 @@ class PatientDefault(SimpleTestCase):
         # is retained, not certified as a medication contradiction: the noun
         # does not positively name medication. Do not manufacture that class.
 
+    def test_nested_clinical_arguments_retain_the_explicit_actor_and_ended_topic(self):
+        prefix='Her father switched from prone to supine positioning and reports that '
+        for source in ['Takes warfarin 5 mg daily.','The patient takes warfarin 5 mg daily.']:
+            for label in ['Medications','Current medications']:
+                for tail in ['the patient stopped warfarin.', 'the patient withheld warfarin.',
+                             'the patient replaced warfarin with apixaban.', 'the patient stopped all medications.',
+                             'she stopped warfarin.',
+                             'warfarin was stopped and the patient reports cough.']:
+                    with self.subTest(source=source,label=label,tail=tail):
+                        self.check(source+' '+prefix+tail,label,[source],'conflict')
+                for tail in ['the patient stopped apixaban.', 'the patient did not stop warfarin.',
+                             'the patient may stop warfarin tomorrow.', 'her mother stopped warfarin.',
+                             'she stopped apixaban.']:
+                    with self.subTest(source=source,label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+
+    def test_bounded_foreign_position_complement_has_no_patient_medication_argument(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['The patient reports that her father switched from prone to supine positioning.',
+                         'The patient confirms that her father switched from prone to supine positioning.',
+                         'The patient reports that her father had switched from prone to supine positioning.',
+                         'The patient reports that her father switched from prone to supine positioning and the patient stopped apixaban.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+            for tail in ['The patient reports that her father switched from prone to supine positioning and the patient stopped warfarin.',
+                         'The patient reports that she switched from an unknown medication to supine positioning.',
+                         'The patient reports that someone switched from an unknown medication to supine positioning.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source],'conflict')
+
     def test_nominal_clinical_assertions_gain_only_default_actor_not_drug_status(self):
         for source, label in [('No fever.', 'Examination'),
                               ('Fever.', 'Symptoms'),
