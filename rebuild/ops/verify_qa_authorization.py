@@ -229,6 +229,13 @@ def main():
         cursor.execute("SET statement_timeout = '8s'")
     out = SCRATCH / ('served-auth-' + args.run_id)
     require(not out.exists(), 'terminal_run_identity_not_reusable')
+    # Check the credential route before any synthetic account or financial row
+    # is created, including parents that an existing scratch directory inherits.
+    for parent in (SCRATCH, TASK):
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode) and not parent.is_symlink()
+                and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700,
+                'unsafe_private_parent_metadata')
     out.mkdir(mode=0o700)
     served = Served()
     created = []
