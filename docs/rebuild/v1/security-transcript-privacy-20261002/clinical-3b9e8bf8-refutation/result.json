@@ -1,0 +1,462 @@
+{
+  "source_commit": "3b9e8bf8454f98031155f3098edcd98dce17f05a",
+  "source_manifest": {
+    "commit": "3b9e8bf8454f98031155f3098edcd98dce17f05a",
+    "status": "finished seventh clinical diff frozen; awaiting independent REFUTE and affected suite, not integrated or live qualified",
+    "files": [
+      {
+        "path": "rebuild/core/generation.py",
+        "sha256": "d66e03d67eeea1cebac0ec18e4b84d9ef83ab5166a23a34e77682d9f6a4df25f"
+      },
+      {
+        "path": "rebuild/core/source_scope.py",
+        "sha256": "46abfffe8ccecbd6ff1e92590aabbb627b023c8502924dc9d7058125c684043a"
+      },
+      {
+        "path": "rebuild/core/transcript_context.py",
+        "sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521"
+      },
+      {
+        "path": "rebuild/core/v3_field_relations.py",
+        "sha256": "c3049a9b87707578f58330283bb2d1c2cbaeb602c3e15103d04a7862c595d75b"
+      },
+      {
+        "path": "rebuild/core/v3_literal_facts.py",
+        "sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7"
+      },
+      {
+        "path": "rebuild/core/v3_actors.py",
+        "sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d"
+      },
+      {
+        "path": "rebuild/core/v3_syntax.py",
+        "sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7"
+      },
+      {
+        "path": "rebuild/core/v3_destination.py",
+        "sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc"
+      },
+      {
+        "path": "rebuild/core/v3_history_context.py",
+        "sha256": "447208e118543aeb89f7a92758781d35bed3a106ee283a7d2794cb206c8fc4c0"
+      },
+      {
+        "path": "rebuild/core/models.py",
+        "sha256": "bd01c65d82fee028493fce93b3dc38da4caad32f0f3be26089135a6d506c9cd9"
+      },
+      {
+        "path": "rebuild/core/views.py",
+        "sha256": "6f17abd19a43f8a280a3529b49b09b1c46929bdd2edb8892af3942658a1dd43b"
+      },
+      {
+        "path": "rebuild/core/jobs.py",
+        "sha256": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1"
+      },
+      {
+        "path": "rebuild/core/batch_jobs.py",
+        "sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca"
+      },
+      {
+        "path": "rebuild/core/generation_batch.py",
+        "sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97"
+      },
+      {
+        "path": "rebuild/core/destination_roles.py",
+        "sha256": "dd5d919116d4c02ca5b92a087ab6d892d5597a1fb4d68213956aab4e9ed8cd4c"
+      },
+      {
+        "path": "rebuild/core/tests/test_transcript_context.py",
+        "sha256": "3dfda2292628c437722aaf2da924d5c25bc19a1658c329b0df1d0ba2e59f3ed8"
+      },
+      {
+        "path": "rebuild/core/tests/voice_first_pass_controls.json",
+        "sha256": "4cec016f52a1b07acd42ea5d86f8ca517608ab04abbb139cb6fa438e57352f01"
+      },
+      {
+        "path": "rebuild/core/migrations/0036_transcript_review.py",
+        "sha256": "ea0a01cb6bc512759d3961638a5a6a1348d7c15d456d49a85ba7ebaddafbce97"
+      },
+      {
+        "path": "rebuild/templates/encounter_input.html",
+        "sha256": "651cc3308726beecd027bd4076d86471ce3d6a48d6ad2a516b6c11f4d0829807"
+      }
+    ],
+    "excluded_local_files": [
+      "temporary untracked Word0035 migration",
+      "isolated old-ORM test_relations_fixture compatibility edit"
+    ],
+    "first_failed_source": "6f0f647a3d10227fc7ed9a30698c1877a7fff22f",
+    "focused_result": {
+      "tests": 21,
+      "seconds": 26.604,
+      "exit_code": 0,
+      "log": "refutation-7-local-3.log"
+    }
+  },
+  "provider_requests": 0,
+  "database_connections": 0,
+  "model_context_relations": "all unselected units adversarially independent",
+  "cases": [
+    {
+      "name": "modified_operator_completely",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has completely absent swelling over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "nominal_predicative_absent",
+      "notes": "Examination mild swelling over the left lateral ankle. Swelling over the left ankle is absent.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "predicative_possessive_patient",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient's swelling over the left ankle is absent.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "predicative_swelling_first",
+      "notes": "Examination mild swelling over the left lateral ankle. Swelling is absent over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "predicative_ankle_free",
+      "notes": "Examination mild swelling over the left lateral ankle. The left ankle is free of swelling.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The left ankle is free of swelling.",
+          "start": 55,
+          "end": 90,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "predicative_different_side",
+      "notes": "Examination mild swelling over the left lateral ankle. Swelling over the right ankle is absent.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "modified_operator_different_side",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has completely absent swelling over the right ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "predicative_cancelled",
+      "notes": "Examination mild swelling over the left lateral ankle. Swelling over the left ankle is not absent.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "modifier_cancelled",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has not absent swelling over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": true,
+      "held_context": [
+        {
+          "quote": "The patient has not absent swelling over the left ankle.",
+          "start": 55,
+          "end": 111,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "predicative_explicit_foreign",
+      "notes": "Examination mild swelling over the left lateral ankle. Her father's swelling over the left ankle is absent.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "independent_clinical_topic",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has completely absent pain over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "same_side_symmetry_without",
+      "notes": "The patient has a left ankle without swelling. The patient has swelling over the left ankle.",
+      "selected_quote": "The patient has a left ankle without swelling.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The patient has swelling over the left ankle.",
+          "start": 47,
+          "end": 92,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "same_side_symmetry_absent",
+      "notes": "The patient has absent swelling over the left ankle. The patient has swelling over the left ankle.",
+      "selected_quote": "The patient has absent swelling over the left ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The patient has swelling over the left ankle.",
+          "start": 53,
+          "end": 98,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "same_side_symmetry_no",
+      "notes": "No swelling over the left ankle. The patient has swelling over the left ankle.",
+      "selected_quote": "No swelling over the left ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The patient has swelling over the left ankle.",
+          "start": 33,
+          "end": 78,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "side_symmetry_without",
+      "notes": "The patient has a left ankle without swelling. The patient has swelling over the right ankle.",
+      "selected_quote": "The patient has a left ankle without swelling.",
+      "expected_hold": false,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": true,
+      "held_context": [
+        {
+          "quote": "The patient has swelling over the right ankle.",
+          "start": 47,
+          "end": 93,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "non_medication_switch",
+      "notes": "Takes warfarin 5 mg daily. The patient switched to the supine position.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Takes warfarin 5 mg daily.",
+      "governed_status": "supported",
+      "governed_text": "Takes warfarin 5 mg daily.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "prior_family_denial",
+      "notes": "Examination mild swelling over the left lateral ankle. Her father has no swelling over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "prior_without_negation",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has a left ankle without swelling.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The patient has a left ankle without swelling.",
+          "start": 55,
+          "end": 101,
+          "after": true,
+          "same": true
+        }
+      ]
+    }
+  ],
+  "original_first_pass_voice_replay": [
+    {
+      "patient_context": false,
+      "supported": [],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    },
+    {
+      "patient_context": true,
+      "supported": [
+        "v3_7"
+      ],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    }
+  ],
+  "elapsed_seconds": 8.495
+}

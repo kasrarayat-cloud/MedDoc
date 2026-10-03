@@ -1,0 +1,391 @@
+{
+  "source_manifest": {
+    "commit": "22476485e80dfa5ca0b0cf3f34febd876619b393",
+    "files": [
+      {
+        "path": "rebuild/documents/word_v3.py",
+        "sha256": "e4d02d3022adfd8327e8a78bb4348d7214bb13a63de3a4747974be26dc0578df"
+      },
+      {
+        "path": "rebuild/documents/service.py",
+        "sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5"
+      },
+      {
+        "path": "rebuild/documents/import_selection.py",
+        "sha256": "06df2620f8d52891511f9f6e20785c52ee215012cece0d3180a582449fed4128"
+      },
+      {
+        "path": "rebuild/core/import_binding.py",
+        "sha256": "73eea4c1e6ac219c82fc51574071e9d8b1a28051ace126e3ecb0e8a92175647b"
+      },
+      {
+        "path": "rebuild/core/v3_mapping.py",
+        "sha256": "950834131edbb89c4c3c83a600502b592e816e9ce4d8067823696704c0d11ae9"
+      },
+      {
+        "path": "rebuild/core/destination_roles.py",
+        "sha256": "46f4955a7662a4d8d0847d1641f4d61ddd25276fc652035a2ba5a0122a2a3834"
+      },
+      {
+        "path": "rebuild/documents/test_source_coverage.py",
+        "sha256": "1ff892094d06429d5683536081bb03a93e321111d0ba3efa411ad50d6d593149"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "apostrophe_alternatives",
+      "source_text": "Role: [patient's/carer's]",
+      "source_sha256": "e94559d4672aff0495d63e500b9e7cf7a070a87a6155a0caf8bb467d0ba755a9",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Role patient's/carer's",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 25,
+              "shape": "bracket"
+            },
+            "fingerprint": "5ba3b579e8036ec899a6086a6ba3477d308e96ee4c079c185ea36c9c391a1677"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "1943438fe5012940d6a2919d604e26186b665d1aeb21e30a58feb49d39f0c409"
+    },
+    {
+      "name": "parenthesized_alternatives",
+      "source_text": "Role: [patient/carer (specify)]",
+      "source_sha256": "386eecb85f9f042f70d468bc7c8c5f26bfee9433b520d90deaae2006127de4ac",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Role patient/carer (specify)",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 31,
+              "shape": "bracket"
+            },
+            "fingerprint": "b8c33170d81e888d8eefd05acc37a2b857e323a934d5b728ad61e7d7d6b33988"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "5bbeeb05ecf616e1f9c71d731d13c4ae3028755d82562f5478047e4a3431341d"
+    },
+    {
+      "name": "digit_alternatives",
+      "source_text": "Severity: [mild/moderate/grade 3]",
+      "source_sha256": "afaff5d4b55530622d0a7d8db0b63b9d32ce5251136962b42db24422b7ed8959",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Severity mild/moderate/grade 3",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 10,
+              "end": 33,
+              "shape": "bracket"
+            },
+            "fingerprint": "bb0417d31b599f99e2e0ce402f21184442a886f02c6775a6cbe01fb2274a5af7"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Severity: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "5c2391abed4461987fc2a688c03776d8a4b27b8d85447b8e498a136ef3bd11cf"
+    },
+    {
+      "name": "punctuated_alternatives",
+      "source_text": "Consent: [yes/no?]",
+      "source_sha256": "fd49daf5e6169a8092b523a7fb6d20316072d057dfc5784351f3745c0f9ea00c",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      }
+    },
+    {
+      "name": "positive_date",
+      "source_text": "Date: [dd/mm/yyyy]",
+      "source_sha256": "395c3532e134a35361296c0c69d19455dfa2cd67883a7aed251bc8d1d8e3f2f0",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date dd/mm/yyyy",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 18,
+              "shape": "bracket"
+            },
+            "fingerprint": "1a463c7e74a759f82dc476e5b7d8cb17b947971a9858cac26d1963ea29021793"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      }
+    },
+    {
+      "name": "source_list_nocolon",
+      "source_text": "Gender\na) Male\nb) Female",
+      "source_sha256": "e5164666c4f0a51904225e0414353c848ce28be9830450e03f2cb26e6f61c977",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[3]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      }
+    },
+    {
+      "name": "source_list_period",
+      "source_text": "Gender.\na) Male\nb) Female",
+      "source_sha256": "e658861f38e1688a805e902b181e46da81d583f6e8b11a33f0ac6e39d4367447",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[3]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      }
+    },
+    {
+      "name": "source_list_instruction",
+      "source_text": "Discharge instructions\na) Call clinic\nb) Keep wound dry",
+      "source_sha256": "1db642b7c888afdbc051773e7e63e8531c6bacb4b1c7c49e7c2622cc7452ff9b",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[3]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      }
+    }
+  ],
+  "provider_requests": 0,
+  "database_connections": 0,
+  "elapsed_seconds": 6.528
+}

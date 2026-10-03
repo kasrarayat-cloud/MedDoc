@@ -1,0 +1,50 @@
+{
+  "source_commit": "3b9e8bf8454f98031155f3098edcd98dce17f05a",
+  "cases": 18,
+  "elapsed_seconds": 8.495,
+  "unsafe": [
+    "modified_operator_completely",
+    "nominal_predicative_absent",
+    "predicative_possessive_patient",
+    "predicative_swelling_first"
+  ],
+  "unnecessary_holds": [
+    "modifier_cancelled",
+    "side_symmetry_without"
+  ],
+  "errors": [],
+  "original_replay": [
+    {
+      "patient_context": false,
+      "supported": [],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    },
+    {
+      "patient_context": true,
+      "supported": [
+        "v3_7"
+      ],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    }
+  ]
+}

@@ -351,3 +351,48 @@ as `leave` and supplies no exclusive dependency despite shared named knee/pain; 
 `other_floor=True` yet still supplies a hold. No source was modified. `clinical-6f0f647a-parser-witness/manifest.json`
 retains the exact witness/instrument/log; the lead independently confirmed all five unsafe outputs. Clinical repair
 and a new complete finished-source refutation remain pending and do not erase this failed qualification.
+
+### Fresh frozen clinical3b9 and Word224 refutations
+
+Clinical `3b9e8bf8454f98031155f3098edcd98dce17f05a` was verified against all19 announced committed component hashes
+and copied before probing; all hashes remained identical afterward. A distinct18-case whole-validator/current
+stored-governance/finalization pass completed exit0 in8.495s, without database connections or provider/network
+calls. It found four unsafe releases of the selected original `Examination mild swelling over the left lateral
+ankle.` beside these exact independent-context clauses:
+
+- `The patient has completely absent swelling over the left ankle.`
+- `Swelling over the left ankle is absent.`
+- `The patient's swelling over the left ankle is absent.`
+- `Swelling is absent over the left ankle.`
+
+Each leaves the positive original supported with no finalization governance decision. Locations measured are
+`source_scope.negative_clinical_modifiers` at366, `clinical_modifier_negations` at409 and the added opposed-topic
+read in `generation.py:3876`. The lead's known `entirely absent` counterexample was not repeated. A symmetric
+different-side control also demonstrates an unnecessary hold: selecting `The patient has a left ankle without
+swelling.` beside `The patient has swelling over the right ankle.` gives conflict/empty. The deliberately awkward
+cancelled modifier `has not absent swelling` is also held; its raw outcome is retained as a conservative grammar
+control, without using it to demand a broader release. The prior direct Without/family-denial controls pass, and
+the exact original voice replay remains zero-to-one supported with the two original wrong picks held. Source was
+released to the writer immediately after actual exit; qualification remains failed pending a new finished repair.
+`clinical-3b9e8bf8-refutation/manifest.json` hashes all raw results and the exact source manifest.
+
+Word `22476485e80dfa5ca0b0cf3f34febd876619b393` received a separate bounded read-only lens. Seven relevant source
+files were compared with committed bytes and copied before eight actual sandbox import/fill probes (exit0,6.528s);
+hashes remained unchanged afterward. Three fresh printed alternatives become arbitrary text writers with zero
+selected-engine issues and `block_generation=False`, then genuine DOCX fill overwrites them with
+`SYNTHETIC UNRESTRICTED REPLACEMENT`:
+
+- `Role: [patient's/carer's]`
+- `Role: [patient/carer (specify)]`
+- `Severity: [mild/moderate/grade 3]`
+
+`documents/word_v3.py:5628` restricts the alternative recognizer to letters/spaces, while the existing placeholder
+reader accepts apostrophes, parentheses and digits as generic text. The lead's known hyphen cases were not repeated.
+A diagnostic list-coverage gap is retained separately: an unpunctuated or period-terminated `Gender` heading with
+`a) Male` and `b) Female` maps neither menu nor a precise unresolved issue. The instruction-list control remains
+fixed text. These diagnostics do not claim an automatic complete-form pass: the manifest's `automatic_complete`
+was already false. The ordinary date placeholder still maps as a date. No role or signing location was promoted,
+no billed generation occurred and no native/rendered Word result is claimed. Source was released immediately
+after exit for the writer's coherent slash-part repair. `word224-refutation/manifest.json` retains all eight
+self-authored synthetic originals, three actual failed exports, raw results and source binding. These supplemental
+cases do not alter the original corpus or held-back denominators.
