@@ -154,7 +154,9 @@ class EffectiveWorkflow(BatchFixture,TestCase):
     def setup_original(self):
         data=original();template,first=self.uploaded(data=data,name='Synthetic preserved option states')
         rule,selected=rules(first.fields,template.sha256)
-        version=TemplateVersion.objects.create(template=template,number=2,fields=first.fields,contract='v3',generation_constraints=rule,created_by=self.user)
+        version=TemplateVersion.objects.create(template=template,number=2,fields=first.fields,contract='v3',
+            document_backend=first.document_backend,import_manifest=first.import_manifest,
+            generation_constraints=rule,created_by=self.user)
         self.confirm(template,version);self.new_encounter(version,'Group B: Active.')
         self.encounter=Encounter.objects.latest('created_at');return data,version,selected
 

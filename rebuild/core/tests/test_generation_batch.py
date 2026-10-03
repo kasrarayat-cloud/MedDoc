@@ -393,6 +393,7 @@ class BatchWorkflow(BatchFixture,TestCase):
         m['rules']=[{'kind':'max_active_groups','source_id':'rule','maximum':1,
             'groups':[[{'key':fs[0]['key'],'values':['selected']}],[{'key':fs[-1]['key'],'values':['selected']}]]}]
         version=TemplateVersion.objects.create(template=self.template,number=3,fields=fs,contract='v3',
+            document_backend=self.version.document_backend,import_manifest=self.version.import_manifest,
             generation_constraints=m,created_by=self.user);self.confirm(self.template,version)
         self.encounter.template_version=version;self.encounter.save(update_fields=['template_version'])
         batch=self.admit();calls,call=self.fake(batch)

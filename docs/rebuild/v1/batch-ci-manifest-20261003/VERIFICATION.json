@@ -1,0 +1,56 @@
+{
+  "base_commit": "b8aef46b166591c94284ad762be19db46439f230",
+  "only_two_test_constructors_modified": true,
+  "affected_test_count": 4,
+  "passed": 4,
+  "skipped": 0,
+  "duration_seconds": 65.31,
+  "exit_code": 0,
+  "database_destroyed": true,
+  "provider_requests": 0,
+  "original_denial_failure_reproduced": {
+    "test_count": 1,
+    "duration_seconds": 1.96,
+    "exit_code": 1,
+    "original_and_source_preserved": true,
+    "zero_jobs": true,
+    "zero_reservations": true,
+    "zero_usage": true,
+    "root_cause": "ambiguous_source_action on ordinary Review of systems answer cell",
+    "repair_owner": "Word source-policy stream"
+  },
+  "source_files": {
+    "rebuild/core/tests/test_generation_batch.py": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207",
+    "rebuild/core/tests/test_batch_effective_constraints.py": "ab2a0fab42817e7ce3b6f260bb29f4a12b3b552c94e9d61efb88ff1d4a0706a9",
+    "rebuild/core/tests/test_import_workflow.py": "8faa0701a25980c4107f97211afbc5fe667183c6dad7355ed909f0c4a5ef3296",
+    "rebuild/core/tests/test_denial_heading_governance.py": "57d95369ee236b1d342b971ef0843fb7a51736d64c5aa7eaf56736a80ffb665a",
+    "rebuild/core/migrations/0035_import_manifest.py": "627bb0430cfa942a92e38f97609b3dd2d80212683f1e0a6ff48428f97cb697bf",
+    "rebuild/core/generation.py": "e561f5d9fd23e876207a9524c8281e17c9e9601896aa5da1c92ac5a0a75d0e94",
+    "rebuild/core/jobs.py": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1",
+    "rebuild/core/import_binding.py": "1fb50ff996071f8125f701c7675a3e0bd211d0110ee17405b3d379ba7716b6bb",
+    "rebuild/core/views.py": "409e2ab5a634208a6a8eabf2306514b0c073d106228de873020fba97f5e3d7c8",
+    "rebuild/core/v3_mapping.py": "987a5a7100bc9f793037842e136f958ef9f87995a7768d0a0b4e9fe4bd885355"
+  },
+  "runtime_files": {
+    "operations/denial-ci-diagnosis/first-failure.log": {
+      "bytes": 4839,
+      "sha256": "51e4c25a00264a322dafa3d3be413858ad8f286207d61934af1a64aae22954ee"
+    },
+    "operations/denial-ci-diagnosis/one-workflow-counterexample.json": {
+      "bytes": 7908,
+      "sha256": "7bec4892147fb9bd164220a1cf4c755f1aadc5c66a77912007e57b154545ba9e"
+    },
+    "operations/denial-ci-diagnosis/original-c3fe7054-d246-452f-a5b3-5752e3797717.docx": {
+      "bytes": 36722,
+      "sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a"
+    },
+    "operations/denial-ci-diagnosis/probe.py": {
+      "bytes": 2951,
+      "sha256": "662e150f773db2ce64698b4f66edbad7a4ebb8ffea9ec8d46b6aae30a193a95a"
+    },
+    "operations/batch-ci-manifest.log": {
+      "bytes": 4807,
+      "sha256": "56ee45cf8361c42785dd7214145924e0fe5eb7c09c2ac685c46500e8fba02472"
+    }
+  }
+}
