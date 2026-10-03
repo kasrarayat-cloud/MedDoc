@@ -210,3 +210,35 @@ and same-first-value rendered verification remain required.
 Security also recorded U+2028 acceptance in the date whitespace grammar. Its
 actual date fill succeeded; this remains a grammar-boundary diagnostic, not a
 demonstrated export harm or a newly asserted clinical failure.
+
+## Preserved internal-blank writer failure
+
+Root's de950f64 component pass completed 57 controls with unchanged code hashes
+and no unsafe writes or false holds in that measured set. The first final
+same-value renderer attempt then failed after 28.395 seconds, child exit 1.
+D26/D27 rendered, but D28's `b/p[321]` printed instruction range acquired
+`Q231v` and `Q232v` inside it: the mapped `utab` destinations at 73–74 and 91–92
+overlap the unresolved bracket source at 0–159. The original paragraph remains
+at that same source location; this was not an ordinal-shift artifact. The
+renderer exited -2 after its bounded SIGINT shutdown, removed its socket, and
+all measured Python source hashes stayed unchanged. Exact first artifacts are
+retained under `word/final-word-render-20261003T030753250769Z`.
+
+An independently authored structural equivalent reproduced this writer defect:
+underlined tabs within `[identify services before\t his/her\t last review]`
+received arbitrary answer text. Its original, export, mapping, coverage and raw
+output are retained in `word/coverage-repair/source-inner-tab-de950-first.*`.
+Generation admission was already blocked by the unresolved issue, and precise
+exclusion review already refused an overlapping field. This is a source writer
+corruption diagnostic; it is not a demonstrated paid-generation leak.
+
+All blank shapes overlapping an unresolved bracket range are now withdrawn from
+the automatic mapping. The issue remains exact and reviewable. The writer also
+compares every destination, including copied destinations, with the original's
+unresolved ranges and refuses a touching forged writer without trusting stored
+protection flags. Adjacent qualified writers remain usable. Four focused pure
+source/fill controls passed in 5.090 seconds, runner exit 0: original paragraph
+XML stays unchanged, arbitrary span/copy writes refuse, and both paired later
+date/notes writers work. The affected real exclusion-to-worker-to-export method,
+finished-component refutation and a distinct final rendered attempt are still
+required before qualification.

@@ -5899,6 +5899,8 @@ class Detector:
                 hint_start = None
         kept = []
         for start, end, kind in merge_spans(spans):
+            if any(start < stop and end > begin for begin, stop, _, _ in unresolved):
+                continue
             if hyperlink_write(pieces, start, end):
                 owner = next((ancestor for pc in pieces if pc.run is not None
                               for ancestor in pc.run.iterancestors() if ancestor.tag == q("w:p")), None)
@@ -7696,7 +7698,13 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read before anything is written and never from the mapping: a stored or
     # forged field on a signing, protected or policy place is refused by its span, not by its paragraph.
     original_roles = destination_roles_of(package)
-    role_refusals = role_violations(_PlaceReader(index), fields, original_roles)
+    reader = _PlaceReader(index)
+    role_refusals = role_violations(reader, fields, original_roles)
+    unresolved_brackets = [{'place': _place_id(issue['part'], issue['slot']),
+                            'start': issue['start'], 'end': issue['end']}
+                           for issue in source_detector.coverage_issues
+                           if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
+                                                'unmapped_bracketed_source')]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -7714,6 +7722,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         answer = answers.get(field["key"])
         if answer is None or answer == "" or answer == []:
             continue
+        if any(reader.touches(place, region) for place in reader.of(field) for region in unresolved_brackets):
+            fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
+                 "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
         if target.get("type") == "cell_append":
             if field.get("source_instructions") != cell_instruction_source(index, field):

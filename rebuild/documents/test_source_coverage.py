@@ -186,6 +186,41 @@ class SourceCoverage(unittest.TestCase):
                 out=word_v3.fill(data(doc),result['fields'],{field['key']:answer})
                 self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'Site: [left/right]; '+suffix.split('[')[0]+answer)
 
+    def inner_tabs(self):
+        doc=Document();p=doc.add_paragraph('Instruction: [identify services before')
+        run=p.add_run('\t');run.font.underline=True;p.add_run(' his/her')
+        run=p.add_run('\t');run.font.underline=True;p.add_run(' last review]')
+        doc.add_paragraph('Reason: ______')
+        return doc
+
+    def test_all_blank_shapes_inside_unresolved_brackets_stay_unchanged(self):
+        doc=self.inner_tabs();result=self.inspect(doc)
+        self.assertEqual([f['label'] for f in result['fields']],['Reason'])
+        issue=result['import_manifest']['coverage']['selected_engine_issues'][0]
+        self.assertEqual(issue['code'],'printed_bracket_alternatives')
+        self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+        field=result['fields'][0];out=word_v3.fill(data(doc),result['fields'],{field['key']:'Synthetic adjacent answer'})
+        export=Document(io.BytesIO(out));self.assertEqual(export.paragraphs[0].text,doc.paragraphs[0].text)
+        self.assertEqual(export.paragraphs[1].text,'Reason: Synthetic adjacent answer')
+        self.assertEqual(etree.tostring(export.paragraphs[0]._p),etree.tostring(doc.paragraphs[0]._p))
+
+    def test_original_unresolved_range_refuses_forged_span_and_copy_writers(self):
+        doc=self.inner_tabs();raw=data(doc);result=self.inspect(doc)
+        issue=result['import_manifest']['coverage']['selected_engine_issues'][0]
+        package=word_v3.open_package(raw);index=word_v3.SlotIndex(package);slot=index.by_id['word/document.xml#b/p[0]']
+        text,_=word_v3.paragraph_text(slot.el);offset=text.index('\t')
+        forged={'key':'manual_source','label':'Forged source blank','kind':'text','locator':{
+            'contract':'v3','part':slot.part,'slot':slot.path,'fingerprint':word_v3.fingerprint(slot.el),
+            'target':{'type':'span','start':offset,'end':offset+1,'shape':'utab'}}}
+        from copy import deepcopy
+        copy=deepcopy(result['fields'][0]);copy['locator']['target']['copies']=[{
+            'part':slot.part,'slot':slot.path,'fingerprint':word_v3.fingerprint(slot.el)}]
+        for field in (forged,copy):
+            with self.subTest(field=field['key']):
+                with self.assertRaises(word_v3.V3Failure) as failure:
+                    word_v3.fill(raw,[field],{field['key']:'SYNTHETIC FORGED WRITE'})
+                self.assertEqual(failure.exception.code,'unresolved_source_range')
+
     def test_long_bracketed_source_is_not_silently_discarded_at_grammar_limit(self):
         for length in (121,2100):
             with self.subTest(length=length):

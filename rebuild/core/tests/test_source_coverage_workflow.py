@@ -25,12 +25,17 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
             numbered(doc,'Gender',90,'decimal')
             for item in ('Male','Female','Other'):numbered(doc,item,91,'lowerLetter')
         elif shape=='unbalanced':doc.add_paragraph('Site: [left/right')
+        elif shape=='internal_tabs':
+            from documents.test_source_coverage import SourceCoverage
+            doc=SourceCoverage().inner_tabs()
+            doc.paragraphs[-1].text='Reason for visit: ______'
+            out=io.BytesIO();doc.save(out);return doc,out.getvalue()
         else:doc.add_paragraph('The care received was right for [me/us].')
         doc.add_paragraph('Reason for visit: ______')
         out=io.BytesIO();doc.save(out);return doc,out.getvalue()
 
     def test_exact_review_preserves_printed_sources_and_ordinary_field_workflow(self):
-        for shape in ('list','alternatives','unbalanced'):
+        for shape in ('list','alternatives','unbalanced','internal_tabs'):
             with self.subTest(shape=shape):
                 original,raw=self.source(shape)
                 template,version=self.uploaded(data=raw,name='Synthetic exact source review '+shape)
