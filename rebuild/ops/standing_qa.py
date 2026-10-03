@@ -242,8 +242,13 @@ AUDIO_LABEL = 'synthesized speech, not a human microphone recording'
 AUDIO_READ_LIMIT = 16 * 1024 * 1024
 #: The frozen synthetic notes form (diagnostics/notes cases.json, built by its frozen generator and checked against its
 #: sha256) every transcript is generated on: a general clinical intake (chief complaint, history, examination,
-#: assessment, plan …) that fits any of the allowlisted scripts.
+#: assessment, plan …). Historical campaigns keep this exact form. A new
+#: declaration may explicitly pin the supplemental procedure form below.
 TRANSCRIPTION_FORM = 'r1-11'
+TRANSCRIPTION_FORM_HASHES = {
+    TRANSCRIPTION_FORM: 'ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa',
+    'synthetic-colonoscopy-voice-v1': '1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e',
+}
 #: A declared rate: USD per audio minute, positive, at most ten decimals.
 TRANSCRIPTION_RATE = re.compile(r'(?:0|[1-9][0-9]{0,2})\.[0-9]{1,10}|[1-9][0-9]{0,2}')
 
@@ -314,11 +319,62 @@ def transcription_module():
     return standing_qa_transcription
 
 
+def voice_forms_module():
+    try:
+        from . import standing_qa_voice_forms
+    except ImportError:
+        import standing_qa_voice_forms
+    return standing_qa_voice_forms
+
+
+def transcription_form_id(audio_id, forms=()):
+    """An exact declared per-recording identity; absence preserves old r1-11."""
+    require(audio_id in AUDIO_BY_ID, 'A transcription form belongs to an allowlisted recording.')
+    overrides = dict(forms)
+    name = overrides.get(audio_id, TRANSCRIPTION_FORM)
+    require(name in TRANSCRIPTION_FORM_HASHES and (name == TRANSCRIPTION_FORM or audio_id == 'colonoscopy-speech'),
+            'The supplemental colonoscopy form belongs only to its allowlisted colonoscopy recording.')
+    return name
+
+
+def transcription_form_spec(send, inputs):
+    name = transcription_form_id(send.case, (inputs or {}).get('transcription_forms', ()))
+    require(send.form == name, 'The transcription send differs from its declared per-recording form.')
+    spec = inputs['cases']['forms'][name]
+    require(spec['sha256'] == TRANSCRIPTION_FORM_HASHES[name], 'The transcription form differs from its pinned hash.')
+    if name != TRANSCRIPTION_FORM:
+        expected, _ = voice_forms_module().frozen()
+        require(spec == expected, 'The supplemental form mapping or expectations differ from the committed freeze.')
+    return spec
+
+
+def build_transcription_forms(target, inputs):
+    """Keep the original frozen generator unchanged; add only a declared new form."""
+    supplemental = voice_forms_module().FORM_ID
+    forms = inputs['cases']['forms']
+    legacy_inputs = {**inputs, 'cases': {**inputs['cases'], 'forms': {
+        name: value for name, value in forms.items() if name != supplemental}}}
+    built = sq.stages_module().build_forms(target, 'ordinary_notes', legacy_inputs)
+    if supplemental in forms:
+        manifest, raw = voice_forms_module().frozen()
+        require(forms[supplemental] == manifest, 'The supplemental form differs from its committed freeze.')
+        path = Path(target) / f'{supplemental}.docx'
+        if os.path.lexists(path):
+            require(pc.read_private(path, limit=1024 * 1024) == raw,
+                    'The retained supplemental original differs from its frozen bytes.')
+        else:
+            pc.write_new(path, raw, raw=True)
+        built[supplemental] = raw
+    return built
+
+
 #: The files a reopening must show were repaired (A2): the historical set and the mapping, relations and Word modules
 #: it lacked (a mapping-only repair could not pass A2 honestly there), the product's recording reader and submission
 #: preparation, and this runner.
 WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
-    'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py', 'rebuild/core/mapping_assistance.py',
+    'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
+    'rebuild/ops/standing_qa_voice_forms.py', 'rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json',
+    'rebuild/core/mapping_assistance.py',
     'rebuild/core/mapping_wire.py', 'rebuild/core/mapping_jobs.py', 'rebuild/core/destination_roles.py',
     'rebuild/core/v3_mapping.py', 'rebuild/core/v3_field_relations.py', 'rebuild/core/v3_literal_facts.py',
     'rebuild/core/v3_destination.py', 'rebuild/core/generation_batch.py', 'rebuild/core/tab_review.py',
@@ -500,6 +556,8 @@ class TranscriptionTerms:
     # New campaigns may exercise the actual clinician transcript-context review.
     # An absent term preserves every historical campaign's unconfirmed behavior.
     patient_context: bool = False
+    # An absent override preserves the historical record byte contract.
+    forms: tuple = ()
 
     def parameters(self):
         """The query parameters the one request carries, exactly (core.jobs.deepgram_parameters' shape)."""
@@ -511,6 +569,9 @@ class TranscriptionTerms:
                 'inputs': [AUDIO_BY_ID[i].record() for i in self.inputs]}
         if self.patient_context:
             value['patient_context'] = True
+        if self.forms:
+            value['forms'] = [{'audio_id': audio_id, 'id': name, 'sha256': TRANSCRIPTION_FORM_HASHES[name]}
+                              for audio_id, name in self.forms]
         return value
 
 
@@ -527,6 +588,8 @@ TRANSCRIPTION_NOTES_CONTRACTS = {'default': 'transcription', 'field_relations': 
 #: `transcription_` prefix: every `transcription_*:` token in a declaration is read as a transcription term.)
 VOICE_PRICING_KEYS = tuple(TRANSCRIPTION_NOTES_CONTRACTS.values())
 TRANSCRIPTION_INPUT = re.compile(r'^transcription_input: ([a-z0-9][a-z0-9-]{0,63}) ([0-9a-f]{64})[ \t]*$', re.M)
+TRANSCRIPTION_FORM_LINE = re.compile(
+    r'^transcription_form: ([a-z0-9][a-z0-9-]{0,63}) ([a-z0-9][a-z0-9-]{0,63}) ([0-9a-f]{64})[ \t]*$', re.M)
 
 
 def transcription_terms(text, seen, stages, credential_file):
@@ -550,7 +613,7 @@ def transcription_terms(text, seen, stages, credential_file):
         require(len(re.findall(rf'(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)) <= 1,
                 f'A transcription stage states `{name}:` at most once.')
     unknown = sorted({name.lower() for name in named} - set(TRANSCRIPTION_LINES) - set(optional)
-                     - {'transcription_input'})
+                     - {'transcription_input', 'transcription_form'})
     require(not unknown, 'The declaration states transcription terms this runner does not know: ' + ', '.join(unknown))
 
     def one(name, pattern=r'(\S+)'):
@@ -596,8 +659,20 @@ def transcription_terms(text, seen, stages, credential_file):
         patient_context = context == 'true'
     require(not patient_context or contract == 'field_relations',
             'A confirmed transcript requires the field-relations generation contract.')
+    form_lines = TRANSCRIPTION_FORM_LINE.findall(text)
+    require(len(form_lines) == len(re.findall(
+        r'(?<![A-Za-z0-9_])transcription_form(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)),
+        'Every transcription_form is one plain line with recording, allowlisted form id and pinned hash.')
+    require(len({row[0] for row in form_lines}) == len(form_lines), 'A recording has at most one declared form.')
+    forms = tuple((audio.id, name) for audio in TRANSCRIPTION_AUDIO
+                  for audio_id, name, digest in form_lines if audio_id == audio.id)
+    for audio_id, name, digest in form_lines:
+        require(audio_id in ids, 'A transcription form names only a recording declared in this campaign.')
+        require(transcription_form_id(audio_id, forms) == name and TRANSCRIPTION_FORM_HASHES[name] == digest,
+                'A transcription form names an allowlisted form with its exact pinned hash.')
     return TranscriptionTerms(provider, model, rate, 'true', smart_format, credential,
-                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)), contract, patient_context)
+                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)),
+                              contract, patient_context, forms)
 
 
 #: Exactly one authorization line (provider_campaign.AUTHORIZATION_LINE finds every line that reads as one), this form.
@@ -931,7 +1006,7 @@ def send_inputs(send, inputs):
     if send.path == 'model_check':
         return {'form_sha256': sq.FORM_SHA256, 'notes_sha256': sq.NOTES_SHA256}
     if send.path in TRANSCRIPTION_PATHS:
-        return {'form_sha256': inputs['cases']['forms'][TRANSCRIPTION_FORM]['sha256'],
+        return {'form_sha256': transcription_form_spec(send, inputs)['sha256'],
                 'audio_sha256': audio_entry(send.case).sha256}
     if send.kind == 'mapping' or send.path == 'mapping_encounter':
         return {'form_sha256': inputs['forms_sha256'][f'mapping/{send.form}.docx']}
@@ -962,9 +1037,10 @@ def standing_plan(stage, inputs=None):
         sends = []
         for audio in TRANSCRIPTION_AUDIO:                       # (allowlist order, whatever order they were named in)
             if audio.id in chosen:
-                sends.append(Send(len(sends) + 1, f'transcription:{audio.id}', 'transcription', TRANSCRIPTION_FORM,
+                name = transcription_form_id(audio.id, (inputs or {}).get('transcription_forms', ()))
+                sends.append(Send(len(sends) + 1, f'transcription:{audio.id}', 'transcription', name,
                                   'transcription', 'transcription', audio.id, 'transcription'))
-                sends.append(Send(len(sends) + 1, f'generation:{audio.id}', 'generation', TRANSCRIPTION_FORM,
+                sends.append(Send(len(sends) + 1, f'generation:{audio.id}', 'generation', name,
                                   'transcription_generation', 'transcription', audio.id, generation_key))
         return sends
     if stage == 'mapping':
@@ -1024,6 +1100,12 @@ def stage_inputs(stage, declaration):
         require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
         inputs = {**inputs, 'transcription_audio': declaration.transcription.inputs,
                   'transcription_notes_contract': declaration.transcription.notes_contract}
+        if declaration.transcription.forms:
+            inputs['transcription_forms'] = declaration.transcription.forms
+            if any(name != TRANSCRIPTION_FORM for _, name in declaration.transcription.forms):
+                manifest, _ = voice_forms_module().frozen()
+                inputs = {**inputs, 'cases': {**inputs['cases'], 'forms': {
+                    **inputs['cases']['forms'], manifest['id']: manifest}}}
     return inputs
 
 
@@ -1212,6 +1294,9 @@ class StandingLedger(pc.Ledger):
             require(audio in run['allowed_inputs'], 'The attempt\'s recording is not one its run allows.')
             require(audio not in set(run['restricted_inputs']),
                     'The attempt\'s recording is marked "no provider upload"; it is never sent.')
+            name = transcription_form_id(entry.id, declaration.transcription.forms)
+            require((send or {}).get('form') == name and form == TRANSCRIPTION_FORM_HASHES[name],
+                    'The attempt form is not the exact declared form for this recording.')
         attempt.update(mode=MODE, monetary_ceiling=None, run=run['run'], run_id=run['run_id'],
                        attempt_id=f'{declaration.campaign}/{run["run_id"]}/attempt-{attempt["number"]:03d}',
                        send_key=send_key, engine_files=watched_hashes())
@@ -1291,6 +1376,14 @@ class StandingCampaign(pc.Campaign):
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         self.require_pinned_terms(rows)
         if stage.id == 'transcription' and self.declaration.transcription is not None:
+            for attempt, _ in rows:
+                if attempt.get('stage') != 'transcription':
+                    continue
+                send = attempt.get('send') or {}
+                name = transcription_form_id(send.get('case'), self.declaration.transcription.forms)
+                require(send.get('form') == name and attempt.get('form_sha256') == TRANSCRIPTION_FORM_HASHES[name],
+                        'The campaign\'s earlier transcript requests used another form; '
+                        'an edited declaration never changes the recorded form for a recording.')
             # The Deepgram request parameters are pinned like the terms (refutation r1 B-F1): smart formatting is in no
             # pricing version, so without this an edited declaration could flip it inside one stage and one `passed`
             # verdict would cover two different requests.
@@ -1678,6 +1771,8 @@ def begin_run(campaign, stage, sends, inputs, cap, provenance):
         terms = campaign.declaration.transcription
         require(terms is not None and all(send.case in terms.inputs for send in sends),
                 'A transcription run sends only the recordings its declaration names.')
+        require(all(send.form == transcription_form_id(send.case, terms.forms) for send in sends),
+                'A transcription run sends only the declared form for each recording.')
         extra['audio'] = [audio_entry(audio_id).record() for audio_id in dict.fromkeys(send.case for send in sends)]
     return campaign.runs.begin(campaign.ledger, {
         'campaign': campaign.declaration.campaign, 'authority_id': campaign.declaration.authority_id, 'stage': stage,
@@ -1843,7 +1938,8 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     selected = select_batch(remaining, cap)
     run = begin_run(campaign, stage, selected, inputs, cap, provenance)
     try:
-        forms = stages.build_forms(root / 'forms' / stage, 'ordinary_notes' if transcribing else kind, inputs)
+        forms = (build_transcription_forms(root / 'forms' / stage, inputs) if transcribing
+                 else stages.build_forms(root / 'forms' / stage, kind, inputs))
         restricted = set(run['restricted_inputs'])
         for name, data in forms.items():
             require(hashlib.sha256(data).hexdigest() not in restricted,
@@ -2026,8 +2122,8 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                 if declaration.transcription is None:
                     entry['declared'] = False                # (defined, not declared: nothing of it can be sent)
                     continue
-                sends = standing_plan(name, {**inputs, 'transcription_audio': declaration.transcription.inputs,
-                                             'transcription_notes_contract': declaration.transcription.notes_contract})
+                declared_inputs = stage_inputs(name, declaration)
+                sends = standing_plan(name, declared_inputs)
                 entry['declared_terms'] = declaration.transcription.record()
                 # (the definitions show the product's default; with a declaration, report what IS sent — refutation r1
                 # B-F3: a `true` declaration printed smart_format 'false')
@@ -2039,8 +2135,13 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                 entry['pricing_keys'] = sorted({'transcription', key})
                 entry['generation_path_flags'] = (sq.stages_module().steps.PATH_FLAGS['field_relations']
                                                   if key != 'transcription' else {})
-                entry['sends'] = [{**row, 'pricing_key': next(s.pricing_key for s in sends if s.id == row['id'])}
-                                  for row in entry['sends'] if any(s.id == row['id'] for s in sends)]
+                entry['sends'] = [{**send.record(), 'inputs': send_inputs(send, declared_inputs)} for send in sends]
+                if declaration.transcription.forms:
+                    entry['form'] = 'per_recording'
+                    entry['forms'] = [{'audio_id': audio_id,
+                        'id': transcription_form_id(audio_id, declaration.transcription.forms),
+                        'sha256': TRANSCRIPTION_FORM_HASHES[transcription_form_id(audio_id, declaration.transcription.forms)]}
+                        for audio_id in declaration.transcription.inputs]
             else:
                 sends = standing_plan(name, inputs)
             left = remaining_sends(campaign, name, sends)

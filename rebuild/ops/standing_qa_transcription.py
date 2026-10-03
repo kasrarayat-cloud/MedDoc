@@ -404,12 +404,12 @@ class TranscriptionRun(stages.Run):
         require(run is not None and entry.sha256 in run['allowed_inputs']
                 and entry.sha256 not in set(run['restricted_inputs']),
                 f'{send.id}: the recording is not one its run allows; nothing is sent.')
-        form = self.inputs['cases']['forms'][st.TRANSCRIPTION_FORM]
+        form = st.transcription_form_spec(send, self.inputs)
         number = len(self.ledger.rows()) + 1
-        template, version = self.upload(self.forms[st.TRANSCRIPTION_FORM],
+        template, version = self.upload(self.forms[send.form],
                                         f'SYNTHETIC STANDING TRANSCRIPTION {entry.id} attempt {number}', 'intake.docx')
         if version.fields != form['fields']:
-            raise stages.StageStop(f'{send.id}: the stored mapping differs from the frozen {st.TRANSCRIPTION_FORM} '
+            raise stages.StageStop(f'{send.id}: the stored mapping differs from the frozen {send.form} '
                                    'fields (nothing sent)')
         response = steps.confirm_mapping(self.world.client, template.pk, version.pk)
         version.refresh_from_db()
@@ -467,8 +467,10 @@ class TranscriptionRun(stages.Run):
         case_dir = pc.private_directory(evidence / 'case')
         pc.write_new(case_dir / f'{entry.id}.wav', audio, raw=True)
         pc.write_new(case_dir / 'audio-provenance.json', entry.record())
-        pc.write_new(case_dir / 'form.docx', self.forms[st.TRANSCRIPTION_FORM], raw=True)
+        pc.write_new(case_dir / 'form.docx', self.forms[send.form], raw=True)
         pc.write_new(case_dir / 'mapping.json', version.fields)
+        if send.form != st.TRANSCRIPTION_FORM:
+            pc.write_new(case_dir / 'supplemental-form-contract.json', form)
         try:
             attempt = self.attempt(send, job, maximum, bound, held, shown, {
                 'form_sha256': template.sha256, 'audio_sha256': entry.sha256,
@@ -677,12 +679,17 @@ class TranscriptionRun(stages.Run):
         encounter = Encounter.objects.get(pk=made['encounter'])
         template = Template.objects.get(pk=made['template'])
         version = template.versions.get(pk=made['version'])
+        form = st.transcription_form_spec(send, self.inputs)
+        require(template.sha256 == form['sha256'] and version.fields == form['fields'],
+                'The transcript generation must use the same frozen original and field destinations.')
         require(hashlib.sha256(encounter.notes.encode()).hexdigest() == made['notes_sha256'] and not encounter.answers
                 and encounter.status == 'draft', 'The encounter changed after its transcript was saved as the notes.')
         return self.generate_on(send, template, version, encounter, extra={
             **({'transcription_patient_context': True} if self.terms.patient_context else {}),
             'audio_sha256': entry.sha256, 'audio': {'id': entry.id, 'bytes': entry.bytes, 'label': entry.label},
-            'transcription_attempt': made['attempt'], 'case': entry.id}, judge=self.judge_transcript(encounter.notes))
+            'transcription_attempt': made['attempt'], 'case': entry.id},
+            judge=self.judge_transcript(encounter.notes,
+                supplemental=form if send.form != st.TRANSCRIPTION_FORM else None))
 
     def generate_on(self, send, template, version, encounter, *, extra, judge):
         """sonnet5_stages.Run.generation_send from the quote on, for an encounter that already exists (its notes are
@@ -760,12 +767,15 @@ class TranscriptionRun(stages.Run):
             return self.interrupted(send, attempt, evidence, error)
 
     @staticmethod
-    def judge_transcript(notes):
+    def judge_transcript(notes, supplemental=None):
         """Each field's outcome (adopted, held, missing — usefulness, never a stop) and, for every ADOPTED answer as
         the product adopted it (the retained answers-adopted.json), its source support in the saved notes: an answer
         that cites nothing, cites what the notes do not say at its offsets, or says what none of its citations says
         is unsafe (adopted_without_source_support); an answer on a signature or initials field is unsafe
-        (protected_area_answered). There is no expected answer for a transcript: nothing else is judged."""
+        (protected_area_answered). Historical r1-11 runs have no reference score.
+        An explicitly declared supplemental form also records its separate frozen
+        literal-reference score from the saved first-pass answers, never the
+        clinician's corrected/reviewed values."""
         def judge(send, version, outcomes, exported, original, *, raw, reviewed, evidence):
             answers = pc.read_json(evidence / 'answers-adopted.json').get('answers') or {}
             names = {'supported': 'adopted', 'held': 'held', 'missing': 'missing'}
@@ -785,5 +795,10 @@ class TranscriptionRun(stages.Run):
                 if problems:
                     findings.append({'code': 'adopted_without_source_support',
                                      'why': f'{field["label"]}: ' + '; '.join(problems)})
-            return fields, findings, {'source_support': support}
+            details = {'source_support': support}
+            if supplemental is not None:
+                score = st.voice_forms_module().score(supplemental, notes, answers, support)
+                pc.write_new(evidence / 'supplemental-first-pass-score.json', score)
+                details['supplemental_first_pass'] = score
+            return fields, findings, details
         return judge
