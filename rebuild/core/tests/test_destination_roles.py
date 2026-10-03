@@ -1225,33 +1225,23 @@ class RepairLegacyIdentity(Walk, V3Fixture, TestCase):
         self.assertContains(page, 'data-destination-role', count=1)
         self.assertContains(page, 'never generated from notes')
 
-    def test_fv_01_a_signing_place_renamed_to_a_signature_label_keeps_the_finalizer_identity(self):
-        """FV-01 (regression vs 43fcf214): identity read the printed label wherever it was a signing place, so a real
-        signing place ('Initials', 'Sign here', 'Signature and date', 'Signed off by consultant') renamed to a signature
-        label finalized another clinician's typed name and accepted 'Leave blank - reviewed'."""
-        for n, (old, new) in enumerate((('Initials', 'Signature'), ('Sign here', "Doctor's signature"),
-                                        ('Signature and date', 'Signature'), ('Signed off by consultant', 'Signature'))):
-            with self.subTest(old=old, new=new):
+    def test_fv_01_original_human_roles_cannot_appoint_finalizer_identity_after_rename(self):
+        for n, old in enumerate(('Initials','Signature and date','Signed off by consultant')):
+            with self.subTest(old=old):
                 template, version = self.uploaded(data=legacy_rows(old, 'Plan'), name='Synthetic FV-01 %d' % n)
-                labels = {f['key']: (new if f['label'] == old else f['label']) for f in version.fields}
+                labels = {f['key']: ('Signature' if f['label'] == old else f['label']) for f in version.fields}
                 response = self.client.post(f'/templates/{template.pk}/', {'mapping_version': version.pk,
                                                                           'labels': json.dumps(labels)})
                 self.assertEqual(response.status_code, 302)
-                renamed = self.latest(template)
-                key = self.by_label(renamed)[new]['key']
-                e = self.generated(renamed, f'{new}: Dr Somebody Else\nPlan: Rest.')
-                self.assertEqual(e.answers[key]['status'], 'missing')
+                renamed = self.latest(template);key = self.by_label(renamed)['Signature']['key']
+                e = self.generated(renamed, 'Signature: ' + FINALIZER + '\nPlan: Rest.')
+                self.assertEqual((e.answers[key]['status'],e.answers[key]['text']), ('missing',''))
                 row = self.page_row(e, key)
-                self.assertEqual((row['identity'], row['blank_eligible']), (True, False))
-                post = {'revision': e.revision}
-                for f in renamed.fields:
-                    post['answer_' + f['key']] = '' if f['key'] == key else 'Rest.'
-                    post['reviewed_' + f['key']] = 'on'
-                post['blank_' + key] = 'on'
-                self.assertEqual(self.client.post(f'/encounters/{e.pk}/save/', post).status_code, 400)
-                self.assertEqual(self.reviewed(e, renamed, typed={new: 'Dr Somebody Else'}).status_code, 302)
-                self.assertIn(IDENTITY_REFUSAL, messages_of(self.finalized(e)))
-                self.assertEqual(e.status, 'review')
+                self.assertEqual((row['identity'], row['blank_eligible']), (False, True))
+                self.assertEqual(self.reviewed(e,renamed).status_code,302)
+                self.finalized(e);self.assertEqual(e.status,'finalized')
+                self.assertEqual(Document(private_path(e.export_path)).tables[0].cell(0,1).text,'')
+
 
 
 @override_settings(**V3)

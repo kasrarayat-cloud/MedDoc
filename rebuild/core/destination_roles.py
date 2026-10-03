@@ -152,7 +152,12 @@ def printed(field, roles):
     if not row:
         return field
     printed_field = {**field, 'label': row['printed_label']}
-    from .tab_review import another_signers_line
+    from .tab_review import another_signers_line, signature_label
+    if row.get('role') and not signature_label(row['printed_label']):
+        # A physical signing/initials role requires an affirmative original
+        # clinician identity; a renamed label or old policy cannot appoint one.
+        printed_field.pop('answer_policy', None)
+        return printed_field
     if another_signers_line(printed_field):
         # An edited label/policy does not turn a physical participant, family,
         # witness or unknown role into the authenticated clinician's identity.
@@ -165,10 +170,12 @@ def printed(field, roles):
 def legacy_reason(field, row):
     """Why a legacy field is never generated (its printed label is identity, a signature or initials, or another named
     person's signature line - tab_review.another_signers_line), or ''."""
-    from .tab_review import another_signers_line, clinician_identity
+    from .tab_review import another_signers_line, clinician_identity, signature_label
     if not row:
         return ''
     printed_field = {**field, 'label': row['printed_label']}
+    if row.get('role') and not signature_label(row['printed_label']):
+        return ROLE_NOT_GENERATED
     if clinician_identity(printed_field):
         return IDENTITY_NOT_GENERATED
     return ROLE_NOT_GENERATED if row.get('role') or another_signers_line(printed_field) else ''

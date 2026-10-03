@@ -157,24 +157,20 @@ class AutoImportWorkflow(V3Fixture,TestCase):
             self.assertEqual(response.status_code,400)
         self.assertEqual(self.template.versions.count(),1)
 
-    def test_ambiguous_kind_change_requires_explicit_ordinary_information_classification(self):
-        # Existing lexical "initial" metadata with no printed signing action
-        # remains an explicit, source-bound clinician mapping decision.
+    def test_ambiguous_initials_role_cannot_be_reclassified_by_an_ordinary_click(self):
+        # A lexical parenthetical alone supplies no physical ordinary reading.
+        # This is an explicit support limit; the source signing hold remains.
         from .test_destination_roles import legacy_rows
         with override_settings(QUILLMD_WORD_ENGINE='v3'):
             template,version=self.uploaded(data=legacy_rows('Troponin (initial)','Plan'),name='Synthetic mapping ambiguity')
         by=self.by_label(version);key=by['Troponin (initial)']['key']
-        self.assertIn(key,import_binding.ordinary_role_fields(version))
-        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_save','mapping_version':version.pk,
-            'kind_'+key:'text'})
-        self.assertEqual(response.status_code,400)
-        self.assertEqual(template.versions.count(),1)
-        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_save','mapping_version':version.pk,
-            'kind_'+key:'text','ordinary_'+key:'on'})
-        self.assertEqual(response.status_code,302)
-        reviewed=self.latest(template)
-        self.assertEqual(reviewed.corrections['ordinary_information_classified'],[key])
-        self.assertEqual(self.by_label(reviewed)['Troponin (initial)']['kind'],'text')
+        self.assertNotIn(key,import_binding.ordinary_role_fields(version))
+        for ordinary in ('','on'):
+            response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_save','mapping_version':version.pk,
+                'kind_'+key:'text','ordinary_'+key:ordinary})
+            self.assertEqual(response.status_code,400)
+            self.assertEqual(template.versions.count(),1)
+        self.assertEqual(Job.objects.count(),0);self.assertEqual(Reservation.objects.count(),0)
 
     def test_typed_fixture_runs_worker_review_finalization_and_download_with_bound_engine(self):
         self.correct_roles();self.confirm(self.template,self.version)

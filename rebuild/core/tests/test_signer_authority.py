@@ -11,6 +11,7 @@ from core.models import AuditEvent, Encounter, Job, LedgerEntry, Usage
 from core.tab_review import another_signers_line, clinician_identity, validate_identity
 from core.tests.test_destination_roles import legacy_rows
 from core.tests.test_role_suggestions import ACTION, Legacy, LIVE, NOTES, ON, labelled_provider
+from core.tests.test_v3_supersession_floor import SONNET_55_DEFAULT
 
 
 class SignerOwnership(SimpleTestCase):
@@ -31,6 +32,20 @@ class SignerOwnership(SimpleTestCase):
                 self.assertEqual(destination_roles.legacy_reason(field, {'printed_label': label, 'role': 'signature'}),
                                  destination_roles.ROLE_NOT_GENERATED)
 
+    def test_original_structural_role_cannot_become_the_finalizer_by_rename_or_old_policy(self):
+        for label, role in (('Signature of participant','signature'),('Signature of witness','signature'),
+                            ('Signature of patient','signature'),('Signed off by manager','signature'),
+                            ('Initials','initials')):
+            with self.subTest(label=label):
+                field={'key':'k','label':'Signature','answer_policy':'clinician_identity'}
+                row={'printed_label':label,'role':role}
+                source=destination_roles.printed(field,{'k':row})
+                self.assertEqual(source['label'],label)
+                self.assertFalse(clinician_identity(source))
+                self.assertEqual(destination_roles.legacy_reason(field,row),destination_roles.ROLE_NOT_GENERATED)
+        mapped={'key':'k','label':'Signature','answer_policy':'clinician_identity'}
+        self.assertTrue(clinician_identity(destination_roles.printed(mapped,{'k':{'printed_label':'Doctor','role':''}})))
+
     def test_explicit_clinician_identity_and_ordinary_date_questions_keep_their_workflows(self):
         actor = SimpleNamespace(pk=1, email='synthetic@invalid', get_full_name=lambda: 'Synthetic Clinician')
         for label in ('Signature', 'Electronically signed by', 'Doctor signature', 'Signature (clinician)'):
@@ -44,8 +59,9 @@ class SignerOwnership(SimpleTestCase):
 
 @override_settings(**ON)
 class WithdrawnSignerOffers(Legacy, TestCase):
-    @override_settings(QUILLMD_WORD_ENGINE='auto', QUILLMD_WORD_AUTO_PREFER_V3=True,
-                       AI_MODEL='claude-sonnet-5-5', V3_FIELD_RELATIONS_SWITCH=None)
+    @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture', QUILLMD_AI_MODE='fixture',
+                              AI_THINKING='between_tools', V3_FIELD_RELATIONS=True,
+                              QUILLMD_WORD_ENGINE='auto', QUILLMD_WORD_AUTO_PREFER_V3=True))
     def test_initial_and_signed_receipt_answers_reach_actual_bound_http_export_without_correction(self):
         import hashlib
         from docx import Document
@@ -58,6 +74,8 @@ class WithdrawnSignerOffers(Legacy, TestCase):
         self.version = self.confirm(self.template, self.version); self.by = self.by_label(self.version)
         notes = '\n\n'.join(label + ': ' + value for label, value in desired.items())
         e = self.generated(notes)
+        job=Job.objects.get(encounter=e,kind='generation')
+        self.assertEqual(job.state,'succeeded',job.error)
         for label, value in desired.items():
             self.assertEqual(e.answers[self.key(label)]['text'], value)
             self.assertEqual(e.answers[self.key(label)]['status'], 'supported')
@@ -132,7 +150,8 @@ class WithdrawnSignerOffers(Legacy, TestCase):
 
     def test_unknown_printed_signer_stays_human_only_after_mapping_rename(self):
         import json
-        for label in ('Signature (participant)', 'Patient signature', 'Manager signature'):
+        for label in ('Signature (participant)', 'Patient signature', 'Manager signature',
+                      'Signature of participant', 'Signature of witness', 'Signature of patient', 'Signed off by manager'):
             with self.subTest(label=label):
                 self.template, self.version = self.uploaded(data=legacy_rows(label, 'Plan'),
                                                             name='Synthetic printed role ' + label)
