@@ -797,7 +797,7 @@ class TranscriptionRun(stages.Run):
                                      'why': f'{field["label"]}: ' + '; '.join(problems)})
             details = {'source_support': support}
             if supplemental is not None:
-                score = st.voice_forms_module().score(supplemental, notes, answers, support)
+                score = st.voice_forms_module(supplemental['id']).score(supplemental, notes, answers, support)
                 pc.write_new(evidence / 'supplemental-first-pass-score.json', score)
                 details['supplemental_first_pass'] = score
             return fields, findings, details

@@ -184,6 +184,7 @@ ledger above marks "no provider upload". The development originals are exercised
 ```
 transcription_input: soap-ankle-speech 3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7
 transcription_input: colonoscopy-speech dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c
+transcription_form: soap-ankle-speech builtin-soap-voice-v1 d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa
 transcription_form: colonoscopy-speech synthetic-colonoscopy-voice-v1 1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e
 ```
 
@@ -192,7 +193,12 @@ synthetic scripts written for this project, on the runner's own allowlist (`stan
 pinned by sha256 and size and read only when its bytes match. This list may only narrow that allowlist. The product's
 stored upload must hash to the same sha256 before the send is admitted, and every transcription attempt records it.
 
-SOAP retains the original frozen r1-11 intake form. Colonoscopy uses a new independently authored blank procedure
+SOAP uses the application's deterministic blank four-section SOAP original, prospectively frozen before this
+campaign's first preflight/send in `rebuild/ops/standing_qa_soap_form.py` and its committed manifest. The original
+recording and script are unchanged and previously exposed. All historical r1-11 zero-answer results retain their
+original forms, outcomes and denominators. The pain-score correction is separately recorded for clinician review;
+literal reference matches do not settle whether a hold is clinically necessary. This measures the actual built-in
+SOAP document, and is not Word corpus or human microphone acceptance. Colonoscopy uses a new independently authored blank procedure
 worksheet, frozen by the committed generator and manifest in `rebuild/ops/standing_qa_voice_forms.py` and
 `rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json`. Its eleven destinations include ten ordinary reference
 answers and one estimated-blood-loss correction that must remain held. It contains no signature, consent, witness,

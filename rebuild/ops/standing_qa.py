@@ -250,6 +250,7 @@ TRANSCRIPTION_FORM = 'r1-11'
 TRANSCRIPTION_FORM_HASHES = {
     TRANSCRIPTION_FORM: 'ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa',
     'synthetic-colonoscopy-voice-v1': '1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e',
+    'builtin-soap-voice-v1': 'd92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa',
 }
 #: A declared rate: USD per audio minute, positive, at most ten decimals.
 TRANSCRIPTION_RATE = re.compile(r'(?:0|[1-9][0-9]{0,2})\.[0-9]{1,10}|[1-9][0-9]{0,2}')
@@ -321,7 +322,14 @@ def transcription_module():
     return standing_qa_transcription
 
 
-def voice_forms_module():
+def voice_forms_module(form_id=None):
+    if form_id == 'builtin-soap-voice-v1':
+        try:
+            from . import standing_qa_soap_form
+        except ImportError:
+            import standing_qa_soap_form
+        return standing_qa_soap_form
+    require(form_id in (None, 'synthetic-colonoscopy-voice-v1'), 'Unknown supplemental voice form.')
     try:
         from . import standing_qa_voice_forms
     except ImportError:
@@ -334,8 +342,11 @@ def transcription_form_id(audio_id, forms=()):
     require(audio_id in AUDIO_BY_ID, 'A transcription form belongs to an allowlisted recording.')
     overrides = dict(forms)
     name = overrides.get(audio_id, TRANSCRIPTION_FORM)
-    require(name in TRANSCRIPTION_FORM_HASHES and (name == TRANSCRIPTION_FORM or audio_id == 'colonoscopy-speech'),
-            'The supplemental colonoscopy form belongs only to its allowlisted colonoscopy recording.')
+    allowed = {TRANSCRIPTION_FORM: set(AUDIO_BY_ID),
+               'synthetic-colonoscopy-voice-v1': {'colonoscopy-speech'},
+               'builtin-soap-voice-v1': {'soap-ankle-speech'}}
+    require(name in TRANSCRIPTION_FORM_HASHES and audio_id in allowed.get(name, set()),
+            'A supplemental voice form belongs only to its prospectively declared recording.')
     return name
 
 
@@ -345,28 +356,28 @@ def transcription_form_spec(send, inputs):
     spec = inputs['cases']['forms'][name]
     require(spec['sha256'] == TRANSCRIPTION_FORM_HASHES[name], 'The transcription form differs from its pinned hash.')
     if name != TRANSCRIPTION_FORM:
-        expected, _ = voice_forms_module().frozen()
+        expected, _ = voice_forms_module(name).frozen()
         require(spec == expected, 'The supplemental form mapping or expectations differ from the committed freeze.')
     return spec
 
 
 def build_transcription_forms(target, inputs):
     """Keep the original frozen generator unchanged; add only a declared new form."""
-    supplemental = voice_forms_module().FORM_ID
+    supplemental = {name for name in TRANSCRIPTION_FORM_HASHES if name != TRANSCRIPTION_FORM}
     forms = inputs['cases']['forms']
     legacy_inputs = {**inputs, 'cases': {**inputs['cases'], 'forms': {
-        name: value for name, value in forms.items() if name != supplemental}}}
+        name: value for name, value in forms.items() if name not in supplemental}}}
     built = sq.stages_module().build_forms(target, 'ordinary_notes', legacy_inputs)
-    if supplemental in forms:
-        manifest, raw = voice_forms_module().frozen()
-        require(forms[supplemental] == manifest, 'The supplemental form differs from its committed freeze.')
-        path = Path(target) / f'{supplemental}.docx'
+    for name in sorted(supplemental & set(forms)):
+        manifest, raw = voice_forms_module(name).frozen()
+        require(forms[name] == manifest, 'The supplemental form differs from its committed freeze.')
+        path = Path(target) / f'{name}.docx'
         if os.path.lexists(path):
             require(pc.read_private(path, limit=1024 * 1024) == raw,
                     'The retained supplemental original differs from its frozen bytes.')
         else:
             pc.write_new(path, raw, raw=True)
-        built[supplemental] = raw
+        built[name] = raw
     return built
 
 
@@ -377,6 +388,8 @@ WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
     'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
     'rebuild/ops/standing_qa_signing.py',
     'rebuild/ops/standing_qa_voice_forms.py', 'rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json',
+    'rebuild/ops/standing_qa_soap_form.py', 'rebuild/ops/fixtures/builtin-soap-voice-v1.json',
+    'rebuild/core/soap_document.py', 'rebuild/core/soap_views.py',
     'rebuild/core/mapping_assistance.py',
     'rebuild/core/mapping_wire.py', 'rebuild/core/mapping_jobs.py', 'rebuild/core/destination_roles.py',
     'rebuild/core/v3_mapping.py', 'rebuild/core/v3_field_relations.py', 'rebuild/core/v3_literal_facts.py',
@@ -1107,8 +1120,8 @@ def stage_inputs(stage, declaration):
                   'transcription_notes_contract': declaration.transcription.notes_contract}
         if declaration.transcription.forms:
             inputs['transcription_forms'] = declaration.transcription.forms
-            if any(name != TRANSCRIPTION_FORM for _, name in declaration.transcription.forms):
-                manifest, _ = voice_forms_module().frozen()
+            for name in sorted({name for _, name in declaration.transcription.forms if name != TRANSCRIPTION_FORM}):
+                manifest, _ = voice_forms_module(name).frozen()
                 inputs = {**inputs, 'cases': {**inputs['cases'], 'forms': {
                     **inputs['cases']['forms'], manifest['id']: manifest}}}
     return inputs
