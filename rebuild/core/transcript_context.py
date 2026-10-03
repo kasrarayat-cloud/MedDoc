@@ -76,7 +76,7 @@ def apply(reading,token):
     if docs is None:return reading
     prefix='The patient '
     augmented=v3_syntax.docs(prefix+u['quote'][0].lower()+u['quote'][1:] for u in units)
-    eligible=set();blocked=False
+    eligible=set();nominals=set();blocked=False
     for index,(unit,doc) in enumerate(zip(units,docs)):
         uid=unit['id'];info=reading['actors'][uid]
         if info.get('kind')=='patient' and not info.get('other_floor'):blocked=False
@@ -121,11 +121,25 @@ def apply(reading,token):
         if any(t.text in ('"','“','”','‘','’') for t in doc):continue
         if info.get('bare_cessation') or info.get('ceased_keys') or info.get('intention'):continue
         if info.get('dependent') or info.get('bounded'):continue
-        nominal=bool(not own and not any(t.pos_ in ('VERB','AUX') for t in value)
-            and sole.get('classes') & {'symptom','finding','injury','condition','medication'}
-            and not sole.get('unknown')
-            and first is not None and first.pos_ in ('ADJ','NUM')
-            and any(t.dep_ in ('amod','compound','prep','nummod') for t in value))
+        # A positively known clinical noun can state a finding without a
+        # human grammatical subject ('No fever', 'Examination mild swelling').
+        # Confirmation supplies whose finding this is; it introduces no has/is
+        # predicate, medication status, clinical words or source offsets.
+        roots=[t for t in value if t.dep_=='ROOT']
+        topic=roots[0] if len(roots)==1 else None
+        unknown_modifiers=[t for t in value if not t.is_punct and not t.is_space
+            and any(c.isalpha() for c in t.text) and t.pos_ not in ('PRON','NUM','DET','ADP','CCONJ','SCONJ','PART','AUX','SYM')
+            and not {a._fold(t.text),a._lemma(t)} & a._SOLE_KNOWN]
+        adjectival=bool(unknown_modifiers and all(t.pos_=='ADJ' and t.dep_=='amod'
+            and a.SOLE_CLASSES.get(a._lemma(t.head),frozenset()) & a.SOLE_CLINICAL for t in unknown_modifiers))
+        nominal=bool(not own and topic is not None and topic.pos_ in ('NOUN','PROPN')
+            and not any(t.pos_ in ('VERB','AUX') for t in value)
+            and a.SOLE_CLASSES.get(a._lemma(topic),frozenset()) & a.SOLE_CLINICAL
+            and not sole.get('uncertain') and 'global' not in sole.get('reach',())
+            and (not sole.get('unknown') or adjectival)
+            and (any(t.dep_ in ('amod','compound','prep','nummod','det','nmod') for t in value)
+                 or a._lemma(topic) not in a.GENERIC_WORDS | a.SOLE_CLINICAL))
         if not own and not syntax and not nominal and not any(t.pos_=='VERB' and t.tag_ in ('VBP','VBZ') for t in value):continue
         eligible.add(uid)
-    return {**reading,'confirmed_patient':frozenset(eligible)}
+        if nominal:nominals.add(uid)
+    return {**reading,'confirmed_patient':frozenset(eligible),'nominal_patient':frozenset(nominals)}

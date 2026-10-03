@@ -64,6 +64,37 @@ class PatientDefault(SimpleTestCase):
                 self.check(source, label, [source], 'conflict', context=False)
                 self.check(source, label, [source])
 
+    def test_nominal_clinical_assertions_gain_only_default_actor_not_drug_status(self):
+        for source, label in [('No fever.', 'Examination'),
+                              ('Fever.', 'Symptoms'),
+                              ('Examination mild swelling over the left lateral ankle.', 'Examination'),
+                              ('No open wound.', 'Examination')]:
+            with self.subTest(source=source):
+                self.check(source, label, [source], 'conflict', context=False)
+                self.check(source, label, [source])
+        pair='Examination mild swelling over the left lateral ankle. No open wound.'
+        self.check(pair, 'Examination', ['Examination mild swelling over the left lateral ankle.', 'No open wound.'])
+        self.check('Symptoms.', 'Symptoms', ['Symptoms.'], 'conflict')
+        for source, label in [('Warfarin 5 mg daily.', 'Current medications'),
+                              ('Stopped warfarin.', 'Current medications'),
+                              ('Her father mild cough.', 'Symptoms'),
+                              ('Possible ankle strain.', 'Current diagnosis')]:
+            with self.subTest(source=source):self.check(source, label, [source], 'conflict')
+        for source in ['Family history. No fever.', 'Hypothetical. No fever.']:
+            self.check(source, 'Examination', ['No fever.'], 'conflict')
+
+    def test_opposed_anatomical_topics_need_the_same_explicit_source_side(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        self.check(source+' Denies fever, numbness, and right ankle pain.', 'Examination', [source])
+        self.check(source+' The patient has no swelling over the left ankle.', 'Examination', [source], 'conflict')
+        self.check(source+' The patient has no swelling.', 'Examination', [source], 'conflict')
+        self.check(source+' The patient has no swelling over the right ankle.', 'Examination', [source])
+        patient='The patient reports pain in the left knee.'
+        self.check(patient+' The patient denies right knee pain.', 'Symptoms', [patient])
+        self.check(patient+' The patient denies left knee pain.', 'Symptoms', [patient], 'conflict')
+        self.check(patient+' The patient denies knee pain.', 'Symptoms', [patient], 'conflict')
+        self.check(patient+' The patient denies right knee pain and has no fever.', 'Symptoms', [patient])
+
     def test_context_is_exact_and_span_bound_not_a_global_patient_assumption(self):
         source = 'Takes warfarin 5 mg daily.'
         prefix = 'Reports cough.\n\n'
@@ -112,6 +143,40 @@ class PatientDefault(SimpleTestCase):
                     self.assertEqual((answers[key]['status'],answers[key]['text']),('conflict',''))
         # The model's exact original correction selection and planning line
         # remain adversarial controls, rather than newly simplified examples.
+
+    def test_original_v4_voice_response_gains_one_useful_answer_without_changing_raw_output(self):
+        retained=json.loads((Path(__file__).parent/'voice_first_pass_controls.json').read_text())
+        notes=retained['notes']; fields=retained['fields']
+        result=raw(notes,fields,retained['first_model_body'],g.SONNET_5_5)
+        self.assertEqual(sum(a['status']=='supported' for a in r.validated(result).values()),0)
+        result['patient_default_context']=proof(notes)
+        answers=r.validated(result)
+        self.assertEqual(answers['v3_7']['status'],'supported')
+        self.assertEqual(answers['v3_7']['text'],
+            'Examination mild swelling over the left lateral ankle.\nNo open wound.')
+        self.assertEqual(sum(a['status']=='supported' for a in answers.values()),1)
+        self.assertEqual(g.governed_decisions(notes,fields,answers),[])
+        for key in retained['held_controls']:self.assertEqual(answers[key]['status'],'conflict')
+
+    def test_literal_prefix_heading_and_side_controls_keep_actual_opposites(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['The patient has no swelling over the left ankle.',
+                     'The patient has no swelling over either ankle.',
+                     'The patient has no swelling over both ankles.',
+                     'The patient has no swelling over the ankle.',
+                     'The patient has no swelling.',
+                     'The patient has non-swollen left ankle.',
+                     'The patient has swelling over the left ankle. No.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source],'conflict')
+        self.check(source+' The patient has non-swollen right ankle.','Examination',[source])
+        patient='The patient reports pain in the left knee.'
+        self.check(patient+' Her father denies left knee pain.','Symptoms',[patient])
+        # Retained lexical-denial residual: a negated deny predicate is still
+        # conservatively held. It is measured as an unnecessary hold, not
+        # proof that the preceding pain statement is actually contradicted.
+        self.check(patient+' The patient does not deny left knee pain.','Symptoms',[patient],'conflict')
+        self.check(patient+' The patient denies left knee pain.','Symptoms',[patient],'conflict',context=False)
+        self.check(patient+' The patient denies left knee pain.','Symptoms',[patient],'conflict',context=True)
 
     def test_confirmation_does_not_tune_around_an_unresolved_parser_failure(self):
         # Pinned syntax still reads left as a past verb in this sentence. Retain
@@ -192,11 +257,12 @@ class PatientDefault(SimpleTestCase):
 
     def test_nominal_temporal_predicate_and_exclusive_negation_have_distinct_scope(self):
         source='Takes warfarin 5 mg daily.'
-        for tail in ['No longer the daily medication.','No longer a daily medication.']:
+        for tail in ['No longer the daily medication.','No longer a daily medication.','No longer my daily medication.']:
             with self.subTest(tail=tail):self.check(source+' '+tail,'Current medications',[source],'conflict')
         for tail in ['Her father is not the only warfarin user.',
                      'Her father is the only person not taking warfarin.',
-                     'Only her father is not taking warfarin.','No diabetes.']:
+                     'Only her father is not taking warfarin.','Her father is the only person without warfarin.',
+                     'Only her father used to take warfarin.','No diabetes.']:
             with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source])
         denied='The patient does not take warfarin.'
         self.check(denied+' Only her father does not take warfarin.','Medications',[denied],'conflict')
