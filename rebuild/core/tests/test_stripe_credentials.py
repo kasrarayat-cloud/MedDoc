@@ -1,13 +1,15 @@
-"""Sandbox credential gating only: no database, Stripe requests, or payments."""
+"""Sandbox gating stays pure; persisted integration metadata uses an isolated database."""
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.messages.storage.fallback import FallbackStorage
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from core.billing import stripe_test_key_configured
 from core.context import integration_status
 from core.views import checkout
+from core.models import CodeSet, Job, LedgerEntry, Payment, Reservation, Usage
 
 
 class StripeCredentialTests(SimpleTestCase):
@@ -58,10 +60,38 @@ class StripeCredentialTests(SimpleTestCase):
                 provider.assert_not_called()
                 self.assertIn('test or restricted test key', str(list(request._messages)[0]))
 
+class StripeIntegrationConfigurationTests(TestCase):
+    """The full interface reads real release metadata; it still makes no payment request."""
     def test_interface_labels_configuration_without_claiming_provider_verification(self):
         for key in ('sk_test_synthetic', 'rk_test_synthetic', 'rk_live_synthetic'):
-            with self.subTest(prefix=key[:8]), override_settings(STRIPE_SECRET_KEY=key):
+            with self.subTest(prefix=key[:8]), override_settings(STRIPE_SECRET_KEY=key), \
+                    patch('stripe.checkout.Session.create') as provider:
                 payments = next(row for row in integration_status() if row['name'] == 'Payments')
-            self.assertEqual(payments['status'],
-                             'Not connected' if '_live_' in key else 'Stripe sandbox key configured')
-            self.assertIn('does not verify payments', payments['detail'])
+                self.assertEqual(payments['status'],
+                                 'Not connected' if '_live_' in key else 'Stripe sandbox key configured')
+                self.assertIn('does not verify payments', payments['detail'])
+                provider.assert_not_called()
+
+    def test_current_expired_and_gap_icd_metadata_are_read_without_financial_mutation(self):
+        for version, first, last, digest in (
+                ('Synthetic FY2026', date(2025, 10, 1), date(2026, 3, 31), 'a'),
+                ('Synthetic FY2027', date(2026, 10, 1), date(2027, 9, 30), 'b')):
+            CodeSet.objects.create(system='ICD-10-CM', version=version, effective_from=first,
+                effective_until=last, source_url='https://example.invalid/synthetic-icd', sha256=digest * 64)
+        before = list(CodeSet.objects.order_by('pk').values())
+        for today, status in ((date(2026, 10, 3), 'Current release: Synthetic FY2027'),
+                              (date(2027, 10, 1), 'No release covers today'),
+                              (date(2026, 5, 1), 'No release covers today')):
+            with self.subTest(today=today), patch('core.context.timezone.localdate', return_value=today), \
+                    patch('stripe.checkout.Session.create') as provider:
+                rows = integration_status()
+                icd = next(row for row in rows if row['name'] == 'ICD-10-CM terminology')
+                self.assertEqual(icd['status'], status)
+                self.assertIn('Each encounter uses its date of service', icd['detail'])
+                self.assertIn('Suggestions require clinician review', icd['detail'])
+                self.assertIn('2 loaded release(s)', icd['detail'])
+                self.assertIn('does not verify payments', next(row for row in rows if row['name'] == 'Payments')['detail'])
+                provider.assert_not_called()
+        self.assertEqual(list(CodeSet.objects.order_by('pk').values()), before)
+        for model in (Job, Reservation, Usage, Payment, LedgerEntry):
+            self.assertEqual(model.objects.count(), 0)

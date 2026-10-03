@@ -30,6 +30,7 @@ from core.models import (Code, CodeSet, CodeSuggestion, Department, Invitation, 
                          Patient, ProviderReceipt, Template, TemplateVersion, User)
 from core.security import digest, private_path
 from core.tests.test_security import SyntheticFixture
+from core.middleware import DOCTOR_URLCONF
 
 STORAGES = {'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
             'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}
@@ -41,7 +42,7 @@ PUBLIC = {'preview_sign_in', 'preview_sign_out', 'recovery_request', 'recovery_c
 #: The signed-in account's own pages: lists scoped to its memberships, its own wallet and session.
 OWN = {'logout', 'mfa_setup', 'dashboard', 'billing', 'checkout', 'api_patients'}
 #: Creations that name the department (or its patient/template) they write into.
-CREATE = {'patients', 'template_upload', 'encounter_new', 'team', 'create_department'}
+CREATE = {'patients', 'template_upload', 'soap_start', 'encounter_new', 'team', 'create_department'}
 #: route name -> (object the id addresses, {method: documented refusal for an intruder})
 P404 = {'GET': 405, 'POST': 404}         # @require_POST and a scoped lookup
 G404 = {'GET': 404, 'POST': 404}         # any method, scoped lookup
@@ -82,6 +83,7 @@ ROUTES = {
     'webhook': 'billing/webhook/',
     'dashboard': '',
     'template_upload': 'templates/upload/',
+    'soap_start': 'templates/soap/',
     'template_detail': 'templates/<uuid:pk>/',
     'template_original': 'templates/<uuid:pk>/original/',
     'encounter_new': 'encounters/new/',
@@ -127,6 +129,14 @@ def all_patterns(resolver=None, prefix=''):
 #: Their routes are mounted too, so each must carry an isolation decision here (QUILLMD_ROLE_SUGGESTIONS).
 SWITCHED_URLCONFS = ('quillmd.urls_doctor_role_suggestions',)
 
+# Preserve the original route and isolation decision above as historical evidence. The Oct 3 human-signing
+# policy withdraws this endpoint for every actor; that absence is verified separately, never counted as tenancy proof.
+RETIRED_ROUTES = {'accept_role_suggestion': 'encounters/<uuid:pk>/role-suggestion/'}
+
+
+def active_objects():
+    return {name: value for name, value in OBJECT.items() if name not in RETIRED_ROUTES}
+
 
 def switched_patterns():
     """(route, pattern, urlconf) of every route a switched doctor URLconf mounts beyond the root's."""
@@ -141,11 +151,12 @@ def classification_problems():
     """Every way the mounted routes and the classification disagree, by route PATTERN and name; [] when they agree."""
     problems = []
     mounted = [(route, pattern.name) for route, pattern in all_patterns() if not route.startswith('console/')]
-    mounted += [(route, pattern.name) for route, pattern, _ in switched_patterns()]
+    mounted += [(route, pattern.name) for route, pattern, _ in switched_patterns()
+                if RETIRED_ROUTES.get(pattern.name) != route]
     if len(mounted) <= 30 or not any(route.startswith('console/') for route, _ in all_patterns()):
         problems.append(('the resolver walk found almost nothing', len(mounted)))
     problems += [('mounted twice', pair) for pair in sorted(set(mounted)) if mounted.count(pair) > 1]
-    expected = {(route, name) for name, route in ROUTES.items()}
+    expected = {(route, name) for name, route in ROUTES.items() if RETIRED_ROUTES.get(name) != route}
     problems += [('no isolation decision', pair) for pair in sorted(set(mounted) - expected)]
     problems += [('classified but not mounted', pair) for pair in sorted(expected - set(mounted))]
     groups = (PUBLIC, OWN, CREATE, set(OBJECT))
@@ -168,8 +179,8 @@ def changed(before, after):
     return sorted(name for name in before if before[name] != after[name])
 
 
-# QUILLMD_ROLE_SUGGESTIONS='1': with it off, accept_role_suggestion is not routed at all (refutation round 2, I2-1), which
-# would pass the intruder rows vacuously and fail the owner's positive control.
+# Keep the historical switch on: the withdrawn endpoint must still be absent. Current active routes retain
+# authorized positive controls; the historical role-suggestion route has its own unmounted-contract tests below.
 @override_settings(AI_MODE='fixture', ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False,
                    QUILLMD_MAPPING_ASSISTANCE=True, QUILLMD_ROLE_SUGGESTIONS='1', STORAGES=STORAGES)
 class IsolationMatrix(SyntheticFixture, TestCase):
@@ -265,7 +276,7 @@ class IsolationMatrix(SyntheticFixture, TestCase):
     def test_intruders_get_the_documented_refusal_and_nothing_changes(self):
         for who, intruder in self.intruders.items():
             client = self.client_for(intruder)
-            for name, (_, refusals) in OBJECT.items():
+            for name, (_, refusals) in active_objects().items():
                 for method, status in refusals.items():
                     with self.subTest(intruder=who, route=name, method=method):
                         before = database_state()
@@ -297,6 +308,7 @@ class IsolationMatrix(SyntheticFixture, TestCase):
                               'service_date': timezone.localdate().isoformat(), 'synthetic_only': 'on'},
             'team': {'department': department.pk, 'email': 'intruder-invite@synthetic.invalid', 'role': 'clinician'},
             'create_department': {'name': 'Intruder department', 'organization': org.pk},
+            'soap_start': {'department': department.pk},
         }
         for who, intruder in self.intruders.items():
             client = self.client_for(intruder)
@@ -325,14 +337,82 @@ class IsolationMatrix(SyntheticFixture, TestCase):
                         self.assertNotIn(secret, body)
 
     def test_positive_control_the_owner_resolves_every_department_object(self):
-        """Every OBJECT route finds its object for the department's own owner: no 404, no 403."""
+        """Every active OBJECT route finds its object for the department's own owner: no 404, no 403."""
         owner = self.alpha[0]
         client = self.client_for(owner)
-        for name, (_, refusals) in OBJECT.items():
+        for name, (_, refusals) in active_objects().items():
             method = 'post' if refusals['GET'] == 405 else 'get'
             with self.subTest(route=name):
                 response = getattr(client, method)(self.url(name), {'revision': 0, 'role': 'manager', 'active': 'on'})
                 self.assertNotIn(response.status_code, (403, 404, 405), f'{name} did not resolve for its owner')
+
+    def test_positive_control_authorized_manual_answer_persists_on_a_hash_bound_original(self):
+        """A real supported form proves that the owner's manual route writes; a redirect alone is insufficient."""
+        from docx import Document
+        import io
+        owner, _org, department, patient, _template, _encounter, _blob = self.alpha
+        document = Document()
+        table = document.add_table(rows=3, cols=2)
+        for row, label in zip(table.rows, ('Patient signature', 'Initials', 'Plan')):
+            row.cells[0].text = label
+        stream = io.BytesIO(); document.save(stream); original = stream.getvalue()
+        client = self.client_for(owner)
+        with override_settings(QUILLMD_WORD_ENGINE='legacy'):
+            uploaded = client.post('/templates/upload/', {'department': department.pk, 'name': 'Synthetic manual role control',
+                'synthetic_only': 'on', 'file': SimpleUploadedFile('manual-role-control.docx', original)})
+        self.assertEqual(uploaded.status_code, 302)
+        template = Template.objects.get(name='Synthetic manual role control')
+        version = template.versions.get()
+        self.assertEqual(template.sha256, hashlib.sha256(original).hexdigest())
+        self.assertEqual(version.import_manifest['source_sha256'], template.sha256)
+        started = client.post('/encounters/new/', {'patient': patient.pk, 'template_version': version.pk,
+            'service_date': timezone.localdate().isoformat(), 'notes': 'Plan: Rest.', 'synthetic_only': 'on'})
+        self.assertEqual(started.status_code, 302)
+        encounter = type(self.alpha[5]).objects.get(template_version=version)
+        keys = {field['label']: field['key'] for field in version.fields}
+        saved = client.post(f'/encounters/{encounter.pk}/save/', {'revision': encounter.revision,
+            'answer_' + keys['Plan']: 'Clinician documented plan correction.', 'reviewed_' + keys['Plan']: 'on'})
+        self.assertEqual(saved.status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.answers[keys['Plan']]['text'], 'Clinician documented plan correction.')
+        self.assertEqual(encounter.answers[keys['Plan']]['status'], 'edited')
+        self.assertEqual(encounter.answers[keys['Plan']]['edited_by'], str(owner.pk))
+        for label in ('Patient signature', 'Initials'):
+            self.assertFalse(encounter.answers.get(keys[label], {}).get('text'))
+        self.assertEqual(private_path(template.original_path).read_bytes(), original)
+        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+        self.assertEqual(client.get(f'/api/encounters/{encounter.pk}/').json()['answers'], encounter.answers)
+        for intruder in self.intruders.values():
+            denied = self.client_for(intruder)
+            before = database_state()
+            self.assertEqual(denied.post(f'/encounters/{encounter.pk}/save/', {'revision': encounter.revision,
+                'answer_' + keys['Plan']: 'SYNTHETIC unauthorized overwrite.'}).status_code, 404)
+            self.assertEqual(changed(before, database_state()), [])
+
+
+@override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES)
+class RetiredRoleSuggestionContract(SyntheticFixture, TestCase):
+    """No actor can invoke the retired act, even with an old setting. This is not access-control evidence."""
+    def test_retired_route_is_unmounted_for_owner_and_intruders_without_mutation(self):
+        from core import destination_roles
+        owner, org, _dept, _patient, _template, encounter, _blob = self.make_scope('retired-owner')
+        sibling = self.make_scope('retired-sibling', org)[0]
+        other = self.make_scope('retired-other')[0]
+        self.assertEqual(RETIRED_ROUTES['accept_role_suggestion'], ROUTES['accept_role_suggestion'])
+        self.assertIn('accept_role_suggestion', OBJECT)  # historical decision remains recorded
+        for setting in ('0', '1'):
+            with override_settings(QUILLMD_ROLE_SUGGESTIONS=setting):
+                self.assertFalse(destination_roles.suggestions_enabled())
+                for actor in (owner, sibling, other):
+                    client = Client(); client.force_login(actor)
+                    for method in ('get', 'post'):
+                        with self.subTest(setting=setting, actor=actor.username, method=method):
+                            before = database_state()
+                            response = getattr(client, method)(f'/encounters/{encounter.pk}/role-suggestion/',
+                                {'revision': encounter.revision, 'key': 'symptoms', 'value': 'SYNTHETIC retired offer'})
+                            self.assertEqual(response.status_code, 404)
+                            self.assertEqual(response.wsgi_request.urlconf, DOCTOR_URLCONF)
+                            self.assertEqual(changed(before, database_state()), [])
 
 
 @override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES)
