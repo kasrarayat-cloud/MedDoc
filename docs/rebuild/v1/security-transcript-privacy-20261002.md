@@ -799,3 +799,25 @@ preserve v2's actual failure and verify the finished repair before execution. No
 
 `clinical-fa3-and-preparation-refutation/manifest.json` binds the protected instruments, first outcomes, parser/scope
 witnesses and retention RED/PASS logs. Original copy helper8cf, signingea5 and voice-fit8aea remain unchanged.
+
+
+### Finished preparation binding repair and retained cleanup proposals
+
+Separate descriptor wrapper v3 at SHA256
+`a9cab0c07256ce2fb23ac2af6db9d9fc084fc9de9dd092e91604f21b4874cc4c` adds the missing temporary-name/descriptor,
+regular-file, owner/mode/link/mount and exact output-byte checks immediately before descriptor-relative replacement.
+Four bounded pure modes exit0 in0.710s: functional generated-launcher compilation/metadata and parent, named-leaf,
+temporary-name substitutions. All three attacks now refuse before a foreign write or replacing the launcher with a
+link; the temporary attack records `final_launcher_is_symlink:false`. Exact v3/helper8cf bytes remained unchanged.
+No further demonstrable failure was found within these measured binding operations. The source factory is mocked,
+so this does not claim a real campaign/key/source preparation, restore or service launch. Actual post-clone111-guard/
+28-function/schema and genuine `transcript_context` proof verification remain lead-owned prerequisites before start.
+All cff/v2 failures remain failures with their original witnesses. `private-demo-wrapper-v3/manifest.json` binds
+finished pure outcomes and exact raw source/instrument paths; no database, container, provider or real key was read.
+
+Completed owned copy tests leave132 reproducible fixture roots with2,899,968allocated bytes. The exact cleanup
+proposal manifest records owners, paths, sizes and leaf hashes;105 plain roots have no link/nonregular refusal,
+while27 deliberate attack fixtures explicitly refuse automatic cleanup pending exact-link/hardlink/FIFO handling.
+Canonical original/final helpers, tests, first failed/final logs and all campaign/financial evidence remain retained.
+No cleanup occurred here; the lead must check references/processes and each current target before authorized removal,
+then measure actual recovered bytes. The prior11 ignored Word copies remain separate proposals.
