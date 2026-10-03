@@ -876,3 +876,58 @@ were supplied to the author and the lead, and the measured source was released o
 voice replay remains raw0 supported / confirmed-context onlyv3_7; originalv3_2/v3_4 stay held. No provider, database,
 fresh transcription, billing or browser-export qualification occurred. `clinical-5748175a-refutation/manifest.json`
 binds the first outcomes, immutable source manifest and narrow baseline witnesses.
+
+### Directory custody correction and cleanup outcomes — 2026-10-03
+
+The lead independently refuted both the earlier `8cfec541` copy helper and `debfe3df` factory before actual use.
+Their per-operation checks recaptured a substituted same-owner directory as new authority: the copy wrote into a
+replacement root, and the factory wrote into a replacement previously created `src`. Both original sources and
+failure witnesses remain retained; the prior controls did not qualify custody between separate operations.
+
+The replacements share one `DirectoryCustody` registry that retains each original or created directory's identity,
+mode and mount for the entire mutation interval, including the prepared root, source, state, evidence and output
+parents. Exact source checks, financial fingerprints, terminal jobs, signing identity and closed-outcome guards
+remain. Copy SHA256 is `b25306b524fdbb33ead73835df96acad18a159e9d81c397be33d0282dcd3826b`; factory SHA256 is
+`f11a3ff66829b69aa8058504909cad26c52f8d94db3cce108ccfbeee475ab756`. On the shared pinned environment,
+53 copy controls pass in0.158s and19 factory controls pass in0.678s. The first fixture-exception failure and wrong
+system-Python/Django instrument errors remain separate failures. Both replacements are frozen for independent lead
+refutation, with no actual campaign, key, database, service or provider operation. Protected
+`security/qa-demo-copy/custody-qualified-source-freeze-20261003.json` binds source, tests and every retained log.
+
+Actual lead cleanup of the old transcript scratch preserved104,242 files in a verified145,877,710-byte deduplicated
+archive, then refused on an O_RDWR EACCES for a read-only Git object. Zero files were removed; no chmod, unlink or
+alternate route is authorized by that refusal. A distinct lead retirement preserved all branches, raw evidence and
+databases and removed four finished owned worktrees, recovering806,277,120 allocated bytes. The first idempotence
+failure is retained; the corrected repeat reports already complete and zero new deletions. Fresh preflight
+`preflight-20261003T064243Z.md` is FIX-AND-GO at90%; the gate is unchanged.
+
+A read-only exact20-target legacy scratch proposal reports179,621,888 gross allocated bytes, no named process,
+launcher, service or direct-container references and no root/nested host mounts. The exact Caddy confinement proof
+accounts for its unavailable direct FD scan; stopped Word's broad root visibility is retained as visibility, not use.
+The denied transcript target is excluded. Full raw byte/hash preservation and immediate final reference, identity
+and permission checks remain prerequisites; net recovery after preservation is unmeasured. Protected
+`security/reclaim-target-inventory-20261003/legacy-subset-proposal.json` SHA256 is
+`7c5cf9856beb9878b425ea7da7746ef25590719bb340f5ab7eb6cc98821fc446`. No cleanup was performed by this worker.
+
+### Fifteenth clinical source remains failed
+
+Finished `562dc645b13ed2e17ebed0ef9bc904c2c120366b` was copied directly from Git into a protected own snapshot.
+The first instrument omitted the parser's local pinned-model manifest and correctly refused before any case; that
+script, log and source manifest remain. The distinct corrected instrument verified20 finished components against
+the live tree and all482 copied Git import assets before/after132 full-validator/current-governance/final-decision
+probes, exiting0 in40.910s. The earlier574 patient denials now hold and original voice controls remain unchanged.
+
+Four case flags, representing two distinct passive inputs on both medication headings, release selected
+`Takes warfarin 5 mg daily.` despite a later statement that warfarin and apixaban were withheld from the patient.
+The singular `was` variant also releases. At `source_scope.py:127`, detached recovery assigns only adjacent apixaban
+to the patient withholding clause and leaves warfarin under the foreign position clause. Both actual validated
+answers and forced stored-supported answers survive current governance and have no final-decision hold; reversed
+drug order correctly holds. This independently confirms the author's separately retained finding.
+
+Sixteen unnecessary-hold flags represent nine distinct inputs: the duplicated known modal control plus eight fresh
+inputs across independent different-drug/side denials, foreign ownership and explicitly negated withholding. These
+exposed diagnostic probes are not a new accuracy denominator or grounds for a broad class release. The separate
+12-record parser/scope witness exits0 on the immutable snapshot. Original raw voice replay remains0 supported;
+hypothetical reviewed context supplies onlyv3_7 whilev3_2/v3_4 remain conflict. No fresh audio, provider, DB, charging
+or served export was exercised. `security/refute-clinical-562dc645-evidence.json` SHA256 is
+`00088ca59067372e13b6eb5dd9cb3349b67c5e46f6b332300a52cec2ae6028c4`. Source was released for repair only after exit.
