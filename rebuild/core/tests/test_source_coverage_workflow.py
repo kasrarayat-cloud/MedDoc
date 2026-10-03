@@ -206,16 +206,22 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                 doc.sections[0].header.paragraphs[0].text='Synthetic fixed header'
                 doc.sections[0].footer.paragraphs[0].text='Synthetic fixed footer'
                 out=io.BytesIO();doc.save(out);raw=out.getvalue()
-                scratch=Path(os.environ.get('QUILLMD_STATE_DIR','/nonexistent'));evidence=None
-                approved=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word/adjacent-writein')
-                if scratch.is_relative_to(approved) and scratch.is_dir() and not scratch.is_symlink():
+                scratch=Path(os.environ.get('QUILLMD_WORD_ARTIFACTS',
+                    os.environ.get('QUILLMD_STATE_DIR','/nonexistent')));evidence=None
+                approved=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002')
+                if scratch.is_relative_to(approved) and not any(p.is_symlink() for p in [scratch,*scratch.parents]):
+                    scratch.mkdir(mode=0o700,parents=True,exist_ok=True)
                     evidence=Path(tempfile.mkdtemp(prefix='ordinary-source-auto-',dir=scratch))
                     (evidence/'original.docx').write_bytes(raw)
                 template,version=self.uploaded(data=raw,name=f'Synthetic ordinary source field {index}')
+                if evidence:
+                    (evidence/'first-import.json').write_text(json.dumps(
+                        {'fields':version.fields,'import_manifest':version.import_manifest,
+                         'notes':caption+': '+value+'\nUnrelated note: Synthetic review'},indent=2))
                 self.assertEqual(version.import_manifest['engine'],'v3')
                 target=next(f for f in version.fields if f['label']==caption)
                 self.assertEqual(target['kind'],'text');self.assertFalse(target.get('write_protected'))
-                self.assertFalse(version.import_manifest['coverage']['block_generation'])
+                self.assertFalse(version.import_manifest['coverage'].get('block_generation',False))
                 import_binding.verify(version);self.confirm(template,version)
                 notes=caption+': '+value+'\nUnrelated note: Synthetic review'
                 self.assertEqual(self.new_encounter(version,notes).status_code,302)
@@ -228,8 +234,6 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                 raw_result=private_path(job.result_path).read_bytes()
                 self.assertEqual(hashlib.sha256(raw_result).hexdigest(),job.result_sha256)
                 if evidence:
-                    (evidence/'first-import.json').write_text(json.dumps(
-                        {'fields':version.fields,'import_manifest':version.import_manifest,'notes':notes},indent=2))
                     (evidence/'first-fixture-result.json').write_bytes(raw_result)
                     (evidence/'first-pass.json').write_text(json.dumps(first,indent=2))
                     (evidence/'fixture-accounting.json').write_text(json.dumps({'job_id':job.pk,
