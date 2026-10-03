@@ -7599,13 +7599,16 @@ def qualified_signing_role(label) -> str:
     person's human destination, without enumerating relationships or titles.
     """
     text = _plain(label)
-    match = re.fullmatch(r'([^()]+)\(([^()]*)\)\s*[:.]?', text)
-    if match is None or not DATE_LABEL.search(match[2]):
+    head, separator, qualifier = text.partition('(')
+    if not separator or not DATE_LABEL.search(qualifier):
         return ''
-    role = signing_place(match[1])
+    role = signing_place(head)
     if not role:
         return ''
-    remainder = DATE_LABEL.sub(' ', match[2])
+    match = re.fullmatch(r'([^()]*)\)\s*[:.]?', qualifier)
+    if match is None:
+        return role  # unresolved/nested qualification cannot become an ordinary date
+    remainder = DATE_LABEL.sub(' ', match[1])
     remainder = re.sub(r'\b(?:of\s+birth|time|day|and|or)\b', ' ', remainder)
     return role if re.sub(r'[\s.,;:/&+\-]+', '', remainder) else ''
 

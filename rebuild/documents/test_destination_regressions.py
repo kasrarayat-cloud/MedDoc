@@ -221,7 +221,8 @@ class DestinationRegressions(unittest.TestCase):
 
     def test_retained_signer_qualifiers_containing_dates_remain_human_locations(self):
         for label in ('Signature (participant, dd/mm/yyyy)', 'Signed (mother, DOB)',
-                      'Signature (father, born)', 'Patient initials (person, date of birth)'):
+                      'Signature (father, born)', 'Patient initials (person, date of birth)',
+                      'Signature (person (DOB))', 'Patient initials (person, date'):
             with self.subTest(label=label):
                 doc = Document(); doc.add_paragraph(label + ': ______________'); doc.add_paragraph('Plan: ______')
                 raw = saved(doc); field = next(f for f in word_v3.inspect(raw)['fields'] if f['label'] == label)
