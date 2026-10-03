@@ -2202,6 +2202,7 @@ class Detector:
         self.rule_tables()
         self.rule_question_boxes()
         self.rule_checkboxes(leftovers=True)
+        self.rule_unclassified_response_lists()
         self.rule_lines_below_label()
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
@@ -4150,6 +4151,53 @@ class Detector:
             self._numbering = fmt
         return self._numbering
 
+    def rule_unclassified_response_lists(self):
+        """Unclaimed printed list structure is reviewable, never a guessed question.
+
+        A decimal parent followed by a separate lettered list can be an answer
+        menu or an instruction list. Likewise literal a)/b) items under a colon
+        heading have no physical write control. Neither structure proves role,
+        cardinality or where an answer should be inserted. Preserve every item
+        and require an exact source-area review before generation.
+        """
+        for question in [s for s in self.index.slots if s.kind == 'p']:
+            if id(question.el) in self.claimed:
+                continue
+            label=self.text(question.el).strip()
+            info=self.list_info(question.el)
+            numbered=bool(info and info[2]=='decimal' and self.list_marker_is_plain(info)
+                          and label and not label.endswith(('?',':')))
+            literal=bool(label and label.endswith(':') and len(label)<=MAX_MAPPING_LABEL)
+            if not (numbered or literal):
+                continue
+            items=[];node=question.el.getnext();identity=None
+            while node is not None and node.tag==q('w:p'):
+                slot=self.index.by_el.get(id(node))
+                if slot is None or slot.parent is not question.parent or id(node) in self.claimed:
+                    break
+                text=self.text(node).strip();option=self.list_info(node)
+                if not text or len(text)>120 or BOX in text or CHECKED in text or UNDERSCORES.search(text):
+                    break
+                if numbered:
+                    if (not option or option[2] not in ('lowerLetter','upperLetter','lowerRoman','upperRoman')
+                            or option[:2]==info[:2] or not self.list_marker_is_plain(option)):
+                        break
+                    if identity is not None and option!=identity:
+                        break
+                    identity=option
+                elif not re.fullmatch(r'(?:[a-z]|[ivxlcdm]+)[).]\s+\S.{0,117}',text):
+                    break
+                items.append(slot);node=node.getnext()
+            if len(items)<2:
+                continue
+            detail=('This printed list has no qualified answer ownership or cardinality. It may be an answer '
+                    'menu or fixed instructions; no answer place was invented. Review these exact original '
+                    'areas before generation. Parent: '+label+'. Items: '+' | '.join(self.text(s.el).strip() for s in items))
+            self.notes.append(detail)
+            for affected in [question,*items]:
+                self.coverage_issue(affected,'unclassified_response_list',detail)
+                self.claimed.add(id(affected.el))
+
     def list_info(self, p):
         ppr = p.find(q("w:pPr"))
         num = ppr.find(q("w:numPr")) if ppr is not None else None
@@ -5572,8 +5620,33 @@ class Detector:
 
     def blank_spans(self, text, pieces):
         spans = []
+        unresolved=[]
+        # Slash-separated printed words are alternatives, not unrestricted text
+        # placeholders. Date-format hints retain their existing interpretation.
+        for match in BRACKET_ANY.finditer(text):
+            inner=match.group(1).strip()
+            if (re.fullmatch(r'[A-Za-z][A-Za-z ]{0,39}(?:\s*/\s*[A-Za-z][A-Za-z ]{0,39})+',inner)
+                    and not re.fullmatch(r'(?:dd|mm|yy|yyyy)(?:/(?:dd|mm|yy|yyyy))+',inner,re.I)
+                    and not _Bracket.VERB.match(inner)):
+                unresolved.append((match.start(),match.end(),'printed_bracket_alternatives',
+                    'Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact '
+                    'choice interpretation need review; this source range remains unchanged: '+match.group(0)))
+        # A long marked range is outside the qualified placeholder grammar. Its
+        # physical presence cannot be silently omitted because of the 120 limit.
+        for match in re.finditer(r'\[[^\[\]\n]{121,}\]',text):
+            unresolved.append((match.start(),match.end(),'unmapped_bracketed_source',
+                'This long bracketed source range exceeds the qualified placeholder grammar. Its authoring or '
+                'answer role is unresolved; preserve the exact text and review it before generation: '+match.group(0)))
+        slot=next((self.index.by_el.get(id(ancestor)) for pc in pieces if pc.run is not None
+                   for ancestor in pc.run.iterancestors() if ancestor.tag==q('w:p')),None)
+        for start,end,code,detail in unresolved:
+            if slot is not None:
+                self.coverage_issue(slot,code,detail,start=start,end=end)
+                if detail not in self.notes:self.notes.append(detail)
         for rx, kind in ((SEGMENTED, "segmented"), (DIGIT_RUN, "segmented"), (UNDERSCORES, "blank"), (DOTS, "blank"), (TOKEN, "token"), (BRACKET, "bracket"), (ANGLE, "angle")):
             for m in rx.finditer(text):
+                if kind=='bracket' and any(start<=m.start() and m.end()<=end for start,end,_,_ in unresolved):
+                    continue
                 spans.append((m.start(), m.end(), kind))
         # underlined tabs / spaces (a drawn line)
         run_start = None
@@ -6851,6 +6924,12 @@ def replace_range(p, start, end, answer, *, plain=True):
             else:
                 p.insert(0, new)
     _flowing(p)
+    # Inline spans inherit their table row's clipping just as whole-cell
+    # answers do. Expanding the paragraph alone leaves an exact-height row
+    # clipping long text and overprinting the following fixed content.
+    cell=next((a for a in p.iterancestors() if a.tag==q('w:tc')),None)
+    if cell is not None:
+        _unclip_row(cell)
     return True
 
 
