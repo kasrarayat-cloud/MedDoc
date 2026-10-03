@@ -3875,6 +3875,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         and not separate_sides(reading,unit,other,shared))
     modifier_negations=clinical_modifier_negations(reading)
     mine_modifiers=modifier_negations.get(uid,{})
+    if mine_modifiers.get('ambiguous'):causes.append((unit,'syntax_incomplete'))
     my_negative=mine_negated | mine_modifiers.get('negative',frozenset())
     for other in units:
         oid=other['id']
