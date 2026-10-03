@@ -303,10 +303,15 @@ def main():
                 encounters[tag] = encounter
                 for kind in ['generation', 'transcription', 'mapping', 'settled']:
                     scope = {'mapping_version': version} if kind == 'mapping' else {'encounter': encounter}
+                    config = {'mode': 'fixture'}
+                    if kind == 'mapping':
+                        config.update(source_sha256=template.sha256, department_id=str(dept.pk),
+                                      mapping_version_id=str(version.pk))
+                    report['fixture_stage'] = tag + ':' + kind
                     job = m.Job.objects.create(**scope, user=author,
                         kind=kind if kind != 'settled' else 'generation', payer='organization:' + str(org.pk),
                         request_key=prefix + ':' + tag + ':' + kind,
-                        state='succeeded' if kind == 'settled' else 'reconciliation', config={'mode': 'fixture'})
+                        state='succeeded' if kind == 'settled' else 'reconciliation', config=config)
                     jobs[tag, kind] = job
                     if kind != 'settled':
                         m.Reservation.objects.create(job=job, wallet=wallet,
@@ -417,6 +422,13 @@ def main():
         report['failure_type'] = type(ex).__name__
         report['failure_frames'] = [{'file': frame.filename, 'line': frame.lineno, 'function': frame.name}
                                     for frame in traceback.extract_tb(ex.__traceback__)]
+        cause = getattr(ex, '__cause__', None)
+        if getattr(cause, 'sqlstate', None):
+            report['database_sqlstate'] = cause.sqlstate
+            primary = getattr(getattr(cause, 'diag', None), 'message_primary', '') or ''
+            report['database_message_sha256'] = sha(primary.encode())
+            if primary == 'Mapping job source and tenant binding mismatch':
+                report['database_guard_refusal'] = primary
         # Our own controlled assertion messages contain no credentials/payload.
         if isinstance(ex, RuntimeError):
             report['failure_reason'] = str(ex)
@@ -432,6 +444,10 @@ def main():
                 .values('id', 'is_active', 'session_version'))
             require(all(not row['is_active'] and row['session_version'] >= 1 for row in report['retired_accounts']),
                     'fixture_retirement_failed')
+        report['at_exit_financial'] = fingerprints()
+        if not created and report.get('before_fixture_financial'):
+            report['failed_seed_financial_rollback_verified'] = (
+                report['before_fixture_financial'] == report['at_exit_financial'])
         report['request_count'] = served.requests
         report['elapsed_seconds'] = round(time.monotonic() - served.started, 3)
         report['http_evidence'] = served.records
