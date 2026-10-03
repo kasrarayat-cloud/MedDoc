@@ -1534,6 +1534,8 @@ class Area:
     # structure (a drawn initials box) rather than from its label's wording.
     label_slot: object = None
     structural: bool = False
+    source_action: bool = False     # source-owned action; role bounded to this destination, not its whole paragraph
+    ordinary_reading: bool = False  # fresh physical argument, never a reviewed label or persisted permission
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -1642,6 +1644,7 @@ class Detector:
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
+        self.box_action_reasons: dict[str, str] = {}
         self.geometry_regions: dict[str, str] = {}
         self.layout_quarantine = None
         self.floating_initials = False
@@ -2340,6 +2343,7 @@ class Detector:
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
         self.rule_checkboxes()
+        self.rule_adjacent_write_ins()
         self.rule_question_boxes(list_only=True)
         self.rule_text_option_choices()
         self.rule_tables()
@@ -2349,6 +2353,7 @@ class Detector:
         self.rule_lines_below_label()
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
+        self.guard_source_actions()
         self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
@@ -2369,6 +2374,77 @@ class Detector:
         self.withdraw_shared_merged_answers(shared)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    def guard_source_actions(self):
+        """Human acts read from the physical source of each actual destination.
+
+        A checkbox is one representation of an act. Its ordinary paragraph
+        writing line or empty table answer cell grants no signing authority
+        either. Read only that destination's existing source relation: its own
+        line prefix/caption, or its row/column labels. No neighboring question,
+        unrelated cell, page heading or user-supplied field label supplies one.
+        """
+        for area in self.areas:
+            if area.protection:
+                continue
+            sources = []
+            if area.label_slot is not None:
+                sources.append(self.text(area.label_slot.el))
+            if area.slot.kind == 'p' and area.target.get('type') == 'span':
+                printed, pieces = self.ptext(area.slot.el)
+                start = area.target['start']
+                boundaries=list(re.finditer(r'[;?]|\.(?=\s+[^\W\d_])|\t{2,}| {4,}',printed))
+                clause_start=max((b.end() for b in boundaries if b.end()<=start),default=0)
+                clause_end=min((b.start() for b in boundaries if b.start()>=area.target['end']),
+                               default=len(printed))
+                before = max((end for _, end, _ in self.blank_spans(printed, pieces)
+                              if end <= start), default=0)
+                # A separately printed caption followed by its own blank is
+                # a different question even within one Word paragraph. Keep
+                # actor/predicate continuations in the original act clause:
+                # whitespace alone, or a modal verb after an actor blank,
+                # cannot establish an independent clinical destination.
+                prefix = printed[before:start]
+                caption = re.fullmatch(r'(?:[ \t]{2,}|\s*[\r\n]+\s*)([^:;?!\r\n]+):\s*', prefix) if before else None
+                if (caption and not self.checkbox_source_action(caption[1], governing=True)
+                        and clean_label(caption[1], limit=None) == area.label):
+                    clause_start = max(clause_start, before)
+                sources.append(printed[max(before,clause_start):start])
+                # Identity and response blanks belong to their original
+                # printed clause even when the acting predicate follows them.
+                # Bind every destination in that clause; never invent a signer
+                # or cross a sentence, question, or printed independent gap.
+                # A period before another blank (Dr. ____) is not a new clause.
+                sources.append(printed[clause_start:clause_end])
+            elif area.slot.kind == 'tc':
+                cell = area.slot
+                for source in self.question_cells(cell.parent, cell.info['row'], cell.info['col']):
+                    if source is not cell:
+                        sources.append(self.cell_text(source))
+            # Native controls retain their own printed alias/tag source; the
+            # engine label is derived from that original control, not a review.
+            elif area.slot.kind in ('sdt', 'ff'):
+                sources.append(area.label)
+            roles = [self.checkbox_source_action(source, governing=True) for source in sources]
+            if not any(roles):
+                # A lexical kind is not a physical signing role. Only the
+                # printed argument of this destination can show an initial
+                # clinical reading or the receipt/status of a signed document.
+                # Native signature controls retain their structural kind.
+                if (not area.structural and area.kind in SIGNING_KINDS
+                        and self.ordinary_source_kind(sources, area.kind)):
+                    area.kind = 'text'
+                    area.ordinary_reading = True
+                continue
+            code = 'human_signing_action' if 'human_signing_action' in roles else 'ambiguous_source_action'
+            area.source_action = True
+            area.protection = ('This printed document action is human-owned. Complete it through the established signing workflow.'
+                               if code == 'human_signing_action' else
+                               'This printed action does not establish who performs it. Keep this precise destination unchanged; '
+                               'a review click does not authorize the act.')
+            extent = ({'start': area.target['start'], 'end': area.target['end']}
+                      if area.target.get('type') == 'span' else {})
+            self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
 
     def guard_fixed_containers(self):
         """Unqualified fixed geometry remains visible, source-held and unwritable.
@@ -2715,6 +2791,388 @@ class Detector:
             # the option ends at a wide gap followed by more text only when it is the last box on the line
             units.append([ref, option, text[:pos] if n == 0 else ""])
         return units
+
+    def adjacent_blank_plan(self, slot):
+        """One physically separate answer span beside qualified box controls.
+
+        Two blanks, hidden/linked ink, drawings and ambiguous option text stay
+        with the existing coverage hold. A printed condition never selects its
+        controlling box; a separate labelled unit never inherits that box.
+        """
+        text, pieces = self.ptext(slot.el)
+        positions = [i for i, ch in enumerate(text) if ch in (BOX, CHECKED)]
+        if not positions:
+            return None
+        # A checkbox can perform a first-person document act. Its physical
+        # option text is read before the supported write-in shape: extra/no
+        # blanks do not grant authority to acknowledge, approve or attest.
+        options = [text[pos + 1:(positions[n + 1] if n + 1 < len(positions) else len(text))]
+                   for n, pos in enumerate(positions)]
+        roles = [self.checkbox_source_action(option) for option in options]
+        head = text[:positions[0]].strip()
+        if head:
+            roles.append(self.checkbox_source_action(head, governing=True))
+        elif not any(re.search(r'\?', option) or self.first_person_source(option)
+                     and not self.checkbox_source_action(option) for option in options):
+            # Only a physically adjacent statement governs a leading response.
+            # Never cross a table/cell, another answer, an independent question,
+            # or a substantive first-person clinical statement printed by a box.
+            previous = slot.el.getprevious()
+            before = self.index.by_el.get(id(previous)) if previous is not None else None
+            if (before is not None and before.kind == 'p' and before.parent is slot.parent
+                    and before.part == slot.part):
+                prior, prior_pieces = self.ptext(before.el)
+                if (prior.strip() and BOX not in prior and CHECKED not in prior
+                        and not self.blank_spans(prior, prior_pieces)
+                        and not any(area.slot is before or before in area.extra_slots for area in self.areas)
+                        and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                                    for n in before.el.iter())):
+                    roles.append(self.checkbox_source_action(prior, governing=True))
+        if any(roles):
+            definite = 'human_signing_action' in roles
+            code = 'human_signing_action' if definite else 'ambiguous_source_action'
+            reason = ('This printed document action is human-owned. Complete it through the established signing workflow.'
+                      if definite else 'This printed action does not establish who performs it. '
+                      'Keep it unchanged and review its precise source role; a review click does not authorize that act.')
+            self.protected_regions.add(slot.id);self.box_action_reasons[slot.id] = reason
+            self.coverage_issue(slot, code, reason + ' Location: ' + slot.id)
+            return None
+        spans = self.blank_spans(text, pieces)
+        if (slot.part != 'word/document.xml' or len(spans) != 1 or not self.tab_source_visible(slot)
+                or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in slot.el.iter())):
+            return None
+        if self.question_box_signing(head):
+            self.protected_regions.add(slot.id)
+            self.coverage_issue(slot, 'human_signing_action',
+                'The printed signing or attestation action remains human-owned at ' + slot.id)
+            return None
+        start, end, shape = spans[0]
+        if (shape not in ('blank', 'utab') or start <= positions[-1]
+                or hyperlink_write(pieces, start, end)):
+            return None
+        if shape == 'blank':
+            # A recognised ellipsis/underscore rule can end with one or two
+            # contiguous dots that are too short to be a second blank. They
+            # belong to this drawn rule, not to the option or a neighbour.
+            while end < len(text) and text[end] in '_.…': end += 1
+            while start > positions[-1] + 1 and text[start - 1] in '_.…': start -= 1
+            if hyperlink_write(pieces, start, end): return None
+        prefix, suffix = text[positions[-1] + 1:start], text[end:]
+        # Explicit Yes/No condition printed after its own labelled option.
+        condition = re.fullmatch(r'\s*(Yes|No)\s*(?:[→⇒]\s*)?(if\s+(yes|no)\s*,\s*\S.+[?:])\s*', prefix, re.I)
+        if condition and not suffix.strip() and condition[1].casefold() == condition[3].casefold():
+            return {'start': start, 'end': end, 'shape': shape, 'label': condition[2].strip(),
+                    'option': condition[1], 'condition': 'printed_option', 'box': len(positions) - 1}
+        # A wide printed gap separates a different labelled/unit answer from
+        # the last option (Gender ... Female<TAB><TAB>Age ____ years).
+        gap = re.search(r'\t{2,}| {4,}', prefix)
+        if gap and suffix.strip() and self.ANSWER_UNIT.fullmatch(suffix.strip()):
+            option, label = prefix[:gap.start()].strip(), clean_label(prefix[gap.end():], limit=None)
+            if option and label and not re.search(r'[:?!\x00' + BOX + CHECKED + r']', label):
+                return {'start': start, 'end': end, 'shape': shape, 'label': label,
+                        'option': option, 'condition': 'independent_unit', 'box': len(positions) - 1}
+        # One box and one trailing write-in are distinct destinations. Do not
+        # generalise multiple-box descriptions or a sentence after the blank.
+        if len(positions) == 1 and not text[:positions[0]].strip() and not suffix.strip():
+            label = clean_label(prefix, limit=None)
+            if label and not re.search(r'\bif\b|[?!\x00]', label, re.I):
+                return {'start': start, 'end': end, 'shape': shape, 'label': label,
+                        'option': label, 'condition': 'printed_option', 'box': 0}
+        return None
+
+    @staticmethod
+    def first_person_source(text):
+        source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        contractions = {'m':'am','re':'are','ve':'have','d':'would','ll':'will'}
+        source = re.sub(r"\b(I|we)[’'](m|re|ve|d|ll)\b",
+                        lambda m:m[1]+' '+contractions[m[2].casefold()],source,flags=re.I)
+        # An explicit subject remains explicit after a bounded introductory
+        # capacity phrase. The printed capacity supplies no signer identity.
+        introductory = re.match(r'^(?:as|acting\s+as|in\s+(?:my|our|the)\s+(?:capacity|role)\s+as)\s+'
+                                r'[^,;:?!\r\n]{1,120}?(?:,\s*|\s+)(?=(?:I|we)(?=\W|$))',source,re.I)
+        if introductory:source=source[introductory.end():]
+        person = re.match(r'^(?:I|we)(?=\W|$)',source,re.I)
+        if not person:return ''
+        predicate=source[person.end():].strip()
+        # A printed apposition qualifies the speaker; it never proves their
+        # identity or signing authority. Keep malformed qualifiers as unknown
+        # predicates, so a consent/signing argument still requires exact review.
+        qualifier = re.match(r'^(?:,\s*[^,;:?!\r\n]{1,120}\s*,|'
+                             r'\([^()\r\n]{1,120}\)|\[[^\[\]\r\n]{1,120}\]|'
+                             r'([—–-])\s*[^—–\r\n]{1,120}?\s*\1)\s*',predicate)
+        if qualifier:predicate=predicate[qualifier.end():]
+        # A capacity phrase without a comma is grammatically ambiguous. Only
+        # isolate a finite permission predicate with its explicit determined
+        # object; a noun such as "permit holder" is not that predicate. Other
+        # unknown predicates retain their original arguments for role review.
+        capacity = re.match(r'^as\s+[^,;:?!\r\n]{1,120}?\s+'
+                            r'(?=(?:allow|permit)(?:s|ted|ting|ed|ing)?\s+'
+                            r'(?:this|that|these|the|a|an|my|our|their|his|her)\b)',predicate,re.I)
+        if capacity:predicate=predicate[capacity.end():]
+        aspect=re.match(r'^(?:(?:hereby|am|are|was|were|have|had|been|being|personally|do|did|not|yet|cannot|will|would)\s+)*',
+                        predicate,re.I)
+        return predicate[aspect.end():]
+
+    @classmethod
+    def checkbox_source_action(cls,text,*,governing=False):
+        """Printed performative ownership, not a signer-name guess.
+
+        Ordinary clinical states and recorded-status labels are not this frame.
+        First-person, documentary nominal, imperative, third-person and explicit
+        checkbox-action conditions share one reading. A third-person subject
+        supplies no signer identity. Documentary objects distinguish those
+        requests from ordinary clinical questions and nonhuman observations.
+        """
+        source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        # Quoting or qualifying a printed human act supplies no authority to
+        # perform it. Read only a complete paired quotation / explicit clause;
+        # ordinary quoted clinical statements retain their own arguments.
+        quote_pairs={'"':'"',"'":"'",'“':'”','‘':'’'}
+        if source[:1] in quote_pairs:
+            closer=source.rfind(quote_pairs[source[0]],1)
+            if closer>0 and re.fullmatch(r'[\s:._…]*',source[closer+1:]):
+                return cls.checkbox_source_action(source[1:closer],governing=governing)
+        conditional=re.match(r'^if\s+[^,;:?!\r\n]{1,200},\s*(.+)$',source,re.I)
+        if conditional:return cls.checkbox_source_action(conditional[1],governing=governing)
+        condition = re.match(r'^by\s+(?:checking|ticking|selecting|signing|initiall?ing)\b'
+                             r'[^,;:\r\n]{0,200}?(?:[,;:]\s*|\s+(?=(?:I|we|you|he|she|they)\b))(.+)$',source,re.I)
+        if condition:
+            return cls.checkbox_source_action(condition[1],governing=governing)
+        predicate = cls.first_person_source(source)
+        first_person = bool(predicate)
+        # A documentary action noun is a governing label, not a recorded-status
+        # label. This reads the action, irrespective of a named signer/role.
+        if governing:
+            # A question cell is a caption without requiring a literal colon.
+            # Read the complete noun phrase: a status/date/receipt suffix is
+            # not an action caption, and no signer name is inferred.
+            heading = re.fullmatch(r'(?:[^:?!\r\n]+?\s+)?'
+                                  r'(?P<action>approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
+                                  r'certification|attestation|declaration|authori[sz]ation|consent|sign[ -]?off)s?'
+                                  r'(?:\s+(?:of|for|to|by|from)\s+[^:?!]+)?\s*[:.]?',source,re.I)
+            if heading:
+                explicit = (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
+                            or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',
+                                        heading['action'],re.I))
+                return 'human_signing_action' if explicit else 'ambiguous_source_action'
+            if ':' in source:
+                caption, statement = source.split(':',1)
+                tail = cls.checkbox_source_action(statement)
+                if tail:
+                    return tail
+                # A printed declaration/statement of witnessing a signing act
+                # governs its response. It supplies no identity or authority.
+                if (re.search(r'\b(?:statement|declaration|attestation)\s*$',caption,re.I)
+                        and cls.first_person_source(statement)
+                        and re.search(r'\bsign(?:ed|ing)?\b',statement,re.I)):
+                    return 'human_signing_action'
+        document_pattern = (r'\b(?:this|the|these|above|foregoing)\s+'
+                            r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
+                            r'(?:records?|documents?|forms?|reports?|information|statements?|details?)(?=\W|_|$)')
+        # A finite auxiliary belongs to the subject/predicate relation, not
+        # the actor's name. Read its complement with the same action reader;
+        # neither tense, negation nor an unfamiliar actor creates authority.
+        # This also protects an actor blank before the predicate. Clinical
+        # complements keep their ordinary meaning ("will review the dose").
+        auxiliary = (r'(?:will|would|shall|should|can|could|may|might|must|cannot|'
+                     r'am|is|are|was|were|has|have|had|do|does|did|been|being|not|yet|hereby|personally)')
+        finite = re.match(r'^(?:(?P<subject>[^.;:?!\r\n]+?)\s+)?'
+                          r'(?P<aspect>(?:'+auxiliary+r'\s+)+)(?P<complement>\S.+)$', source, re.I)
+        if finite and not first_person:
+            complement = finite['complement']
+            action = cls.checkbox_source_action(complement, governing=governing)
+            if action:
+                return 'ambiguous_source_action'
+        # Permission and witnessing are acts even when their object is a
+        # procedure/person rather than the document. Their subject/predicate
+        # relationship supplies the role; merely mentioning consent, signing
+        # or a past document receipt does not.
+        permission = (r'(?:permit(?:s|ted|ting)?|allow(?:s|ed|ing)?)(?=\W|_|$)|'
+                      r'(?:grant(?:s|ed|ing)?|giv(?:e|es|en|ing)|gave)\s+'
+                      r'(?:(?:my|our|their|the|explicit|informed)\s+)*(?:permission|consent|authori[sz]ation)\b')
+        witness = (r'\b(?:observ(?:e|es|ed|ing)|see|sees|seen|saw|witness(?:es|ed|ing)?)\b'
+                   r'[^.;:?!\r\n]*\b(?:signing|signed|signatures?|sign(?=\s*(?:[.:;_]|$)))\b')
+        witnessed_presence = (r'\b(?:sign(?:ed|ing)|signatures?)\b[^.;:?!\r\n]*'
+                              r'\bin\s+(?:my|our)\s+presence\b')
+        # A signing event does not require a particular document noun: its
+        # verb may take a pronoun, a printed place, or an unfamiliar object.
+        # "Signs" and "sign of ..." are clinical noun readings. An otherwise
+        # ambiguous singular sign remains a precise source-role decision.
+        signing_event = (r'\b(?:signed|signing|signatures?)\b|'
+                         r'\bsign(?=\W|_|$)(?!\s+of\b)')
+        if (governing and re.search(r'\b(?:observation|witnessing)\s+of\b',source,re.I)
+                and re.search(signing_event,source,re.I)):
+            return 'ambiguous_source_action'
+        # Witnessing is a subject + perception predicate + signing event. Its
+        # subject need not name a known role, and cannot authorize generation
+        # to perform that person's observation. Clinical observations without
+        # a signing event and recorded noun/status labels remain independent.
+        observed = re.match(r'^([^.;:?!\r\n]+?)\s+'
+                            r'(?:observ(?:es|ed)|sees|saw|witness(?:es|ed)|watch(?:es|ed))\b'
+                            r'(?P<argument>[^.;:?!\r\n]+)',source,re.I)
+        if (observed and re.search(signing_event,observed['argument'],re.I)):
+            return 'human_signing_action' if first_person else 'ambiguous_source_action'
+        if (first_person and (re.match(permission,predicate,re.I) or re.search(witness,predicate,re.I))
+                or re.search(witnessed_presence,source,re.I)):
+            return 'human_signing_action'
+        if first_person:
+            # The argument supplies a legal/signing role even when its verb
+            # is unfamiliar, negated, withdrawing consent, or describes a
+            # witness's presence. Do not grow a verb/signer-name whitelist.
+            # Clinical signs/observations have no such signing-event argument.
+            signing_argument = re.search(signing_event,predicate,re.I)
+            formal_argument = re.search(r'\b(?:consent|permission|authori[sz]ation|attestation|certification|declaration)s?\b',
+                                        predicate,re.I)
+            if signing_argument or formal_argument:
+                return 'ambiguous_source_action'
+        if not predicate:
+            # A documentary nominal printed as an option is still the act,
+            # even without a named signer or a colon-bearing parent label.
+            nominal = re.match(r'^(approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
+                               r'certification|attestation|declaration|authori[sz]ation|consent)s?'
+                               r'\s+(?:that|of|for|to)\b',source,re.I)
+            if (nominal and (re.search(document_pattern,source,re.I)
+                             or re.match(r'certification|attestation|declaration|authori[sz]ation|consent',nominal[1],re.I))):
+                return 'human_signing_action'
+            action = (r'certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|'
+                      r'affirm(?:s|ed|ing)?|consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing)|'
+                      r'confirm(?:s|ed|ing)?|verif(?:y|ies|ied|ying)|acknowledg(?:e|es|ed|ing)|'
+                      r'agree(?:s|d|ing)?|accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?|'
+                      r'permit(?:s|ted|ting)?|allow(?:s|ed|ing)?|grant(?:s|ed|ing)?|giv(?:e|es|en|ing)|gave')
+            base_action = (r'certify|attest|declare|affirm|consent|authori[sz]e|confirm|verify|acknowledge|'
+                           r'agree|accept|approve|review|read|permit|allow|grant|give')
+            imperative = re.match(r'^(?:please\s+)?('+base_action+r')(?=\W|_|$)',source,re.I)
+            if imperative and re.match(r'\s+(?:is|are|was|were|has|have|had)\b',source[imperative.end():],re.I):
+                imperative = None  # "Consent was obtained" reports a noun's status; it is not an order.
+            third_person = re.match(r'^([^.;:?!\r\n]+?)\s+('+action+r')(?=\W|_|$)',source,re.I)
+            if third_person:
+                subject,verb = third_person[1].strip(),third_person[2]
+                if (re.fullmatch(base_action,verb,re.I)
+                        and not re.fullmatch(r'you|they|he|she|it',subject,re.I)
+                        and not re.search(r's\s*$',subject,re.I)):
+                    third_person = None  # "Signed consent" is a noun phrase, not subject + finite verb.
+            frame = imperative or third_person
+            if not frame:
+                return ''
+            predicate = source[frame.start(1 if imperative else 2):]
+            if re.match(permission,predicate,re.I):
+                return 'human_signing_action' if imperative else 'ambiguous_source_action'
+            # A request about a clinical observation is not a documentary
+            # attestation merely because it says confirm/verify/review.
+            if not re.search(document_pattern,predicate,re.I):
+                formal = re.match(r'(?:certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|'
+                                  r'affirm(?:s|ed|ing)?|consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing))'
+                                  r'(?=\W|_|$)',predicate,re.I)
+                # Authorizing treatment or giving consent performs an act
+                # without saying "document". An unqualified third-person
+                # subject supplies no identity/authority to perform it either.
+                if formal:
+                    return 'human_signing_action' if imperative else 'ambiguous_source_action'
+                return ''
+        if re.match(r'(?:so|this|that)(?=\W|_|$)',predicate,re.I):
+            return 'ambiguous_source_action'
+        document = re.search(document_pattern,predicate,re.I)
+        if re.match(r'(?:certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|affirm(?:s|ed|ing)?|'
+                    r'consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing)|(?:give|given|gave)\s+(?:(?:my|our)\s+)?consent)'
+                    r'(?=\W|_|$)', predicate, re.I):
+            return 'human_signing_action'
+        if not re.match(r'(?:confirm(?:s|ed|ing)?|verif(?:y|ies|ied|ying)|acknowledg(?:e|es|ed|ing)|agree(?:s|d|ing)?|'
+                        r'accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?)(?=\W|_|$)',
+                        predicate, re.I):
+            # An unfamiliar predicate about the document cannot silently become
+            # authority to make the printed first-person assertion either.
+            return 'ambiguous_source_action' if document else ''
+        return 'human_signing_action' if document else 'ambiguous_source_action' if first_person else ''
+
+    @staticmethod
+    def ordinary_source_kind(sources, kind):
+        """An incidental signing word with an ordinary physical argument.
+
+        This does not release a signature/initials instruction or an attestation.
+        The caller has already excluded action captions and native controls.
+        It uses the original caption/span prefix, never a reviewed field label.
+        """
+        printed = [_plain(source) for source in sources if _plain(source)]
+        if not printed or any(signing_place(source) for source in printed):
+            return False
+        if kind == 'initials':
+            return any(ADJECTIVE_INITIAL.search(source) for source in printed)
+        # A signed noun being received/recorded is a document's history, not
+        # the act of signing it. Terminal explicit status asks for that history
+        # too; a bare "consent form signed" remains a review decision.
+        receipt = (r'\bsigned\s+[^:?!\r\n]+?\s+'
+                   r'(?:(?:was|were|is|are|has\s+been|had\s+been)\s+)?'
+                   r'(?:received|recorded|filed|stored)\b')
+        received_signed_object = (r'\b(?:received|recorded|filed|stored)\s+'
+                                  r'(?:the|a|an|this|that|these|those)\s+signed\s+[^:?!\r\n]+')
+        return any(re.search(receipt,source,re.I) or re.search(received_signed_object,source,re.I) or
+                   re.search(r'\b(?:recorded|documented)\b[^:?!]*\bsigned\b[^:?!]*\bstatus$',source,re.I)
+                   for source in printed)
+
+    def adjacent_option_text(self, unit):
+        """Separate only a proven explicit trailing condition from its option."""
+        ref = unit[0]
+        slot = self.index.by_id.get(ref['part'] + '#' + ref['slot'])
+        paragraph = self.host_paragraph(slot) if slot is not None else None
+        if paragraph is None:
+            return unit[1]
+        plan = self.adjacent_blank_plan(paragraph)
+        refs = [u[0] for u in self.box_units(paragraph)]
+        if (plan and plan['condition'] == 'printed_option' and refs[plan['box']] == ref
+                and (len(refs) == 1 or re.match(r'if\s+(?:yes|no)\s*,', plan['label'], re.I))):
+            return plan['option']
+        return unit[1]
+
+    def rule_adjacent_write_ins(self):
+        """An existing qualified checkbox owner permits a separate exact span.
+
+        The complete owner and condition travel with the mapping and are read
+        again by fill. Coverage holds are removed only by a genuine writer at
+        this exact span; no ambiguous option/cardinality group is promoted.
+        """
+        for slot in [s for s in self.index.slots if s.kind == 'p']:
+            plan = self.adjacent_blank_plan(slot)
+            if slot.id in self.protected_regions:
+                for area in self.areas:
+                    if any(ref.get('part') == slot.part and ref.get('slot', '').startswith(slot.path + '/')
+                           for ref in area.target.get('boxes', [])):
+                        area.protection = self.box_action_reasons.get(slot.id,
+                            'This printed signing or attestation action is human-owned. Complete it through the established signing workflow.')
+                continue
+            if not plan:
+                continue
+            target = {'type': 'span', 'start': plan['start'], 'end': plan['end'], 'shape': plan['shape']}
+            if any(a.slot is slot and a.target == target for a in self.areas):
+                continue
+            control = self.box_units(slot)[plan['box']][0]
+            owners = [a for a in self.areas if a.target.get('type') == 'checkboxes'
+                      and control in a.target.get('boxes', [])]
+            if len(owners) != 1:
+                continue
+            owner = owners[0]; position = owner.target['boxes'].index(control)
+            if (owner.protection or owner.kind not in ('choice', 'multi_choice', 'checkbox')
+                    or owner.label in ('Choose', 'Checkbox', '') or not owner.options
+                    or position >= len(owner.options)
+                    or option_text(owner.options[position]).casefold() != option_text(plan['option']).casefold()):
+                continue
+            label = plan['label']
+            context = ' > '.join(x for x in (owner.context, owner.label,
+                ('Only when the printed option ' + owner.options[position] + ' is selected')
+                    if plan['condition'] == 'printed_option' else 'Separate labelled answer: ' + label) if x)
+            if (len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT
+                    or self.question_box_signing(label) or self.question_box_signing(context)
+                    or self.question_box_signing(owner.label + ':')):
+                continue
+            source = {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+            owner_ref = {'part': owner.slot.part, 'slot': owner.slot.path, 'fingerprint': fingerprint(owner.slot.el)}
+            relation = {'relation': 'adjacent_checkbox_answer', 'question': label, 'context': context,
+                        'source': source, 'owner': owner_ref, 'owner_label': owner.label,
+                        'owner_context': owner.context, 'owner_kind': owner.kind,
+                        'owner_options': list(owner.options), 'owner_target': dict(owner.target),
+                        'condition': plan['condition'], 'control': dict(control), 'option_index': position,
+                        'printed_option': owner.options[position], 'source_text': self.ptext(slot.el)[0]}
+            self.add(Area(self.kind_for(label), label, slot, target, context=context,
+                          complete_source=True, source_questions=[relation]))
 
     def tab_column_properties(self, slot, *, scope_only=False):
         """Resolve additive stops and per-attribute indentation; unknown layout refuses."""
@@ -4177,7 +4635,7 @@ class Detector:
         pslot = g["paras"][0]
         for units in self.split_inline_groups(g):
             options = [option_text(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else option_text(o)
-                       for _, o, _ in units]
+                       for o in (self.adjacent_option_text(unit) for unit in units)]
             question = clean_label(units[0][2])
             before_boxes = self.words_before_boxes(units, options) if len(units) > 1 else ""
             if before_boxes:
@@ -6689,7 +7147,12 @@ def _role_reading(package):
     for area, field in zip(areas, engine):
         places = reader.of(field)
         anchor = _place_id(field["locator"]["part"], field["locator"]["slot"])
-        if area.protection:
+        if area.protection and area.source_action:
+            for pid, start, end in _extent(reader, field):
+                if start is not None:
+                    start, end = segment(pid, start, end, field['key'])
+                roles.append(_role(ROLE_PROTECTED, 'human_document_action', pid, start, end, area.protection))
+        elif area.protection:
             for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
                 roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))
         elif area.kind in SIGNING_KINDS:
@@ -7705,6 +8168,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                            for issue in source_detector.coverage_issues
                            if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
                                                 'unmapped_bracketed_source')]
+    adjacent_answers = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -7726,6 +8191,48 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        for area in adjacent_answers:
+            region = {'place': area.slot.id, 'start': area.target['start'], 'end': area.target['end']}
+            if not any(reader.touches(place, region) for place in reader.of(field)):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or field.get('kind') != area.kind
+                    or field.get('label') != area.label or field.get('context') != area.context
+                    or field.get('source_questions') != area.source_questions):
+                fail('This answer changes a source-bound checkbox write-in or its complete ownership. '
+                     'Review its exact mapping again.', 'mapping_mismatch')
+            relation = area.source_questions[0]
+            if relation['condition'] != 'printed_option':
+                continue
+            owner = relation['owner']
+            controls = [f for f in fields if f.get('kind') == relation['owner_kind']
+                        and f.get('label') == relation['owner_label']
+                        and f.get('context') == relation['owner_context']
+                        and f.get('options') == relation['owner_options']
+                        and (f.get('locator') or {}).get('part') == owner['part']
+                        and (f.get('locator') or {}).get('slot') == owner['slot']
+                        and (f.get('locator') or {}).get('fingerprint') == owner['fingerprint']
+                        and (f.get('locator') or {}).get('target') == relation['owner_target']]
+            if len(controls) != 1:
+                fail('The conditional write-in has no unique original controlling choice. Review the mapping.',
+                     'mapping_mismatch')
+            control = controls[0]; value = answers.get(control['key'])
+            position = relation['option_index']
+            if value not in (None, '', []):
+                selected = position in _options_chosen(control, value)
+            else:
+                states = constrained_option_states(index, control)
+                selected = position < len(states) and states[position] is True
+                if control['kind'] == 'choice':
+                    # The original's tick is usable only when this single-choice
+                    # control has one unambiguous, readable selection. A pair of
+                    # printed ticks is not the clinician resolving that conflict.
+                    selected = (selected and len(states) == len(control['options'])
+                                and all(state is True or state is False for state in states)
+                                and sum(state is True for state in states) == 1)
+            if not selected:
+                fail('This write-in is conditional on its own printed option being selected. '
+                     'Review the controlling choice; no tick was inferred.', 'conditional_answer_unselected')
         if target.get("type") == "cell_append":
             if field.get("source_instructions") != cell_instruction_source(index, field):
                 fail("The complete printed answer-cell instructions changed. Review the mapping again.", "mapping_mismatch")
@@ -7780,6 +8287,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
             elif relation.get("relation") == "native_checkbox_history" and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
+            elif relation.get('relation') == 'adjacent_checkbox_answer':
+                refs = [relation.get('source'), relation.get('owner')]
             else:
                 fail("The related question mapping is invalid.", "invalid_mapping")
             for ref in refs:
@@ -7790,8 +8299,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             if relation_areas is None:
                 relation_areas = Detector(package).detect()[0]
             if not any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                       and (not any(r.get("relation") == "native_checkbox_history" for r in relations)
-                            or area.kind == field.get("kind") and area.options == field.get("options")
+                       and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer') for r in relations)
+                            or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                             and area.label == field.get("label") and area.context == field.get("context"))
                        for area in relation_areas):
                 fail("The related question no longer owns this answer destination. Review the mapping again.",

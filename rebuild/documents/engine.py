@@ -835,8 +835,16 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
                                                          word_v3._PlaceReader(detector.index), ordinary_roles=ordinary)
             if preferred == 'auto' and prefer_v3_parity:
                 roles=word_v3.destination_roles(path.read_bytes(),advanced['fields'])
-                parity=(advanced.get('warnings') == V3_WARNINGS and not roles.get('violations') and not any(
-                    word_v3.Detector.question_box_signing(field['label']) for field in legacy['fields'])
+                # The broad checkbox-word veto is not a destination-role
+                # reading. Exempt only exact old places freshly classified
+                # from their physical ordinary arguments by this processor.
+                # No reviewed label or stored kind can provide this proof.
+                detected,_=detector.detect();reader=word_v3._PlaceReader(detector.index)
+                ordinary_places={place for n,area in enumerate(detected,1) if area.ordinary_reading
+                                 for place in reader.of(word_v3.area_to_field(n,area))}
+                lexical_hold=any(word_v3.Detector.question_box_signing(field['label'])
+                                 and place not in ordinary_places for field,place in zip(legacy['fields'],places))
+                parity=(advanced.get('warnings') == V3_WARNINGS and not roles.get('violations') and not lexical_hold
                     and import_selection.ordinary_parity(legacy,advanced,places,
                         word_v3._PlaceReader(detector.index),source_roles=roles.get('roles',[])))
                 coverage['new_import_v3_preference']={'enabled':True,'exact_ordinary_parity':bool(parity)}

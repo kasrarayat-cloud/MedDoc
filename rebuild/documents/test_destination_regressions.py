@@ -1,0 +1,136 @@
+"""Fixed physical-destination controls from the retained a620ebaf failures.
+
+Pure synthetic OOXML tests: no database, provider, renderer or native Word.
+Whole-document qualification remains a separate workflow gate.
+"""
+from copy import deepcopy
+import io
+import unittest
+from zipfile import ZipFile
+
+from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+from . import word_v3
+
+
+def saved(doc):
+    stream = io.BytesIO()
+    doc.save(stream)
+    return stream.getvalue()
+
+
+class DestinationRegressions(unittest.TestCase):
+    def assert_held(self, raw):
+        info = word_v3.inspect(raw)
+        ordinary = next(f for f in info['fields'] if f['label'] == 'Clinical reason')
+        targets = [f for f in info['fields'] if f['key'] != ordinary['key']]
+        self.assertTrue(targets)
+        for field in targets:
+            forged = deepcopy(field)
+            forged['kind'] = 'checkbox' if field['kind'] == 'checkbox' else 'text'
+            forged.pop('write_protected', None)
+            forged.pop('review_reason', None)
+            with self.subTest(destination=field['label']):
+                self.assertIn(forged['key'], word_v3.destination_roles(raw, [forged])['violations'])
+                with self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(raw, [forged], {forged['key']: 'checked' if forged['kind'] == 'checkbox'
+                                              else 'Synthetic finalizer'})
+        self.assertFalse(ordinary.get('write_protected'))
+        exported = word_v3.fill(raw, info['fields'], {ordinary['key']: 'Synthetic reason'})
+        self.assertIn('Clinical reason: Synthetic reason',
+                      [p.text for p in Document(io.BytesIO(exported)).paragraphs])
+        return info, exported
+
+    def test_retained_actor_modal_failures_protect_actor_action_checkbox_and_table(self):
+        # These are the seven exact unsafe retained inputs, never unseen cases.
+        for source in ('Person ______ will confirm this form: ______',
+                       'Person ______ will attest this form: ______',
+                       'Person ______ shall verify this document: ______',
+                       'Person ______ cannot verify this document: ______',
+                       'Person ______ would approve this form: ______',
+                       '☐ Person ______ will confirm this form: ______'):
+            with self.subTest(source=source):
+                doc = Document(); doc.add_paragraph(source); doc.add_paragraph('Clinical reason: ______')
+                _, exported = self.assert_held(saved(doc))
+                self.assertEqual(Document(io.BytesIO(exported)).paragraphs[0].text, source)
+        doc = Document(); table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'Person will confirm this form'; table.cell(0, 1).text = '______'
+        doc.add_paragraph('Clinical reason: ______')
+        _, exported = self.assert_held(saved(doc))
+        self.assertEqual(Document(io.BytesIO(exported)).tables[0].cell(0, 1).text, '______')
+
+    def test_genuine_signing_roles_never_receive_finalizer_identity(self):
+        for source in ('Clinician signature: ______', 'Witness signature and date: ______',
+                       'Patient signature: ______', 'Manager approval: ______',
+                       '☐ I grant permission for this procedure: ______',
+                       '☐ I observed the patient signing: ______'):
+            with self.subTest(source=source):
+                doc = Document(); doc.add_paragraph(source); doc.add_paragraph('Clinical reason: ______')
+                _, exported = self.assert_held(saved(doc))
+                self.assertEqual(Document(io.BytesIO(exported)).paragraphs[0].text, source)
+
+    def test_retained_independent_caption_after_two_spaces_or_linebreak_is_ordinary(self):
+        for separator in ('  ', '\n', '\t\t', '    ', '. '):
+            with self.subTest(separator=repr(separator)):
+                source = 'I approve this form: ______' + separator + 'Clinical reason: ______'
+                doc = Document(); doc.add_paragraph(source); raw = saved(doc)
+                info = word_v3.inspect(raw)
+                ordinary = next(f for f in info['fields'] if f['label'] == 'Clinical reason')
+                self.assertFalse(ordinary.get('write_protected'))
+                self.assertEqual(word_v3.destination_roles(raw, [ordinary])['violations'], {})
+                signer = info['fields'][0]
+                self.assertTrue(signer.get('write_protected'))
+                exported = word_v3.fill(raw, info['fields'], {ordinary['key']: 'Synthetic reason'})
+                self.assertEqual(Document(io.BytesIO(exported)).paragraphs[0].text,
+                                 source.removesuffix('______') + 'Synthetic reason')
+        # A blank actor followed by a modal/action remains one human clause.
+        for separator in ('  ', '\n'):
+            doc = Document(); doc.add_paragraph('Person ______' + separator + 'will confirm this form: ______')
+            doc.add_paragraph('Clinical reason: ______')
+            self.assert_held(saved(doc))
+
+    def test_ordinary_initial_signed_quoted_clinical_controls_remain_writable(self):
+        for caption in ('Initial symptoms occurred at', 'Initial diagnosis',
+                        'Signed consent was received on', 'Signed consent was recorded on',
+                        'The patient has received the signed document on',
+                        'The patient will receive this document on',
+                        'The patient has received the signed prescription on',
+                        'Consent was obtained by', 'Person will review the medication dose',
+                        '"I observed a sign of dehydration"', '"Initial pain score"'):
+            for shape in ('paragraph', 'table'):
+                with self.subTest(caption=caption, shape=shape):
+                    doc = Document()
+                    if shape == 'paragraph': doc.add_paragraph(caption + ': ______')
+                    else:
+                        table = doc.add_table(rows=1, cols=2)
+                        table.cell(0, 0).text = caption; table.cell(0, 1).text = '______'
+                    raw = saved(doc); info = word_v3.inspect(raw); target = info['fields'][0]
+                    self.assertFalse(target.get('write_protected'))
+                    self.assertNotIn(target['kind'], ('signature', 'initials'))
+                    self.assertEqual(word_v3.destination_roles(raw, [target])['violations'], {})
+                    exported = Document(io.BytesIO(word_v3.fill(raw, info['fields'],
+                                                                {target['key']: 'Synthetic value'})))
+                    self.assertEqual(exported.tables[0].cell(0, 1).text if shape == 'table'
+                                     else exported.paragraphs[0].text,
+                                     'Synthetic value' if shape == 'table' else caption + ': Synthetic value')
+
+    def test_precise_clinical_write_preserves_original_checks_link_and_package_parts(self):
+        doc = Document(); p = doc.add_paragraph('☒ Existing selection')
+        link = OxmlElement('w:hyperlink'); link.set(qn('w:anchor'), 'retained_reference')
+        run = OxmlElement('w:r'); text = OxmlElement('w:t'); text.text = 'Reference'
+        run.append(text); link.append(run); p._p.append(link)
+        doc.add_paragraph('I approve this form: ______  Clinical reason: ______')
+        doc.add_paragraph('Neighbor: ______'); raw = saved(doc)
+        info = word_v3.inspect(raw)
+        target = next(f for f in info['fields'] if f['label'] == 'Clinical reason')
+        out = word_v3.fill(raw, info['fields'], {target['key']: 'Synthetic reason'})
+        with ZipFile(io.BytesIO(raw)) as before, ZipFile(io.BytesIO(out)) as after:
+            self.assertEqual(before.namelist(), after.namelist())
+            for part in before.namelist():
+                if part != 'word/document.xml': self.assertEqual(before.read(part), after.read(part))
+        actual = Document(io.BytesIO(out))
+        self.assertEqual(actual.paragraphs[0].text, Document(io.BytesIO(raw)).paragraphs[0].text)
+        self.assertEqual(actual.paragraphs[2].text, 'Neighbor: ______')
+        self.assertEqual(actual.paragraphs[0]._p.find(qn('w:hyperlink')).get(qn('w:anchor')), 'retained_reference')

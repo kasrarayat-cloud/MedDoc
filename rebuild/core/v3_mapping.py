@@ -353,6 +353,10 @@ def fill_answers(fields, answers):
     for field in fields:
         record = answers.get(field['key']) or {}
         text = normalize(field, record.get('text', ''))
+        if field.get('write_protected'):
+            # Empty review preserves a human-owned control's printed state.
+            # normalize above still refuses any proposed text or tick.
+            continue
         kind = field.get('kind')
         if kind == 'checkbox':
             if text:

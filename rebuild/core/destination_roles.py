@@ -140,27 +140,29 @@ def legacy_roles(version, *, fresh=False):
 
 
 def printed(field, roles):
-    """The field as identity reads it. Its PRINTED (inspected) label decides wherever that label is itself a signing
-    place (legacy_reason: identity, a signature or initials role, or another named person's signature line), so a
-    participant's signature line renamed 'Signature' is not the finalizer's (design matrix L05). Everywhere else the
-    mapping's label decides, as on 43fcf214.
+    """Read finalizer identity against the immutable original's signer role.
 
-    ⚠️ Reading ONLY the printed label (refutation of 258650f2, L1:R1-02) dropped identity from a field a clinician
-    renamed TO a signature label: a Word row 'Doctor' renamed "Doctor's signature" and a PDF field 'Text1' renamed
-    'Signature' finalized another clinician's typed name, and 'Leave blank - reviewed' was accepted there. The rename
-    guard refuses only renames AWAY from a signature label, so this is the only way such a field becomes identity.
-    So identity = the printed label's identity, or the mapped label's where the printed label is no signing place.
-
-    ⚠️ AND THE MAPPED LABEL'S IDENTITY IS NEVER DROPPED (final verification of 8951fdec, FV-01, a regression vs
-    43fcf214). Returning the printed label whenever it is a signing place dropped identity from a real signing place
-    renamed TO a signature label ('Initials', 'Sign here', 'Signature and date', a PDF field 'Initials' renamed
-    'Signature'): another clinician's typed name finalized and 'Leave blank - reviewed' was accepted, where 43fcf214
-    refused both. Identity is therefore the mapped label's OR the printed label's, never less than 43fcf214's reading;
-    the design-matrix L05 relaxation (another person's line renamed 'Signature' is not the finalizer's) is withdrawn,
-    because it was the same drop."""
+    A mapped signature label retains the normal clinician identity protection
+    on an ordinary destination. An original signing line with an unknown or
+    other-person qualification remains that human role even after a rename or
+    an old clinician-identity policy. Neither operation appoints a signer.
+    """
     from .tab_review import clinician_identity
     row = (roles or {}).get(field.get('key'))
-    if not row or clinician_identity(field):
+    if not row:
+        return field
+    printed_field = {**field, 'label': row['printed_label']}
+    from .tab_review import another_signers_line, signature_label
+    if row.get('role') and not signature_label(row['printed_label']):
+        # A physical signing/initials role requires an affirmative original
+        # clinician identity; a renamed label or old policy cannot appoint one.
+        printed_field.pop('answer_policy', None)
+        return printed_field
+    if another_signers_line(printed_field):
+        # An edited label/policy does not turn a physical participant, family,
+        # witness or unknown role into the authenticated clinician's identity.
+        return printed_field
+    if clinician_identity(field):
         return field
     return {**field, 'label': row['printed_label']} if legacy_reason(field, row) else field
 
@@ -168,10 +170,12 @@ def printed(field, roles):
 def legacy_reason(field, row):
     """Why a legacy field is never generated (its printed label is identity, a signature or initials, or another named
     person's signature line - tab_review.another_signers_line), or ''."""
-    from .tab_review import another_signers_line, clinician_identity
+    from .tab_review import another_signers_line, clinician_identity, signature_label
     if not row:
         return ''
     printed_field = {**field, 'label': row['printed_label']}
+    if row.get('role') and not signature_label(row['printed_label']):
+        return ROLE_NOT_GENERATED
     if clinician_identity(printed_field):
         return IDENTITY_NOT_GENERATED
     return ROLE_NOT_GENERATED if row.get('role') or another_signers_line(printed_field) else ''
@@ -231,33 +235,19 @@ ROLE_SUGGESTION_WARNING = ('The printed form may expect a handwritten signature 
 
 
 def suggestions_enabled():
-    """Whether this deployment offers role suggestions at all (QUILLMD_ROLE_SUGGESTIONS='1'). Read by core.middleware,
-    which mounts the accepting act on the doctor surface only while it is on - and the page offers a suggestion only on a
-    request that can reach that act (core.middleware.role_act_routed) - so turning the setting off withdraws every stored
-    suggestion at once; read by admission and the worker for what a job asks (core.generation.role_suggestions)."""
-    from django.conf import settings
-    return getattr(settings, 'QUILLMD_ROLE_SUGGESTIONS', '0') == '1'
+    """Withdraw note-derived signer suggestions, including old stored offers.
+
+    The existing disabled-feature routes provide the refusal. Historical
+    drafts, queued jobs, settings and evidence keep their original identities.
+    """
+    # Standing continuation 2026-10-03: accepting a note-derived value does
+    # not establish the signer, authority or signing event.
+    return False
 
 
 def suggestion_scope(field, row):
-    """Whether a LEGACY field may carry a role suggestion: it is held ONLY because its printed label's role
-    (documents.word_v3.legacy_role_kind) is set - never an identity row (by its printed OR its mapped label, as identity
-    reads it), never another named person's signature line, never a protected or option field.
-
-    ⚠️ Every arm narrows: a field this does not admit is held exactly as before and nothing about it is asked."""
-    from .tab_review import another_signers_line, clinician_identity
-    if not isinstance(field, dict) or not isinstance(row, dict) or not row.get('role'):
-        return False
-    if legacy_reason(field, row) != ROLE_NOT_GENERATED:
-        return False
-    printed_field = {**field, 'label': row.get('printed_label')}
-    if clinician_identity(field) or clinician_identity(printed_field):
-        return False
-    if another_signers_line(field) or another_signers_line(printed_field):
-        return False
-    if field.get('kind', 'text') not in ('text', 'long_text') or field.get('write_protected'):
-        return False
-    return field.get('answer_policy', 'documented_source_only') == 'documented_source_only'
+    """No signing hold can be released through a note-derived offer."""
+    return False
 
 
 def stored_suggestion(answer):
