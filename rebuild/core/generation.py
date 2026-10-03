@@ -3338,6 +3338,11 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
                 if unit['id'] in reading['conditional_unsafe'] or (not ordinary['self_reference'] and unit['id'] in reading['coupled'].get(label, ())) or (label in reading['ambiguous_subjects']
                     and reading['subjects'][unit['id']] == label)}
     matches = reading['named'].get(label, ())
+    from .source_scope import receipt_date_warnings
+    receipt_field=next((f for f in matches if f['key']==field_key),None) if field_key is not None else None
+    receipt_field=receipt_field if receipt_field is not None else matches[0] if len(matches)==1 else None
+    if receipt_field is not None:
+        warnings.update((unit['id'],unit) for unit in receipt_date_warnings(reading,receipt_field,selected.values()))
     if len(matches) == 1:
         from .v3_destination import side_warnings, policy_warnings, temporal_warnings, option_warnings
         warnings.update((unit['id'], unit) for unit in
