@@ -144,6 +144,26 @@ class LayoutSource(unittest.TestCase):
             conflict=[dict(issues[0],code=code)]
             self.assertEqual(w.reconcile_layout_coverage(raw,fields,conflict,qualified)['coverage_issues'],conflict)
 
+    def test_fixed_question_dot_leaders_do_not_create_answers_but_other_extents_remain_held(self):
+        from .test_structural_columns import coded_form, LYMPH
+        for leader, complete in (('........',True),('________',False)):
+            with self.subTest(leader=leader):
+                raw=data(coded_form([line.replace('Posterior\t','Posterior'+leader+'\t') for line in LYMPH]))
+                prepared,_,_=source.prepare(raw);fields=copy.deepcopy(prepared['fields']);qualified={}
+                for field in fields:
+                    if field.get('layout_candidate'):
+                        receipt={'source_sha256':source.digest(raw),'candidate':field['layout_candidate'],
+                                 'profile_sha256':'0'*64}
+                        field['layout_verified']=receipt;qualified[field['layout_candidate']]=receipt
+                result=w.reconcile_layout_coverage(raw,fields,prepared['coverage_issues'],qualified)
+                self.assertEqual(not result['coverage_issues'],complete)
+                if complete:
+                    missing=next(f for f in fields if f.get('layout_candidate'))
+                    self.assertTrue(w.reconcile_layout_coverage(raw,[f for f in fields if f is not missing],
+                        prepared['coverage_issues'],qualified)['coverage_issues'])
+                    self.assertEqual(w.reconcile_layout_coverage(raw,fields,prepared['coverage_issues'],{})
+                                     ['coverage_issues'],prepared['coverage_issues'])
+
 
 class LayoutPdf(unittest.TestCase):
     def setUp(self):

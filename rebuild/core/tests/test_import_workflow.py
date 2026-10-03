@@ -76,6 +76,21 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         self.assertEqual(version.contract,'v3');self.assertIsNone(version.confirmed)
         self.assertEqual(Encounter.objects.filter(template_version=version).count(),0)
 
+    def test_valid_ordinary_parts_route_allows_large_v3_import_without_generic_batch_flag(self):
+        from .test_word_v3_workflow import build_questionnaire
+        from core import v3_mapping
+        eligible=dict(QUILLMD_WORD_ENGINE='v3',V3_FIELD_RELATIONS=True,V3_GENERATION_BATCHES=False,
+                      AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-5-5',AI_INPUT_RATE='2',
+                      AI_OUTPUT_RATE='10',AI_CACHED_RATE='0.20',AI_THINKING='between_tools',AI_EFFORT='medium')
+        with override_settings(**eligible):
+            self.assertEqual(v3_mapping.field_limit(),800)
+            template,version=self.uploaded(data=build_questionnaire(101),name='Synthetic ordinary parts import')
+            self.assertEqual(len(version.fields),101)
+            self.confirm(template,version)
+        for invalid in ({'AI_MODEL':'claude-sonnet-4-6'},{'AI_INPUT_RATE':'3'},{'V3_FIELD_RELATIONS':False}):
+            with override_settings(**dict(eligible,**invalid)):
+                self.assertEqual(v3_mapping.field_limit(),100)
+
     def test_original_binding_is_immutable_and_copied_to_explicit_review_version(self):
         first=self.version;manifest=copy.deepcopy(first.import_manifest)
         self.assertEqual(first.contract,'v3')

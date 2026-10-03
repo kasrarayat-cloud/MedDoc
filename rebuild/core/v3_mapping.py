@@ -32,8 +32,19 @@ KIND_NAMES = {'text': 'Text', 'long_text': 'Long text', 'date': 'Date', 'time': 
 GENERATION_FIELD_LIMIT = 100
 
 def field_limit():
-    from .generation_batch import enabled, MAX_PARTS
-    return GENERATION_FIELD_LIMIT * MAX_PARTS if enabled() else GENERATION_FIELD_LIMIT
+    from .generation_batch import enabled, MAX_PARTS, relations_parts, require_config
+    if enabled():return GENERATION_FIELD_LIMIT * MAX_PARTS
+    # The qualified ordinary contract already has bounded complete-form parts;
+    # import must not require a separate generic-batch grant to reach that route.
+    from .generation import configuration
+    try:
+        config=configuration()
+        if relations_parts(config):
+            require_config(config)
+            return GENERATION_FIELD_LIMIT * MAX_PARTS
+    except ValidationError:
+        pass
+    return GENERATION_FIELD_LIMIT
 CHECKED = 'checked'
 #: The only source values that tick a checkbox automatically.
 CHECKBOX_YES = frozenset(('yes', 'checked', 'present'))

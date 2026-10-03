@@ -681,6 +681,30 @@ class NestedCheckboxOwnership(unittest.TestCase):
                 self.assertFalse([f for f in result['fields'] if f['kind'] == 'multi_choice'])
                 self.assertTrue(any('Nested option' in note for note in result['notes']))
 
+    def test_direct_attestation_place_is_human_owned_for_every_named_role(self):
+        ordinary=self.form(); ordinary.tables[0].cell(0,0).paragraphs[0].text='Recorded declaration status:'
+        ordinary.tables[0].cell(0,0).tables[0].cell(0,0).text='☐ Recorded'
+        ordinary.tables[0].cell(0,0).tables[0].cell(0,1).text='☐ Not recorded'
+        original=data(ordinary)
+        group=next(f for f in w.inspect(original)['fields'] if f['locator']['target']['type']=='checkboxes')
+        positive=w.fill(original,[group],{group['key']:'Recorded'})
+        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(positive)),group),[True,False])
+        for label in ('Spouse attestation:', 'Caregiver declaration:', 'Administrator signoff:',
+                      'Parent attestation:', 'Independent external assessor declaration:', 'Attestation:'):
+            with self.subTest(label=label):
+                doc=self.form();parent=doc.tables[0].cell(0,0);parent.paragraphs[0].text=label
+                parent.tables[0].cell(0,0).text='☐ I certify'
+                parent.tables[0].cell(0,1).text='☐ I do not certify'
+                raw=data(doc);inspected=w.inspect(raw)
+                self.assertFalse([f for f in inspected['fields'] if f['locator']['target']['type']=='checkboxes'])
+                self.assertTrue(any(i['code']=='nested_options' for i in inspected['coverage_issues']))
+                self.assertEqual(w.fill(raw,inspected['fields'],{}),raw)
+                # Manual mapping and a clinician's later click do not establish
+                # that they are the person whose declaration this place records.
+                forged=dict(group,key='forged_declaration',options=['I certify','I do not certify'])
+                self.assertIn('forged_declaration',w.destination_roles(raw,[forged])['violations'])
+                with self.assertRaises(w.V3Failure):w.fill(raw,[forged],{'forged_declaration':'I certify'})
+
     def test_nested_source_cannot_lose_local_subject_or_page_boundary(self):
         for case in ('foreign_prefix', 'unpaired_subsection', 'page_break', 'long_question'):
             with self.subTest(case=case):

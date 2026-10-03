@@ -5068,8 +5068,13 @@ class Detector:
                 r"\b(?:(?:counter|under|co|re)[ -]?)?sign(?:s|ed|ing|off|offs)?\b", reading, re.I):
             return True
         return (SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
-                or re.fullmatch(r'(?:(?:patient|clinician|doctor|nurse|witness|manager|supervisor)\s+)?'
-                                r'(?:attestation|declaration|sign[ -]?off)\s*:', reading.strip(), re.I))
+                # A complete printed place label ending in the action noun is
+                # human-owned regardless of who is named before it. Enumerating
+                # signer roles would release every role omitted from that list.
+                # A question about recorded status is a different structure and
+                # does not end in this action label.
+                or re.fullmatch(r'(?:[^:?!\r\n]+\s+)?(?:attestation|declaration|sign[ -]?off)\s*:',
+                                reading.strip(), re.I))
 
     def question_box_role_source(self, table):
         """(printed question, section) over a one-cell box, read for the box's DESTINATION ROLE only (destination_roles).
@@ -6556,7 +6561,13 @@ def reconcile_layout_coverage(data, fields, issues, qualified):
                 location = {'part': slot.part, 'slot': slot.path, 'target': {'type': 'checkboxes', 'boxes': [ref]}}
                 for place in reader.of({'locator': location}):
                     expected.append((place, box_writes))
-            for start, end, _ in detector.blank_spans(*detector.ptext(slot.el)):
+            text, pieces = detector.ptext(slot.el)
+            for start, end, _ in detector.blank_spans(text, pieces):
+                own = [field['locator']['target']['column_sequence']['source'][-1] for field in proven
+                       if _place_id(field['locator']['part'],field['locator']['slot']) == slot.id]
+                if text[start:end] and not text[start:end].strip('.') and any(
+                        len(ref['starts']) > 1 and end <= ref['starts'][1] for ref in own):
+                    continue  # fixed dot leader in the measured complete question column
                 expected.append(((slot.id, start, end), blank_writes))
         if not expected:
             remaining.append(issue);continue
