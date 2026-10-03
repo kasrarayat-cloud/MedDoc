@@ -104,13 +104,13 @@ def elliptical_dependencies(reading):
                     and not sole.get('classes') and not info.get('other_floor')
                     and ('class' in sole.get('reach',()) or any(t.dep_=='neg'
                         or (t.dep_=='det' and a._fold(t.text)=='no') for t in doc)))
-                # A negated determined nominal predicate omits what it is
+                # A negated nominal predicate omits what it is
                 # classifying ("No longer the daily medication"). Its clinical
                 # class bounds the adjacent dependency; a direct independent
                 # negative "No diabetes" has no separate predicate determiner.
                 nominal_predicate=bool(not any(t.pos_ in ('VERB','AUX') for t in doc)
                     and a._negates(root)
-                    and any(t.dep_=='det' and not a._negates(t) and a._fold(t.text)!='no' for t in root.children))
+                    and any(t.dep_=='neg' or (t.dep_=='advmod' and a._negates(t)) for t in root.children))
                 if nominal_predicate:typed[uid]=sole.get('classes',frozenset())
                 fragment=operator or topicless or adpositional or restriction or nominal_predicate
         if fragment:
@@ -155,6 +155,14 @@ def exclusive_reattributions(reading):
         # Negation on an actual action differs from negation of exclusive focus.
         # Prefer the lexical predicate to copular/auxiliary framing.
         nodes=[t for t in predicate_nodes(root) if a._lemma(t)!='be']
+        if not nodes and a._lemma(root)=='be':
+            # A negative relational preposition ('the only person without
+            # warfarin') denies possession, rather than medication use by the
+            # patient. This is the existing polarity vocabulary, not an actor
+            # or medication whitelist.
+            relations=[p for attr in root.children if attr.dep_ in ('attr','oprd')
+                for p in attr.subtree if p.dep_=='prep' and a._fold(p.text) in a.SOLE_NEGATION]
+            if relations:return {not a._negates(p) for p in relations}
         return {a._negates(t) for t in nodes or [root]}
     causes={}
     for other,doc in zip(units,docs or [None]*len(units)):
@@ -184,6 +192,9 @@ def exclusive_reattributions(reading):
             if claim['id']==other['id'] or claim_doc is None:continue
             mine=reading['actors'][claim['id']]
             if mine.get('other_floor'):continue
+            if (mine.get('present_tense') and not mine.get('habitual') and not mine.get('past_time')
+                    and (info.get('habitual') or (info.get('past_time') and not info.get('present_tense')))):
+                continue
             my_roots=[t for t in claim_doc if t.dep_=='ROOT']
             my_predicates=predicate_lemmas(my_roots[0]) if len(my_roots)==1 else set()
             if len(my_roots)!=1 or not negations & predicate_negations(my_roots[0]):continue
@@ -214,3 +225,107 @@ def exclusive_reattributions(reading):
                 causes.setdefault(claim['id'],[]).append(other)
     reading[key]=causes
     return causes
+
+
+def separate_sides(reading, first, second, shared):
+    """Prove shared topic words belong to explicitly disjoint anatomical sides.
+
+    Read each matching noun phrase locally, excluding coordinated clauses and
+    sibling topics. A side elsewhere in a sentence cannot qualify another
+    denial. Unknown, unqualified and mixed scope retains the existing hold.
+    This affects only the lexical overlap floor; other dependencies still hold.
+    """
+    if not shared:return False
+    from . import v3_syntax,v3_actors as a
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=v3_syntax.docs(u['quote'] for u in reading['units'])
+    docs=reading['_source_scope_docs']
+    if docs is None:return False
+    def local_sides(token):
+        phrase=token
+        while phrase.dep_ in ('compound','amod') and phrase.head.pos_ in ('NOUN','PROPN'):
+            phrase=phrase.head
+        sides=set()
+        for member in phrase.subtree:
+            path=member
+            while path!=phrase and path.head!=path:
+                if path.dep_ in ('conj','advcl','ccomp','xcomp','relcl','acl'):break
+                path=path.head
+            if path!=phrase:continue
+            side=a.SOLE_SIDES.get(a._fold(member.text))
+            if side=='both':sides.update(('left','right'))
+            elif side:sides.add(side)
+        return sides
+    def occurrences(unit):
+        info=reading['actors'][unit['id']]
+        if not info.get('readable') or info.get('other_floor'):return None
+        doc=docs[reading['position'][unit['id']]]
+        if doc is None:return None
+        matched={key:[] for key in shared}
+        for token in doc:
+            if token.pos_ not in ('NOUN','PROPN'):continue
+            keys=a.keys({a._lemma(token),a._fold(token.text)}) & shared
+            if keys:
+                sides=local_sides(token)
+                if len(sides)!=1:return None
+                for key in keys:matched[key].append(sides)
+        return matched if all(matched.values()) else None
+    mine=occurrences(first);theirs=occurrences(second)
+    return bool(mine and theirs and all(not l & r for key in shared for l in mine[key] for r in theirs[key]))
+
+
+
+def malformed_denial_dependencies(reading):
+    """A misattached explicit patient denial cannot erase its named object.
+
+    The pinned parser sometimes reads 'patient denies left knee pain' as a
+    past left/leave root, with the finite deny predicate as its subject. That
+    unresolved finite predicate still denies a named clinical topic. Only its
+    positively named topic holds; no parse or clinical value is repaired.
+    """
+    key='_malformed_denials'
+    if key in reading:return reading[key]
+    from . import v3_syntax,v3_actors as a
+    docs=reading.get('_source_scope_docs')
+    if docs is None:
+        docs=v3_syntax.docs(u['quote'] for u in reading['units'])
+        reading['_source_scope_docs']=docs
+    found=[]
+    for unit,doc in zip(reading['units'],docs or [None]*len(reading['units'])):
+        info=reading['actors'][unit['id']]
+        if doc is None or info.get('other_floor'):continue
+        for token in doc:
+            if (token.pos_=='VERB' and a._lemma(token) in a.SOLE_NEGATION
+                    and token.dep_ in ('nsubj','nsubjpass') and token.head.pos_ in ('VERB','AUX')
+                    and not a._negates(token)
+                    and any(c.dep_ in ('nsubj','nsubjpass') and a.this_patient(c) for c in token.children)):
+                topics=a.keys({a._lemma(t) for t in token.head.subtree
+                    if t.pos_ in ('NOUN','PROPN') and a.SOLE_CLASSES.get(a._lemma(t),frozenset()) & a.SOLE_CLINICAL})
+                if topics:found.append((unit,topics))
+    reading[key]=found
+    return found
+
+
+def prefixed_modifier_dependencies(reading):
+    """Unresolved reversing modifiers govern their own named noun phrase.
+
+    Use the literal reader's existing written-prefix comparison, without deciding
+    what that prefix means or equating swollen with swelling. A prefixed
+    adjective on the same named anatomical/clinical object remains reviewable;
+    an explicitly different source side can still prove a different object.
+    """
+    key='_prefixed_modifiers'
+    if key in reading:return reading[key]
+    from . import v3_syntax,v3_actors as a,v3_literal_facts as literal
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=v3_syntax.docs(u['quote']for u in reading['units'])
+    found=[]
+    for unit,doc in zip(reading['units'],reading['_source_scope_docs'] or [None]*len(reading['units'])):
+        if doc is None or reading['actors'][unit['id']].get('other_floor'):continue
+        for token in doc:
+            if (token.pos_=='ADJ' and token.dep_=='amod' and token.head.pos_ in ('NOUN','PROPN')
+                    and a._lemma(token.head) in a.SOLE_NOUNS
+                    and literal._related(literal._surface(token),literal._singular(token.text.casefold()))=='prefixed'):
+                found.append((unit,a.keys({a._lemma(token.head),a._fold(token.head.text)})))
+    reading[key]=found
+    return found

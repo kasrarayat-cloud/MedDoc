@@ -661,9 +661,18 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         elif item.option_ids: return refused
         if text is not None and text != answer: return refused
         related = reading['coupled'].get(g.question_key(label), set())
-        self_reference = bool(chosen and related == chosen and len(group) == 1
+        reviewed = chosen <= reading.get('confirmed_patient',frozenset())
+        # An exact question-name prefix on a confirmed clinical nominal
+        # assertion names this destination, rather than coupling every later
+        # topic in the paragraph. Bare headings/foreign actors never gain this
+        # nominal proof; every model relation and hold remains binding.
+        prefix=field['label'].strip().rstrip(':?').casefold()+' '
+        named_nominal=bool(reviewed and any(u['id'] in reading.get('nominal_patient',())
+            and u['quote'].casefold().startswith(prefix) for u in ordered))
+        self_reference = bool(chosen and related and len(group) == 1
+            and (related == chosen or (reviewed and related <= chosen) or named_nominal)
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
-                    and reading['patients'].get(u['id']) for u in ordered))
+                    and (reading['patients'].get(u['id']) or reviewed) for u in ordered))
         return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference, 'syntax_ids': literal_ids}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused

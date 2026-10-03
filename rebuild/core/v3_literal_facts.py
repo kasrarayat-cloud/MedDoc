@@ -261,7 +261,14 @@ def _surface(token):
     while before >= 0 and _dash(doc[before].text): before -= 1
     if before >= 0 and before != token.i:
         prefix = doc[before]
-        if (prefix.text.isalpha() and len(prefix.text) <= _PREFIX
+        # A parsed anatomical side is an adjective, not a written reversal
+        # prefix. Keep it in the predicate's topic; combining 'left ankle'
+        # into 'leftankle' falsely opposes another positive ankle statement.
+        # Joined/hyphenated prefixes retain the existing whole-word handling.
+        from .v3_actors import SOLE_SIDES
+        side_modifier = (prefix.dep_ == 'amod' and prefix.pos_ == 'ADJ'
+                         and prefix.head.i == token.i and prefix.text.casefold() in SOLE_SIDES)
+        if (prefix.text.isalpha() and len(prefix.text) <= _PREFIX and not side_modifier
                 and (prefix.head.i == token.i and prefix.dep_ in _PREFIX_ROLES
                      or token.head.i == prefix.i and prefix.pos_ in _NOMINAL + ('ADJ', 'ADV', 'X'))):
             word = prefix.text + word
@@ -878,6 +885,11 @@ def opposed_ids(selected, reading):
     at all, withholds the claim.
     """
     from . import generation as g
+    # Materialize shared source docs before taking the parser lock. The side
+    # proof uses the same bounded docs; a failed read is cached and cannot retry
+    # recursively under this non-reentrant lock.
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=syntax.docs(u['quote'] for u in reading['units'])
     docs = reading.setdefault('_ordinary_opposite_docs', {})
     variants = reading.setdefault('_ordinary_opposite_readings', {})
     summaries = reading.setdefault('_ordinary_opposite_words', {})
@@ -928,8 +940,23 @@ def opposed_ids(selected, reading):
                     after = following.get(u['id'])
                     if after is None or not after['quote']: return False
                     texts = readings_of(after['quote'])
+                    def reply_fragment(doc):
+                        if not _fragment(doc):return False
+                        # A plural denial-category heading ('Pertinent negatives')
+                        # starts a category; it does not answer/retract the prior
+                        # finite statement. Its forward clinical scope is still
+                        # judged by the ordinary source-context reader.
+                        from .v3_actors import SOLE_NEGATION
+                        roots=[t for t in doc if t.dep_=='ROOT']
+                        printed_heading=g.question_key(doc.text.strip().rstrip('.')) in reading['named']
+                        category=bool(len(roots)==1 and roots[0].pos_=='NOUN'
+                            and (printed_heading or ('Plur' in roots[0].morph.get('Number')
+                                and _singular(roots[0].text.casefold()) in SOLE_NEGATION))
+                            and not any(_quantifier(t) or t.dep_=='neg' for t in doc)
+                            and all(t.i==roots[0].i or t.dep_ in ('amod','punct') for t in doc))
+                        return not category
                     return (any(len(t) > syntax.MAX_CHARACTERS for t in texts)
-                            or any(_fragment(doc) for doc in parsed(texts)))
+                            or any(reply_fragment(doc) for doc in parsed(texts)))
                 others = []
                 for u in units:
                     if u['id'] == unit['id']: continue
@@ -940,6 +967,14 @@ def opposed_ids(selected, reading):
                         or any(len(t) > syntax.MAX_CHARACTERS for _, texts in others for t in texts)):
                     held.add(unit['id']); continue
                 for u, texts in others:
+                    # An anatomical noun on an explicitly different side is
+                    # a distinct topic. Prove every matching noun phrase's
+                    # side locally; mixed/unqualified/unknown scope still holds.
+                    from .v3_actors import keys
+                    from .source_scope import separate_sides
+                    shared=keys(words) & (reading['actors'][u['id']].get('named_keys',frozenset())
+                        | reading['actors'][u['id']].get('claim_keys',frozenset()))
+                    if separate_sides(reading,unit,u,shared):continue
                     prompt = answered(u)
                     for doc in parsed(texts):
                         occurrences = [c for c in _occurrences(doc, words) if c is not None]

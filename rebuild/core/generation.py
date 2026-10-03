@@ -3858,7 +3858,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
-    from .source_scope import bare_affects,elliptical_dependencies,exclusive_reattributions
+    from .source_scope import bare_affects,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
     # An elliptical other-person attribution or topicless temporal modifier
@@ -3868,6 +3868,11 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # OPPOSED SAME TOPIC (only the units an arm can meet by its own kind of key: `v3_opposed_candidates`)
     mine_claim, mine_negated = reading['claim_keys'][uid], reading['negated_keys'][uid]
     mine = reading['predicates'][uid]
+    causes.extend((other,None) for other,topics in malformed_denial_dependencies(reading)
+        if other['id']!=uid and topics & (mine_claim | info.get('named_keys',frozenset())))
+    causes.extend((other,None) for other,topics in prefixed_modifier_dependencies(reading)
+        if other['id']!=uid and (shared := topics & (mine_claim | info.get('named_keys',frozenset())))
+        and not separate_sides(reading,unit,other,shared))
     mine_timeless = [v3_without_time(record) for record in mine]
     labelled = reading.get('labelled_claims', {})
     position = reading['position']
@@ -3879,7 +3884,8 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 or (found['kind'] == 'pronoun' and resolved[oid].get('actor') == 'other')))):
             continue
         theirs = reading['predicates'][oid]
-        if (mine_claim & reading['negated_keys'][oid] or mine_negated & reading['claim_keys'][oid]
+        overlap=(mine_claim & reading['negated_keys'][oid]) | (mine_negated & reading['claim_keys'][oid])
+        if ((overlap and not separate_sides(reading,unit,other,overlap))
                 or any(v3_opposed_predicates(first, v3_without_time(second)) for first in mine_timeless for second in theirs)
                 or v3_denies_labelled(labelled.get(uid), theirs) or v3_denies_labelled(labelled.get(oid), mine)
                 or v3_ends_labelled(labelled.get(uid), found) or v3_ends_labelled(labelled.get(oid), info)
@@ -3920,7 +3926,9 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         # a re-attribution away from the patient, or a class denied OF THE ANSWER's own predicate ('takes no
         # anticoagulants' / 'takes warfarin') or naming what it claims ('has had no pain' / 'presents with chest pain';
         # not a modifier of it: 'expects no relationship changes' / 'The relationship reporting condition ...')
-        if found['reattribution'] or found['denial_heads'] & my_heads or found['denial_nouns'] & my_words:
+        shared=found['denial_nouns'] & my_words
+        if (found['reattribution'] or found['denial_heads'] & my_heads
+                or (shared and not separate_sides(reading,unit,other,shared))):
             causes.append((other, None))
     return causes
 
