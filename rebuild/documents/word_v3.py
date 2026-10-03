@@ -3055,6 +3055,15 @@ class Detector:
                 explicit = (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
                             or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',
                                         heading['action'],re.I))
+                # A complete nominal "review/confirmation/... of <clinical
+                # object>" names an observation category. It has neither an
+                # appointed author nor a document/formal act argument. Keep
+                # bare/assigned reviews ambiguous and formal objects held;
+                # a clinician's reviewed label cannot establish this reading.
+                descriptive = re.fullmatch(re.escape(heading['action']) + r's?\s+of\s+[^:?!]+\s*[:.]?', source, re.I)
+                formal_object = re.search(r'\b(?:consent|permission|authori[sz]ation|attestation|certification|declaration)s?\b', source, re.I)
+                if descriptive and not explicit and not formal_object:
+                    return ''
                 return 'human_signing_action' if explicit else 'ambiguous_source_action'
             if ':' in source:
                 caption, statement = source.split(':',1)

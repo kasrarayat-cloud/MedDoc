@@ -242,6 +242,28 @@ class DestinationRegressions(unittest.TestCase):
                 out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: '2026-10-03'})))
                 self.assertEqual(out.paragraphs[0].text, label + ': 2026-10-03')
 
+    def test_nominal_clinical_review_caption_is_not_an_assigned_document_act(self):
+        for caption in ('Review of systems', 'Review of symptoms', 'Confirmation of blood pressure',
+                        'Verification of medication dose'):
+            for shape in ('table', 'paragraph'):
+                with self.subTest(caption=caption, shape=shape):
+                    doc = Document()
+                    if shape == 'table':
+                        table = doc.add_table(rows=1, cols=2); table.cell(0, 0).text = caption
+                    else: doc.add_paragraph(caption + ': ______')
+                    raw = saved(doc); field = word_v3.inspect(raw)['fields'][0]
+                    self.assertFalse(field.get('write_protected'))
+                    self.assertEqual(word_v3.destination_roles(raw, [field])['violations'], {})
+                    out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: 'Synthetic clinical result'})))
+                    self.assertEqual(out.tables[0].cell(0, 1).text if shape == 'table' else out.paragraphs[0].text,
+                                     'Synthetic clinical result' if shape == 'table' else caption + ': Synthetic clinical result')
+        for caption in ('Manager review', 'Review by the line manager', 'Review of this form',
+                        'Review of consent', 'Attestation', 'I certify this form'):
+            with self.subTest(human_act=caption):
+                doc = Document(); table = doc.add_table(rows=1, cols=2); table.cell(0, 0).text = caption
+                doc.add_paragraph('Clinical reason: ______')
+                self.assert_held(saved(doc))
+
     def test_counted_answer_restriction_is_not_a_person_granting_permission(self):
         for caption in ('Treatment(s) - only one answer allowed:',
                         'Treatment(s) - one option permitted:'):
