@@ -4,10 +4,12 @@ These controls do not promote instruction lists or printed alternatives into
 clinical answers. Long answer reflow is limited to the actual written row.
 """
 import io
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 from zipfile import ZipFile
+from unittest.mock import patch
 
 from docx import Document
 from docx.oxml import OxmlElement
@@ -110,7 +112,8 @@ class SourceCoverage(unittest.TestCase):
     def test_alternative_parts_cannot_escape_through_punctuation_unicode_or_digits(self):
         for alternatives in ('left/right-hand','me/us/other-person',"patient's/carer's",
                              'patient/carer (specify)','mild/moderate/grade 3','α/β','左/右',
-                             'patient’s/carer’s','1/2/3'):
+                             'patient’s/carer’s','1/2/3','type A/type B','state/local','add/remove',
+                             'patient/carer/','patient//carer','patient/\ncarer'):
             with self.subTest(alternatives=alternatives):
                 doc=Document();doc.add_paragraph('Selection: ['+alternatives+']');doc.add_paragraph('Reason: ______')
                 result=self.inspect(doc)
@@ -122,11 +125,11 @@ class SourceCoverage(unittest.TestCase):
 
     def test_ordinary_placeholders_and_dates_remain_usable(self):
         doc=Document();doc.add_paragraph('Name: [patient name]')
-        doc.add_paragraph('Date: [dd/mm/yyyy]');doc.add_paragraph('Plan: [enter left/right]')
+        doc.add_paragraph('Date: [dd/mm/yyyy]');doc.add_paragraph('Plan: [enter clinical plan]')
         doc.add_paragraph('Printed abbreviation [SDU] and [This page is intentionally left blank]')
         result=self.inspect(doc)
         self.assertFalse(result['import_manifest']['coverage'].get('selected_engine_issues'))
-        self.assertEqual({f['label'] for f in result['fields']},{'Name patient name','Date dd/mm/yyyy','Plan enter left/right'})
+        self.assertEqual({f['label'] for f in result['fields']},{'Name patient name','Date dd/mm/yyyy','Plan enter clinical plan'})
 
     def test_long_bracketed_source_is_not_silently_discarded_at_grammar_limit(self):
         for length in (121,2100):
@@ -183,25 +186,47 @@ class SourceCoverage(unittest.TestCase):
         out=word_v3.fill(data(doc),result['fields'],{ordinary['key']:'Synthetic ordinary review'})
         self.assertEqual(Document(io.BytesIO(out)).sections[0].header.paragraphs[0].text,'Patient name: ______')
 
-    def test_positioned_table_is_source_held_while_regular_table_remains_answerable(self):
+    def test_positioned_table_also_holds_neighbor_growth_but_plain_document_stays_answerable(self):
         doc=Document();floating=doc.add_table(rows=1,cols=2);floating.cell(0,0).text='Finding'
         pos=OxmlElement('w:tblpPr');pos.set(qn('w:vertAnchor'),'text');pos.set(qn('w:tblpY'),'300')
         floating._tbl.tblPr.append(pos)
         regular=doc.add_table(rows=1,cols=2);regular.cell(0,0).text='Plan'
         result=self.inspect(doc);by={f['label']:f for f in result['fields']}
-        self.assertTrue(by['Finding']['write_protected']);self.assertFalse(by['Plan'].get('write_protected'))
+        self.assertTrue(by['Finding']['write_protected']);self.assertTrue(by['Plan']['write_protected'])
         self.assertTrue(result['import_manifest']['coverage']['block_generation'])
         forged=dict(by['Finding'],write_protected=False)
         with self.assertRaises(word_v3.V3Failure):word_v3.fill(data(doc),[forged],{forged['key']:'Synthetic replacement'})
-        out=word_v3.fill(data(doc),result['fields'],{by['Plan']['key']:'Synthetic plan'})
+        plan=dict(by['Plan'],write_protected=False)
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(data(doc),[plan],{plan['key']:'Synthetic plan'})
+        out=word_v3.fill(data(doc),result['fields'],{})
         parsed=Document(io.BytesIO(out));self.assertEqual(parsed.tables[0].cell(0,1).text,'')
-        self.assertEqual(parsed.tables[1].cell(0,1).text,'Synthetic plan')
+        self.assertEqual(parsed.tables[1].cell(0,1).text,'')
+        plain=Document();table=plain.add_table(rows=1,cols=2);table.cell(0,0).text='Plan'
+        good=self.inspect(plain);field=good['fields'][0]
+        self.assertFalse(good['import_manifest']['coverage'].get('selected_engine_issues'))
+        result=word_v3.fill(data(plain),good['fields'],{field['key']:'Synthetic plan'})
+        self.assertEqual(Document(io.BytesIO(result)).tables[0].cell(0,1).text,'Synthetic plan')
 
-    def test_cell_append_wrap_changes_only_the_new_answer_paragraph(self):
+    def test_cell_append_preserves_original_paragraph_without_unqualified_wrap_repair(self):
         doc=Document();cell=doc.add_table(rows=1,cols=1).cell(0,0);cell.text='FIXED SOURCE GUIDANCE'
         old=etree.tostring(cell.paragraphs[0]._p)
         word_v3.write_cell(cell._tc,'SYNTHETIC synthetic',append=True)
         self.assertEqual(etree.tostring(cell.paragraphs[0]._p),old)
-        wrap=cell.paragraphs[1]._p.find('./'+qn('w:pPr')+'/'+qn('w:wordWrap'))
-        self.assertEqual(wrap.get(qn('w:val')),'off')
+        self.assertIsNone(cell.paragraphs[1]._p.find('./'+qn('w:pPr')+'/'+qn('w:wordWrap')))
         self.assertEqual(cell.paragraphs[1].text,'SYNTHETIC synthetic')
+
+    def test_exact_measured_source_quarantine_cannot_be_cleared_by_forged_writer(self):
+        doc=Document();doc.add_paragraph('Reason: ______');raw=data(doc)
+        baseline=word_v3.inspect(raw);anchor=baseline['fields'][0]['locator']
+        declaration={'case':'synthetic negative control','failed_anchors':[anchor],
+                     'evidence':['retained synthetic failure control']}
+        with patch.dict(word_v3.KNOWN_LAYOUT_FAILURES,{hashlib.sha256(raw).hexdigest():declaration}):
+            result=word_v3.inspect(raw)
+            self.assertEqual(result['layout_quarantine']['source_sha256'],hashlib.sha256(raw).hexdigest())
+            self.assertTrue(result['fields'][0]['write_protected'])
+            forged=dict(result['fields'][0],write_protected=False)
+            with self.assertRaises(word_v3.V3Failure) as refusal:
+                word_v3.fill(raw,[forged],{forged['key']:'Synthetic replacement'})
+            self.assertEqual(refusal.exception.code,'unqualified_layout')
+            different=Document();different.add_paragraph('Plan: ______')
+            self.assertIsNone(word_v3.inspect(data(different))['layout_quarantine'])

@@ -29,6 +29,12 @@ def verify(version, *, allow_unreviewed=False):
             or manifest.get('mapping_sha256') != digest(version.fields)):
         raise ValidationError('The stored import choice does not match this original and mapping version. '
                               'Nothing was sent or exported; review a new mapping version.')
+    from documents.word_v3 import KNOWN_LAYOUT_FAILURES
+    if not allow_unreviewed and (manifest.get('coverage', {}).get('layout_quarantine')
+                                or version.template.sha256 in KNOWN_LAYOUT_FAILURES):
+        raise ValidationError('This exact original has retained rendered answer failures and is unsupported. '
+                              'No generation or charge is allowed until its whole-document growth is qualified. '
+                              'Leaving areas unchanged cannot qualify this original.')
     if not allow_unreviewed and manifest.get('coverage', {}).get('block_generation') and not coverage_reviewed(version):
         raise ValidationError('This import has unmapped answer areas. No generation or charge is allowed until a '
                               'clinician reviews the exact exclusions or a new original/mapping repairs them. '
@@ -44,7 +50,9 @@ def coverage_reviewed(version):
     """
     coverage = version.import_manifest.get('coverage', {})
     issues = coverage.get('selected_engine_issues') or []
-    if not issues or coverage.get('comparison_unresolved'):
+    from documents.word_v3 import KNOWN_LAYOUT_FAILURES
+    if (not issues or coverage.get('comparison_unresolved') or coverage.get('layout_quarantine')
+            or version.template.sha256 in KNOWN_LAYOUT_FAILURES):
         return False
     reviews = version.corrections.get('coverage_review', [])
     by_id = {row.get('id'): row for row in reviews if isinstance(row, dict)}

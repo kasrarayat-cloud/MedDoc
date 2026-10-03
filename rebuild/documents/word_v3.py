@@ -43,6 +43,140 @@ XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 NS = {"w": W, "w14": W14, "mc": MC}
 CONTRACT = "v3"
 MAX_FIELDS = 1500
+
+# Exact original blanks with retained rendered failures, not width guesses or
+# qualification of changed/proxy documents. Each remains unsupported until its
+# growth contract is independently qualified. Original stored exports are never
+# rewritten. New import manifests carry this evidence to the admission guard.
+KNOWN_LAYOUT_FAILURES = {
+    "bc002ff4594eb374f1748c8e80a66dfa432bc1432d98cd4e218a06d3515d0c66": {
+        "case": "D27",
+        "failed_anchors": [
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[5]/tr[6]/tc[1]",
+                "fingerprint": "f43b264a2a4e0d1a370968fa5f63910d8731f33825abffeb138a5e52389f12fb"
+            },
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[8]/tr[1]/tc[5]/p[0]",
+                "fingerprint": "0e258b98e64b64bc9716c7de1a01d30ca3fbddc88f3162203cdcc48a66d4784c"
+            },
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[9]/tr[1]/tc[5]/p[0]",
+                "fingerprint": "171d6aa4caade933fc6dfea8ece21f8b6407568ad01898d1327b4a5bdb1b07a3"
+            },
+            {
+                "part": "word/footer2.xml",
+                "slot": "hf/p[1]",
+                "fingerprint": "96beb00f4b0e94110ddf741159d52937818ab5031c51bac325620fb01d78767d",
+                "copies": [
+                    {
+                        "part": "word/footer3.xml",
+                        "slot": "hf/p[1]",
+                        "fingerprint": "04133e66bad8d8b0b6c6465ede81375c550085b692e94db332461f936a57fd7a"
+                    }
+                ]
+            },
+            {
+                "part": "word/header2.xml",
+                "slot": "hf/p[0]",
+                "fingerprint": "beb6a4109bd8d8d5f2274d2913507372a4e72378111505029f32ebcf41c48c07",
+                "copies": [
+                    {
+                        "part": "word/header3.xml",
+                        "slot": "hf/p[0]",
+                        "fingerprint": "f9d88e2f21fb7099ed0350ce25e35c239e4e2670fe653e888d95b4e63f1cff28"
+                    }
+                ]
+            }
+        ],
+        "evidence": [
+            "development-coverage-5a06295a6bcf-20261003T005255569947Z",
+            "retained-export-render-20261003T014550746568Z",
+            "fixed096-render-20261003T021326015945Z"
+        ],
+        "measurements": [
+            {
+                "artifact": "retained-export-render-20261003T014550746568Z/D27/pdfium-geometry-supplement.json",
+                "sha256": "698e72a9691a928ecf0df5e5ad4cf8ef653ab8b22a9b239a7511fd76cb46e32e",
+                "long_new_overlap_pairs": 96,
+                "long_missing_probes": [
+                    "v3_38"
+                ],
+                "original_pdf_sha256": "978aafae128d0f332bced93651ffd36778d4ea53bae3864d2bb18511f28c003f",
+                "export_pdf_sha256": "36a3122233ba93add830926554dccac5b80b8505843bd2432e7f08f0ea936eeb"
+            },
+            {
+                "artifact": "fixed096-render-20261003T021326015945Z/D27/pdfium-geometry-supplement.json",
+                "sha256": "353c6e5dab634dbc42a5e2cfd20bef63e105badbd32637cc66e0c071cfa3ee67",
+                "long_new_overlap_pairs": 0,
+                "long_missing_probes": [
+                    "v3_25",
+                    "v3_40"
+                ],
+                "original_pdf_sha256": "8620c0a9aee972042bbad25549253ca961ec3570392d019cead870c778f98656",
+                "export_pdf_sha256": "a8f09f15b57f4dfe9cb060506a313e7501470ca3e12c3364369c17d3760619d4"
+            }
+        ]
+    },
+    "cf9b240f3893f97bf168c7cd3ac808bb720b3bf0f65b168c9671c6827ca1a4b7": {
+        "case": "D35",
+        "failed_anchors": [
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[9]/tr[18]/tc[2]",
+                "fingerprint": "8efb5bf6bca7de20a1417c7dd8ffad09a7fe5b92130ff7e90b82d947e6b837ca"
+            },
+            {
+                "part": "word/header1.xml",
+                "slot": "hf/p[0]/txbx[0]/p[0]",
+                "fingerprint": "2c4c5b60ecdb4e8144f1a37359bf132b2c4c6e81c7b20a06ecf30185913023ff",
+                "copies": [
+                    {
+                        "part": "word/header2.xml",
+                        "slot": "hf/p[0]/txbx[0]/p[0]",
+                        "fingerprint": "fbb2ee921630eb011e4a13957b286dd9a2a90e614e1f9c1f4c189ddee6b93bf7"
+                    },
+                    {
+                        "part": "word/header3.xml",
+                        "slot": "hf/p[0]/txbx[0]/p[0]",
+                        "fingerprint": "50150ee99595390e15fb340501ad3b64bc71817f7cfc1d05bae7069d24e7a5b8"
+                    }
+                ]
+            }
+        ],
+        "evidence": [
+            "development-coverage-5a06295a6bcf-20261003T005255569947Z",
+            "retained-export-render-20261003T014550746568Z",
+            "fixed096-render-20261003T021326015945Z"
+        ],
+        "measurements": [
+            {
+                "artifact": "retained-export-render-20261003T014550746568Z/D35/pdfium-geometry-supplement.json",
+                "sha256": "d208407ebd773ede29a1f46836d9dcf760bb0e0745ae187a39caa167c5905f55",
+                "long_new_overlap_pairs": 0,
+                "long_missing_probes": [
+                    "v3_257",
+                    "v3_299"
+                ],
+                "original_pdf_sha256": "094d4bd75cdd77f9e40e422765668bb9e0128d375e1e9e48a1eeb29ded000d06",
+                "export_pdf_sha256": "b99932f05c7ed36e4be51fb169a032bfad84617b666fed89366105f66f894896"
+            },
+            {
+                "artifact": "fixed096-render-20261003T021326015945Z/D35/pdfium-geometry-supplement.json",
+                "sha256": "eaafaa807b24ce3db7330b3d6ddd560befbda1d67522714ed866fee8a8dfaf06",
+                "long_new_overlap_pairs": 0,
+                "long_missing_probes": [
+                    "v3_257"
+                ],
+                "original_pdf_sha256": "53396a5797d748098e16f28454ca1baedff9254390f0f93b9982184f48931018",
+                "export_pdf_sha256": "13c16246fc72fa9a1e94bf146dc3b5f8a5fe8a0672e1be3c6be4fb20d47d520b"
+            }
+        ]
+    }
+}
 MAX_ANSWER = 100_000
 #: A content control the original locks (contentLocked / sdtContentLocked): its content cannot take an answer, so
 #: its area is protected and the control is a destination role (destination_roles).
@@ -65,6 +199,13 @@ class V3Failure(ValueError):
 
 def fail(message, code="invalid_document"):
     raise V3Failure(message, code)
+
+
+def known_layout_failure(data):
+    """The exact-source declaration is independent of parser or engine success."""
+    source_hash=hashlib.sha256(data).hexdigest()
+    declaration=KNOWN_LAYOUT_FAILURES.get(source_hash)
+    return {'source_sha256':source_hash,**declaration} if declaration else None
 
 
 # ─── package ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1501,6 +1642,8 @@ class Detector:
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
+        self.geometry_regions: dict[str, str] = {}
+        self.layout_quarantine = None
         self.floating_initials = False
         self._order = 0
         self._grid = {}
@@ -2239,6 +2382,26 @@ class Detector:
         fixed_parts={part for part in self.package.content_parts()
                      if part!='word/document.xml' and
                      self.package.tree(part).find('.//'+q('w:txbxContent')) is not None}
+        positioned_parts={part for part in self.package.content_parts()
+                          if self.package.tree(part).find('.//'+q('w:tblpPr')) is not None}
+        failed=known_layout_failure(self.package.data)
+        if failed:
+            self.layout_quarantine=failed
+        for part in fixed_parts|positioned_parts|(
+                set(self.package.content_parts()) if failed else set()):
+            region=part+('#b' if part=='word/document.xml' else '#hf')
+            if failed:
+                reason=('This exact original has retained rendered answer truncation or overlap failures. '
+                        'Its whole-document answer growth remains unsupported; no generation or charge is allowed. '
+                        'Review cannot qualify it by leaving an area unchanged.')
+            elif part in positioned_parts:
+                reason=('This source part contains positioned tables. Growth in neighboring flowing areas can '
+                        'overlap those fixed placements; answer growth in this whole part remains unqualified.')
+            else:
+                reason=('This header/footer contains fixed text boxes. Answer growth has not been qualified '
+                        'and can overwrite nearby printed content; these source areas remain unchanged.')
+            self.protected_regions.add(region)
+            self.geometry_regions[region]=reason
         for area in self.areas:
             sources=[area.slot,*area.extra_slots]
             for ref in area.target.get('copies',[]):
@@ -2246,10 +2409,9 @@ class Detector:
                 if slot is not None:sources.append(slot)
             for slot in sources:
                 fixed=None;reason=''
-                if slot.part in fixed_parts:
-                    fixed=slot.part+'#hf'
-                    reason=('This header/footer contains fixed text boxes. Answer growth has not been qualified '
-                            'and can overwrite nearby printed content; these source areas remain unchanged.')
+                root=slot.part+('#b' if slot.part=='word/document.xml' else '#hf')
+                if root in self.geometry_regions:
+                    fixed=root;reason=self.geometry_regions[root]
                 else:
                     parent=slot
                     while parent is not None:
@@ -2262,6 +2424,7 @@ class Detector:
                 if fixed is None:continue
                 if not area.protection:area.protection=reason
                 self.protected_regions.add(fixed)
+                self.geometry_regions[fixed]=reason
                 detail=reason+' Location: '+slot.id
                 self.coverage_issue(slot,'unqualified_fixed_container',detail)
                 if detail not in self.notes:self.notes.append(detail)
@@ -5663,21 +5826,22 @@ class Detector:
         spans = []
         unresolved=[]
         # Printed slash-separated parts are alternatives, irrespective of their
-        # punctuation, script or digits. No lexical meaning or signer identity is
-        # inferred. Date-format hints and explicit authoring directives retain
-        # their existing placeholder interpretation.
-        for match in BRACKET_ANY.finditer(text):
+        # punctuation, script, digits, empty parts or line breaks. A leading
+        # verb does not prove an authoring role: [type A/type B] is a menu.
+        # Only the existing explicit date-format hint is a slash placeholder.
+        for match in re.finditer(r'\[([^\[\]]+)\]',text):
             inner=match.group(1).strip()
             parts=inner.split('/')
-            if (len(parts)>1 and all(part.strip() for part in parts)
-                    and not re.fullmatch(r'(?:dd|mm|yy|yyyy)(?:/(?:dd|mm|yy|yyyy))+',inner,re.I)
-                    and not _Bracket.VERB.match(inner)):
+            if (len(parts)>1 and
+                    not re.fullmatch(r'(?:dd|mm|yy|yyyy)(?:/(?:dd|mm|yy|yyyy))+',inner,re.I)):
                 unresolved.append((match.start(),match.end(),'printed_bracket_alternatives',
                     'Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact '
                     'choice interpretation need review; this source range remains unchanged: '+match.group(0)))
         # A long marked range is outside the qualified placeholder grammar. Its
         # physical presence cannot be silently omitted because of the 120 limit.
-        for match in re.finditer(r'\[[^\[\]\n]{121,}\]',text):
+        for match in re.finditer(r'\[[^\[\]]+\]',text):
+            if len(match.group(0))<=122 and '\n' not in match.group(0):continue
+            if any(start==match.start() and end==match.end() for start,end,_,_ in unresolved):continue
             unresolved.append((match.start(),match.end(),'unmapped_bracketed_source',
                 'This long bracketed source range exceeds the qualified placeholder grammar. Its authoring or '
                 'answer role is unresolved; preserve the exact text and review it before generation: '+match.group(0)))
@@ -6262,6 +6426,7 @@ def inspect(data: bytes) -> dict:
                 if detail not in notes:notes.append(detail)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
             "coverage_issues": detector.coverage_issues,
+            "layout_quarantine": detector.layout_quarantine,
             "layout_pending": len(detector.layout_candidates)}
 
 
@@ -7429,12 +7594,6 @@ def write_cell(tc, answer, replace=False, whole=False, append=False):
         if wraps_structure(tc):
             fail("The instruction cell contains another form structure.", "unsupported_layout")
         paragraph = etree.SubElement(tc, q("w:p"))
-        # Newly inserted answer text may contain a word wider than a narrow
-        # instruction cell. Permit character-level line breaking without
-        # changing the original paragraph, cell width, or answer characters.
-        # OOXML wordWrap=off specifies character-level (not word-level) breaks.
-        ppr=etree.SubElement(paragraph,q('w:pPr'))
-        etree.SubElement(ppr,q('w:wordWrap')).set(q('w:val'),'off')
         source_run = next(p0.iter(R), None)
         props = source_run.find(q("w:rPr")) if source_run is not None else None
         paragraph.append(_new_run(_answer_rpr(props), answer))
@@ -7567,6 +7726,10 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if target.get("type") == "table_rows":
             destinations.append({"part": loc.get("part"), "slot": target.get("table")})
         locations = ["%s#%s" % (x.get("part"), x.get("slot")) for x in destinations]
+        for region,reason in source_detector.geometry_regions.items():
+            if any(location==region or location.startswith(region+'/') or region.startswith(location+'/')
+                   for location in locations):
+                fail(reason,'unqualified_layout')
         for identity, reason in legacy_protected.items():
             if any(location == identity or location.startswith(identity + "/") or identity.startswith(location + "/")
                    for location in locations):

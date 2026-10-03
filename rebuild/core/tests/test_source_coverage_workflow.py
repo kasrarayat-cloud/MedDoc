@@ -8,7 +8,7 @@ from docx import Document
 
 from core import import_binding
 from core.jobs import enqueue,run_one
-from core.models import Encounter,Job,Reservation
+from core.models import Encounter,Job,Reservation,TemplateVersion
 from core.security import private_path
 from documents.test_source_coverage import numbered
 from .test_word_v3_workflow import V3Fixture
@@ -83,4 +83,24 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                                  'mapping_version':version.pk,'checked_every_field':'on'})
         self.assertEqual(response.status_code,400)
         self.assertEqual(self.new_encounter(version).status_code,200)
+        self.assertEqual(Job.objects.count(),0);self.assertEqual(Reservation.objects.count(),0)
+
+    def test_measured_document_quarantine_refuses_even_precise_exclusion_before_money(self):
+        _,raw=self.source('alternatives');template,version=self.uploaded(data=raw)
+        manifest=copy.deepcopy(version.import_manifest)
+        manifest['coverage']['layout_quarantine']={'source_sha256':template.sha256,
+                                                   'failed_anchors':[version.fields[0]['locator']],
+                                                   'evidence':['synthetic measured-failure control']}
+        quarantined=TemplateVersion.objects.create(template=template,number=2,fields=version.fields,
+                    contract=version.contract,created_by=self.user,import_manifest=manifest,
+                    corrections={'coverage_review':[{'id':issue['id'],'disposition':'leave_unchanged',
+                                  'source_sha256':template.sha256,'reviewed_by':str(self.user.pk)}
+                                 for issue in manifest['coverage']['selected_engine_issues']]})
+        self.assertFalse(import_binding.coverage_reviewed(quarantined))
+        with self.assertRaisesMessage(ValidationError,'retained rendered answer failures'):
+            import_binding.verify(quarantined)
+        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_confirm',
+                                 'mapping_version':quarantined.pk,'checked_every_field':'on'})
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(self.new_encounter(quarantined).status_code,200)
         self.assertEqual(Job.objects.count(),0);self.assertEqual(Reservation.objects.count(),0)

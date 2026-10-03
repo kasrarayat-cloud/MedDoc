@@ -121,3 +121,37 @@ this behavior in the [official WordprocessingML documentation](https://learn.mic
 The 31 affected source/import/workflow tests passed in 80.132 seconds, real exit 0,
 with the synthetic database destroyed. Same-first-value rendered verification
 and finished-diff independent refutation are still required for this follow-up.
+
+## Preserved 096 failures and exact-source quarantine
+
+The 09644640 five-case same-first-value writer/render supplement completed with
+exit 0 in 78.160 seconds and unchanged measured source hashes. The selected v3
+writer explicitly left 4/6/80/4 fixed-container fields unchanged on D26/D27/D29/
+D35. D26 and D28 had no new measured overlaps and all 7/85 probes visible.
+D27 still missed two long-answer probes; D29 still added 12 ordinary and 148 long
+overlap pairs; D35 still rendered the unchanged 15-character `Q257v synthetic`
+answer as `Q257v synthet`. The proposed OOXML wrapping property therefore did
+not repair the observed cell truncation and is removed. These results, the
+original five failed forms, and D28's 80/85 stricter check remain failures.
+
+Independent 096 inspect/fill refutation also demonstrated unrestricted overwrite
+of `[type A/type B]`, `[state/local]`, `[add/remove]`, malformed slash menus and
+multiline slash ranges. The blanket leading-verb exception is removed for
+slash ranges; a leading verb cannot establish that the range is an authoring
+placeholder. Exact date-format placeholders and non-slash authoring placeholders
+retain their existing behavior. Unsupported multiline bracket ranges now carry
+exact source issues rather than disappearing from the grammar.
+
+A source part containing positioned tables is now held as a whole: growth in
+another flowing table or paragraph can overlap its fixed siblings. Exact D27
+and D35 originals are quarantined using their immutable SHA256 values, measured
+failed anchors, retained geometry artifact hashes and original/export PDF hashes.
+This declares measured unsupported originals, without an invented global width
+threshold or a claim about altered documents. Every new auto, legacy or v3 import
+carries the declaration. Admission checks the known original hash independently
+of the copied manifest, and precise exclusions cannot turn this quarantine into
+supported whole-document growth. Historical empty manifests remain recorded
+history; no stored mapping or existing finalized export is rewritten.
+
+The final source still requires its affected checks, actual original-upload
+admission controls on all engines, and a finished-diff independent refutation.

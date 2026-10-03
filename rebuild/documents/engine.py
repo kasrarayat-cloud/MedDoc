@@ -53,6 +53,7 @@ def process_v3(workspace, request):
             found = word_v3.inspect(data)
             return {"format": "docx", "fields": found["fields"], "warnings": found["notes"] + V3_WARNINGS,
                     "coverage_issues": found.get('coverage_issues', []),
+                    "layout_quarantine": found.get('layout_quarantine'),
                     "layout_pending": found["layout_pending"],
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "layout_prepare":
@@ -783,6 +784,7 @@ def process(workspace, request):
 def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
     """Select once at import, under the sandbox, against one immutable byte snapshot."""
     path = workspace / 'input.docx'
+    quarantine=word_v3.known_layout_failure(path.read_bytes())
     legacy, advanced = None, None
     old_error, new_error = '', ''
     try:
@@ -853,6 +855,12 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
     result = advanced if selected == 'v3' else legacy
     if selected == 'v3' and advanced.get('coverage_issues'):
         coverage['selected_engine_issues'] = advanced['coverage_issues']
+        coverage['block_generation'] = True
+    if quarantine:
+        # Exact measured source failures remain unsupported on every NEW-import
+        # engine route. Choosing legacy or excluding locations cannot qualify
+        # the original's unproven whole-document growth contract.
+        coverage['layout_quarantine'] = quarantine
         coverage['block_generation'] = True
     if selected == 'legacy' and advanced and (advanced.get('coverage_issues') or advanced.get('layout_pending')):
         # A legacy destination in another cell cannot establish coverage of a
