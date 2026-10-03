@@ -92,3 +92,46 @@ custody limitation, `http-custody-fourth/`,
 three-original mapping diagnostics. The final component and evidence manifests
 retain their exact hashes. Cleanup targets are proposed separately for lead
 verification; no evidence or worktree was deleted by this worker.
+
+
+2026-10-03 08:45 UTC correction and unfinished source-role follow-up
+-----------------------------------------------------------------
+
+The earlier adjacent report describes its measured controls, not general signing
+qualification. Independent actual exports subsequently disproved the human-owned
+claim at ec23, 6255, f284, 2216, 6e, and 17b. These original results and exports
+remain protected; none is promoted by a later fix. In particular, the latest
+17b refutations retained eight Security action failures, four Notes speaker
+appositions, and eight additional Notes captions across three physical shapes.
+The raw Notes instrument flags are not a count of served failures. No shared
+integration or activation has occurred for this repair.
+
+The follow-up reads the original subject, bounded speaker apposition/capacity,
+finite permission predicate, and signing-event argument. It supplies no signer
+identity. Third-person witnessing of a signing event requires precise source
+role review. Printed human acts remain unwritable even after a forged ordinary
+mapping; unrelated cells and independent questions retain their own roles.
+Identity blanks within an attestation's printed speaker qualification remain
+human-owned as well, preventing insertion of a finalizer's name. Ordinary
+initial clinical fields, recorded signed receipts, clinical observations, and
+an ordinary permit-holder statement remain useful in the measured controls.
+Role suggestions remain disabled. Existing mappings and finalized encounters
+are not reparsed or rewritten.
+
+Thirty affected pure tests passed in 71.102 seconds, actual exit 0. A subsequent
+one-method identity/capacity supplement passed in 1.491 seconds, actual exit 0.
+The first 30-test run failed three source/count assertions and four test owner
+selection errors; its 70.487-second log remains retained. Two additional actual
+identity-capacity writes on the dirty intermediate source were preserved before
+the narrow repair. The final source has not yet completed independent finished
+diff refutation or its pending actual HTTP worker-to-export qualification.
+No provider call, database mutation, financial-history reset, or invoice claim
+was made by these pure checks. The frozen 2/31 strict generic result and the
+unopened held-back denominator remain unchanged.
+
+Protected evidence: word/adjacent-writein/verify-notes-17b-appositive-f67x4o61/,
+self-extra-current-y3z28j5q/, actor-destination-pending-5ittmlpi/,
+actor-capacity-before-ewfsa_3v/, and pure-twentythird through twentyseventh logs.
+The active worker tree stays isolated; lead-only integration, CI, private
+installation and demonstration are pending because the lead session is
+unavailable. There is no configured background deployment.

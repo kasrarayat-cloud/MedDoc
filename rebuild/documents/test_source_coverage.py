@@ -377,15 +377,17 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
         for shape,raw in self.source_act_forms(statement):
             with self.subTest(statement=statement,shape=shape):
                 result=word_v3.inspect(raw);held=[f for f in result['fields'] if f.get('write_protected')]
-                self.assertEqual(len(held),1)
+                self.assertGreaterEqual(len(held),1)
                 self.assertTrue(any(i['code'] in ('human_signing_action','ambiguous_source_action')
                                     for i in result['coverage_issues']))
-                field=deepcopy(held[0]);field.pop('write_protected');field.pop('review_reason')
-                if field['kind'] in ('signature','initials'):field['kind']='text'
-                self.assertIn(field['key'],word_v3.destination_roles(raw,[field])['violations'])
-                with self.assertRaises(word_v3.V3Failure):
-                    word_v3.fill(raw,[field],{field['key']:'checked' if shape=='checkbox' else 'Synthetic completion'})
+                for original in held:
+                    field=deepcopy(original);field.pop('write_protected');field.pop('review_reason')
+                    if field['kind'] in ('signature','initials'):field['kind']='text'
+                    self.assertIn(field['key'],word_v3.destination_roles(raw,[field])['violations'])
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw,[field],{field['key']:'checked' if field['kind']=='checkbox' else 'Synthetic completion'})
                 ordinary=next(f for f in result['fields'] if f['label']=='Unrelated note')
+                self.assertFalse(ordinary.get('write_protected'))
                 before=Document(io.BytesIO(raw));after=Document(io.BytesIO(word_v3.fill(raw,result['fields'],
                                                         {ordinary['key']:'Synthetic review'})))
                 self.assertEqual([p.text for p in after.paragraphs[:-1]],[p.text for p in before.paragraphs[:-1]])
@@ -508,6 +510,95 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
                     self.assertEqual(word_v3.destination_roles(raw,[target])['violations'],{})
                     word_v3.fill(raw,fields,{target['key']:'checked' if target['kind']=='checkbox'
                                             else 'Synthetic recorded value'})
+
+    def test_personal_signing_event_arguments_remain_held_without_a_witness_verb_whitelist(self):
+        for statement in ('I saw the patient sign the consent form',
+                          'I watched the patient sign the consent form',
+                          'I witnessed the patient sign this consent form',
+                          'I was present when the patient signed',
+                          'I was present during the signing',
+                          'I stood beside the patient when she signed'):
+            self.assert_source_act_stays_human_owned(statement)
+
+    def test_personal_permission_arguments_require_role_review_with_unfamiliar_or_negative_acts(self):
+        for statement in ('I provide informed consent for this procedure',
+                          'I withdraw my consent to this procedure',
+                          'We gave written permission for surgery',
+                          'I revoke my authorization for this treatment'):
+            self.assert_source_act_stays_human_owned(statement)
+
+    def test_printed_speaker_appositions_never_establish_signing_identity(self):
+        for statement in ('I, the witness, saw the patient sign',
+                          'I, the manager, approve this document',
+                          'We, the undersigned, verify the above information',
+                          'I (patient) allow this procedure',
+                          'I — the clinician — certify this record',
+                          'I [the clinician] certify this record'):
+            self.assert_source_act_stays_human_owned(statement)
+        for statement in ('I, the patient, have ankle swelling','I (patient) take warfarin',
+                          'We, the clinical team, observed ankle swelling'):
+            for shape,raw in self.source_act_forms(statement):
+                with self.subTest(ordinary=statement,shape=shape):
+                    result=word_v3.inspect(raw)
+                    self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                      ('human_signing_action','ambiguous_source_action')])
+                    field=next(f for f in result['fields'] if f['label']!='Unrelated note')
+                    self.assertEqual(word_v3.destination_roles(raw,[field])['violations'],{})
+
+    def test_grammatical_number_does_not_release_action_captions_or_document_objects(self):
+        for statement in ('Witness declarations','Declarations that these records are accurate',
+                          'The reviewers approve these documents','I verify the above records'):
+            self.assert_source_act_stays_human_owned(statement)
+
+    def test_capacity_phrases_and_third_person_witness_events_never_supply_authority(self):
+        for statement in ('The witness saw the patient sign',
+                          'The witness observed the patient signing this form',
+                          'I as the parent allow this procedure',
+                          'As the witness, I saw the patient sign',
+                          'I—the witness—saw the patient sign',
+                          'The patient’s witness saw her sign',
+                          'By checking this box, I, the patient, authorise the treatment',
+                          'As manager, I approve this document'):
+            self.assert_source_act_stays_human_owned(statement)
+        for statement in ('As the patient, I have ankle swelling',
+                          'I as the permit holder have ankle swelling',
+                          'The witness observed the patient walking',
+                          'The clinician saw Tinel signs'):
+            for shape,raw in self.source_act_forms(statement):
+                with self.subTest(ordinary=statement,shape=shape):
+                    result=word_v3.inspect(raw)
+                    self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                      ('human_signing_action','ambiguous_source_action')])
+                    fields=result['fields'];target=next(f for f in fields if f['kind']=='checkbox') if shape=='checkbox' else \
+                                                 next(f for f in fields if f['label']!='Unrelated note')
+                    self.assertEqual(word_v3.destination_roles(raw,[target])['violations'],{})
+                    word_v3.fill(raw,fields,{target['key']:'checked' if target['kind']=='checkbox'
+                                            else 'Synthetic ordinary status'})
+
+    def test_name_blank_inside_attestation_subject_is_not_a_finalizer_identity_destination(self):
+        for source in ('I [enter full name] certify that this record is accurate: ______    Reason for visit: ______',
+                       'I (initials ______) certify that this record is accurate: ______    Reason for visit: ______',
+                       'I — [enter full name] — certify that this record is accurate: ______    Reason for visit: ______',
+                       'As [enter full name], I certify that this record is accurate: ______    Reason for visit: ______',
+                       'I as [enter full name] allow this procedure: ______    Reason for visit: ______'):
+            with self.subTest(source=source):
+                doc=Document();doc.add_paragraph(source);raw=data(doc);result=word_v3.inspect(raw)
+                fields=result['fields'];ordinary=next(f for f in fields if f['label']=='Reason for visit')
+                identity=fields[0];self.assertTrue(identity['write_protected'])
+                forged=deepcopy(identity);forged['kind']='text';forged.pop('write_protected');forged.pop('review_reason')
+                self.assertIn(forged['key'],word_v3.destination_roles(raw,[forged])['violations'])
+                with self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(raw,[forged],{forged['key']:'Synthetic finalizer name'})
+                self.assertFalse(ordinary.get('write_protected'))
+                out=word_v3.fill(raw,fields,{ordinary['key']:'Synthetic reason'})
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,
+                                 source.removesuffix('______')+'Synthetic reason')
+        source='I [enter full name] have ankle swelling: ______    Reason for visit: ______'
+        doc=Document();doc.add_paragraph(source);raw=data(doc);fields=word_v3.inspect(raw)['fields']
+        identity=fields[0];self.assertFalse(identity.get('write_protected'))
+        self.assertEqual(word_v3.destination_roles(raw,[identity])['violations'],{})
+        out=word_v3.fill(raw,fields,{identity['key']:'Synthetic patient name'})
+        self.assertIn('I Synthetic patient name have ankle swelling',Document(io.BytesIO(out)).paragraphs[0].text)
 
 
 class SourceCoverage(unittest.TestCase):

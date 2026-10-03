@@ -2396,6 +2396,23 @@ class Detector:
                 before = max((end for _, end, _ in self.blank_spans(printed, pieces)
                               if end <= start), default=0)
                 sources.append(printed[before:start])
+                # A name/role blank inside the subject of an attestation is
+                # part of that human act, even though its predicate is after
+                # the blank. Bound the reading to that printed apposition and
+                # its first clause/answer; never inherit a later question.
+                qualifier = re.match(r'^\s*(?P<speaker>[^\[\](),—–\r\n]+?)\s*'
+                    r'(?P<role>\[[^\[\]\r\n]{1,120}\]|\([^()\r\n]{1,120}\)|'
+                    r',\s*[^,;:?!\r\n]{1,120}\s*,|(?P<dash>[—–-])[^—–\r\n]{1,120}?(?P=dash))\s*',printed)
+                speaker = _plain(qualifier['speaker']) if qualifier else ''
+                subject_role = (speaker in ('i','we','i as','we as') or
+                                speaker=='as' and re.match(r'^,\s*(?:I|we)(?=\W|$)',
+                                                           printed[qualifier.end():],re.I))
+                if (qualifier and subject_role
+                        and area.target['end']>qualifier.start('role') and start<qualifier.end('role')):
+                    following = [a for a,_,_ in self.blank_spans(printed,pieces) if a>=qualifier.end()]
+                    boundary = re.search(r'[.;?]',printed[qualifier.end():])
+                    end = min(following+[qualifier.end()+boundary.start()+1 if boundary else len(printed)])
+                    sources.append(printed[:end])
             elif area.slot.kind == 'tc':
                 cell = area.slot
                 for source in self.question_cells(cell.parent, cell.info['row'], cell.info['col']):
@@ -2866,9 +2883,31 @@ class Detector:
         contractions = {'m':'am','re':'are','ve':'have','d':'would','ll':'will'}
         source = re.sub(r"\b(I|we)[’'](m|re|ve|d|ll)\b",
                         lambda m:m[1]+' '+contractions[m[2].casefold()],source,flags=re.I)
-        person = re.match(r'^(?:I|we)\s+(?:(?:hereby|am|are|have|had|been|being|personally|do|did|not|yet|cannot|will|would)\s+)*',
-                          source,re.I)
-        return source[person.end():] if person else ''
+        # An explicit subject remains explicit after a bounded introductory
+        # capacity phrase. The printed capacity supplies no signer identity.
+        introductory = re.match(r'^as\s+[^,;:?!\r\n]{1,120},\s*(?=(?:I|we)(?=\W|$))',source,re.I)
+        if introductory:source=source[introductory.end():]
+        person = re.match(r'^(?:I|we)(?=\W|$)',source,re.I)
+        if not person:return ''
+        predicate=source[person.end():].strip()
+        # A printed apposition qualifies the speaker; it never proves their
+        # identity or signing authority. Keep malformed qualifiers as unknown
+        # predicates, so a consent/signing argument still requires exact review.
+        qualifier = re.match(r'^(?:,\s*[^,;:?!\r\n]{1,120}\s*,|'
+                             r'\([^()\r\n]{1,120}\)|\[[^\[\]\r\n]{1,120}\]|'
+                             r'([—–-])\s*[^—–\r\n]{1,120}?\s*\1)\s*',predicate)
+        if qualifier:predicate=predicate[qualifier.end():]
+        # A capacity phrase without a comma is grammatically ambiguous. Only
+        # isolate a finite permission predicate with its explicit determined
+        # object; a noun such as "permit holder" is not that predicate. Other
+        # unknown predicates retain their original arguments for role review.
+        capacity = re.match(r'^as\s+[^,;:?!\r\n]{1,120}?\s+'
+                            r'(?=(?:allow|permit)(?:s|ted|ting|ed|ing)?\s+'
+                            r'(?:this|that|these|the|a|an|my|our|their|his|her)\b)',predicate,re.I)
+        if capacity:predicate=predicate[capacity.end():]
+        aspect=re.match(r'^(?:(?:hereby|am|are|was|were|have|had|been|being|personally|do|did|not|yet|cannot|will|would)\s+)*',
+                        predicate,re.I)
+        return predicate[aspect.end():]
 
     @classmethod
     def checkbox_source_action(cls,text,*,governing=False):
@@ -2895,7 +2934,7 @@ class Detector:
             # not an action caption, and no signer name is inferred.
             heading = re.fullmatch(r'(?:[^:?!\r\n]+?\s+)?'
                                   r'(?P<action>approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
-                                  r'certification|attestation|declaration|authori[sz]ation|consent|sign[ -]?off)'
+                                  r'certification|attestation|declaration|authori[sz]ation|consent|sign[ -]?off)s?'
                                   r'(?:\s+(?:of|for|to|by|from)\s+[^:?!]+)?\s*[:.]?',source,re.I)
             if heading:
                 explicit = (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
@@ -2915,7 +2954,7 @@ class Detector:
                     return 'human_signing_action'
         document_pattern = (r'\b(?:this|the|these|above|foregoing)\s+'
                             r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
-                            r'(?:record|document|form|report|information|statements?|details?)(?=\W|_|$)')
+                            r'(?:records?|documents?|forms?|reports?|information|statements?|details?)(?=\W|_|$)')
         # Permission and witnessing are acts even when their object is a
         # procedure/person rather than the document. Their subject/predicate
         # relationship supplies the role; merely mentioning consent, signing
@@ -2927,14 +2966,37 @@ class Detector:
                    r'[^.;:?!\r\n]*\b(?:signing|signed|signatures?|sign(?=\s*(?:[.:;_]|$)))\b')
         witnessed_presence = (r'\b(?:sign(?:ed|ing)|signatures?)\b[^.;:?!\r\n]*'
                               r'\bin\s+(?:my|our)\s+presence\b')
+        signing_event = (r'\b(?:signed|signing|signatures?)\b|\bsign(?=\s*(?:[.:;_]|$)|\s+'
+                         r'(?:(?:the|this|that|these|a|an|my|our|their|his|her)\s+)?'
+                         r'(?:consent|declaration|attestation|authori[sz]ation|(?:clinical\s+|medical\s+)?'
+                         r'(?:document|form|report|record))\b)')
+        # Witnessing is a subject + perception predicate + signing event. Its
+        # subject need not name a known role, and cannot authorize generation
+        # to perform that person's observation. Clinical observations without
+        # a signing event and recorded noun/status labels remain independent.
+        observed = re.match(r'^([^.;:?!\r\n]+?)\s+'
+                            r'(?:observ(?:es|ed)|sees|saw|witness(?:es|ed)|watch(?:es|ed))\b'
+                            r'(?P<argument>[^.;:?!\r\n]+)',source,re.I)
+        if (observed and re.search(signing_event,observed['argument'],re.I)):
+            return 'human_signing_action' if first_person else 'ambiguous_source_action'
         if (first_person and (re.match(permission,predicate,re.I) or re.search(witness,predicate,re.I))
                 or re.search(witnessed_presence,source,re.I)):
             return 'human_signing_action'
+        if first_person:
+            # The argument supplies a legal/signing role even when its verb
+            # is unfamiliar, negated, withdrawing consent, or describes a
+            # witness's presence. Do not grow a verb/signer-name whitelist.
+            # Clinical signs/observations have no such signing-event argument.
+            signing_argument = re.search(signing_event,predicate,re.I)
+            formal_argument = re.search(r'\b(?:consent|permission|authori[sz]ation|attestation|certification|declaration)s?\b',
+                                        predicate,re.I)
+            if signing_argument or formal_argument:
+                return 'ambiguous_source_action'
         if not predicate:
             # A documentary nominal printed as an option is still the act,
             # even without a named signer or a colon-bearing parent label.
             nominal = re.match(r'^(approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
-                               r'certification|attestation|declaration|authori[sz]ation|consent)'
+                               r'certification|attestation|declaration|authori[sz]ation|consent)s?'
                                r'\s+(?:that|of|for|to)\b',source,re.I)
             if (nominal and (re.search(document_pattern,source,re.I)
                              or re.match(r'certification|attestation|declaration|authori[sz]ation|consent',nominal[1],re.I))):
