@@ -4,6 +4,7 @@ Every model choice is simulated; no provider requests or patient data.
 """
 import json
 import io
+import hashlib
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -63,6 +64,235 @@ class PatientDefault(SimpleTestCase):
             with self.subTest(source=source):
                 self.check(source, label, [source], 'conflict', context=False)
                 self.check(source, label, [source])
+
+    def test_generic_medication_source_remains_an_unresolved_dependency(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for actor in ['She','The patient']:
+                for unknown in ['unknown','UNKNOWN','']:
+                    tail=f'{actor} switched from an {unknown} medication to supine positioning.'
+                    with self.subTest(label=label,tail=tail):
+                        self.check(source+' '+tail,label,[source],'conflict')
+        tail='The patient switched from an unknown medication to supine positioning.'
+        independent='The patient reports cough.'
+        self.check(independent+' '+tail,'Symptoms',[independent])
+        dependent='The patient reports cough while taking warfarin.'
+        self.check(dependent+' '+tail,'Symptoms',[dependent],'conflict')
+        # A concrete old value still governs that value, without treating its
+        # separately supported current replacement as discontinued as well.
+        change='The patient switched from warfarin medication to apixaban.'
+        replacement='The patient takes apixaban 5 mg twice daily.'
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+change,label,[source],'conflict')
+            self.check(replacement+' '+change,label,[replacement])
+
+    def test_foreign_positional_event_does_not_change_patient_medication(self):
+        for source in ['Takes warfarin 5 mg daily.','The patient takes warfarin 5 mg daily.']:
+            for tail in ['Her father switched from prone to supine positioning.',
+                         'Her father switched to the supine position.']:
+                with self.subTest(source=source,tail=tail):self.check(source+' '+tail,'Medications',[source])
+        # This scopes an unrelated event; it grants no patient actor to a
+        # father's actual medication statement or an unresolved drug change.
+        foreign='Her father takes warfarin 5 mg daily.'
+        self.check(foreign+' The patient switched from prone to supine positioning.','Medications',[foreign],'conflict')
+
+    def test_generic_transition_requires_a_completed_patient_event(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['Her father switched from an unknown medication to supine positioning.',
+                     'Her father previously switched from an unknown medication last year to supine positioning.',
+                     'She did not switch from an unknown medication to supine positioning.',
+                     'The patient may switch from an unknown medication to supine positioning tomorrow.',
+                     'The patient will switch from an unknown medication to supine positioning tomorrow.']:
+            for label in ['Medications','Current medications']:
+                with self.subTest(tail=tail,label=label):self.check(source+' '+tail,label,[source])
+
+    def test_unidentified_old_medication_does_not_also_discontinue_its_named_target(self):
+        change='The patient switched from an unknown medication to apixaban.'
+        source='The patient takes warfarin 5 mg daily.'
+        target='The patient takes apixaban 5 mg twice daily.'
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+change,label,[source],'conflict')
+            self.check(target+' '+change,label,[target])
+            for invalid in ['The patient previously took apixaban last year.',
+                            'The patient may take apixaban tomorrow.',
+                            'Her father takes apixaban 5 mg twice daily.']:
+                with self.subTest(invalid=invalid,label=label):self.check(invalid+' '+change,label,[invalid],'conflict')
+            self.check(target+' '+change+' Apixaban was stopped.',label,[target],'conflict')
+        moved='The patient switched to apixaban from an unknown medication.'
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+moved,label,[source],'conflict')
+            self.check(target+' '+moved,label,[target])
+
+    def test_medication_question_references_do_not_become_drug_arguments(self):
+        source='The patient takes warfarin 5 mg daily.'
+        for tail in ['Medications were copied from the prior section.',
+                     'Her father switched from the medication section to the plan section.',
+                     'Her father switched from an unknown medication to supine positioning. Medications are incorrect.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source],'conflict')
+
+    def test_mixed_actor_endings_keep_their_own_patient_and_named_medication(self):
+        prefix='Her father switched from prone to supine positioning'
+        for source in ['Takes warfarin 5 mg daily.','The patient takes warfarin 5 mg daily.']:
+            for label in ['Medications','Current medications']:
+                for tail in [' and the patient stopped warfarin.', '; the patient stopped warfarin.',
+                             ' and the patient withheld warfarin.',
+                             ' and the patient replaced warfarin with apixaban.',
+                             ' and the patient stopped all medications.',
+                             " and the patient's warfarin was stopped.",
+                             ' and she stopped warfarin.']:
+                    with self.subTest(source=source,label=label,tail=tail):
+                        self.check(source+' '+prefix+tail,label,[source],'conflict')
+                for tail in [' and the patient stopped apixaban.',
+                             ' and the patient did not stop warfarin.',
+                             ' and the patient may stop warfarin tomorrow.',
+                             " and the patient stopped her father's warfarin.",
+                             ' and the patient reports cough.']:
+                    with self.subTest(source=source,label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+        target='The patient takes apixaban 5 mg twice daily.'
+        self.check(target+' '+prefix+' and the patient stopped warfarin and apixaban.',
+            'Current medications',[target],'conflict')
+        self.check(target+' '+prefix+' and the patient replaced warfarin with apixaban.',
+            'Current medications',[target])
+        source='Takes warfarin 5 mg daily.'
+        self.check(source+' The patient switched from prone to supine positioning and her father stopped warfarin.',
+            'Medications',[source])
+
+    def test_mixed_medication_events_do_not_share_an_actor_or_replacement(self):
+        source='The patient takes warfarin 5 mg daily.'
+        other='Her father switched from an unknown medication to supine positioning and the patient reports cough.'
+        self.check(source+' '+other,'Medications',[source])
+        self.check(source+' '+other,'Current medications',[source])
+        target='The patient takes apixaban 5 mg twice daily.'
+        changes='Her father switched from an unknown medication to apixaban and the patient switched from an unknown medication to warfarin.'
+        self.check(target+' '+changes,'Current medications',[target],'conflict')
+        self.check(source+' '+changes,'Current medications',[source])
+        # The separate first policy diagnostic for an 'unidentified substance'
+        # is retained, not certified as a medication contradiction: the noun
+        # does not positively name medication. Do not manufacture that class.
+
+    def test_nested_clinical_arguments_retain_the_explicit_actor_and_ended_topic(self):
+        prefix='Her father switched from prone to supine positioning and reports that '
+        for source in ['Takes warfarin 5 mg daily.','The patient takes warfarin 5 mg daily.']:
+            for label in ['Medications','Current medications']:
+                for tail in ['the patient stopped warfarin.', 'the patient withheld warfarin.',
+                             'the patient replaced warfarin with apixaban.', 'the patient stopped all medications.',
+                             'she stopped warfarin.',
+                             'warfarin was stopped and the patient reports cough.']:
+                    with self.subTest(source=source,label=label,tail=tail):
+                        self.check(source+' '+prefix+tail,label,[source],'conflict')
+                for tail in ['the patient stopped apixaban.', 'the patient did not stop warfarin.',
+                             'the patient may stop warfarin tomorrow.', 'her mother stopped warfarin.',
+                             'she stopped apixaban.']:
+                    with self.subTest(source=source,label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+
+    def test_bounded_foreign_position_complement_has_no_patient_medication_argument(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['The patient reports that her father switched from prone to supine positioning.',
+                         'The patient confirms that her father switched from prone to supine positioning.',
+                         'The patient reports that her father had switched from prone to supine positioning.',
+                         'The patient reports that her father switched from prone to supine positioning and the patient stopped apixaban.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+            for tail in ['The patient reports that her father switched from prone to supine positioning and the patient stopped warfarin.',
+                         'The patient reports that she switched from an unknown medication to supine positioning.',
+                         'The patient reports that someone switched from an unknown medication to supine positioning.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source],'conflict')
+
+    def test_owned_patient_denial_is_not_erased_by_a_foreign_outer_actor(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['Her father denies that the patient takes warfarin.',
+                         'Her father switched from prone to supine positioning and the patient does not take warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source],'conflict')
+            for tail in ['Her father denies that her mother takes warfarin.',
+                         'Her father denies that the patient takes apixaban.',
+                         'Her father switched from prone to supine positioning and her mother does not take warfarin.',
+                         'Her father switched from prone to supine positioning and the patient does not take apixaban.',
+                         'Her father switched from prone to supine positioning and the patient did not stop warfarin.',
+                         'Her father denies that the patient has warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+
+    def test_family_positional_subject_is_not_replaced_by_an_inferred_patient(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['Her father switched from prone to supine positioning and stopped warfarin.',
+                         'Her father switched from prone to supine positioning and replaced warfarin with apixaban.',
+                         'The patient reports that her father switched from prone to supine positioning and stopped warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+
+    def test_passive_ended_argument_and_explicit_recipient_keep_their_ownership(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            for tail in ['warfarin was withheld from her father.',
+                         'apixaban was withheld from the patient.',
+                         'apixaban was withheld.',
+                         'warfarin was not withheld from the patient.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+            for tail in ['warfarin was withheld from the patient.',
+                         'warfarin was withheld.', 'medication was withheld from the patient.',
+                         'warfarin was stopped and the patient reports cough.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+
+    def test_bounded_negative_clinical_argument_is_separate_from_patient_medication(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+prefix+'the patient denies knee pain.',label,[source])
+            self.check(source+' '+prefix+'the patient denies knee pain while taking warfarin.',label,[source],'conflict')
+            # The existing note-wide modal scope remains an honest unsupported
+            # boundary. A base future and an uncertain completed cessation must
+            # not be qualified by changing that old scope or its evidence.
+            for tail in ['reports that the patient might stop warfarin tomorrow.',
+                         'reports that the patient might have stopped warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+        pain='The patient reports knee pain.'
+        self.check(pain+' '+prefix+'the patient denies knee pain.','Symptoms',[pain],'conflict')
+        self.check(source+' '+prefix+'the patient does not take warfarin.','Medications',[source],'conflict')
+
+    def test_detached_passive_cannot_omit_a_medication_list_or_unknown_head(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            for tail in ['warfarin and apixaban were withheld from the patient.',
+                         'warfarin and apixaban was withheld from the patient.',
+                         'apixaban and warfarin were withheld from the patient.',
+                         'medication and apixaban were withheld from the patient.',
+                         'an unknown item and apixaban were withheld from the patient.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+            self.check(source+' '+prefix+'apixaban was withheld from the patient.',label,[source])
+
+    def test_ended_argument_polarity_and_recipient_are_not_the_requesters_role(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['Warfarin was not withheld from the patient.',
+                         "Warfarin was withheld from her father at the patient's request."]:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+            for tail in ['Warfarin was withheld from the patient.',
+                         "Warfarin was withheld from the patient at her father's request.",
+                         'Warfarin was withheld from her father and the patient.',
+                         'Warfarin was withheld from someone.',
+                         "The patient's warfarin was withheld from her father."]:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source],'conflict')
+
+    def test_known_owned_denial_arguments_bound_only_the_positional_floor(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            for tail in ['discontinued warfarin.',
+                         'the patient denies taking apixaban.',
+                         'the patient denies left knee pain.',
+                         'the patient denies that her mother takes warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+            for tail in ['the patient denies taking warfarin.',
+                         'the patient denies taking medication.',
+                         'the patient denies taking an unknown item.',
+                         'the patient denies left knee pain while taking warfarin.',
+                         'the patient denies that the patient takes warfarin.',
+                         'discontinued warfarin and the patient stopped warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+        pain='The patient reports pain in the left knee.'
+        self.check(pain+' '+prefix+'the patient denies left knee pain.','Symptoms',[pain],'conflict')
 
     def test_nominal_clinical_assertions_gain_only_default_actor_not_drug_status(self):
         for source, label in [('No fever.', 'Examination'),
@@ -578,19 +808,33 @@ class ReviewVersion(BoundaryFixture, TestCase):
 class VoiceToWord(V3Fixture, TestCase):
     """Actual HTTP/worker/Word export with mocked providers; live calls are a separate gate."""
     def test_reviewed_subjectless_transcript_reaches_default_doctor_generation_and_export(self):
-        doc=Document();doc.add_paragraph('Medications: ____________');doc.add_paragraph('Symptoms: ____________')
+        self.voice_walk('Takes warfarin 5 mg daily. Reports cough.',
+            {'Medications':'Takes warfarin 5 mg daily.', 'Symptoms':'Reports cough.'})
+
+    def test_replacement_and_family_source_keep_useful_voice_answers_and_unsafe_pick_separate(self):
+        transcript=('Takes apixaban 5 mg twice daily. Reports cough. '
+            'Examination mild swelling over the left lateral ankle. '
+            'The patient switched from warfarin to apixaban. Her father has asthma.')
+        self.voice_walk(transcript, {'Current medications':'Takes apixaban 5 mg twice daily.',
+            'Symptoms':'Reports cough.', 'Examination':'Examination mild swelling over the left lateral ankle.',
+            'Past medical history':'Her father has asthma.'}, held={'Past medical history'})
+
+    def voice_walk(self, transcript, picks, held=frozenset()):
+        doc=Document()
+        for label in picks:doc.add_paragraph(label+': ____________')
         buffer=io.BytesIO();doc.save(buffer)
-        template,version=self.uploaded(data=buffer.getvalue(),name='Synthetic subjectless voice')
+        original=buffer.getvalue();audio=wav_bytes(tag='scope')
+        template,version=self.uploaded(data=original,name='Synthetic subjectless voice')
         self.confirm(template,version)
         self.assertEqual(self.new_encounter(version,notes='').status_code,302)
         encounter=Encounter.objects.get(template_version=version)
         url=f'/encounters/{encounter.pk}/'
         with patch.dict(os.environ,BoundaryFixture.VOICE_ENV):
             quote=self.client.get(url).context['usage_quote']
-            response=self.client.post(url+'voice/',{'audio':SimpleUploadedFile('synthetic.wav',wav_bytes(tag='scope')),
+            response=self.client.post(url+'voice/',{'audio':SimpleUploadedFile('synthetic.wav',audio),
                 'consent':'on','usage_quote':quote})
             self.assertEqual(response.status_code,302)
-            with patch('core.jobs.httpx.post',return_value=deepgram('Takes warfarin 5 mg daily. Reports cough.',
+            with patch('core.jobs.httpx.post',return_value=deepgram(transcript,
                 'synthetic-reviewed-voice',duration=1)):self.assertTrue(run_one())
         voice=Job.objects.get(kind='transcription',encounter=encounter)
         voice.refresh_from_db();self.assertEqual(voice.state,'succeeded',voice.error)
@@ -598,7 +842,7 @@ class VoiceToWord(V3Fixture, TestCase):
         self.assertContains(self.client.get(url),'Statements with no subject in this reviewed transcript are about this patient.')
         encounter.refresh_from_db()
         self.assertEqual(self.client.post(url+'notes/',{'revision':encounter.revision,'transcript_job':voice.pk,
-            'corrected_transcript':'Takes warfarin 5 mg daily. Reports cough.','transcript_mode':'replace',
+            'corrected_transcript':transcript,'transcript_mode':'replace',
             'transcript_reviewed':'on','transcript_patient_context':'on'}).status_code,302)
         encounter.refresh_from_db()
         page=self.client.get(url);self.assertContains(page,'data-patient-context-current')
@@ -610,9 +854,8 @@ class VoiceToWord(V3Fixture, TestCase):
         def reply(**request):
             sent.append(request);payload=json.loads(request['messages'][0]['content'])
             self.assertEqual(payload['patient_default_context']['default_subject'],'encounter_patient')
-            picks={f['key']:['Takes warfarin 5 mg daily.' if f['label']=='Medications' else 'Reports cough.']
-                   for f in version.fields}
-            body=json.dumps(relation_wire(encounter.notes,version.fields,picks))
+            selections={f['key']:[picks[f['label']]] for f in version.fields}
+            body=json.dumps(relation_wire(encounter.notes,version.fields,selections))
             return SimpleNamespace(model=g.SONNET_5_5,stop_reason='end_turn',content=[SimpleNamespace(type='text',text=body)],
                 id='msg_synthetic_reviewed_voice',_request_id='req_synthetic_reviewed_voice',
                 usage=SimpleNamespace(input_tokens=100,output_tokens=20,cache_read_input_tokens=0,cache_creation_input_tokens=0),
@@ -622,18 +865,42 @@ class VoiceToWord(V3Fixture, TestCase):
         generation.refresh_from_db();self.assertEqual(generation.state,'succeeded',generation.error)
         self.assertEqual(len(sent),1)
         encounter.refresh_from_db()
-        self.assertEqual([encounter.answers[f['key']]['status'] for f in version.fields],['supported','supported'])
+        generated=json.loads(json.dumps(encounter.answers))
+        for field in version.fields:
+            answer=generated[field['key']]
+            if field['label'] in held:
+                self.assertEqual((answer['status'],answer['text']),('conflict',''))
+            else:
+                self.assertEqual((answer['status'],answer['text']),('supported',picks[field['label']]))
         self.assertEqual(Usage.objects.filter(job=voice).count(),1)
         self.assertEqual(Usage.objects.filter(job=generation).count(),1)
         payload={'revision':encounter.revision}
         for field in version.fields:
             payload['answer_'+field['key']]=encounter.answers[field['key']]['text']
             payload['reviewed_'+field['key']]='on'
+            if field['label'] in held:payload['blank_'+field['key']]='on'
         self.assertEqual(self.client.post(url+'save/',payload).status_code,302)
         encounter.refresh_from_db();self.assertTrue(tc.current(encounter))
         self.assertEqual(self.client.post(url+'finalize/',{'revision':encounter.revision,'reviewed':'on'}).status_code,302)
         encounter.refresh_from_db();self.assertEqual(encounter.status,'finalized')
         export=self.client.get(url+'export/');self.assertEqual(export.status_code,200)
-        text=part_text(b''.join(export.streaming_content))
-        self.assertIn('Takes warfarin 5 mg daily.',text);self.assertIn('Reports cough.',text)
+        exported=b''.join(export.streaming_content);text=part_text(exported)
+        for label,value in picks.items():
+            if label in held:self.assertNotIn(value,text)
+            else:self.assertIn(value,text)
         self.assertEqual(private_path(voice.result_path).read_bytes(),raw_bytes)
+        self.assertEqual(private_path(template.original_path).read_bytes(),original)
+        if folder:=os.environ.get('QUILLMD_VOICE_ARTIFACTS'):
+            out=Path(folder)/self._testMethodName;out.mkdir(parents=True,exist_ok=False)
+            for name,data in [('original.docx',original),('synthetic-audio.wav',audio),
+                ('raw-transcription.json',raw_bytes),('first-generation.json',private_path(generation.result_path).read_bytes()),
+                ('faithful-export.docx',exported)]:
+                (out/name).write_bytes(data)
+            (out/'reviewed-transcript.txt').write_text(transcript)
+            (out/'generation-request.json').write_text(json.dumps(sent[0],indent=2))
+            (out/'answers-before-review.json').write_text(json.dumps(generated,indent=2))
+            (out/'answers-after-review.json').write_text(json.dumps(encounter.answers,indent=2))
+            (out/'qualification.json').write_text(json.dumps({'provider':'mocked synthetic responses',
+                'human_microphone_acceptance':False,'source_revision':TranscriptReview.objects.get(encounter=encounter).source_revision,
+                'reviewed_sha256':tc.digest(transcript),'supported':len(picks)-len(held),'unsafe_picks_held':len(held),
+                'actual_http_finalize_export':True,'export_sha256':hashlib.sha256(exported).hexdigest()},indent=2))

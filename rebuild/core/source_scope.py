@@ -5,52 +5,56 @@ transition names a position; it supplies no evidence of changing medication.
 This is one structural interpretation, not a list of verbs that release notes.
 """
 
-def transition_scope(reading,unit):
+def transition_scope(reading,unit,*,clause=None):
     cache=reading.setdefault('_transition_scopes',{})
-    if unit['id'] in cache:return cache[unit['id']]
+    if clause is None and unit['id'] in cache:return cache[unit['id']]
     from . import v3_syntax,v3_actors as a
-    docs=v3_syntax.docs([unit['quote']]);doc=docs[0] if docs else None
+    docs=v3_syntax.docs([unit['quote']]) if clause is None else None
+    doc=(docs[0] if docs else None) if clause is None else clause
+    inside=set(doc) if doc is not None else set()
     answer=None
     if doc is not None:
-        roots=[t for t in doc if t.dep_=='ROOT']
+        roots=[t for t in doc if t.dep_=='ROOT' or t.head not in inside]
         if len(roots)==1:
             root=roots[0]
-            subjects=[t for t in root.children if t.dep_ in ('nsubj','nsubjpass')]
-            targets=[g for p in root.children if p.dep_=='prep' and a._fold(p.text)=='to'
-                     for g in p.children if g.dep_=='pobj']
+            children=[t for t in root.children if t in inside]
+            subjects=[t for t in children if t.dep_ in ('nsubj','nsubjpass')]
+            targets=[g for p in children if p.dep_=='prep' and a._fold(p.text)=='to'
+                     for g in p.children if g in inside and g.dep_=='pobj']
             verbs=[t for t in doc if t.pos_=='VERB']
             def position_argument(token,excluded=()):
                 # The explicit position noun includes its grammatical noun
                 # nominalization. No orientation-word whitelist supplies it.
                 word=a._lemma(token)
                 named=token.pos_=='NOUN' and (word=='position' or (word.endswith('ing') and word[:-3]=='position'))
-                members=[t for t in token.subtree if t not in excluded]
+                members=[t for t in token.subtree if t in inside and t not in excluded]
                 return bool(named and any(t.dep_ in ('amod','compound') and t.pos_=='ADJ' for t in members)
                     and all(t==token or t.pos_ in ('ADJ','ADV','DET','PUNCT') for t in members)
                     and not any(a.SOLE_CLASSES.get(a._lemma(t),frozenset()) for t in members))
-            sources=[p for p in root.children if p.dep_=='prep' and a._lemma(p)=='from']
+            sources=[p for p in children if p.dep_=='prep' and a._lemma(p)=='from']
             positional_targets=[(p,g) for p in doc if p.dep_=='prep' and a._lemma(p)=='to'
                 for g in p.children if g.dep_=='pobj' and position_argument(g)]
-            positional=False
+            positional=bool(not sources and len(positional_targets)==1 and positional_targets[0][0].head==root)
             if len(sources)==1 and len(positional_targets)==1:
                 source=sources[0];target_prep,target=positional_targets[0]
-                objects=[t for t in source.children if t.dep_=='pobj']
-                adjectival=[t for t in source.subtree if t not in set(target_prep.subtree)]
+                objects=[t for t in source.children if t in inside and t.dep_=='pobj']
+                adjectival=[t for t in source.subtree if t in inside and t not in set(target_prep.subtree)]
                 adjective_source=bool(not objects and any(t.pos_=='ADJ' for t in adjectival)
                     and all(t==source or t.pos_ in ('ADJ','ADV','PUNCT') for t in adjectival)
                     and not any(a.SOLE_CLASSES.get(a._lemma(t),frozenset())
                         or a._fold(t.text) in a.SOLE_UNCERTAIN for t in adjectival))
                 noun_source=bool(len(objects)==1 and position_argument(objects[0],set(target_prep.subtree)))
                 positional=bool((adjective_source or noun_source)
-                    and (target_prep.head==root or (noun_source and target_prep.head==objects[0])))
+                    and (target_prep.head==root or (adjective_source and target_prep.head==source)
+                         or (noun_source and target_prep.head==objects[0])))
             if (positional and a._lemma(root) in ('switch','change') and len(verbs)==1
-                    and all(a.this_patient(t) or a._fold(t.text) in ('he','she') for t in subjects)
-                    and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in root.children)
+                    and all(a.this_patient(t) or a.names_person(t) or a._fold(t.text) in ('he','she') for t in subjects)
+                    and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in children)
                     and not any(t.dep_=='prep' and a._fold(t.text) in ('with','by','of','for') for t in doc)):
                 answer='position'
             complete=bool(a._lemma(root) in ('switch','change') and len(verbs)==1 and len(targets)==1
                 and all(a.this_patient(t) or a._fold(t.text) in ('he','she') for t in subjects)
-                and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in root.children)
+                and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in children)
                 and not any(t.dep_=='prep' and a._fold(t.text) in ('from','with','by','of','for') for t in doc)
                 and not any(a.names_person(t) for t in targets[0].subtree)
                 and not any(t.pos_ in ('PRON',) for t in targets[0].subtree))
@@ -65,7 +69,7 @@ def transition_scope(reading,unit):
                     if (sole.get('classes')==frozenset({'medication'}) and not sole.get('unknown')
                             and 'global' not in sole.get('reach',())):
                         answer='medication'
-    cache[unit['id']]=answer
+    if clause is None:cache[unit['id']]=answer
     return answer
 
 def bare_affects(reading,change,claim):
@@ -77,13 +81,480 @@ def bare_affects(reading,change,claim):
     avoids this additional floor; unknown claims and references remain held.
     """
     scope=transition_scope(reading,change)
-    if scope is None:return True
+    if scope is None:
+        clauses=clause_readings(reading,change)
+        # The entire sole clause has an explicit foreign subject and no
+        # unresolved pronoun/patient branch. No patient action is inherited.
+        if len(clauses)==1 and clauses[0]['foreign']:return False
+        bounded=bounded_mixed_endings(reading,change)
+        if bounded is None:return True
+        return any(ending_affects(reading,ending,claim) for ending in bounded)
     info=reading['actors'][claim['id']]
     if scope=='position':return bool(info.get('named_keys',frozenset()) & {'position','posit'})
+    return medication_affects(reading,claim)
+
+
+def medication_affects(reading,claim):
+    """An unresolved medication event governs its claim and actual dependencies."""
+    info=reading['actors'][claim['id']]
     sole=info.get('sole') or {}
     classes=sole.get('classes',frozenset())
     if not classes or sole.get('unknown') or 'global' in sole.get('reach',()):return True
     return bool(classes & {'medication','therapy','test','care'})
+
+
+def nominal_carrier(token):
+    """The pinned parser's nominal reporting head still owns a finite clause."""
+    from . import v3_actors as a
+    return bool(token.pos_=='NOUN' and token.dep_=='conj' and a._lemma(token) in a.LIGHT_VERBS
+        and any(c.dep_=='acl' and c.pos_ in ('VERB','AUX')
+            and any(s.dep_ in ('nsubj','nsubjpass') for s in c.children)
+            and any(m.dep_=='mark' and a._fold(m.text)=='that' for m in c.children) for c in token.children))
+
+
+def detached_passive_theme(predicate):
+    """Bind the pinned parser's adjacent nominal/passive coordination.
+
+    The exact named medication sits immediately before its passive auxiliary,
+    although the parser attached it to the preceding nominal conjunction. This
+    accounts for the same source token in both clauses; it supplies no actor.
+    Unknown objects, alternatives and nonadjacent clauses cannot use this proof.
+    """
+    from . import v3_actors as a
+    auxiliaries=[t for t in predicate.children if t.dep_=='auxpass']
+    if (predicate.pos_!='VERB' or predicate.tag_!='VBN' or predicate.dep_ not in ('conj','advcl')
+            or len(auxiliaries)!=1 or predicate.head.pos_ not in ('VERB','AUX')
+            or any(t.dep_ in ('nsubj','nsubjpass','dobj','obj','mark') for t in predicate.children)):
+        return None
+    first=auxiliaries[0]
+    if first.i<2:return None
+    theme=predicate.doc[first.i-1]
+    # Recover the entire adjacent nominal group, rather than the last drug.
+    # Every member must be a named medication and every join explicit AND;
+    # an alternative, unknown item or incomplete group retains the old hold.
+    while theme.dep_=='conj' and theme.head.pos_ in ('NOUN','PROPN') and 'medication' in a.SOLE_CLASSES.get(a._lemma(theme.head),()):
+        theme=theme.head
+    if theme.i<1:return None
+    join=predicate.doc[theme.i-1];members=list(theme.subtree)
+    if (theme.pos_ not in ('NOUN','PROPN') or theme.dep_!='conj'
+            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(theme),())
+            or theme.head.pos_!='NOUN' or theme.head not in set(predicate.head.subtree)
+            or a._lemma(theme.head) not in ('position','positioning')
+            or join.dep_!='cc' or join.head!=theme.head or a._fold(join.text)!='and'
+            or a._lemma(theme) in a.DOSAGE_FORM_NOUNS
+            or {t.i for t in members}!=set(range(theme.i,first.i))
+            or any(t!=theme and t.dep_ not in ('det','compound','amod','poss','conj','cc') for t in members)
+            or any(t.dep_=='cc' and a._fold(t.text)!='and' for t in members)
+            or any(t.dep_=='conj' and a._lemma(t) in a.DOSAGE_FORM_NOUNS for t in members)
+            or any(t.pos_ in ('NOUN','PROPN') and 'medication' not in a.SOLE_CLASSES.get(a._lemma(t),()) for t in members)
+            or any(t.dep_=='conj' and t.pos_ not in ('NOUN','PROPN') for t in members)):
+        return None
+    return theme
+
+
+def owned_clause(predicate):
+    """A grammatical clause excludes separately owned coordinated assertions."""
+    excluded=set()
+    for token in predicate.subtree:
+        if token==predicate:continue
+        if (nominal_carrier(token) or (token.pos_ in ('VERB','AUX') and token.dep_ in ('conj','ccomp','advcl','relcl','acl','parataxis'))
+                or (token.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in token.children))):
+            excluded.update(token.subtree)
+            theme=detached_passive_theme(token)
+            if theme is not None:
+                excluded.update(theme.subtree)
+                excluded.update(c for c in theme.head.children if c.dep_=='cc' and c.i==theme.i-1)
+            if token.dep_=='conj':
+                excluded.update(c for c in token.head.children if c.dep_=='cc')
+    own=set(predicate.subtree)-excluded
+    theme=detached_passive_theme(predicate)
+    if theme is not None:own.update(theme.subtree)
+    return sorted(own,key=lambda t:t.i)
+
+
+def denied_ending(predicate, words):
+    """A canonical denial owns one subjectless completed ending.
+
+    Denying stopping does not deny taking. Extra negation, a modal, another
+    argument or an unknown ended value cannot establish this narrow scope.
+    This grants no current medication status or replacement answer.
+    """
+    from . import v3_actors as a
+    inside=set(words)
+    children=[t for t in predicate.children if t in inside]
+    endings=[t for t in children if t.dep_=='xcomp' and t.pos_=='VERB'
+        and a._lemma(t) in a.CESSATION_VERBS | a.SUPERSESSION_VERBS]
+    subjects=[t for t in children if t.dep_ in ('nsubj','nsubjpass')]
+    if (a._lemma(predicate)!='deny' or a._negates(predicate) or len(endings)!=1
+            or len(subjects)!=1 or not a.this_patient(subjects[0])):return False
+    ending=endings[0]
+    arguments=[t for t in ending.children if t in inside and (t.dep_ in ('dobj','obj')
+        or (t.dep_=='xcomp' and t.pos_ in ('NOUN','PROPN')))]
+    if (len(arguments)!=1 or not a.keys({a._lemma(arguments[0])})
+            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(arguments[0]),())
+            or a._lemma(arguments[0]) in a.DOSAGE_FORM_NOUNS):return False
+    if any(a._negates(t) or t.tag_=='MD' for t in words):return False
+    if any(t.pos_=='VERB' and t not in (predicate,ending) for t in words):return False
+    permitted=set(subjects[0].subtree)|set(ending.subtree)|{predicate}
+    return bool(all(t in permitted or t.is_punct for t in words)
+        and not any(t.dep_ in ('nsubj','nsubjpass','csubj','csubjpass','ccomp','conj','relcl','acl')
+            for t in ending.subtree if t in inside)
+        and all({a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN
+            for t in arguments[0].subtree if t in inside and t.pos_ in a.CONTENT))
+
+
+def clause_readings(reading,unit):
+    """Keep each finite clause's actor and ended argument together.
+
+    The main actor cannot erase a second explicit patient's cessation. Equally,
+    a different named ended medication must not turn an independent positional
+    clause into a note-wide unidentified cessation. This reads existing ending
+    operators; it supplies no actor to an elided or ambiguous clause.
+    """
+    cache=reading.setdefault('_clause_readings',{})
+    if unit['id'] in cache:return cache[unit['id']]
+    from . import v3_syntax,v3_actors as a
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=v3_syntax.docs(u['quote']for u in reading['units'])
+    docs=reading['_source_scope_docs'];doc=docs[reading['position'][unit['id']]] if docs else None
+    result=[]
+    if doc is not None:
+        lem={t.i:a._lemma(t) for t in doc};txt={t.i:a._fold(t.text) for t in doc}
+        predicates=[t for t in doc if nominal_carrier(t) or (t.pos_ in ('VERB','AUX') and (t.dep_=='ROOT'
+            or t.dep_ in ('conj','ccomp','advcl','parataxis','acl','relcl')
+            or (t.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in t.children))))]
+        for predicate in predicates:
+            words=owned_clause(predicate);inside=set(words)
+            subjects=[t for t in predicate.children if t in inside and t.dep_ in ('nsubj','nsubjpass')]
+            direct_patient=bool(len(subjects)==1 and a.this_patient(subjects[0]))
+            malformed_denials=[t for t in subjects if t.pos_=='VERB' and a._lemma(t) in a.SOLE_NEGATION
+                and not a._negates(t) and any(c.dep_ in ('nsubj','nsubjpass') and a.this_patient(c)
+                    for c in t.children)]
+            themes=[t for t in predicate.children if t in inside and t.dep_ in ('dobj','obj','nsubjpass')]
+            passive_theme=detached_passive_theme(predicate)
+            if passive_theme is not None:themes.append(passive_theme)
+            possessed=bool(any(c.dep_=='poss' and a.this_patient(c) for t in themes for c in t.children))
+            foreign=bool(len(subjects)==1 and a.names_person(subjects[0])
+                and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in words))
+            # A known family member's complete positional action can own its
+            # direct coordinated action. This does not inherit a clinician or
+            # service's agent role, an unresolved subject, or an embedded actor.
+            parent=predicate.head
+            parent_subjects=[t for t in parent.children if t.dep_ in ('nsubj','nsubjpass')]
+            if (not subjects and predicate.dep_=='conj' and parent.pos_ in ('VERB','AUX')
+                    and not any(t.dep_=='auxpass' for t in predicate.children)
+                    and len(parent_subjects)==1 and a._family(parent_subjects[0])
+                    and transition_scope(reading,unit,clause=owned_clause(parent))=='position'
+                    and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in words)):
+                foreign=True
+            floor=a._floor_reading(words,predicate,lem=lem,txt=txt)
+            # A medication nominal still attached to the position argument
+            # after owned-clause recovery is an unresolved clinical theme.
+            # The outer family's subject cannot make that omitted theme
+            # foreign (for example, "warfarin but not apixaban was withheld").
+            unresolved_theme=bool(floor['bare_cessation'] and any(t.dep_=='conj'
+                    and t.head in inside
+                    and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())
+                    and a._lemma(t.head) in ('position','positioning') for t in words))
+            if unresolved_theme:
+                foreign=False
+            own_keys=a.keys({a._lemma(t) for t in words if t.pos_ in a.CONTENT})-a.keys({'patient'})
+            topics=floor['ceased_keys'] & own_keys
+            # The pinned parser can use an object-predicate slot for a named
+            # medication ('stopped apixaban'). Its positively typed argument
+            # remains named; arbitrary adjectival complements do not qualify.
+            nominal=[t for t in predicate.children if t in inside and t.dep_ in ('oprd','attr','acomp')
+                and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())]
+            repaired_argument=bool(a._lemma(predicate) in a.CESSATION_VERBS and nominal)
+            if passive_theme is not None and a._lemma(predicate) in a.CESSATION_VERBS | a.SUPERSESSION_VERBS:
+                nominal.append(passive_theme);repaired_argument=True
+            if repaired_argument:
+                topics |= a.keys({a._lemma(t) for argument in nominal for t in argument.subtree
+                    if t in inside and t.pos_ in a.CONTENT})
+            foreign_themes=[t for t in themes if any(c.dep_=='poss' and a.names_person(c) for c in t.children)
+                and not any(a.this_patient(c) for c in t.subtree if c in inside)]
+            foreign_keys=a.keys({a._lemma(t) for theme in foreign_themes for t in theme.subtree
+                if t in inside and t.pos_ in a.CONTENT})
+            if topics and topics<=foreign_keys:foreign=True
+            # Withholding's explicit FROM recipient owns that affected action.
+            # A passive theme or its preceding speaker never supplies a person.
+            recipients=[t for prep in predicate.children if prep in inside and prep.dep_=='prep'
+                and a._lemma(prep)=='from' for t in prep.children if t in inside and t.dep_=='pobj']
+            recipient_patient=bool(a._lemma(predicate)=='withhold' and topics and len(recipients)==1
+                and a.this_patient(recipients[0]))
+            if (a._lemma(predicate)=='withhold' and topics and len(recipients)==1
+                    and a.names_person(recipients[0])
+                    and not direct_patient and not possessed
+                    and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head)))
+                        for t in recipients[0].subtree)):
+                foreign=True
+            generic=bool(any(a._lemma(t) in a.DOSAGE_FORM_NOUNS
+                and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),()) and a.keys({a._lemma(t)}) & topics for t in words)
+                and not any('medication' in a.SOLE_CLASSES.get(a._lemma(t),())
+                    and a._lemma(t) not in a.DOSAGE_FORM_NOUNS and a.keys({a._lemma(t)}) & topics for t in words))
+            denied_end=denied_ending(predicate,words)
+            cancelled=bool(a._negates(predicate) or denied_end or any(t.dep_=='aux' and t.tag_=='MD' for t in predicate.children))
+            span=doc[min(t.i for t in words):max(t.i for t in words)+1]
+            sole=(a._sole_reading(span,predicate,value_start=0,colon=False,age=False,opener=False,explicit=direct_patient)
+                if all(t in inside or t.is_punct for t in span) else {})
+            separate=bool(sole.get('nouns_ok') and not sole.get('unknown') and not sole.get('reach')
+                and sole.get('classes') and not sole.get('classes') & {'medication','therapy','test','care','allergy'}
+                and a._lemma(predicate) in a.SOLE_CURRENT_VERBS and not floor['bare_cessation'] and not topics)
+            negative_predicate=malformed_denials[0] if len(malformed_denials)==1 else predicate
+            separate |= bool((direct_patient or len(malformed_denials)==1) and negative_operator(negative_predicate,a) is not None
+                and (sole.get('nouns_ok') or len(malformed_denials)==1) and not sole.get('unknown') and sole.get('negation_only')
+                and not sole.get('reach',frozenset()) & {'global','key'}
+                and sole.get('classes') and not sole.get('classes') & {'medication','therapy','test','care','allergy'}
+                and not floor['bare_cessation'] and not topics)
+            # A complete named medication denial has its own argument. This
+            # bounds only the positional floor; its matching denial still
+            # holds that same value through the ordinary opposition checks.
+            claim_topics=frozenset()
+            if (direct_patient and negative_operator(predicate,a) is not None and sole.get('nouns_ok')
+                    and not sole.get('unknown') and sole.get('negation_only')
+                    and not sole.get('reach',frozenset()) & {'global','key'}
+                    and sole.get('classes')==frozenset({'medication'}) and not floor['bare_cessation'] and not topics):
+                medications=[t for t in words if 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())]
+                if medications and all(a._lemma(t) not in a.DOSAGE_FORM_NOUNS for t in medications):
+                    claim_topics=a.keys({a._lemma(t) for t in medications})
+            # A finite content clause owns its explicit subject, not its outer
+            # speaker. Its carrier has no independent clinical argument here.
+            # Its canonical denial retains scope on that owned content; an
+            # extra negation, modifier, intention or ending cannot establish
+            # this bounded carrier. No reporting-verb release list.
+            complements=[c for c in predicate.children if c.dep_=='ccomp'
+                or (nominal_carrier(predicate) and c.dep_=='acl')]
+            subject_words={t for subject in subjects for t in subject.subtree if t in inside}
+            carrier=bool(len(complements)==1 and complements[0] in predicates
+                and any(c.dep_ in ('nsubj','nsubjpass') for c in complements[0].children)
+                and (nominal_carrier(predicate) or (len(subjects)==1 and (direct_patient or foreign)))
+                and all(t==predicate or t in subject_words or t.is_punct or t.dep_=='aux' for t in words)
+                and not cancelled and not floor['intention'] and not floor['quantified_denial']
+                and not floor['bare_cessation'] and not topics)
+            result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed or recipient_patient,
+                'foreign':foreign,'topics':topics,'generic':generic,'cancelled':cancelled,
+                'denied_end':denied_end,
+                'unresolved_theme':unresolved_theme,
+                'bare':floor['bare_cessation'] and not repaired_argument,'position':transition_scope(reading,unit,clause=words)=='position',
+                'separate':separate,'carrier':carrier,'claim_topics':claim_topics,'bounded_end':bool(topics and (generic or all(
+                    {a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN for t in words
+                    if a.keys({a._lemma(t)}) & topics and t.pos_ in a.CONTENT)))})
+    cache[unit['id']]=result
+    return result
+
+
+def denied_ending_keys(reading, unit):
+    """Only keys of the proved denied event avoid the lexical value-denial floor."""
+    clauses=clause_readings(reading,unit)
+    if not all(c['denied_end'] or c['foreign'] or c['position'] or c['carrier'] for c in clauses):
+        return frozenset()
+    return frozenset().union(*(c['topics'] for c in clauses if c['denied_end'] and c['bounded_end']))
+
+
+def ending_affects(reading,ending,claim):
+    if ending['foreign'] or ending['cancelled'] or ending['position'] or ending['separate'] or ending['carrier']:return False
+    info=reading['actors'][claim['id']]
+    if ending['claim_topics']:
+        return bool(ending['claim_topics'] & (reading['claim_keys'][claim['id']] | info.get('named_keys',frozenset())))
+    if not ending['patient']:
+        if not ending['bounded_end'] or ending['generic']:return True
+        return bool(ending['topics'] & (reading['claim_keys'][claim['id']] | info.get('named_keys',frozenset())))
+    if ending['generic']:
+        from . import v3_actors as a
+        if a._lemma(ending['predicate']) in a.SUPERSEDED_PREPOSITIONS:
+            return unresolved_medication_affects(reading,ending['unit'],claim,predicate=ending['predicate'])
+    return bool(ending['topics'] & (reading['claim_keys'][claim['id']] | info.get('named_keys',frozenset()))
+        or (ending['generic'] and medication_affects(reading,claim)))
+
+
+def bounded_mixed_endings(reading,unit):
+    clauses=clause_readings(reading,unit)
+    if len(clauses)<2 or not any(c['position'] or c['foreign'] for c in clauses):return None
+    if not all(c['foreign'] or c['position'] or c['separate'] or c['carrier'] or (not c['bare']
+        and (c['bounded_end'] or c['claim_topics'] or ((c['patient'] or c['foreign']) and c['cancelled']))) for c in clauses):return None
+    return clauses
+
+
+def ceased_affects(reading,change,claim):
+    """A proved ended argument retains its own polarity and recipient.
+
+    The original unit-wide ended keys remain the fallback. Only complete owned
+    endings covering every matching key can narrow that old floor. Unparsed
+    endings, unknown arguments and incomplete medication groups remain held.
+    """
+    from . import v3_actors as a
+    shared=reading['actors'][change['id']]['ceased_keys'] & (
+        reading['claim_keys'][claim['id']] | reading['actors'][claim['id']].get('named_keys',frozenset()))
+    if not shared:return False
+    clauses=[c for c in clause_readings(reading,change) if c['topics'] & shared]
+    covered=frozenset().union(*(c['topics'] for c in clauses))
+    if not shared<=covered or any(c['bare'] or not c['bounded_end']
+        or any(t.dep_=='aux' and t.tag_=='MD' for t in c['predicate'].children) for c in clauses):return True
+    return any(ending_affects(reading,c,claim) for c in clauses)
+
+
+def explicit_patient_endings(reading,claim):
+    result=[]
+    keys=reading['claim_keys'][claim['id']] | reading['actors'][claim['id']].get('named_keys',frozenset())
+    for unit in reading['units']:
+        if unit['id']==claim['id']:continue
+        for ending in clause_readings(reading,unit):
+            if ending['unresolved_theme'] and medication_affects(reading,claim):
+                if unit not in result:result.append(unit)
+            # An unresolved subject cannot make this same named ending
+            # independent. Retain it for review; do not assign a patient actor.
+            uncertain=bool(not ending['foreign'] and not ending['patient'] and ending['bounded_end']
+                and (ending['topics'] & keys or (ending['generic'] and medication_affects(reading,claim))))
+            if not ending['cancelled'] and ((ending['patient'] and ending_affects(reading,ending,claim)) or uncertain):
+                if unit not in result:result.append(unit)
+    return result
+
+
+def owned_oppositions(reading,claim):
+    """Compare an owned patient assertion without adopting its outer speaker.
+
+    This retains the established predicate's head, object, polarity and tense.
+    A denial of taking is not a denial of possessing. It only adds a review
+    dependency; it supplies no answer or inferred actor.
+    """
+    from . import v3_actors as a,generation as g
+    mine=[g.v3_without_time(record) for record in reading['predicates'][claim['id']]]
+    result=[]
+    for unit in reading['units']:
+        if unit['id']==claim['id']:continue
+        for clause in clause_readings(reading,unit):
+            if clause['foreign'] or clause['carrier'] or not clause['patient']:continue
+            predicate=clause['predicate'];words=clause['words']
+            records=a._predicates(predicate)
+            if not records:continue
+            # The first record is this predicate, before separately owned
+            # conjoined verbs. Restrict its argument to this exact clause.
+            head,negated,tense,complement,coordinated=records[0]
+            own_keys=a.keys({a._lemma(t) for t in words if t.pos_ in a.CONTENT})-a.keys({'patient'})
+            bounded=complement & own_keys
+            if complement and not bounded:continue
+            # A canonical denial owns its direct content clause; a foreign
+            # outer speaker cannot erase the explicit patient's argument.
+            child=predicate
+            while child.dep_=='ccomp':
+                parent=child.head
+                if negative_operator(parent,a) is not None:
+                    negated ^= not a._negates(parent)
+                child=parent
+            record=g.v3_without_time((head,negated,tense,bounded,coordinated))
+            if any(g.v3_opposed_predicates(own,record) for own in mine):
+                result.append(unit);break
+    return result
+
+
+def unresolved_medication_changes(reading):
+    """A generic old medication argument does not identify what changed.
+
+    A named source already has its own cessation keys. A generic dosage-form
+    noun without a bound medication name needs review of affected medication
+    claims; a positional target cannot establish that this old argument was a
+    position. This only adds dependencies. A proved foreign actor, an explicitly
+    negated event or a future modal supplies no completed patient change here.
+    Existing named-source, bare-event and temporal floors remain unchanged.
+    """
+    key='_unresolved_medication_changes'
+    if key in reading:return reading[key]
+    from . import v3_syntax,v3_actors as a
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=v3_syntax.docs(u['quote']for u in reading['units'])
+    found=[];events={}
+    for unit,doc in zip(reading['units'],reading['_source_scope_docs'] or [None]*len(reading['units'])):
+        if doc is None or pure_foreign_clause(reading,unit):continue
+        clauses={c['predicate'].i:c for c in clause_readings(reading,unit)}
+        for predicate in doc:
+            verb=a._lemma(predicate)
+            if predicate.pos_!='VERB' or verb not in a.SUPERSEDED_PREPOSITIONS:continue
+            if a._negates(predicate) or any(t.dep_=='aux' and t.tag_=='MD' for t in predicate.children):continue
+            if clauses.get(predicate.i,{}).get('foreign'):continue
+            replacements=[t for prep in predicate.children if prep.dep_=='prep' and a._lemma(prep)=='to'
+                for t in prep.children if t.dep_ in ('pobj','pcomp')]
+            source_preps=list(predicate.children)+[p for target in replacements for p in target.children]
+            for prep in source_preps:
+                if prep.dep_!='prep' or a._lemma(prep) not in a.SUPERSEDED_PREPOSITIONS[verb]:continue
+                for argument in prep.children:
+                    if (argument.dep_ not in ('pobj','pcomp') or argument.pos_ not in ('NOUN','PROPN')
+                            or a._lemma(argument) not in a.DOSAGE_FORM_NOUNS
+                            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(argument),())):continue
+                    if (any(t.dep_=='poss' and a.names_person(t) for t in argument.children)
+                            and not any(a.this_patient(t) for t in argument.subtree)):continue
+                    # A known medication name must modify this argument, not
+                    # the target or another clause. Quantities and forms do
+                    # not provide an identity ('5 mg medication').
+                    named=any(t.dep_ in ('amod','compound','appos') and t.pos_ in ('NOUN','PROPN','ADJ')
+                        and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())
+                        and a._lemma(t) not in a.DOSAGE_FORM_NOUNS
+                        and not any(c.pos_=='NUM' for c in t.children) for t in argument.children)
+                    if not named:
+                        if unit not in found:found.append(unit)
+                        target_keys=frozenset()
+                        if len(replacements)==1:
+                            target=replacements[0]
+                            if ('medication' in a.SOLE_CLASSES.get(a._lemma(target),())
+                                    and a._lemma(target) not in a.DOSAGE_FORM_NOUNS
+                                    and all(t==target or t.pos_ in ('DET','PUNCT')
+                                        for t in target.subtree if t not in set(prep.subtree))):
+                                target_keys=a.keys({a._lemma(target),a._fold(target.text)})
+                        events.setdefault(unit['id'],[]).append({'predicate':predicate.i,'target':target_keys})
+    reading[key]=found
+    reading['_unresolved_medication_events']=events
+    return found
+
+
+def unresolved_medication_affects(reading,change,claim,*,predicate=None):
+    if not medication_affects(reading,claim):return False
+    # Switching FROM an unidentified source does not also end its named TO
+    # value. Only that exact target's separate complete current medication claim
+    # can avoid this new source dependency; all other existing guards still see it.
+    unresolved_medication_changes(reading)
+    events=reading.get('_unresolved_medication_events',{}).get(change['id'],())
+    if predicate is not None:
+        events=[event for event in events if event['predicate']==predicate.i]
+        if not events:return False
+    targets=[event['target'] for event in events]
+    info=reading['actors'][claim['id']];sole=info.get('sole') or {}
+    names=info.get('named_keys',frozenset())
+    if (targets and names and all(target and names<=target for target in targets) and sole.get('classes')==frozenset({'medication'})
+            and not sole.get('unknown') and info.get('present_tense')
+            and not info.get('past_time') and not info.get('habitual') and not info.get('intention')):return False
+    return True
+
+
+def medication_argument_references(value,pattern):
+    """All literal matches are old medication arguments, not question names.
+
+    The same generic noun can name a printed question or the old argument of a
+    supersession. Only the exact source token in the latter grammatical role
+    qualifies. This removes no clinical dependency: source identity, actor,
+    event polarity, time and current-answer evidence are judged separately.
+    A question heading, named section, target, mixed reference or unparsed token
+    retains the original structural coupling.
+    """
+    from . import v3_syntax,v3_actors as a
+    matches=list(pattern.finditer(value))
+    if not matches:return False
+    docs=v3_syntax.docs([value]);doc=docs[0] if docs else None
+    if doc is None:return False
+    tokens={(t.idx,t.idx+len(t.text)):t for t in doc}
+    for match in matches:
+        token=tokens.get(match.span())
+        if (token is None or token.pos_ not in ('NOUN','PROPN')
+                or a._lemma(token) not in a.DOSAGE_FORM_NOUNS
+                or 'medication' not in a.SOLE_CLASSES.get(a._lemma(token),())
+                or token.dep_ not in ('pobj','pcomp')):return False
+        prep=token.head;predicate=prep.head
+        if (predicate.dep_ in ('pobj','pcomp') and predicate.head.dep_=='prep'
+                and a._lemma(predicate.head)=='to'
+                and 'medication' in a.SOLE_CLASSES.get(a._lemma(predicate),())
+                and a._lemma(predicate) not in a.DOSAGE_FORM_NOUNS):
+            predicate=predicate.head.head
+        if (prep.dep_!='prep' or predicate.pos_!='VERB'
+                or a._lemma(prep) not in a.SUPERSEDED_PREPOSITIONS.get(a._lemma(predicate),())):return False
+    return True
 
 
 def elliptical_dependencies(reading):
@@ -378,8 +849,7 @@ def malformed_denial_dependencies(reading):
         reading['_source_scope_docs']=docs
     found=[]
     for unit,doc in zip(reading['units'],docs or [None]*len(reading['units'])):
-        info=reading['actors'][unit['id']]
-        if doc is None or info.get('other_floor'):continue
+        if doc is None:continue
         for token in doc:
             if (token.pos_=='VERB' and a._lemma(token) in a.SOLE_NEGATION
                     and token.dep_ in ('nsubj','nsubjpass') and token.head.pos_ in ('VERB','AUX')
