@@ -3859,6 +3859,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # cancer.'; 'His father had a heart attack at 55. He has asthma. Allergies: none known.'): nothing in the note
     # says it is the patient's, whatever the model called the other line.
     if info['kind'] != 'patient' and uid not in sole:
+        from .source_scope import reserved_identity_source
         first_other = None
         for other in units[:reading['position'][uid]]:
             found, seen = actors[other['id']], resolved[other['id']]
@@ -3868,7 +3869,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 first_other = None
                 break                       # the note presents the patient before this statement (its main subject)
             if first_other is None and (not found['readable'] or found['other_floor'] or seen.get('self_other')
-                                        or (found['kind'] == 'pronoun' and seen.get('actor') == 'other')):
+                                        or (found['kind'] == 'pronoun' and seen.get('actor') == 'other')) and not reserved_identity_source(reading,other,unit,field):
                 first_other = other
         if first_other is not None:
             causes.append((first_other, None))

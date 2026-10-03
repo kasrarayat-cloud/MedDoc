@@ -11,7 +11,7 @@ def body(notes, catalogue, asked, context_labels, *, requested_ids=None, units=N
     labels = g.recognized_labels(asked, context_labels)
     parsed = {u['id']: g.labelled_value(u['quote'], labels) for u in units}
     owners = {}
-    for field in asked:
+    for field in catalogue:
         owners.setdefault(g.question_key(field['label']), []).append(field['key'])
     selected = {pick.key: pick.quotes for pick in g.fixture(notes, asked, context_labels=context_labels).fields}
     with_options = any(r.options(f) for f in requested)

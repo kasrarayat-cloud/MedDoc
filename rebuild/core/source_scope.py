@@ -472,6 +472,36 @@ def receipt_date_warnings(reading, field, selected):
         and own[0]==key and not calendar_date(own[1])]
 
 
+def reserved_identity_source(reading, source, claim, field):
+    """A protected area's exact labelled human name is metadata for that area.
+
+    It supplies no actor to a separately labelled clinical answer. A clinical
+    statement, pronoun, correction, unknown label or unprotected source cannot
+    use this boundary. The caller still requires a valid complete-source
+    relation and keeps every other actor, contradiction and context floor.
+    """
+    from . import v3_syntax, v3_actors as a, generation as g
+    own=reading['parsed'].get(source['id']);answer=reading['parsed'].get(claim['id'])
+    if not own or not own[1] or not answer or field is None or answer[0]!=g.question_key(field['label']):return False
+    if not reading['colon'].get(source['id']) or not reading['colon'].get(claim['id']):return False
+    matches=[f for f in reading.get('catalogue',()) if g.question_key(f.get('label'))==own[0]]
+    if len(matches)!=1:return False
+    protected=matches[0]
+    if (protected['key']==field['key'] or (not protected.get('write_protected')
+            and protected.get('kind') not in ('signature','initials'))
+            or (protected.get('locator')or{}).get('contract')!='v3'):return False
+    if any(pattern.search(own[1]) for pattern in (g.SELF_CORRECTION,g.INHERITED_SCOPE,g.UNSETTLED,g.SCOPE_POINTER,g.DENIAL)):
+        return False
+    docs=v3_syntax.docs([own[1]]);doc=docs[0] if docs else None
+    if doc is None:return False
+    roots=[t for t in doc if t.dep_=='ROOT']
+    if len(roots)!=1 or roots[0].pos_ not in ('NOUN','PROPN'):return False
+    if any(t.pos_ not in ('NOUN','PROPN') and not (t.is_punct and t.text=='.') for t in doc):return False
+    if any(a.SOLE_CLASSES.get(a._lemma(t),()) or a._negates(t) for t in doc):return False
+    return bool(a.names_person(roots[0]) or a.names_carer(roots[0])
+        or any(a._fold(t.text).rstrip('.') in a.TITLES | a.CARE_TITLES for t in doc))
+
+
 def clause_readings(reading,unit):
     """Keep each finite clause's actor and ended argument together.
 
