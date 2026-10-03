@@ -23,7 +23,7 @@ SIGNING_KINDS = ('signature', 'initials')
 #: Never generated from notes: the clinician enters table rows; signature and initials are signed by hand.
 NEVER_GENERATED = ('table_rows',) + SIGNING_KINDS
 #: What a clinician may add by hand (the engine's manual kinds).
-MANUAL_KINDS = ('text', 'long_text', 'date', 'time', 'choice', 'checkbox', 'signature', 'initials')
+MANUAL_KINDS = ('text', 'long_text', 'date', 'time', 'choice', 'multi_choice', 'checkbox', 'signature', 'initials')
 KIND_NAMES = {'text': 'Text', 'long_text': 'Long text', 'date': 'Date', 'time': 'Time', 'choice': 'One printed option',
               'multi_choice': 'Printed options (several)', 'checkbox': 'Checkbox', 'table_rows': 'Table rows',
               'signature': 'Signature', 'initials': 'Initials'}
