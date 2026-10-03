@@ -111,9 +111,11 @@ from pathlib import Path
 try:
     from . import provider_campaign as pc
     from . import sonnet5_qa as sq
+    from . import standing_qa_signing as qa_signing
 except ImportError:                                  # (run as a script: ops/ is on sys.path)
     import provider_campaign as pc
     import sonnet5_qa as sq
+    import standing_qa_signing as qa_signing
 
 RUNNER = Path(__file__).resolve()
 REBUILD = RUNNER.parents[1]
@@ -373,6 +375,7 @@ def build_transcription_forms(target, inputs):
 #: preparation, and this runner.
 WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
     'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
+    'rebuild/ops/standing_qa_signing.py',
     'rebuild/ops/standing_qa_voice_forms.py', 'rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json',
     'rebuild/core/mapping_assistance.py',
     'rebuild/core/mapping_wire.py', 'rebuild/core/mapping_jobs.py', 'rebuild/core/destination_roles.py',
@@ -502,6 +505,7 @@ class StandingDeclaration:
     restricted_inputs_ledger: str
     restricted_inputs_ledger_sha256: str
     transcription: object = None    # TranscriptionTerms when a transcription stage is declared, else None
+    qa_signing_key_file: object = None  # Prospective opt-in only; historical declarations keep random process keys.
 
     # (read by provider_campaign code written for the historical declaration)
     total_limit = None
@@ -835,6 +839,7 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
     for named in (credential_file, password_file, restricted):
         pc.refuse_env_path(named)
     transcription = transcription_terms(text, seen, stages, credential_file)
+    signing_file = qa_signing.declared_file(text, seen, campaign_root)
     if transcription is not None and transcription.notes_contract != 'default':
         key = TRANSCRIPTION_NOTES_CONTRACTS[transcription.notes_contract]
         require(key in names, f'Stage transcription has no declared pricing version for {key} (its notes contract).')
@@ -850,7 +855,7 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
         stages=tuple(stages), root=campaign_root, qa_database=database, credential_file=credential_file,
         qa_database_password_file=password_file, restricted_inputs_ledger=restricted,
         restricted_inputs_ledger_sha256=one('restricted_inputs_ledger_sha256', r'([0-9a-f]{64})'),
-        transcription=transcription)
+        transcription=transcription, qa_signing_key_file=signing_file)
     print(f'declaration {relative}: committed {commit_time} in {commit}; sha256 {declaration.sha256}; authority '
           f'{authority_id}; mode {MODE}; monetary ceiling none', file=out)
     return declaration
@@ -1278,6 +1283,11 @@ class StandingLedger(pc.Ledger):
                 f'{send_key} already has an attempt in this campaign; a send is never made twice.')
         in_run = sum(1 for a, _ in rows if a.get('run') == run['run'])
         require(in_run < run['max_sends'], f'Run {run["run_id"]} has made all {run["max_sends"]} sends it may make.')
+        _, signing_record = signing_identity(campaign)
+        require(attempt.get(qa_signing.FIELD) in (None, signing_record),
+                'The attempt carries another QA signing identity.')
+        if signing_record is not None:
+            attempt[qa_signing.FIELD] = signing_record
         form = attempt.get('form_sha256')
         require(isinstance(form, str) and form in run['allowed_inputs'],
                 'The attempt\'s form is not one of the synthetic inputs its run allows.')
@@ -1375,6 +1385,7 @@ class StandingCampaign(pc.Campaign):
         rows = self.rows() if rows is None else rows
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         self.require_pinned_terms(rows)
+        signing_identity(self)
         if stage.id == 'transcription' and self.declaration.transcription is not None:
             for attempt, _ in rows:
                 if attempt.get('stage') != 'transcription':
@@ -1695,6 +1706,24 @@ def preflights(root):
     return found
 
 
+def signing_identity(campaign, *, create=False):
+    """Validate the optional file against every append-only identity pin."""
+    if create:
+        campaign.ledger._require_lock()
+    key, record = qa_signing.load(campaign.declaration, campaign.root, create=create)
+    if key and CONTEXT_VARIABLE in os.environ:
+        require(pc.constant_time_equal(key, os.environ.get('QUILLMD_SECRET_KEY', '')),
+                'The request process does not carry the pinned QA signing key.')
+    previous = [attempt for attempt, _ in campaign.rows()]
+    previous += [opened for opened, _ in campaign.runs.listing()]
+    for number, result in preflights(campaign.root):
+        path = campaign.root / 'preflight' / f'{number:03d}' / 'qa-signing-key.json'
+        # This pin precedes the models request, including an interrupted preflight.
+        previous.append({qa_signing.FIELD: pc.read_json(path)} if os.path.lexists(path) else {})
+    qa_signing.require_history(record, previous)
+    return key, record
+
+
 def require_preflight(campaign):
     """A recorded preflight whose returned id is the declared model, for this campaign."""
     matched = [result for _, result in preflights(campaign.root) if isinstance(result, dict)
@@ -1713,10 +1742,13 @@ def run_preflight(campaign, *, secret, transport=None):
     declaration = campaign.declaration
     campaign.ledger._require_lock()
     campaign.require_not_stopped()
+    signing_key, signing_record = signing_identity(campaign)
     base = pc.private_directory(campaign.root / 'preflight')
     number = len(preflights(campaign.root)) + 1
     evidence = base / f'{number:03d}'
     evidence.mkdir(mode=0o700)
+    if signing_record is not None:
+        pc.write_new(evidence / 'qa-signing-key.json', signing_record)
     url = MODELS_URL + declaration.model
     guard = _preflight_transport_class()(transport or httpx.HTTPTransport(), url, evidence, secret)
     client = anthropic.Anthropic(api_key=secret, base_url=PROVIDER_ROOT, max_retries=0,
@@ -1743,10 +1775,14 @@ def run_preflight(campaign, *, secret, transport=None):
               'status_code': (received or {}).get('status_code'), 'request_id': (received or {}).get('request_id'),
               'request_captured': (evidence / 'request.json').exists(), 'error': error,
               'generation_proof': False, 'statement': PREFLIGHT_STATEMENT, 'recorded_at': pc.now()}
+    if signing_record is not None:
+        result[qa_signing.FIELD] = signing_record
     result['matches_declared'] = bool(received is not None and received.get('status_code') == 200 and error is None
                                       and body.get('id') == declaration.model)
     try:
         hits = pc.leaked(evidence, secret)
+        if signing_key:
+            hits += pc.leaked(evidence, signing_key)
     except pc.Refused as refused:
         hits = [f'unscannable: {refused}']
     if hits:
@@ -1767,6 +1803,9 @@ def begin_run(campaign, stage, sends, inputs, cap, provenance):
     clash = sorted(set(allowed) & restricted)
     require(not clash, 'A planned input is a development original marked "no provider upload": ' + ', '.join(clash))
     extra = {}
+    _, signing_record = signing_identity(campaign)
+    if signing_record is not None:
+        extra[qa_signing.FIELD] = signing_record
     if stage == 'transcription':
         terms = campaign.declaration.transcription
         require(terms is not None and all(send.case in terms.inputs for send in sends),
@@ -2007,6 +2046,9 @@ def run_secrets(campaign, worker):
     deepgram = getattr(worker, 'transcription_secret', None)
     if deepgram:
         found.append((deepgram, campaign.declaration.transcription.credential_file))
+    signing_key, _ = signing_identity(campaign)
+    if signing_key:
+        found.append((signing_key, campaign.declaration.qa_signing_key_file))
     return found
 
 
@@ -2288,7 +2330,8 @@ def request_environment(key, declaration, root, password, context, flags, door, 
     campaign's own QA database and state, and the door's two variables (so the request process re-checks the door).
     `transcription_key`: the Deepgram key, for a transcription run's request process only (outer passes it for no other
     command or stage); the request process takes it out of its environment before anything else (inner)."""
-    extra = {'DJANGO_SETTINGS_MODULE': 'quillmd.settings', 'QUILLMD_SECRET_KEY': secrets.token_urlsafe(48),
+    signing_key, _ = signing_identity(StandingCampaign(declaration, root))
+    extra = {'DJANGO_SETTINGS_MODULE': 'quillmd.settings', 'QUILLMD_SECRET_KEY': signing_key or secrets.token_urlsafe(48),
              'QUILLMD_DB_NAME': declaration.qa_database, 'QUILLMD_DB_USER': QA_SERVER['user'],
              'QUILLMD_DB_PASSWORD': password, 'QUILLMD_DB_HOST': QA_SERVER['host'], 'QUILLMD_DB_PORT': QA_SERVER['port'],
              'QUILLMD_STATE_DIR': str(root / 'qa-state'), 'QUILLMD_ENV_MANAGED': '1', 'QUILLMD_ADMIN_SITE': '0',
@@ -2320,6 +2363,13 @@ def outer(command, stage=None, max_sends=None, path=None):
     for name in ('ledger', 'runs', 'evidence', 'preflight', 'qa-state', 'access', 'home', 'tmp', 'forms'):
         pc.private_directory(root / name)
     require(not os.path.lexists(root / STOP_NAME), f'The Stop file {root / STOP_NAME} exists; nothing is sent.')
+    if declaration.qa_signing_key_file:
+        campaign = StandingCampaign(declaration)
+        campaign.ledger.acquire()
+        try:
+            signing_identity(campaign, create=True)
+        finally:
+            campaign.ledger.release()
     key = pc.load_credential(declaration.credential_file, declaration)
     # (the Deepgram key: read for a transcription run ONLY, by the same file rules, before anything is sent — a missing,
     # linked, wrongly owned or wrongly permissioned file refuses here, before the database or the request process, and
@@ -2371,6 +2421,9 @@ def inner():
             'The request process runs only at this campaign\'s root.')
     campaign = StandingCampaign(declaration)
     campaign.ledger.acquire()
+    signing_key, _ = signing_identity(campaign)
+    require(signing_key is None or pc.constant_time_equal(signing_key, os.environ.get('QUILLMD_SECRET_KEY', '')),
+            'The request process does not carry the pinned QA signing key.')
     pc.scrubbed_now()
     campaign.require_not_stopped()
     key = os.environ['ANTHROPIC_API_KEY']
@@ -2416,9 +2469,17 @@ def inner():
     finally:
         os.environ.pop('ANTHROPIC_API_KEY', None)
         os.environ.pop(TRANSCRIPTION_KEY_VARIABLE, None)
+        if signing_key:
+            os.environ.pop('QUILLMD_SECRET_KEY', None)
     text = json.dumps(result, indent=1, default=str)
+    if signing_key:
+        hits = pc.leaked(campaign.root, signing_key, exclude=(declaration.qa_signing_key_file,))
+        if hits:
+            campaign.ledger.write_stop({'reason': 'the campaign evidence carries its QA signing key', 'detail': hits})
+            raise Refused('The evidence carried a QA signing key; the result was withheld and the campaign stopped.')
     require(key not in text and not pc.KEY_SHAPE.search(text.encode())
-            and not (transcription_key and transcription_key in text),
+            and not (transcription_key and transcription_key in text)
+            and not (signing_key and signing_key in text),
             'The result carried a key-shaped value; withheld.')
     print(text)
     return code
