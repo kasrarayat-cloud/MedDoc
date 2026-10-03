@@ -12,18 +12,20 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CIGatePartitions(unittest.TestCase):
-    def invoke(self, mode, fail_at=''):
+    def invoke(self, mode, fail_at='', require_support_settings=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fake = root / 'python'
             fake.write_text('#!' + sys.executable + '\n' +
                             'import json,os,sys\n'
                             'with open(os.environ["CI_PROBE_LOG"],"a") as f: f.write(json.dumps(sys.argv[1:])+"\\n")\n'
+                            'if os.environ.get("CI_REQUIRE_SETTINGS")=="1" and sys.argv[1:3]==["-m","unittest"] and os.environ.get("DJANGO_SETTINGS_MODULE")!="quillmd.settings": sys.exit(24)\n'
                             'sys.exit(23 if os.environ.get("CI_PROBE_FAIL") in sys.argv[1:] else 0)\n')
             fake.chmod(0o700)
             log = root / 'calls.jsonl'
             env = dict(os.environ, QUILLMD_CI_PYTHON=str(fake), CI_PROBE_LOG=str(log),
-                       CI_PROBE_FAIL=fail_at, QUILLMD_SECRET_KEY='synthetic', QUILLMD_DB_PASSWORD='synthetic')
+                       CI_PROBE_FAIL=fail_at, CI_REQUIRE_SETTINGS=str(int(require_support_settings)),
+                       QUILLMD_SECRET_KEY='synthetic', QUILLMD_DB_PASSWORD='synthetic')
             result = subprocess.run(['bash', str(ROOT/'scripts/ci/verify-fresh.sh'), mode],
                                     env=env, capture_output=True, text=True, timeout=10)
             return result.returncode, [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -57,6 +59,13 @@ class CIGatePartitions(unittest.TestCase):
         expected = {'documents.' + path.stem for path in (ROOT/'rebuild/documents').glob('test*.py')}
         self.assertEqual(set(modules), expected)
         self.assertEqual(len(modules), len(set(modules)))
+
+    def test_standalone_document_controls_receive_application_settings(self):
+        for mode in ('python-support', 'python'):
+            with self.subTest(mode=mode):
+                code, calls = self.invoke(mode, require_support_settings=True)
+                self.assertEqual(code, 0)
+                self.assertEqual(len([call for call in calls if call[:2] == ['-m', 'unittest']]), 2)
 
     def test_core_shards_keep_checks_and_use_the_same_full_discovery_label(self):
         for shard in (1, 2):
