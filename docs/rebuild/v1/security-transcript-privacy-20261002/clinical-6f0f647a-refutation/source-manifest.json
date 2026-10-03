@@ -1,0 +1,78 @@
+{
+  "commit": "6f0f647a3d10227fc7ed9a30698c1877a7fff22f",
+  "status": "finished clinical diff frozen awaiting independent REFUTE; not integrated or live qualified",
+  "files": [
+    {
+      "path": "rebuild/core/generation.py",
+      "sha256": "72a01ba63d704444453bd34aa185c66c371e9d573a5a6966da03c0b07c97fbb7"
+    },
+    {
+      "path": "rebuild/core/source_scope.py",
+      "sha256": "653ffe19c8203d56c8a2aab919d4a1bf03928fccf0e805298ffbd01f427669b4"
+    },
+    {
+      "path": "rebuild/core/transcript_context.py",
+      "sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521"
+    },
+    {
+      "path": "rebuild/core/v3_field_relations.py",
+      "sha256": "c3049a9b87707578f58330283bb2d1c2cbaeb602c3e15103d04a7862c595d75b"
+    },
+    {
+      "path": "rebuild/core/v3_literal_facts.py",
+      "sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7"
+    },
+    {
+      "path": "rebuild/core/v3_actors.py",
+      "sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d"
+    },
+    {
+      "path": "rebuild/core/v3_syntax.py",
+      "sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7"
+    },
+    {
+      "path": "rebuild/core/v3_destination.py",
+      "sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc"
+    },
+    {
+      "path": "rebuild/core/v3_history_context.py",
+      "sha256": "447208e118543aeb89f7a92758781d35bed3a106ee283a7d2794cb206c8fc4c0"
+    },
+    {
+      "path": "rebuild/core/models.py",
+      "sha256": "bd01c65d82fee028493fce93b3dc38da4caad32f0f3be26089135a6d506c9cd9"
+    },
+    {
+      "path": "rebuild/core/views.py",
+      "sha256": "6f17abd19a43f8a280a3529b49b09b1c46929bdd2edb8892af3942658a1dd43b"
+    },
+    {
+      "path": "rebuild/core/jobs.py",
+      "sha256": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1"
+    },
+    {
+      "path": "rebuild/core/batch_jobs.py",
+      "sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca"
+    },
+    {
+      "path": "rebuild/core/generation_batch.py",
+      "sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97"
+    },
+    {
+      "path": "rebuild/core/destination_roles.py",
+      "sha256": "dd5d919116d4c02ca5b92a087ab6d892d5597a1fb4d68213956aab4e9ed8cd4c"
+    },
+    {
+      "path": "rebuild/core/tests/test_transcript_context.py",
+      "sha256": "06d94c9cf3290be319bedab0cdfcabcd33f889705efcdc03f7306b5ab0fba554"
+    },
+    {
+      "path": "rebuild/core/tests/voice_first_pass_controls.json",
+      "sha256": "4cec016f52a1b07acd42ea5d86f8ca517608ab04abbb139cb6fa438e57352f01"
+    }
+  ],
+  "excluded_local_files": [
+    "temporary untracked Word0035 migration",
+    "isolated old-ORM test_relations_fixture compatibility edit"
+  ]
+}

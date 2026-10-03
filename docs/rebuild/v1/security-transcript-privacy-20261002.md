@@ -281,3 +281,38 @@ and binds each historical harness source commit. Original protected credentials,
 usage/ledger rows, audit events and all failed runs remain retained; credentials were not copied into this report
 or repository. No financial history was deleted and no grant was fabricated. Evidence-backed retirement covered
 all18 committed accounts from the second through fourth runs; the first committed none.
+
+### Finished clinical6f0f647a refutation remains failed
+
+The writer announced finished clinical commit `6f0f647a3d10227fc7ed9a30698c1877a7fff22f` with generation72a01ba6,
+source scope653ffe19 and transcript contextd371aa54. All17 manifest files were verified against both working bytes
+and committed bytes, then copied and hash-verified before probing. A distinct28-case instrument completed exit0
+in8.690s with database connections and sockets denied. It uses actual field-relations validation, current stored
+answer governance and finalization governance; every unselected model context unit is adversarially independent.
+Five concrete unsafe releases and one unnecessary hold were demonstrated. This is supplemental adversarial evidence,
+not a new campaign or a replacement for any frozen denominator. No provider request was made.
+
+| Selected original source | Other exact source declared independent by the simulated model | Actual validation/current governance |
+| --- | --- | --- |
+| `Examination mild swelling over the left lateral ankle.` | `The patient has a left ankle without swelling.` | Original supported text; no finalization governance decision. |
+| Same examination source | `The patient has absent swelling over the left ankle.` | Original supported text; no finalization governance decision. |
+| Same examination source | `The patient has a swelling-free left ankle.` | Original supported text; no finalization governance decision. |
+| `The patient reports pain in the left knee.` | `The patient has a left knee without pain.` | Original supported text; no finalization governance decision. |
+| Same pain source | `Only her father has left knee pain.` | Original supported text; no finalization governance decision. |
+| Original examination source | `Her father has no swelling over the left ankle.` | Conflict/empty: an unnecessary hold from an explicitly different actor. |
+
+Relevant finished locations are `core/generation.py:3866` through the opposed-topic read at3882 and
+`core/source_scope.py:200` through the same-assertion/topic intersection at224. These identify the measured path;
+the writer and lead must diagnose and independently verify each finding before accepting a repair. No patch was
+made to the measured clinical tree. Earlier OnlyFatherDoes/NotToday/date/nominal/exclusive medication failures,
+the two prior Without/Past false holds, wrong-subject/stopped-medication controls and different-drug/locality/side
+positives passed within this instrument. This does not attribute every new finding to this diff; its pre-change
+baseline was not measured. It refutes the finished candidate's asserted qualification.
+
+The retained original first-pass voice response remains byte-identical: no patient context yields zero supported
+answers; an exact reviewed context yields only `v3_7` (examination), with both original adversarial picks still
+conflict/empty and no unresolved finalization decision for the emitted supported answer. This is deterministic
+replay, not a live transcription/generation or a human microphone pass. `clinical-6f0f647a-refutation/manifest.json`
+hashes the raw result, exact instrument, successful instrument log and complete source manifest. All17 original
+source witnesses remain in protected scratch and the writer's preserved commit. Finished clinical qualification
+is withdrawn pending repair and a fresh frozen independent pass.
