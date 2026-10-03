@@ -102,8 +102,7 @@ def elliptical_dependencies(reading):
                 # such as "No diabetes" remain their own claims.
                 restriction=bool(not any(t.pos_ in ('VERB','AUX') for t in doc)
                     and not sole.get('classes') and not info.get('other_floor')
-                    and ('class' in sole.get('reach',()) or any(t.dep_=='neg'
-                        or (t.dep_=='det' and a._fold(t.text)=='no') for t in doc)))
+                    and (a._negates(root) or a._lemma(root) in a.SOLE_NEGATION))
                 # A negated nominal predicate omits what it is
                 # classifying ("No longer the daily medication"). Its clinical
                 # class bounds the adjacent dependency; a direct independent
@@ -219,8 +218,15 @@ def exclusive_reattributions(reading):
             # and adjectival solitude/status retain their separate predicates.
             nominal_reference=bool(a._lemma(root)=='be' and not core_clauses
                 and any(t.dep_=='attr' and t.pos_ in ('NOUN','PROPN','PRON','NUM') for t in root.children))
+            # An anatomical modifier misread as a perfect lexical predicate
+            # ('Only her father has left knee pain') cannot prove independence
+            # of the same named clinical claim. Hold that unresolved relation;
+            # do not silently reinterpret leave as a positive clinical verb.
+            anatomical_parse=bool(root.pos_=='VERB' and a._fold(root.text) in a.SOLE_SIDES
+                and any(t.dep_=='aux' and a._lemma(t) in a.LIGHT_VERBS for t in root.children)
+                and mine_sole.get('classes',frozenset()) & other_sole.get('classes',frozenset()))
             if ((predicates-{'be'}) & (my_predicates-{'be'}) or heads & my_heads
-                    or same_assertion or nominal_reference) and topic & (
+                    or same_assertion or nominal_reference or anatomical_parse) and topic & (
                     mine.get('claim_keys',frozenset())|mine.get('named_keys',frozenset())):
                 causes.setdefault(claim['id'],[]).append(other)
     reading[key]=causes
@@ -242,7 +248,7 @@ def separate_sides(reading, first, second, shared):
     docs=reading['_source_scope_docs']
     if docs is None:return False
     def local_sides(token):
-        phrase=token
+        phrase=negative_phrase_anchor(token, a)
         while phrase.dep_ in ('compound','amod') and phrase.head.pos_ in ('NOUN','PROPN'):
             phrase=phrase.head
         sides=set()
@@ -263,7 +269,7 @@ def separate_sides(reading, first, second, shared):
         if doc is None:return None
         matched={key:[] for key in shared}
         for token in doc:
-            if token.pos_ not in ('NOUN','PROPN'):continue
+            if token.pos_ not in ('NOUN','PROPN') and not negative_clinical_modifiers(token,a):continue
             keys=a.keys({a._lemma(token),a._fold(token.text)}) & shared
             if keys:
                 sides=local_sides(token)
@@ -329,3 +335,104 @@ def prefixed_modifier_dependencies(reading):
                 found.append((unit,a.keys({a._lemma(token.head),a._fold(token.head.text)})))
     reading[key]=found
     return found
+
+
+def pure_foreign_clause(reading,unit):
+    """A complete single foreign actor, with no patient or embedded speaker.
+
+    This proves only whose own claim this is. Mixed subjects, references to the
+    patient and unresolved grammatical actors keep the previous conservative
+    hold. Exclusive attribution is judged separately, including its polarity.
+    """
+    from . import v3_actors as a,v3_syntax
+    info=reading['actors'][unit['id']]
+    if not info.get('other_floor') or info.get('main_patient'):return False
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=v3_syntax.docs(u['quote']for u in reading['units'])
+    docs=reading['_source_scope_docs']
+    if docs is None:return False
+    doc=docs[reading['position'][unit['id']]]
+    roots=[t for t in doc if t.dep_=='ROOT']
+    if len(roots)!=1:return False
+    root=roots[0];subjects=[t for t in doc if t.dep_ in ('nsubj','nsubjpass','csubj','csubjpass','expl')]
+    return bool(len(subjects)==1 and subjects[0].head==root and a.names_person(subjects[0])
+        and root.pos_ in ('VERB','AUX') and not any(t.tag_=='MD' for t in doc)
+        and not any(a.this_patient(t) or (t.pos_=='PRON' and t.dep_!='poss') for t in doc)
+        and not any(t.dep_ in ('ccomp','xcomp','advcl','conj','relcl','acl') for t in doc))
+
+
+def negative_clinical_modifiers(token,a):
+    """Existing clinical word and a direct grammatical absence relation.
+
+    The pinned parser can tag a nominal -ing argument as a verb. Its actual
+    direct argument/modifier edge still supplies a hold; it supplies no positive
+    assertion or repaired predicate. An embedded action (without treating pain)
+    has no such direct edge to the clinical word.
+    """
+    classes=a.SOLE_CLASSES.get(a._lemma(token),frozenset()) | a.SOLE_CLASSES.get(a._fold(token.text),frozenset())
+    if not classes & a.SOLE_CLINICAL:return []
+    modifiers=[t for t in token.children if t.dep_ in ('amod','det') and a._lemma(t) in a.SOLE_NEGATION]
+    if (token.dep_ in ('compound','npadvmod','acl') and token.head.pos_ in ('ADJ','NOUN')
+            and a._lemma(token.head) in a.SOLE_NEGATION):modifiers.append(token.head)
+    if token.dep_ in ('pobj','pcomp') and token.head.pos_=='ADP':
+        prep=token.head
+        if a._lemma(prep) in a.SOLE_NEGATION:modifiers.append(prep)
+        elif prep.dep_=='prep' and prep.head.pos_=='ADJ' and a._lemma(prep.head) in a.SOLE_NEGATION:
+            modifiers.append(prep.head)
+    return modifiers
+
+
+def negative_phrase_anchor(token,a):
+    """The explicit anatomy in the SAME direct absence phrase, when unique.
+
+    The parser attaches 'without pain' to 'has', beside its sole anatomical
+    object. Only that positively typed single object can supply the side; a
+    side in another topic, coordinate or clause cannot. Unknown attachment
+    retains the existing hold.
+    """
+    if not negative_clinical_modifiers(token,a):return token
+    body=frozenset(a.SOLE_LEXICON['body'].split())
+    def anatomical(t):return t.pos_ in ('NOUN','PROPN') and bool({a._lemma(t),a._fold(t.text)} & body)
+    head=token.head
+    if head.pos_=='ADJ' and head.dep_=='amod' and anatomical(head.head):return head.head
+    if token.dep_ in ('pobj','pcomp') and head.pos_=='ADP':
+        parent=head.head
+        if anatomical(parent):return parent
+        if parent.pos_=='ADJ' and parent.dep_=='amod' and anatomical(parent.head):return parent.head
+        if parent.pos_ in ('VERB','AUX') and a._lemma(parent) in a.LIGHT_VERBS:
+            objects=[t for t in parent.children if t.dep_ in ('dobj','obj','attr') and anatomical(t)]
+            if len(objects)==1 and not any(t.dep_ in ('conj','ccomp','xcomp','advcl','relcl','acl') for t in parent.subtree
+                    if t!=token):return objects[0]
+    return token
+
+
+def clinical_modifier_negations(reading):
+    """Polarity on a named clinical word, by its own modifier/relation scope.
+
+    Existing negative words must directly modify that clinical argument: absent
+    swelling, ankle without swelling, ankle free of swelling, swelling-free
+    ankle. An intervening predicate (without treating pain) does not deny pain.
+    Negation of that modifier remains unresolved rather than declaring a
+    positive value. No source text or clinical claim is added.
+    """
+    key='_clinical_modifier_negations'
+    if key in reading:return reading[key]
+    from . import v3_syntax,v3_actors as a
+    if '_source_scope_docs' not in reading:
+        reading['_source_scope_docs']=v3_syntax.docs(u['quote']for u in reading['units'])
+    result={}
+    for unit,doc in zip(reading['units'],reading['_source_scope_docs'] or [None]*len(reading['units'])):
+        if doc is None:continue
+        targets=set();ambiguous=set()
+        for noun in doc:
+            modifiers=negative_clinical_modifiers(noun,a)
+            if modifiers:
+                keys=a.keys({a._lemma(noun),a._fold(noun.text)})
+                spine=[noun,*noun.ancestors]
+                cancelled=any(a._negates(t) for t in modifiers) or any(
+                    c.dep_=='neg' for t in spine for c in t.children)
+                if cancelled:ambiguous |= keys
+                else:targets |= keys
+        if targets or ambiguous:result[unit['id']]={'negative':frozenset(targets),'ambiguous':frozenset(ambiguous)}
+    reading[key]=result
+    return result

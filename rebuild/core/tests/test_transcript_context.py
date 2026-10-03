@@ -178,6 +178,48 @@ class PatientDefault(SimpleTestCase):
         self.check(patient+' The patient denies left knee pain.','Symptoms',[patient],'conflict',context=False)
         self.check(patient+' The patient denies left knee pain.','Symptoms',[patient],'conflict',context=True)
 
+    def test_independent_refutation_modifiers_and_exclusive_clinical_topic(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['The patient has a left ankle without swelling.',
+                     'The patient has absent swelling over the left ankle.',
+                     'The patient has a swelling-free left ankle.',
+                     'The patient has a left ankle free of swelling.',
+                     'The patient has an ankle without swelling.',
+                     'The patient has no swelling over the left ankle.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source],'conflict')
+        for tail in ['The patient has a right ankle without swelling.',
+                     'The patient has absent swelling over the right ankle.',
+                     'The patient has a swelling-free right ankle.',
+                     'Her father has no swelling over the left ankle.',
+                     'Her father has a left ankle without swelling.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source])
+        patient='The patient reports pain in the left knee.'
+        for tail in ['The patient has a left knee without pain.',
+                     'Only her father has left knee pain.']:
+            with self.subTest(tail=tail):self.check(patient+' '+tail,'Symptoms',[patient],'conflict')
+        for tail in ['Her father has left knee pain.','Only her father has right knee pain.',
+                     'Only her father has a cough.','The patient has a right knee without pain.']:
+            with self.subTest(tail=tail):self.check(patient+' '+tail,'Symptoms',[patient])
+        self.check('The patient takes warfarin. Diet: none.','Medications',['The patient takes warfarin.'])
+        self.check('Takes warfarin. None.','Medications',['Takes warfarin.'],'conflict')
+
+    def test_negative_modifier_polarity_and_side_are_local_to_the_named_assertion(self):
+        patient='The patient reports pain in the left knee.'
+        for tail in ['The patient has no pain relief.',
+                     'The patient goes without treatment for pain.',
+                     'Her father has a left knee without pain.',
+                     'The patient has a right knee without pain.']:
+            with self.subTest(tail=tail):self.check(patient+' '+tail,'Symptoms',[patient])
+        for tail in ['The patient does not have a left knee without pain.',
+                     'The patient has a right knee and a left ankle without pain.',
+                     'The patient has knee pain on the right and on the left. The patient has a knee without pain.']:
+            with self.subTest(tail=tail):self.check(patient+' '+tail,'Symptoms',[patient],'conflict')
+        negative='The patient has a left knee without pain.'
+        self.check(negative+' '+patient,'Symptoms',[negative],'conflict')
+        self.check(negative+' The patient reports pain in the right knee.','Symptoms',[negative])
+        self.check(negative+' Her father reports pain in the left knee.','Symptoms',[negative])
+        self.check('Takes warfarin. No diabetes.','Medications',['Takes warfarin.'])
+
     def test_confirmation_does_not_tune_around_an_unresolved_parser_failure(self):
         # Pinned syntax still reads left as a past verb in this sentence. Retain
         # the first failed result; a clinician can edit and explicitly re-review.
