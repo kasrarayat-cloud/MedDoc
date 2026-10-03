@@ -77,6 +77,17 @@ class SourceCoverage(unittest.TestCase):
         issues=result['import_manifest']['coverage']['selected_engine_issues']
         self.assertEqual([i['slot'] for i in issues],['b/p[0]','b/p[1]','b/p[2]'])
 
+    def test_literal_lists_do_not_depend_on_parent_punctuation_or_casing(self):
+        for title in ('Gender','Gender.','Gender:','Instructions'):
+            for prefix in ('a)','A)'):
+                with self.subTest(title=title,prefix=prefix):
+                    doc=Document();doc.add_paragraph(title)
+                    doc.add_paragraph(prefix+' Male');doc.add_paragraph(('b)' if prefix=='a)' else 'B)')+' Female')
+                    doc.add_paragraph('Reason: ______');result=self.inspect(doc)
+                    self.assertEqual([f['label'] for f in result['fields']],['Reason'])
+                    self.assertEqual(len(result['import_manifest']['coverage']['selected_engine_issues']),3)
+                    self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+
     def test_list_does_not_bridge_a_table_or_unrelated_numbering(self):
         doc=Document();numbered(doc,'Instructions',90,'decimal');numbered(doc,'One item',91,'lowerLetter')
         doc.add_table(rows=1,cols=1).cell(0,0).text='Fixed boundary'
@@ -96,13 +107,26 @@ class SourceCoverage(unittest.TestCase):
         output=word_v3.fill(data(doc),result['fields'],{result['fields'][0]['key']:'Synthetic review'})
         self.assertEqual(Document(io.BytesIO(output)).paragraphs[0].text,text)
 
+    def test_alternative_parts_cannot_escape_through_punctuation_unicode_or_digits(self):
+        for alternatives in ('left/right-hand','me/us/other-person',"patient's/carer's",
+                             'patient/carer (specify)','mild/moderate/grade 3','α/β','左/右',
+                             'patient’s/carer’s','1/2/3'):
+            with self.subTest(alternatives=alternatives):
+                doc=Document();doc.add_paragraph('Selection: ['+alternatives+']');doc.add_paragraph('Reason: ______')
+                result=self.inspect(doc)
+                self.assertEqual([f['label'] for f in result['fields']],['Reason'])
+                issue=result['import_manifest']['coverage']['selected_engine_issues'][0]
+                self.assertEqual(issue['code'],'printed_bracket_alternatives')
+                self.assertEqual(doc.paragraphs[0].text[issue['start']:issue['end']],'['+alternatives+']')
+                self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+
     def test_ordinary_placeholders_and_dates_remain_usable(self):
         doc=Document();doc.add_paragraph('Name: [patient name]')
-        doc.add_paragraph('Date: [dd/mm/yyyy]');doc.add_paragraph('Plan: [enter the plan]')
+        doc.add_paragraph('Date: [dd/mm/yyyy]');doc.add_paragraph('Plan: [enter left/right]')
         doc.add_paragraph('Printed abbreviation [SDU] and [This page is intentionally left blank]')
         result=self.inspect(doc)
         self.assertFalse(result['import_manifest']['coverage'].get('selected_engine_issues'))
-        self.assertEqual({f['label'] for f in result['fields']},{'Name patient name','Date dd/mm/yyyy','Plan enter the plan'})
+        self.assertEqual({f['label'] for f in result['fields']},{'Name patient name','Date dd/mm/yyyy','Plan enter left/right'})
 
     def test_long_bracketed_source_is_not_silently_discarded_at_grammar_limit(self):
         for length in (121,2100):

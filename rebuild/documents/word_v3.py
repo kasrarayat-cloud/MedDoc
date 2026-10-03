@@ -4167,7 +4167,8 @@ class Detector:
             info=self.list_info(question.el)
             numbered=bool(info and info[2]=='decimal' and self.list_marker_is_plain(info)
                           and label and not label.endswith(('?',':')))
-            literal=bool(label and label.endswith(':') and len(label)<=MAX_MAPPING_LABEL)
+            literal=bool(label and len(label)<=MAX_MAPPING_LABEL and not BOX in label
+                         and not CHECKED in label and not UNDERSCORES.search(label))
             if not (numbered or literal):
                 continue
             items=[];node=question.el.getnext();identity=None
@@ -4185,7 +4186,7 @@ class Detector:
                     if identity is not None and option!=identity:
                         break
                     identity=option
-                elif not re.fullmatch(r'(?:[a-z]|[ivxlcdm]+)[).]\s+\S.{0,117}',text):
+                elif not re.fullmatch(r'(?:[a-z]|[ivxlcdm]+)[).]\s+\S.{0,117}',text,re.I):
                     break
                 items.append(slot);node=node.getnext()
             if len(items)<2:
@@ -5621,11 +5622,14 @@ class Detector:
     def blank_spans(self, text, pieces):
         spans = []
         unresolved=[]
-        # Slash-separated printed words are alternatives, not unrestricted text
-        # placeholders. Date-format hints retain their existing interpretation.
+        # Printed slash-separated parts are alternatives, irrespective of their
+        # punctuation, script or digits. No lexical meaning or signer identity is
+        # inferred. Date-format hints and explicit authoring directives retain
+        # their existing placeholder interpretation.
         for match in BRACKET_ANY.finditer(text):
             inner=match.group(1).strip()
-            if (re.fullmatch(r'[A-Za-z][A-Za-z ]{0,39}(?:\s*/\s*[A-Za-z][A-Za-z ]{0,39})+',inner)
+            parts=inner.split('/')
+            if (len(parts)>1 and all(part.strip() for part in parts)
                     and not re.fullmatch(r'(?:dd|mm|yy|yyyy)(?:/(?:dd|mm|yy|yyyy))+',inner,re.I)
                     and not _Bracket.VERB.match(inner)):
                 unresolved.append((match.start(),match.end(),'printed_bracket_alternatives',
