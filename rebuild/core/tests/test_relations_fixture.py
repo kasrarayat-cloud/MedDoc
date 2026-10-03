@@ -67,7 +67,7 @@ class LabelledRelationsFixture(SimpleTestCase):
 
 @override_settings(**SETTINGS)
 class LargeFixtureWorkflow(V3Fixture, TestCase):
-    def test_browser_worker_to_genuine_export_keeps_101_fixture_answers_and_zero_cost(self):
+    def test_http_worker_to_genuine_export_keeps_101_fixture_answers_and_zero_cost(self):
         deny = patch('socket.socket.connect', side_effect=AssertionError('Network denied'))
         deny.start(); self.addCleanup(deny.stop)
         template, first = self.uploaded(data=build_questionnaire(101), name='Synthetic v4 fixture 101')
@@ -75,7 +75,7 @@ class LargeFixtureWorkflow(V3Fixture, TestCase):
         # this is a simulated fixture declaration, never a live qualification.
         from core.models import TemplateVersion
         version = TemplateVersion.objects.create(template=template, number=2, contract='v3', fields=first.fields,
-            document_backend=first.document_backend,
+            document_backend=first.document_backend, import_manifest=first.import_manifest,
             generation_constraints=manifest(first.fields, template.sha256, synthetic=True), created_by=self.user)
         self.confirm(template, version)
         notes = '\n\n'.join(f"{f['label']}: documented {i:03d}." for i, f in enumerate(version.fields))
