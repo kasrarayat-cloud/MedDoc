@@ -287,8 +287,11 @@ class SigningGenerationAdmission(V3Fixture, TestCase):
         Template.objects.filter(pk=self.template.pk).update(warnings=[])
         path = private_path(self.template.original_path)
         path.write_bytes(signing_form(table=False))
-        with self.assertRaisesMessage(ValidationError, 'could not be verified'):
+        # The earlier coverage gate rechecks the original digest before admitting the reviewed exclusion. Changed
+        # bytes invalidate that review and refuse before the later floating-layout parser can report its own error.
+        with self.assertRaisesMessage(ValidationError, 'This import has unmapped answer areas'):
             enqueue(self.encounter, self.user)
+        self.assert_no_financial_request()
         path.write_bytes(self.original)
         with patch('documents.inspect_template', side_effect=DocumentError('SYNTHETIC PRIVATE DETAIL')):
             with self.assertRaisesMessage(ValidationError, 'could not be verified') as caught:

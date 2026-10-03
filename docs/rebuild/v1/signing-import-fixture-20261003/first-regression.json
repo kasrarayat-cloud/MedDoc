@@ -1,0 +1,13 @@
+{
+  "source_commit": "becb0bf0",
+  "methods": 14,
+  "passed": 13,
+  "failed": 1,
+  "seconds": 80.231,
+  "exit_status": 1,
+  "database_destroyed": true,
+  "failure": "test_integrity_or_unavailable_parser_refuses_without_source_detail",
+  "cause": "coverage_reviewed checks writing_places original SHA before the later generation parser; changed original invalidates its reviewed exclusion and refuses as unmapped answer areas",
+  "log_sha256": "1a6f6c2f66671f84ed42b2cc1a50b4af92e5ff76e179cb879ce469107de92c33",
+  "raw_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/signing-import-regression.log"
+}
