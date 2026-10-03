@@ -1,0 +1,93 @@
+{
+  "contract": "quillmd-frozen-private-refutation-v1",
+  "database_calls": 0,
+  "container_calls": 0,
+  "provider_calls": 0,
+  "files": {
+    "refute_clinical_fa3de6f3.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_fa3de6f3.py",
+      "sha256": "80184639e00d40b4b86600b87306b5b599d71902a88106cd4c6b88b385944637",
+      "bytes": 10462
+    },
+    "refute-clinical-fa3de6f3.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fa3de6f3.json",
+      "sha256": "3e1eeb2dda2c60071cbcbb9534e8062edd4cce93e5e1c290b84f785e769b361f",
+      "bytes": 27914
+    },
+    "refute-clinical-fa3de6f3.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fa3de6f3.log",
+      "sha256": "5bc7c4cf0d77740f09caee06325fe66f92f968b73b28ce665a582b521b8dfba6",
+      "bytes": 1097
+    },
+    "refute_clinical_fa3de6f3_witness.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_fa3de6f3_witness.py",
+      "sha256": "5f8ecb772e1f5a12e9d3d51df0e2837b450d70f45ec6d52e0f9ab9bd27ce4c8e",
+      "bytes": 7247
+    },
+    "refute-clinical-fa3de6f3-witness.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fa3de6f3-witness.json",
+      "sha256": "3ff8313ed77c3e56579f2c5d0d74da0eec143192fb50ba963e6bdc96ca4b32b2",
+      "bytes": 67100
+    },
+    "refute-clinical-fa3de6f3-witness.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fa3de6f3-witness.log",
+      "sha256": "aa5c8a219af79318205616e120fd89c5bf192afbc46697e8b49ca5deca0a74c3",
+      "bytes": 1080
+    },
+    "refute-clinical-fa3de6f3-source/manifest.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-fa3de6f3-source/manifest.json",
+      "sha256": "a72bec92f340b98d72417ecdfc4360e1653c79d064729bd5e46da8fb3a687d1d",
+      "bytes": 4480
+    },
+    "refute_prepare_campaign_demo_v2.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_prepare_campaign_demo_v2.py",
+      "sha256": "4f50e86493e13f181f16a44df163e4ef524541385f656806aadd8a6a058f1ade",
+      "bytes": 5062
+    },
+    "refute-prepare-campaign-v2.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-prepare-campaign-v2.log",
+      "sha256": "f04cab46ab112c2e413fc009b4a2185a592e7e331bc63be8a35f75d46bdbf32d",
+      "bytes": 2134
+    },
+    "refute-prepare-campaign-v2-positive.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-prepare-campaign-v2-positive.json",
+      "sha256": "f43ef5362e06481628964d7711bb5249b2d0ef24ff7ffc819141d100b1cdf888",
+      "bytes": 663
+    },
+    "refute-prepare-campaign-v2-parent.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-prepare-campaign-v2-parent.json",
+      "sha256": "66d3ccafab6891bb6c9ecaf3f1e6eebcf5c995084fc112b63fbb219b2421d094",
+      "bytes": 735
+    },
+    "refute-prepare-campaign-v2-leaf.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-prepare-campaign-v2-leaf.json",
+      "sha256": "153aa5c3ed56bf7515f98b258b3ceb7fb1a50b517e330cc8cf17bf123cef64b3",
+      "bytes": 733
+    },
+    "refute_prepare_campaign_demo_v2_temporary.py": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_prepare_campaign_demo_v2_temporary.py",
+      "sha256": "8747d090795a8b797d63abd4235c69cf339ff399dbebedd29e911e2df974947d",
+      "bytes": 5589
+    },
+    "refute-prepare-campaign-v2-extra-temporary.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-prepare-campaign-v2-extra-temporary.json",
+      "sha256": "734d3572e70cb322db7c4c651db653d53c37d0fbd86e3066b3cc13a352fb03e5",
+      "bytes": 768
+    },
+    "retention-artifacts/baseline-red.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/retention-artifacts/baseline-red.log",
+      "sha256": "b8dadf4a1e53b95b05147675c904ccd6e52ff9103f72bf4fe3a371f6b4274607",
+      "bytes": 1213
+    },
+    "retention-artifacts/final-pure.log": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/retention-artifacts/final-pure.log",
+      "sha256": "4d04c48c8c719e8476bc671042d56c77a351199894fc3aea681aee8ba3153631",
+      "bytes": 504
+    },
+    "retention-artifacts/frozen.json": {
+      "absolute_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/retention-artifacts/frozen.json",
+      "sha256": "a709279943983bd380855dd78a1d717a6e94c52ca587ab0e5fde2f8c7350a9c7",
+      "bytes": 502
+    }
+  }
+}

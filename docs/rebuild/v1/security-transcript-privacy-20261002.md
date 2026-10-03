@@ -758,3 +758,44 @@ remain explicit gates, not invented available owner decisions.
 
 `qa-demo-copy-preparation/manifest.json` binds all protected helper/test/log/wrapper and policy witnesses. All
 reproducible fixture directories are retained pending lead manifest review; no cleanup or live copy occurred here.
+
+
+### Retention template repair and finished fa3 / preparation-v2 refutation
+
+The retention publication defect above is repaired in a separate clean isolated branch at
+`b9ac60370255de9b66eeecf44fa9b97a51c28575`, based on exact `b1b60455`. Only the two canonical-generated JSON
+artifacts and one semantic protection test change. The existing published-policy parity test first failed as
+expected; the final two pure checks pass in0.544s (0.009s body), with database and socket refusal. The published
+unresolved review class now validates, while a forged aging window for immutable transcript evidence refuses.
+No approved schedule, duration, legal authority or deletion permission is created. Root integration remains separate.
+
+Finished clinical `fa3de6f365840fbf7ed8a6df0ed4acbc83f3db5d` is REFUTED:30 whole-validation/current-governance/
+final-decision probes plus the original raw-voice replay exit0 in13.008s, all20 Git-bound source hashes unchanged.
+A new definite unsafe is `Takes warfarin 5 mg daily. Her father switched from prone to supine positioning and reports
+that the patient stopped warfarin.` The selected positive medication survives supported and no final-decision hold.
+Six narrow/parser controls on the immutable full fa3 archive exit0 in8.644s and reproduce with an explicit patient
+selected baseline. Parser `reports` is a NOUN conjunct of positioning, and explicit-patient `stopped` is VERB/ACL
+with patient subject and warfarin object. The predicate filter at `source_scope.py:127` excludes ACL, so the explicit
+cessation dependency is missed and `generation.py:3905` skips the mixed other-person unit despite warfarin cessation
+keys. This is a demonstrated clinical scope failure, not a speculative parsing complaint.
+
+Patient CONFIRMS that father switched position, and REPORTS that father HAD switched position each unnecessarily
+hold an otherwise supported patient warfarin value; the lead's two reports-label controls are also reproduced.
+The raw resumed-today flag is explicitly NOT a new demonstrated falsehold: its selected baseline alone is already
+held. Both outputs are retained, and the new-defect classification is withdrawn rather than widening a guard.
+Earlier direct mixed patient stopped/withheld/replaced and precise different-drug controls pass this instrument.
+Voice replay remains hypothetical: raw0 useful, confirmed context onlyv3_7, with originalv3_2/v3_4 held. No new audio,
+provider, billing or browser-export qualification follows. The measured writer source was released after real exit.
+
+The lead's descriptor preparation wrapper v2 at SHA256
+`50d72c1ac1d151fd87f2bb07bb9ef82d1248a800fafe9fe8025159f4d34b2fe7` passes functional generated-launcher compilation
+and refuses the prior parent/leaf swap before foreign writes (three pure modes, actual exits0/0.446s). A distinct
+pre-execution temporary-name defect remains: the open temporary file is not compared with its named directory entry
+before replacement. Substituting that name during the original-file recheck replaces the valid new launcher with a
+symlink; only the following read refuses. The fourth pure witness exits0/0.030s, leaves the foreign bytes unchanged,
+and records `final_launcher_is_symlink:true`. This is a corrupted fresh preparation caught after mutation, not a
+claimed provider/production leak. Bind/recheck the temporary name and descriptor immediately before replacement;
+preserve v2's actual failure and verify the finished repair before execution. No source helper was mutated by review.
+
+`clinical-fa3-and-preparation-refutation/manifest.json` binds the protected instruments, first outcomes, parser/scope
+witnesses and retention RED/PASS logs. Original copy helper8cf, signingea5 and voice-fit8aea remain unchanged.
