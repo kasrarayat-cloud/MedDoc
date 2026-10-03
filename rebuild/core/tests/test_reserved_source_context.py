@@ -91,7 +91,8 @@ class ReservedSourceContext(SimpleTestCase):
         self.assertEqual(body['fields'][0]['context']['unresolved'],[1])
 
     def test_printed_label_never_resolves_a_personal_pronoun_after_the_named_author(self):
-        for selected in ['Plan: She will rest.','Plan: He will rest.','Plan: They will rest.']:
+        for selected in ['Plan: She will rest.','Plan: He will rest.','Plan: They will rest.',
+                         'Plan: I will rest.','Plan: We will rest.','Plan: You will rest.']:
             for confirmed in (False,True):
                 with self.subTest(selected=selected,confirmed=confirmed):
                     self.check(SOURCE+'\n'+selected,selected=selected,confirmed=confirmed,expected='conflict')
