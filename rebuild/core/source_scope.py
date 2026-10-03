@@ -164,6 +164,11 @@ def owned_clause(predicate):
     excluded=set()
     for token in predicate.subtree:
         if token==predicate:continue
+        active=detached_active_theme(token)
+        if active is not None:
+            excluded.update(active.subtree)
+            excluded.add(token.doc[token.i-1])
+            continue
         if (nominal_carrier(token) or (token.pos_ in ('VERB','AUX') and token.dep_ in ('conj','ccomp','advcl','relcl','acl','parataxis'))
                 or (token.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in token.children))):
             excluded.update(token.subtree)
@@ -176,7 +181,30 @@ def owned_clause(predicate):
     own=set(predicate.subtree)-excluded
     theme=detached_passive_theme(predicate)
     if theme is not None:own.update(theme.subtree)
+    active=detached_active_theme(predicate)
+    if active is not None:own.update(active.subtree)
     return sorted(own,key=lambda t:t.i)
+
+
+def detached_active_theme(predicate):
+    """Recover one adjacent active ending misattached as a nominal modifier.
+
+    In explicit AND coordination after a position noun, a past ending directly
+    precedes its sole named medication. No passive, alternative, possession,
+    list member or unknown argument is recovered by this proof.
+    """
+    from . import v3_actors as a
+    if (predicate.pos_!='VERB' or predicate.tag_ not in ('VBD','VBN') or predicate.dep_!='amod'
+            or a._lemma(predicate) not in a.CESSATION_VERBS | a.SUPERSESSION_VERBS or predicate.i<1):return None
+    theme=predicate.head;join=predicate.doc[predicate.i-1]
+    if (theme.pos_ not in ('NOUN','PROPN') or theme.dep_!='conj' or theme.i!=predicate.i+1
+            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(theme),()) or a._lemma(theme) in a.DOSAGE_FORM_NOUNS
+            or theme.head.pos_!='NOUN' or a._lemma(theme.head) not in ('position','positioning')
+            or join.dep_!='cc' or join.head!=theme.head or a._fold(join.text)!='and'
+            or any(t!=predicate and t.dep_ not in ('det','compound','amod') for t in theme.children)
+            or any(t.dep_ in ('nsubj','nsubjpass','auxpass','dobj','obj','mark','neg','conj') for t in predicate.children)):
+        return None
+    return theme
 
 
 def denied_ending(predicate, words):
@@ -414,7 +442,7 @@ def clause_readings(reading,unit):
     result=[]
     if doc is not None:
         lem={t.i:a._lemma(t) for t in doc};txt={t.i:a._fold(t.text) for t in doc}
-        predicates=[t for t in doc if nominal_carrier(t) or (t.pos_ in ('VERB','AUX') and (t.dep_=='ROOT'
+        predicates=[t for t in doc if nominal_carrier(t) or detached_active_theme(t) is not None or (t.pos_ in ('VERB','AUX') and (t.dep_=='ROOT'
             or t.dep_ in ('conj','ccomp','advcl','parataxis','acl','relcl')
             or (t.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in t.children))))]
         for predicate in predicates:
@@ -434,8 +462,11 @@ def clause_readings(reading,unit):
             # direct coordinated action. This does not inherit a clinician or
             # service's agent role, an unresolved subject, or an embedded actor.
             parent=predicate.head
+            active_theme=detached_active_theme(predicate)
+            if active_theme is not None:
+                parent=next((t for t in active_theme.head.ancestors if t.pos_ in ('VERB','AUX')),parent)
             parent_subjects=[t for t in parent.children if t.dep_ in ('nsubj','nsubjpass')]
-            if (not subjects and predicate.dep_=='conj' and parent.pos_ in ('VERB','AUX')
+            if (not subjects and (predicate.dep_=='conj' or active_theme is not None) and parent.pos_ in ('VERB','AUX')
                     and not any(t.dep_=='auxpass' for t in predicate.children)
                     and len(parent_subjects)==1 and a._family(parent_subjects[0])
                     and transition_scope(reading,unit,clause=owned_clause(parent))=='position'
@@ -462,6 +493,8 @@ def clause_readings(reading,unit):
             repaired_argument=bool(a._lemma(predicate) in a.CESSATION_VERBS and nominal)
             if passive_theme is not None and a._lemma(predicate) in a.CESSATION_VERBS | a.SUPERSESSION_VERBS:
                 nominal.append(passive_theme);repaired_argument=True
+            if active_theme is not None:
+                nominal.append(active_theme);repaired_argument=True
             if repaired_argument:
                 topics |= a.keys({a._lemma(t) for argument in nominal for t in argument.subtree
                     if t in inside and t.pos_ in a.CONTENT})

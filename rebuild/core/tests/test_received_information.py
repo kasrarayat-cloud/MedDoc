@@ -38,6 +38,19 @@ class ReceivedInformation(SimpleTestCase):
                 _,_,page=self.answer(notes,label,pick)
                 self.assertEqual((page['status'],page['text']),('conflict',''))
 
+    def test_entire_retained_receipt_source_preserves_other_answers_and_finalization(self):
+        notes='Initial diagnosis: Sprain\n\nSigned consent was received on: 3 October 2026\n\nPlan: Rest.'
+        fields=form('Initial diagnosis','Signed consent was received on','Plan')
+        expected=['Sprain','3 October 2026','Rest.']
+        units=g.source_units(notes,fields)[0]
+        body=relation_wire(notes,fields,{f['key']:[u['quote']] for f,u in zip(fields,units)})
+        result=raw(notes,fields,body,g.SONNET_5_5);result['patient_default_context']=proof(notes)
+        answers=r.validated(result);governance=g.governance_for(notes,fields)
+        for field,value in zip(fields,expected):
+            row=g.as_currently_governed(governance,notes,{**field,**answers[field['key']]})
+            self.assertEqual((row['status'],row['text']),('supported',value))
+        self.assertEqual(g.governed_decisions(notes,fields,answers),[])
+
     def test_actual_signing_destinations_never_adopt_receipt_values(self):
         for label in ['Clinician signature','Signed by (patient)','Signed by (witness)','Signed (manager)']:
             notes=label+': Dr Synthetic'
@@ -45,3 +58,11 @@ class ReceivedInformation(SimpleTestCase):
                 _,_,page=self.answer(notes,label,notes)
                 self.assertNotEqual(page['status'],'supported')
                 self.assertEqual(page['text'],'')
+
+    def test_consent_act_does_not_inherit_receipt_exemption(self):
+        notes='Consent obtained: yes\n\nPlan: Rest.'
+        fields=form('Consent obtained','Plan');units=g.source_units(notes,fields)[0]
+        body=relation_wire(notes,fields,{f['key']:[u['quote']] for f,u in zip(fields,units)})
+        result=raw(notes,fields,body,g.SONNET_5_5);result['patient_default_context']=proof(notes)
+        answer=r.validated(result)['f1']
+        self.assertEqual((answer['status'],answer['text']),('conflict',''))

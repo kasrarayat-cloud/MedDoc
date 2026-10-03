@@ -83,6 +83,17 @@ class CancellationScope(SimpleTestCase):
         self.check('Her father takes warfarin 5 mg daily.', 'Medications',
                    ['Her father takes warfarin 5 mg daily.'], 'conflict')
 
+    def test_adjacent_active_family_ending_keeps_its_own_actor(self):
+        for label in ['Medications','Current medications']:
+            self.check(self.source+' '+self.prefix+'discontinued warfarin.',label,[self.source])
+            for tail in [
+                'The patient switched from prone to supine positioning and discontinued warfarin.',
+                self.prefix+'discontinued warfarin for the patient.',
+                self.prefix+'discontinued warfarin and the patient stopped warfarin.',
+                'The patient switched from prone to supine positioning and discontinued an unknown medication.',
+            ]:
+                self.check(self.source+' '+tail,label,[self.source],'conflict')
+
     def test_explicit_replacement_relation_binds_old_value_and_actual_recipient(self):
         change = 'For the patient, apixaban 5 mg twice daily was started in place of warfarin last week.'
         target = 'The patient takes apixaban 5 mg twice daily.'
