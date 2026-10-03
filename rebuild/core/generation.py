@@ -3342,7 +3342,11 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
     for kind, start, end in reading['inherited_causes']:
         index = bisect.bisect_right(starts, start) - 1
         if index >= 0:
-            unit = reading['units'][index]; warnings[unit['id']] = unit
+            unit = reading['units'][index]
+            from .source_scope import future_event_at
+            if kind=='lexical' and ordinary['valid'] and future_event_at(reading,unit,start,end):
+                continue
+            warnings[unit['id']] = unit
     for unit in selected.values():
         if not v3_complete_statement(reading, unit, scoped):
             warnings.setdefault(unit['id'], {**unit, 'syntax_incomplete': True})
@@ -3571,6 +3575,8 @@ def v3_current_state_field(field):
     label = question_key(field.get('label'))
     if label in GENERAL_NARRATIVE_FIELDS:
         return False
+    from .source_scope import completed_receipt_question
+    if completed_receipt_question(field):return False
     if re.search(LETTER_BEFORE + r'(?:history|past|previous|prior|ever|when|since|last|date|dated|onset)' + LETTER_AFTER,
                  label, re.I):
         return False
@@ -3953,7 +3959,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         # a re-attribution away from the patient, or a class denied OF THE ANSWER's own predicate ('takes no
         # anticoagulants' / 'takes warfarin') or naming what it claims ('has had no pain' / 'presents with chest pain';
         # not a modifier of it: 'expects no relationship changes' / 'The relationship reporting condition ...')
-        shared=found['denial_nouns'] & my_words
+        shared=(found['denial_nouns']-denied_ending_keys(reading,other)) & my_words
         if (found['reattribution'] or found['denial_heads'] & my_heads
                 or (shared and not separate_sides(reading,unit,other,shared))):
             causes.append((other, None))
@@ -4114,6 +4120,13 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             [{k: choice[k] for k in ('quote', 'start', 'end')} for choice in sorted(choices, key=lambda u:u['start'])],
             ordinary_relation, field_key=item.key) if v3 and ordinary_relation is not None else {
                 'ids': set(), 'warnings': [], 'valid': False, 'self_reference': False}
+        field_inherited=inherited
+        if v3 and ordinary['valid']:
+            from .source_scope import future_event_at
+            preceding=governance[11]['preceding']
+            field_inherited=any(kind!='lexical' or not any(
+                u['start']<=start<u['end'] and future_event_at(preceding,u,start,end)
+                for u in preceding['units']) for kind,start,end in preceding['inherited_causes'])
         if ordinary['warnings']: guarded = True
         history = {'ids': set(), 'warnings': []}
         if v3 and history_context is not None:
@@ -4230,13 +4243,13 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if value and (value not in texts or unit['id'] in history['ids'] or unit['id'] in ordinary['ids'] or unit['id'] in complete_paragraphs.get(item.key, ())
                           or (v3 and label in governance[11]['preceding']['general']
                               and unit['id'] in scoped['complete'])): texts.append(value)
-        conflict=item.conflict or len(explicit)>1 or injection or (inherited and bool(texts)) or guarded
+        conflict=item.conflict or len(explicit)>1 or injection or (field_inherited and bool(texts)) or guarded
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
         own=evidence
         governed=judged_context(governance,notes,index,field['label'],own,history_context=history_context,
                                ordinary_relation=ordinary_relation,field_key=item.key)   # the RAW label
-        if (inherited or injection) and texts:
+        if (field_inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
         answer={'text':'\n'.join(texts) if status=='supported' else '',
@@ -4247,7 +4260,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             # The whole note stands in `evidence`, or its own unit IS the whole note (tenth pass: a one-sentence note's
             # ready answer, cleared, was judged fail-closed as if its evidence were the substituted span).
             answer['own_evidence']=own
-        if inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
+        if field_inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
             answer=with_scope_suggestion(answer,notes,texts,own,set(explicit),
                                          governed,note_erratum=governance[8])
         elif status=='supported' and (context:=governed) is not None:

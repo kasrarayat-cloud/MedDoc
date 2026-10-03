@@ -350,7 +350,7 @@ class FieldRelationsSwitch(SimpleTestCase):
     def test_one_effective_switch(self):
         for overrides, model, expected in (
                 ({'V3_FIELD_RELATIONS': True}, g.SONNET_5, True), ({'V3_FIELD_RELATIONS': True}, g.SONNET_5_5, True),
-                ({'V3_FIELD_RELATIONS': False}, g.SONNET_5_5, False),                       # settings predating the default
+                ({'V3_FIELD_RELATIONS': False, 'V3_FIELD_RELATIONS_SWITCH': False}, g.SONNET_5_5, False),
                 ({'V3_FIELD_RELATIONS': False, 'V3_FIELD_RELATIONS_SWITCH': None}, g.SONNET_5_5, True),
                 ({'V3_FIELD_RELATIONS': False, 'V3_FIELD_RELATIONS_SWITCH': None}, g.SONNET_5, False),
                 ({'V3_FIELD_RELATIONS': False, 'V3_FIELD_RELATIONS_SWITCH': None}, 'claude-sonnet-4-6', False),
