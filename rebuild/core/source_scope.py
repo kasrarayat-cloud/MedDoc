@@ -417,12 +417,59 @@ def completed_receipt_question(field):
     root=roots[0];children=list(root.children)
     subjects=[t for t in children if t.dep_ in ('nsubj','nsubjpass')]
     past=bool(root.tag_=='VBD' or any(t.dep_=='auxpass' and t.tag_=='VBD' for t in children))
-    return bool(a._lemma(root)=='receive' and past and len(subjects)==1
+    # A form caption can omit BE from its passive: "Signed consent
+    # received on". The pinned parser then gives RECEIVE VBN and CONSENT
+    # nsubj. A single nonhuman nominal theme and no auxiliary establish this
+    # reduced passive; an infinitive, intention, actor or qualified/embedded
+    # clause cannot borrow it. Source identity and context still govern below.
+    elliptical=bool(root.tag_=='VBN' and len(subjects)==1 and subjects[0].dep_=='nsubj'
+        and not any(t.pos_=='AUX' or a.names_carer(t) or t.pos_=='PROPN'
+            or a._fold(t.text) in a.SOLE_UNCERTAIN or a._lemma(t) in a.INTENTION_WORDS for t in doc)
+        and all(t==subjects[0] or t.dep_ in ('det','compound','amod')
+            for t in subjects[0].subtree)
+        and all(t.pos_ in ('NOUN','DET') or (t.dep_=='amod' and t.tag_=='VBN')
+            for t in subjects[0].subtree))
+    return bool(a._lemma(root)=='receive' and (past or elliptical) and len(subjects)==1
         and subjects[0].pos_=='NOUN' and subjects[0].i<root.i
         and not any(a.names_person(t) or a.this_patient(t) or t.pos_=='PRON' or t.tag_=='MD' or a._negates(t) for t in doc)
         and all(t==root or t.pos_!='VERB' or (t.dep_=='amod' and t.head in set(subjects[0].subtree)) for t in doc)
         and all(t.dep_ in ('nsubj','nsubjpass','auxpass','punct')
             or (t.dep_=='prep' and a._lemma(t)=='on' and not list(t.children)) for t in children))
+
+
+def receipt_date_warnings(reading, field, selected):
+    """A completed receipt's own labelled ON value must actually name a date.
+
+    The printed reduced/passive clause supplies the event; a literal calendar
+    date supplies only its time. A future, uncertain, negative or arbitrary
+    labelled value cannot manufacture that completed event. Preserve the
+    exact original answer bytes; this parser never rewrites ambiguous US/UK
+    numeric dates. Non-date receipt questions and planned receipt questions
+    keep their existing source guards.
+    """
+    from datetime import datetime
+    from . import v3_syntax, generation as g
+    if not completed_receipt_question(field):return []
+    docs=v3_syntax.docs([str(field.get('label')or'')]);doc=docs[0] if docs else None
+    if doc is None:return list(selected)
+    roots=[t for t in doc if t.dep_=='ROOT']
+    if len(roots)!=1 or not any(t.dep_=='prep' and t.text.casefold()=='on'
+            for t in roots[0].children):return []
+    def calendar_date(value):
+        value=value.strip().rstrip('.')
+        # These source-relative day names require no invented encounter date.
+        # Future relative dates do not describe a completed receipt.
+        if value.casefold() in ('today','yesterday'):return True
+        # A successful parse must consume the whole value. Parsing proves
+        # calendar validity, never whose receipt it is or a clinical event.
+        for fmt in ('%Y-%m-%d','%m/%d/%Y','%d/%m/%Y','%d %B %Y','%d %b %Y',
+                    '%B %d, %Y','%b %d, %Y','%B %d %Y','%b %d %Y'):
+            try:datetime.strptime(value,fmt);return True
+            except ValueError:pass
+        return False
+    key=g.question_key(field.get('label'))
+    return [unit for unit in selected if (own:=reading['parsed'].get(unit['id']))
+        and own[0]==key and not calendar_date(own[1])]
 
 
 def clause_readings(reading,unit):
