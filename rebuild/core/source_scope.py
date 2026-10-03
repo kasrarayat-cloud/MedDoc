@@ -108,6 +108,32 @@ def nominal_carrier(token):
             and any(m.dep_=='mark' and a._fold(m.text)=='that' for m in c.children) for c in token.children))
 
 
+def detached_passive_theme(predicate):
+    """Bind the pinned parser's adjacent nominal/passive coordination.
+
+    The exact named medication sits immediately before its passive auxiliary,
+    although the parser attached it to the preceding nominal conjunction. This
+    accounts for the same source token in both clauses; it supplies no actor.
+    Unknown objects, alternatives and nonadjacent clauses cannot use this proof.
+    """
+    from . import v3_actors as a
+    auxiliaries=[t for t in predicate.children if t.dep_=='auxpass']
+    if (predicate.pos_!='VERB' or predicate.tag_!='VBN' or predicate.dep_ not in ('conj','advcl')
+            or len(auxiliaries)!=1 or predicate.head.pos_ not in ('VERB','AUX')
+            or any(t.dep_ in ('nsubj','nsubjpass','dobj','obj','mark') for t in predicate.children)):
+        return None
+    first=auxiliaries[0]
+    if first.i<2:return None
+    theme=predicate.doc[first.i-1];join=predicate.doc[theme.i-1]
+    if (theme.pos_ not in ('NOUN','PROPN') or theme.dep_!='conj'
+            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(theme),())
+            or theme.head.pos_ not in ('NOUN','PROPN') or theme.head not in set(predicate.head.subtree)
+            or join.dep_!='cc' or join.head!=theme.head or a._fold(join.text)!='and'
+            or any(t!=theme and t.dep_ not in ('det','compound','amod','poss') for t in theme.subtree)):
+        return None
+    return theme
+
+
 def owned_clause(predicate):
     """A grammatical clause excludes separately owned coordinated assertions."""
     excluded=set()
@@ -116,9 +142,16 @@ def owned_clause(predicate):
         if (nominal_carrier(token) or (token.pos_ in ('VERB','AUX') and token.dep_ in ('conj','ccomp','advcl','relcl','acl','parataxis'))
                 or (token.dep_ in ('xcomp','pcomp') and any(c.dep_ in ('nsubj','nsubjpass') for c in token.children))):
             excluded.update(token.subtree)
+            theme=detached_passive_theme(token)
+            if theme is not None:
+                excluded.update(theme.subtree)
+                excluded.update(c for c in theme.head.children if c.dep_=='cc' and c.i==theme.i-1)
             if token.dep_=='conj':
                 excluded.update(c for c in token.head.children if c.dep_=='cc')
-    return [t for t in predicate.subtree if t not in excluded]
+    own=set(predicate.subtree)-excluded
+    theme=detached_passive_theme(predicate)
+    if theme is not None:own.update(theme.subtree)
+    return sorted(own,key=lambda t:t.i)
 
 
 def clause_readings(reading,unit):
@@ -146,9 +179,22 @@ def clause_readings(reading,unit):
             subjects=[t for t in predicate.children if t in inside and t.dep_ in ('nsubj','nsubjpass')]
             direct_patient=bool(len(subjects)==1 and a.this_patient(subjects[0]))
             themes=[t for t in predicate.children if t in inside and t.dep_ in ('dobj','obj','nsubjpass')]
+            passive_theme=detached_passive_theme(predicate)
+            if passive_theme is not None:themes.append(passive_theme)
             possessed=bool(any(c.dep_=='poss' and a.this_patient(c) for t in themes for c in t.children))
             foreign=bool(len(subjects)==1 and a.names_person(subjects[0])
                 and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in words))
+            # A known family member's complete positional action can own its
+            # direct coordinated action. This does not inherit a clinician or
+            # service's agent role, an unresolved subject, or an embedded actor.
+            parent=predicate.head
+            parent_subjects=[t for t in parent.children if t.dep_ in ('nsubj','nsubjpass')]
+            if (not subjects and predicate.dep_=='conj' and parent.pos_ in ('VERB','AUX')
+                    and not any(t.dep_=='auxpass' for t in predicate.children)
+                    and len(parent_subjects)==1 and a._family(parent_subjects[0])
+                    and transition_scope(reading,unit,clause=owned_clause(parent))=='position'
+                    and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in words)):
+                foreign=True
             floor=a._floor_reading(words,predicate,lem=lem,txt=txt)
             own_keys=a.keys({a._lemma(t) for t in words if t.pos_ in a.CONTENT})-a.keys({'patient'})
             topics=floor['ceased_keys'] & own_keys
@@ -158,6 +204,8 @@ def clause_readings(reading,unit):
             nominal=[t for t in predicate.children if t in inside and t.dep_ in ('oprd','attr','acomp')
                 and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())]
             repaired_argument=bool(a._lemma(predicate) in a.CESSATION_VERBS and nominal)
+            if passive_theme is not None and a._lemma(predicate) in a.CESSATION_VERBS | a.SUPERSESSION_VERBS:
+                nominal.append(passive_theme);repaired_argument=True
             if repaired_argument:
                 topics |= a.keys({a._lemma(t) for argument in nominal for t in argument.subtree
                     if t in inside and t.pos_ in a.CONTENT})
@@ -166,6 +214,16 @@ def clause_readings(reading,unit):
             foreign_keys=a.keys({a._lemma(t) for theme in foreign_themes for t in theme.subtree
                 if t in inside and t.pos_ in a.CONTENT})
             if topics and topics<=foreign_keys:foreign=True
+            # Withholding's explicit FROM recipient owns that affected action.
+            # A passive theme or its preceding speaker never supplies a person.
+            recipients=[t for prep in predicate.children if prep in inside and prep.dep_=='prep'
+                and a._lemma(prep)=='from' for t in prep.children if t in inside and t.dep_=='pobj']
+            recipient_patient=bool(a._lemma(predicate)=='withhold' and topics and len(recipients)==1
+                and a.this_patient(recipients[0]))
+            if (a._lemma(predicate)=='withhold' and topics and len(recipients)==1
+                    and a.names_person(recipients[0])
+                    and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in words)):
+                foreign=True
             generic=bool(any(a._lemma(t) in a.DOSAGE_FORM_NOUNS
                 and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),()) and a.keys({a._lemma(t)}) & topics for t in words)
                 and not any('medication' in a.SOLE_CLASSES.get(a._lemma(t),())
@@ -177,6 +235,11 @@ def clause_readings(reading,unit):
             separate=bool(sole.get('nouns_ok') and not sole.get('unknown') and not sole.get('reach')
                 and sole.get('classes') and not sole.get('classes') & {'medication','therapy','test','care','allergy'}
                 and a._lemma(predicate) in a.SOLE_CURRENT_VERBS and not floor['bare_cessation'] and not topics)
+            separate |= bool(direct_patient and negative_operator(predicate,a) is not None
+                and sole.get('nouns_ok') and not sole.get('unknown') and sole.get('negation_only')
+                and not sole.get('reach',frozenset()) & {'global','key'}
+                and sole.get('classes') and not sole.get('classes') & {'medication','therapy','test','care','allergy'}
+                and not floor['bare_cessation'] and not topics)
             # A finite content clause owns its explicit subject, not its outer
             # speaker. Its carrier has no independent clinical argument here.
             # Unknown modifiers, negation, intention and ending operators cannot
@@ -190,7 +253,7 @@ def clause_readings(reading,unit):
                 and all(t==predicate or t in subject_words or t.is_punct or t.dep_=='aux' for t in words)
                 and not cancelled and not floor['intention'] and not floor['quantified_denial']
                 and not floor['bare_cessation'] and not topics and negative_operator(predicate,a) is None)
-            result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed,
+            result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed or recipient_patient,
                 'foreign':foreign,'topics':topics,'generic':generic,'cancelled':cancelled,
                 'bare':floor['bare_cessation'] and not repaired_argument,'position':transition_scope(reading,unit,clause=words)=='position',
                 'separate':separate,'carrier':carrier,'bounded_end':bool(topics and (generic or all(
@@ -234,6 +297,43 @@ def explicit_patient_endings(reading,claim):
                 and (ending['topics'] & keys or (ending['generic'] and medication_affects(reading,claim))))
             if not ending['cancelled'] and ((ending['patient'] and ending_affects(reading,ending,claim)) or uncertain):
                 if unit not in result:result.append(unit)
+    return result
+
+
+def owned_oppositions(reading,claim):
+    """Compare an owned patient assertion without adopting its outer speaker.
+
+    This retains the established predicate's head, object, polarity and tense.
+    A denial of taking is not a denial of possessing. It only adds a review
+    dependency; it supplies no answer or inferred actor.
+    """
+    from . import v3_actors as a,generation as g
+    mine=[g.v3_without_time(record) for record in reading['predicates'][claim['id']]]
+    result=[]
+    for unit in reading['units']:
+        if unit['id']==claim['id']:continue
+        for clause in clause_readings(reading,unit):
+            if clause['foreign'] or clause['carrier'] or not clause['patient']:continue
+            predicate=clause['predicate'];words=clause['words']
+            records=a._predicates(predicate)
+            if not records:continue
+            # The first record is this predicate, before separately owned
+            # conjoined verbs. Restrict its argument to this exact clause.
+            head,negated,tense,complement,coordinated=records[0]
+            own_keys=a.keys({a._lemma(t) for t in words if t.pos_ in a.CONTENT})-a.keys({'patient'})
+            bounded=complement & own_keys
+            if complement and not bounded:continue
+            # A canonical denial owns its direct content clause; a foreign
+            # outer speaker cannot erase the explicit patient's argument.
+            child=predicate
+            while child.dep_=='ccomp':
+                parent=child.head
+                if negative_operator(parent,a) is not None:
+                    negated ^= not a._negates(parent)
+                child=parent
+            record=g.v3_without_time((head,negated,tense,bounded,coordinated))
+            if any(g.v3_opposed_predicates(own,record) for own in mine):
+                result.append(unit);break
     return result
 
 

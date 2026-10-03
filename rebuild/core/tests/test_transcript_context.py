@@ -197,6 +197,58 @@ class PatientDefault(SimpleTestCase):
                          'The patient reports that someone switched from an unknown medication to supine positioning.']:
                 with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source],'conflict')
 
+    def test_owned_patient_denial_is_not_erased_by_a_foreign_outer_actor(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['Her father denies that the patient takes warfarin.',
+                         'Her father switched from prone to supine positioning and the patient does not take warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source],'conflict')
+            for tail in ['Her father denies that her mother takes warfarin.',
+                         'Her father denies that the patient takes apixaban.',
+                         'Her father switched from prone to supine positioning and her mother does not take warfarin.',
+                         'Her father switched from prone to supine positioning and the patient does not take apixaban.',
+                         'Her father switched from prone to supine positioning and the patient did not stop warfarin.',
+                         'Her father denies that the patient has warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+
+    def test_family_positional_subject_is_not_replaced_by_an_inferred_patient(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['Her father switched from prone to supine positioning and stopped warfarin.',
+                         'Her father switched from prone to supine positioning and replaced warfarin with apixaban.',
+                         'The patient reports that her father switched from prone to supine positioning and stopped warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+
+    def test_passive_ended_argument_and_explicit_recipient_keep_their_ownership(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            for tail in ['warfarin was withheld from her father.',
+                         'apixaban was withheld from the patient.',
+                         'apixaban was withheld.',
+                         'warfarin was not withheld from the patient.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+            for tail in ['warfarin was withheld from the patient.',
+                         'warfarin was withheld.', 'medication was withheld from the patient.',
+                         'warfarin was stopped and the patient reports cough.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+
+    def test_bounded_negative_clinical_argument_is_separate_from_patient_medication(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            self.check(source+' '+prefix+'the patient denies knee pain.',label,[source])
+            self.check(source+' '+prefix+'the patient denies knee pain while taking warfarin.',label,[source],'conflict')
+            # The existing note-wide modal scope remains an honest unsupported
+            # boundary. A base future and an uncertain completed cessation must
+            # not be qualified by changing that old scope or its evidence.
+            for tail in ['reports that the patient might stop warfarin tomorrow.',
+                         'reports that the patient might have stopped warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+        pain='The patient reports knee pain.'
+        self.check(pain+' '+prefix+'the patient denies knee pain.','Symptoms',[pain],'conflict')
+        self.check(source+' '+prefix+'the patient does not take warfarin.','Medications',[source],'conflict')
+
     def test_nominal_clinical_assertions_gain_only_default_actor_not_drug_status(self):
         for source, label in [('No fever.', 'Examination'),
                               ('Fever.', 'Symptoms'),
