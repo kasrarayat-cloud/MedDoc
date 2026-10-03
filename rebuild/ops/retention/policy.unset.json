@@ -197,6 +197,11 @@
       "anchor": null,
       "days": null
     },
+    "reviewed_transcripts": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "generation_batches": {
       "mode": "unresolved",
       "anchor": null,
