@@ -1,0 +1,9 @@
+{
+  "source_directory": "/opt/meddoc-pro/.worktrees/v1-sol-notes-voice/rebuild/core",
+  "sha256": {
+    "source_scope.py": "8b83a04c7e57778ca5896c51827fd4c2f5c304b6b60a39080a6dfc529878e3a8",
+    "generation.py": "77e123ba8407cb82a660c5769b483b55673f3ac16b650b7eb692ce7ea53bd1c1",
+    "transcript_context.py": "3b925017fb157d864e9a4941c8c01d3e9086c19107c43a22b59fa96d9da40454"
+  },
+  "classification": "Frozen fourth clinical refutation source; preserve first outcomes; no network or DB"
+}
