@@ -1,6 +1,8 @@
 """Frozen input and routing controls only; no account, provider or database access."""
 import hashlib
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -51,6 +53,15 @@ class BuiltinSoapVoiceInput(unittest.TestCase):
     def test_unknown_supplemental_generator_is_refused(self):
         with self.assertRaises(st.Refused):
             st.voice_forms_module('unfrozen-soap')
+
+    def test_standalone_cli_can_plan_the_declared_application_form_without_import_path_aliases(self):
+        root = Path(st.__file__).resolve().parents[2]
+        result = subprocess.run([sys.executable, '-B', 'rebuild/ops/standing_qa.py', 'plan',
+                                 '--stage', 'transcription', '--declaration',
+                                 'docs/foundation/mutations/20261003-quillmd-v1-standing-api-testing.md'],
+                                cwd=root, capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn(soap.FORM_ID.encode(), result.stdout)
 
     def test_changed_mapping_or_expectation_is_refused_before_a_send(self):
         manifest, _ = soap.frozen()

@@ -4,6 +4,7 @@ Historical r1-11 forms and outcomes retain their own denominator. This module
 reads no credentials and grants no provider or patient-data authority.
 """
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 
@@ -22,8 +23,13 @@ AUDIO_ID = 'soap-ankle-speech'
 
 
 def build():
-    from core.soap_document import original_bytes
-    return original_bytes()
+    # The CLI starts with ops/ on sys.path. Load the same pure application
+    # constructor by its exact path, without requiring Django or a path alias.
+    path = Path(__file__).resolve().parents[1] / 'core' / 'soap_document.py'
+    spec = importlib.util.spec_from_file_location('quillmd_builtin_soap_original', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.original_bytes()
 
 
 def frozen():
