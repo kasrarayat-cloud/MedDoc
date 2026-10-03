@@ -4,6 +4,7 @@ Every model choice is simulated; no provider requests or patient data.
 """
 import json
 import io
+import hashlib
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -807,19 +808,33 @@ class ReviewVersion(BoundaryFixture, TestCase):
 class VoiceToWord(V3Fixture, TestCase):
     """Actual HTTP/worker/Word export with mocked providers; live calls are a separate gate."""
     def test_reviewed_subjectless_transcript_reaches_default_doctor_generation_and_export(self):
-        doc=Document();doc.add_paragraph('Medications: ____________');doc.add_paragraph('Symptoms: ____________')
+        self.voice_walk('Takes warfarin 5 mg daily. Reports cough.',
+            {'Medications':'Takes warfarin 5 mg daily.', 'Symptoms':'Reports cough.'})
+
+    def test_replacement_and_family_source_keep_useful_voice_answers_and_unsafe_pick_separate(self):
+        transcript=('Takes apixaban 5 mg twice daily. Reports cough. '
+            'Examination mild swelling over the left lateral ankle. '
+            'The patient switched from warfarin to apixaban. Her father has asthma.')
+        self.voice_walk(transcript, {'Current medications':'Takes apixaban 5 mg twice daily.',
+            'Symptoms':'Reports cough.', 'Examination':'Examination mild swelling over the left lateral ankle.',
+            'Past medical history':'Her father has asthma.'}, held={'Past medical history'})
+
+    def voice_walk(self, transcript, picks, held=frozenset()):
+        doc=Document()
+        for label in picks:doc.add_paragraph(label+': ____________')
         buffer=io.BytesIO();doc.save(buffer)
-        template,version=self.uploaded(data=buffer.getvalue(),name='Synthetic subjectless voice')
+        original=buffer.getvalue();audio=wav_bytes(tag='scope')
+        template,version=self.uploaded(data=original,name='Synthetic subjectless voice')
         self.confirm(template,version)
         self.assertEqual(self.new_encounter(version,notes='').status_code,302)
         encounter=Encounter.objects.get(template_version=version)
         url=f'/encounters/{encounter.pk}/'
         with patch.dict(os.environ,BoundaryFixture.VOICE_ENV):
             quote=self.client.get(url).context['usage_quote']
-            response=self.client.post(url+'voice/',{'audio':SimpleUploadedFile('synthetic.wav',wav_bytes(tag='scope')),
+            response=self.client.post(url+'voice/',{'audio':SimpleUploadedFile('synthetic.wav',audio),
                 'consent':'on','usage_quote':quote})
             self.assertEqual(response.status_code,302)
-            with patch('core.jobs.httpx.post',return_value=deepgram('Takes warfarin 5 mg daily. Reports cough.',
+            with patch('core.jobs.httpx.post',return_value=deepgram(transcript,
                 'synthetic-reviewed-voice',duration=1)):self.assertTrue(run_one())
         voice=Job.objects.get(kind='transcription',encounter=encounter)
         voice.refresh_from_db();self.assertEqual(voice.state,'succeeded',voice.error)
@@ -827,7 +842,7 @@ class VoiceToWord(V3Fixture, TestCase):
         self.assertContains(self.client.get(url),'Statements with no subject in this reviewed transcript are about this patient.')
         encounter.refresh_from_db()
         self.assertEqual(self.client.post(url+'notes/',{'revision':encounter.revision,'transcript_job':voice.pk,
-            'corrected_transcript':'Takes warfarin 5 mg daily. Reports cough.','transcript_mode':'replace',
+            'corrected_transcript':transcript,'transcript_mode':'replace',
             'transcript_reviewed':'on','transcript_patient_context':'on'}).status_code,302)
         encounter.refresh_from_db()
         page=self.client.get(url);self.assertContains(page,'data-patient-context-current')
@@ -839,9 +854,8 @@ class VoiceToWord(V3Fixture, TestCase):
         def reply(**request):
             sent.append(request);payload=json.loads(request['messages'][0]['content'])
             self.assertEqual(payload['patient_default_context']['default_subject'],'encounter_patient')
-            picks={f['key']:['Takes warfarin 5 mg daily.' if f['label']=='Medications' else 'Reports cough.']
-                   for f in version.fields}
-            body=json.dumps(relation_wire(encounter.notes,version.fields,picks))
+            selections={f['key']:[picks[f['label']]] for f in version.fields}
+            body=json.dumps(relation_wire(encounter.notes,version.fields,selections))
             return SimpleNamespace(model=g.SONNET_5_5,stop_reason='end_turn',content=[SimpleNamespace(type='text',text=body)],
                 id='msg_synthetic_reviewed_voice',_request_id='req_synthetic_reviewed_voice',
                 usage=SimpleNamespace(input_tokens=100,output_tokens=20,cache_read_input_tokens=0,cache_creation_input_tokens=0),
@@ -851,18 +865,42 @@ class VoiceToWord(V3Fixture, TestCase):
         generation.refresh_from_db();self.assertEqual(generation.state,'succeeded',generation.error)
         self.assertEqual(len(sent),1)
         encounter.refresh_from_db()
-        self.assertEqual([encounter.answers[f['key']]['status'] for f in version.fields],['supported','supported'])
+        generated=json.loads(json.dumps(encounter.answers))
+        for field in version.fields:
+            answer=generated[field['key']]
+            if field['label'] in held:
+                self.assertEqual((answer['status'],answer['text']),('conflict',''))
+            else:
+                self.assertEqual((answer['status'],answer['text']),('supported',picks[field['label']]))
         self.assertEqual(Usage.objects.filter(job=voice).count(),1)
         self.assertEqual(Usage.objects.filter(job=generation).count(),1)
         payload={'revision':encounter.revision}
         for field in version.fields:
             payload['answer_'+field['key']]=encounter.answers[field['key']]['text']
             payload['reviewed_'+field['key']]='on'
+            if field['label'] in held:payload['blank_'+field['key']]='on'
         self.assertEqual(self.client.post(url+'save/',payload).status_code,302)
         encounter.refresh_from_db();self.assertTrue(tc.current(encounter))
         self.assertEqual(self.client.post(url+'finalize/',{'revision':encounter.revision,'reviewed':'on'}).status_code,302)
         encounter.refresh_from_db();self.assertEqual(encounter.status,'finalized')
         export=self.client.get(url+'export/');self.assertEqual(export.status_code,200)
-        text=part_text(b''.join(export.streaming_content))
-        self.assertIn('Takes warfarin 5 mg daily.',text);self.assertIn('Reports cough.',text)
+        exported=b''.join(export.streaming_content);text=part_text(exported)
+        for label,value in picks.items():
+            if label in held:self.assertNotIn(value,text)
+            else:self.assertIn(value,text)
         self.assertEqual(private_path(voice.result_path).read_bytes(),raw_bytes)
+        self.assertEqual(private_path(template.original_path).read_bytes(),original)
+        if folder:=os.environ.get('QUILLMD_VOICE_ARTIFACTS'):
+            out=Path(folder)/self._testMethodName;out.mkdir(parents=True,exist_ok=False)
+            for name,data in [('original.docx',original),('synthetic-audio.wav',audio),
+                ('raw-transcription.json',raw_bytes),('first-generation.json',private_path(generation.result_path).read_bytes()),
+                ('faithful-export.docx',exported)]:
+                (out/name).write_bytes(data)
+            (out/'reviewed-transcript.txt').write_text(transcript)
+            (out/'generation-request.json').write_text(json.dumps(sent[0],indent=2))
+            (out/'answers-before-review.json').write_text(json.dumps(generated,indent=2))
+            (out/'answers-after-review.json').write_text(json.dumps(encounter.answers,indent=2))
+            (out/'qualification.json').write_text(json.dumps({'provider':'mocked synthetic responses',
+                'human_microphone_acceptance':False,'source_revision':TranscriptReview.objects.get(encounter=encounter).source_revision,
+                'reviewed_sha256':tc.digest(transcript),'supported':len(picks)-len(held),'unsafe_picks_held':len(held),
+                'actual_http_finalize_export':True,'export_sha256':hashlib.sha256(exported).hexdigest()},indent=2))

@@ -128,17 +128,27 @@ def detached_passive_theme(predicate):
         return None
     first=auxiliaries[0]
     if first.i<2:return None
-    theme=predicate.doc[first.i-1];join=predicate.doc[theme.i-1]
+    theme=predicate.doc[first.i-1]
+    # Recover the entire adjacent nominal group, rather than the last drug.
+    # Every member must be a named medication and every join explicit AND;
+    # an alternative, unknown item or incomplete group retains the old hold.
+    while theme.dep_=='conj' and theme.head.pos_ in ('NOUN','PROPN') and 'medication' in a.SOLE_CLASSES.get(a._lemma(theme.head),()):
+        theme=theme.head
+    if theme.i<1:return None
+    join=predicate.doc[theme.i-1];members=list(theme.subtree)
     if (theme.pos_ not in ('NOUN','PROPN') or theme.dep_!='conj'
             or 'medication' not in a.SOLE_CLASSES.get(a._lemma(theme),())
             or theme.head.pos_!='NOUN' or theme.head not in set(predicate.head.subtree)
             or a._lemma(theme.head) not in ('position','positioning')
             or join.dep_!='cc' or join.head!=theme.head or a._fold(join.text)!='and'
-            or any(t!=theme and t.dep_ not in ('det','compound','amod','poss') for t in theme.subtree)):
+            or a._lemma(theme) in a.DOSAGE_FORM_NOUNS
+            or {t.i for t in members}!=set(range(theme.i,first.i))
+            or any(t!=theme and t.dep_ not in ('det','compound','amod','poss','conj','cc') for t in members)
+            or any(t.dep_=='cc' and a._fold(t.text)!='and' for t in members)
+            or any(t.dep_=='conj' and a._lemma(t) in a.DOSAGE_FORM_NOUNS for t in members)
+            or any(t.pos_ in ('NOUN','PROPN') and 'medication' not in a.SOLE_CLASSES.get(a._lemma(t),()) for t in members)
+            or any(t.dep_=='conj' and t.pos_ not in ('NOUN','PROPN') for t in members)):
         return None
-    # Another medication (or an unknown nominal) may begin a coordinated
-    # theme. Recovering only its last drug would omit an ended source value.
-    # Only the existing explicit position anchor permits this narrow proof.
     return theme
 
 
@@ -160,6 +170,37 @@ def owned_clause(predicate):
     theme=detached_passive_theme(predicate)
     if theme is not None:own.update(theme.subtree)
     return sorted(own,key=lambda t:t.i)
+
+
+def denied_ending(predicate, words):
+    """A canonical denial owns one subjectless completed ending.
+
+    Denying stopping does not deny taking. Extra negation, a modal, another
+    argument or an unknown ended value cannot establish this narrow scope.
+    This grants no current medication status or replacement answer.
+    """
+    from . import v3_actors as a
+    inside=set(words)
+    children=[t for t in predicate.children if t in inside]
+    endings=[t for t in children if t.dep_=='xcomp' and t.pos_=='VERB'
+        and a._lemma(t) in a.CESSATION_VERBS | a.SUPERSESSION_VERBS]
+    subjects=[t for t in children if t.dep_ in ('nsubj','nsubjpass')]
+    if (a._lemma(predicate)!='deny' or a._negates(predicate) or len(endings)!=1
+            or len(subjects)!=1 or not a.this_patient(subjects[0])):return False
+    ending=endings[0]
+    arguments=[t for t in ending.children if t in inside and (t.dep_ in ('dobj','obj')
+        or (t.dep_=='xcomp' and t.pos_ in ('NOUN','PROPN')))]
+    if (len(arguments)!=1 or not a.keys({a._lemma(arguments[0])})
+            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(arguments[0]),())
+            or a._lemma(arguments[0]) in a.DOSAGE_FORM_NOUNS):return False
+    if any(a._negates(t) or t.tag_=='MD' for t in words):return False
+    if any(t.pos_=='VERB' and t not in (predicate,ending) for t in words):return False
+    permitted=set(subjects[0].subtree)|set(ending.subtree)|{predicate}
+    return bool(all(t in permitted or t.is_punct for t in words)
+        and not any(t.dep_ in ('nsubj','nsubjpass','csubj','csubjpass','ccomp','conj','relcl','acl')
+            for t in ending.subtree if t in inside)
+        and all({a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN
+            for t in arguments[0].subtree if t in inside and t.pos_ in a.CONTENT))
 
 
 def clause_readings(reading,unit):
@@ -207,6 +248,16 @@ def clause_readings(reading,unit):
                     and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in words)):
                 foreign=True
             floor=a._floor_reading(words,predicate,lem=lem,txt=txt)
+            # A medication nominal still attached to the position argument
+            # after owned-clause recovery is an unresolved clinical theme.
+            # The outer family's subject cannot make that omitted theme
+            # foreign (for example, "warfarin but not apixaban was withheld").
+            unresolved_theme=bool(floor['bare_cessation'] and any(t.dep_=='conj'
+                    and t.head in inside
+                    and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())
+                    and a._lemma(t.head) in ('position','positioning') for t in words))
+            if unresolved_theme:
+                foreign=False
             own_keys=a.keys({a._lemma(t) for t in words if t.pos_ in a.CONTENT})-a.keys({'patient'})
             topics=floor['ceased_keys'] & own_keys
             # The pinned parser can use an object-predicate slot for a named
@@ -241,7 +292,8 @@ def clause_readings(reading,unit):
                 and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),()) and a.keys({a._lemma(t)}) & topics for t in words)
                 and not any('medication' in a.SOLE_CLASSES.get(a._lemma(t),())
                     and a._lemma(t) not in a.DOSAGE_FORM_NOUNS and a.keys({a._lemma(t)}) & topics for t in words))
-            cancelled=bool(a._negates(predicate) or any(t.dep_=='aux' and t.tag_=='MD' for t in predicate.children))
+            denied_end=denied_ending(predicate,words)
+            cancelled=bool(a._negates(predicate) or denied_end or any(t.dep_=='aux' and t.tag_=='MD' for t in predicate.children))
             span=doc[min(t.i for t in words):max(t.i for t in words)+1]
             sole=(a._sole_reading(span,predicate,value_start=0,colon=False,age=False,opener=False,explicit=direct_patient)
                 if all(t in inside or t.is_punct for t in span) else {})
@@ -281,12 +333,22 @@ def clause_readings(reading,unit):
                 and not floor['bare_cessation'] and not topics)
             result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed or recipient_patient,
                 'foreign':foreign,'topics':topics,'generic':generic,'cancelled':cancelled,
+                'denied_end':denied_end,
+                'unresolved_theme':unresolved_theme,
                 'bare':floor['bare_cessation'] and not repaired_argument,'position':transition_scope(reading,unit,clause=words)=='position',
                 'separate':separate,'carrier':carrier,'claim_topics':claim_topics,'bounded_end':bool(topics and (generic or all(
                     {a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN for t in words
                     if a.keys({a._lemma(t)}) & topics and t.pos_ in a.CONTENT)))})
     cache[unit['id']]=result
     return result
+
+
+def denied_ending_keys(reading, unit):
+    """Only keys of the proved denied event avoid the lexical value-denial floor."""
+    clauses=clause_readings(reading,unit)
+    if not all(c['denied_end'] or c['foreign'] or c['position'] or c['carrier'] for c in clauses):
+        return frozenset()
+    return frozenset().union(*(c['topics'] for c in clauses if c['denied_end'] and c['bounded_end']))
 
 
 def ending_affects(reading,ending,claim):
@@ -337,6 +399,8 @@ def explicit_patient_endings(reading,claim):
     for unit in reading['units']:
         if unit['id']==claim['id']:continue
         for ending in clause_readings(reading,unit):
+            if ending['unresolved_theme'] and medication_affects(reading,claim):
+                if unit not in result:result.append(unit)
             # An unresolved subject cannot make this same named ending
             # independent. Retain it for review; do not assign a patient actor.
             uncertain=bool(not ending['foreign'] and not ending['patient'] and ending['bounded_end']

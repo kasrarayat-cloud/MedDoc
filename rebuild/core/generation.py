@@ -3862,7 +3862,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
-    from .source_scope import bare_affects,ceased_affects,explicit_patient_endings,owned_oppositions,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
+    from .source_scope import bare_affects,ceased_affects,explicit_patient_endings,owned_oppositions,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause,denied_ending_keys
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
     causes.extend((other,None) for other in unresolved_medication_changes(reading)
@@ -3907,7 +3907,11 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 or (found['kind'] == 'pronoun' and resolved[oid].get('actor') == 'other')))):
             continue
         theirs = reading['predicates'][oid]
-        overlap=(mine_claim & reading['negated_keys'][oid]) | (mine_negated & reading['claim_keys'][oid])
+        # Denial of a complete ended event keeps that event's polarity. It is
+        # not a lexical denial of using its named medication. Other denials,
+        # unknown arguments and separately owned endings retain every floor.
+        other_negated=reading['negated_keys'][oid]-denied_ending_keys(reading,other)
+        overlap=(mine_claim & other_negated) | (mine_negated & reading['claim_keys'][oid])
         if ((overlap and not separate_sides(reading,unit,other,overlap))
                 or any(v3_opposed_predicates(first, v3_without_time(second)) for first in mine_timeless for second in theirs)
                 or v3_denies_labelled(labelled.get(uid), theirs) or v3_denies_labelled(labelled.get(oid), mine)
