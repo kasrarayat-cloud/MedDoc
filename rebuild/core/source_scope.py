@@ -104,13 +104,13 @@ def elliptical_dependencies(reading):
                     and not sole.get('classes') and not info.get('other_floor')
                     and ('class' in sole.get('reach',()) or any(t.dep_=='neg'
                         or (t.dep_=='det' and a._fold(t.text)=='no') for t in doc)))
-                # A negated indefinite nominal predicate omits what it is
-                # classifying ("No longer a daily medication"). Its clinical
+                # A negated determined nominal predicate omits what it is
+                # classifying ("No longer the daily medication"). Its clinical
                 # class bounds the adjacent dependency; a direct independent
-                # negative "No diabetes" has no indefinite predicate article.
+                # negative "No diabetes" has no separate predicate determiner.
                 nominal_predicate=bool(not any(t.pos_ in ('VERB','AUX') for t in doc)
                     and a._negates(root)
-                    and any(t.dep_=='det' and a._fold(t.text) in ('a','an') for t in root.children))
+                    and any(t.dep_=='det' and not a._negates(t) and a._fold(t.text)!='no' for t in root.children))
                 if nominal_predicate:typed[uid]=sole.get('classes',frozenset())
                 fragment=operator or topicless or adpositional or restriction or nominal_predicate
         if fragment:
@@ -141,14 +141,21 @@ def exclusive_reattributions(reading):
     units=reading['units']
     docs=reading.get('_source_scope_docs')
     if docs is None:docs=v3_syntax.docs(u['quote'] for u in units)
-    def predicate_lemmas(root):
+    def predicate_nodes(root):
         heads=[root]+[t for t in root.children if t.dep_ in ('xcomp','ccomp','conj','compound')]
         # A nominal copular predicate can identify the actor of an action
         # ("the only one to take ..."). An incidental advcl/prepositional
         # clause ("is alone while taking ...") is not that predicate.
         for noun in (t for t in root.children if t.dep_ in ('attr','oprd') and t.pos_ in ('NOUN','PROPN','PRON','NUM')):
             heads.extend(t for t in noun.children if t.dep_ in ('acl','relcl','xcomp'))
-        return {a._lemma(t) for t in heads if t.pos_ in ('VERB','AUX')}
+        return [t for t in heads if t.pos_ in ('VERB','AUX')]
+    def predicate_lemmas(root):
+        return {a._lemma(t) for t in predicate_nodes(root)}
+    def predicate_negations(root):
+        # Negation on an actual action differs from negation of exclusive focus.
+        # Prefer the lexical predicate to copular/auxiliary framing.
+        nodes=[t for t in predicate_nodes(root) if a._lemma(t)!='be']
+        return {a._negates(t) for t in nodes or [root]}
     causes={}
     for other,doc in zip(units,docs or [None]*len(units)):
         info=reading['actors'][other['id']]
@@ -164,6 +171,12 @@ def exclusive_reattributions(reading):
                  or (t.head.dep_=='attr' and a._lemma(root)=='be'))
             for t in doc)
         if not focused:continue
+        # 'Not the only user' denies exclusivity; it does not exclude the
+        # patient. An exclusive NEGATIVE action instead applies to negative
+        # claims of that same action, never a positive patient assertion.
+        nominal_focus=any(t.head.dep_=='attr' and (a._fold(t.text) in ('only','sole','solely','just')) for t in doc)
+        if nominal_focus and a._negates(root):continue
+        negations=predicate_negations(root)
         predicates=predicate_lemmas(root)
         heads=frozenset().union(frozenset(),*(p[0] for p in info.get('predicates',())))
         topic=info.get('claim_keys',frozenset())|info.get('named_keys',frozenset())
@@ -173,6 +186,7 @@ def exclusive_reattributions(reading):
             if mine.get('other_floor'):continue
             my_roots=[t for t in claim_doc if t.dep_=='ROOT']
             my_predicates=predicate_lemmas(my_roots[0]) if len(my_roots)==1 else set()
+            if len(my_roots)!=1 or not negations & predicate_negations(my_roots[0]):continue
             my_heads=frozenset().union(frozenset(),*(p[0] for p in mine.get('predicates',())))
             mine_sole=mine.get('sole') or {};other_sole=info.get('sole') or {}
             my_sides=mine_sole.get('sides',frozenset());other_sides=other_sole.get('sides',frozenset())

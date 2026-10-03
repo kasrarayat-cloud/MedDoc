@@ -190,6 +190,19 @@ class PatientDefault(SimpleTestCase):
         self.check(source+' Reports cough. Her father is the sole warfarin user.','Medications',[source],'conflict')
         self.check(source+' Reports cough. Her father is the sole warfarin user.','Symptoms',['Reports cough.'])
 
+    def test_nominal_temporal_predicate_and_exclusive_negation_have_distinct_scope(self):
+        source='Takes warfarin 5 mg daily.'
+        for tail in ['No longer the daily medication.','No longer a daily medication.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Current medications',[source],'conflict')
+        for tail in ['Her father is not the only warfarin user.',
+                     'Her father is the only person not taking warfarin.',
+                     'Only her father is not taking warfarin.','No diabetes.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source])
+        denied='The patient does not take warfarin.'
+        self.check(denied+' Only her father does not take warfarin.','Medications',[denied],'conflict')
+        self.check(source+' Reports cough. No longer the daily medication.','Symptoms',['Reports cough.'])
+        self.check(source+' Reports cough. No longer the daily medication.','Current medications',[source],'conflict')
+
     @override_settings(V3_GENERATION_BATCHES=True)
     def test_whole_form_plan_keeps_context_in_request_digest_and_field_records(self):
         from core import generation_batch as b
