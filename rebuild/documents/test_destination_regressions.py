@@ -137,6 +137,49 @@ class DestinationRegressions(unittest.TestCase):
         self.assertEqual(actual.paragraphs[2].text, 'Neighbor: ______')
         self.assertEqual(actual.paragraphs[0]._p.find(qn('w:hyperlink')).get(qn('w:anchor')), 'retained_reference')
 
+    def test_reserved_authorship_is_physical_and_does_not_depend_on_a_job_title_list(self):
+        for author in ('the line manager', 'the radiology supervisor', 'Dr. Synthetic'):
+            for shape in ('table', 'paragraph'):
+                with self.subTest(author=author, shape=shape):
+                    source = 'This section is for ' + author + ' to add comments'
+                    doc = Document()
+                    if shape == 'table':
+                        table = doc.add_table(rows=1, cols=2)
+                        table.cell(0, 0).text = source
+                    else:
+                        doc.add_paragraph(source + ': ______')
+                    doc.add_paragraph('Clinical reason: ______')
+                    self.assert_held(saved(doc))
+        # An authorship role in a neighboring question grants no authority and
+        # cannot hold a separately printed clinical answer cell.
+        doc = Document(); table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = 'This section is for the line manager to add comments'
+        table.cell(1, 0).text = 'Clinical reason'; raw = saved(doc)
+        info = word_v3.inspect(raw)
+        ordinary = next(f for f in info['fields'] if f['label'] == 'Clinical reason')
+        self.assertFalse(ordinary.get('write_protected'))
+        out = Document(io.BytesIO(word_v3.fill(raw, info['fields'], {ordinary['key']: 'Rest'})))
+        self.assertEqual(out.tables[0].cell(0, 1).text, '')
+        self.assertEqual(out.tables[0].cell(1, 1).text, 'Rest')
+
+    def test_authorship_receipts_and_clinical_recording_remain_ordinary(self):
+        for caption in ('Line manager comments received on',
+                        'This section is for the clinician to record initial symptoms',
+                        'Clinical comments about the line manager'):
+            with self.subTest(caption=caption):
+                doc = Document(); table = doc.add_table(rows=1, cols=2)
+                table.cell(0, 0).text = caption; raw = saved(doc)
+                info = word_v3.inspect(raw); field = info['fields'][0]
+                self.assertFalse(field.get('write_protected'))
+                self.assertEqual(word_v3.destination_roles(raw, [field])['violations'], {})
+                out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: 'Synthetic value'})))
+                self.assertEqual(out.tables[0].cell(0, 1).text, 'Synthetic value')
+        doc = Document()
+        doc.add_paragraph('This section is for Dr. Synthetic to add comments. Clinical reason: ______')
+        raw = saved(doc); info = word_v3.inspect(raw); field = info['fields'][0]
+        self.assertFalse(field.get('write_protected'))
+        self.assertEqual(word_v3.destination_roles(raw, [field])['violations'], {})
+
 
 class LegacyPhysicalSources(unittest.TestCase):
     def report(self, labels):

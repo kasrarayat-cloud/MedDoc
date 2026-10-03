@@ -2410,6 +2410,15 @@ class Detector:
                         and clean_label(caption[1], limit=None) == area.label):
                     clause_start = max(clause_start, before)
                 sources.append(printed[max(before,clause_start):start])
+                # A named author's abbreviation can contain a period. Read a
+                # complete ownership caption up to THIS blank, independently
+                # of sentence splitting, only when nothing but punctuation
+                # follows the caption. This cannot borrow a reservation across
+                # a subsequent clinical question or a previous answer blank.
+                ownership_prefix = printed[before:start]
+                ownership = self.question_box_authorship(ownership_prefix)
+                if ownership and not ownership_prefix[ownership.end():].strip(' \t\r\n:_.'):
+                    sources.append(ownership_prefix)
                 # Identity and response blanks belong to their original
                 # printed clause even when the acting predicate follows them.
                 # Bind every destination in that clause; never invent a signer
@@ -2425,6 +2434,20 @@ class Detector:
             # engine label is derived from that original control, not a review.
             elif area.slot.kind in ('sdt', 'ff'):
                 sources.append(area.label)
+            # A printed reservation of an author's comments belongs to that
+            # author regardless of the destination's representation. Reading
+            # this relationship only for one-cell boxes released identical
+            # manager-owned statements in ordinary table answer cells.
+            if any(self.question_box_authorship(source) for source in sources):
+                area.source_action = True
+                area.protection = ('This answer area is reserved for another author\'s comments. '
+                                   'Ordinary clinician notes do not establish that author\'s statement; '
+                                   'complete it through the explicit human workflow.')
+                extent = ({'start': area.target['start'], 'end': area.target['end']}
+                          if area.target.get('type') == 'span' else {})
+                self.coverage_issue(area.slot, 'human_authored_destination',
+                                    area.protection + ' Location: ' + area.slot.id, **extent)
+                continue
             roles = [self.checkbox_source_action(source, governing=True) for source in sources]
             if not any(roles):
                 # A lexical kind is not a physical signing role. Only the
@@ -5951,8 +5974,12 @@ class Detector:
 
     @staticmethod
     def question_box_authorship(text):
-        return re.match(r"^this section is for (?:the )?(?:patient|parent|guardian|line manager|employer|witness)\b"
-                        r".*\bto (?:add|provide|record)\b.*\b(?:comments|concerns|statement)\b", text, re.I)
+        # Read an ownership relation, not a list of job titles. The original
+        # appoints an author to supply their comments/statement; an unfamiliar
+        # role has the same authority as a familiar one. A caption asking about
+        # received comments or clinical findings has a different structure.
+        return re.match(r"^\s*this section is for\s+[^:;?!\r\n]+?\s+to (?:add|provide|record)\b"
+                        r"[^:;?!\r\n]*\b(?:comments|concerns|statement)\b", text, re.I)
 
     def rule_question_boxes(self, *, list_only=False):
         """A printed body question followed by its own empty one-cell bordered table.

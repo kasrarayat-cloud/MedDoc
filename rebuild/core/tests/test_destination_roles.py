@@ -1560,6 +1560,43 @@ class RoleReportReuse(V3Fixture, TestCase):
 
 @override_settings(**V3)
 class MappingReviewCoverage(Walk, V3Fixture, TestCase):
+    @override_settings(AI_PROVIDER='anthropic', AI_MODEL='claude-sonnet-5-5', AI_THINKING='between_tools',
+                       AI_EFFORT='medium', AI_INPUT_RATE='2', AI_OUTPUT_RATE='10', AI_CACHED_RATE='.2',
+                       V3_FIELD_RELATIONS=True)
+    def test_reserved_manager_statement_is_not_asked_or_written_through_upload_and_export(self):
+        original = legacy_rows('This section is for the line manager to add comments', 'Plan')
+        template, version = self.uploaded(data=original, name='Synthetic manager source reservation')
+        self.assertEqual(version.contract, 'v3')
+        manager, plan = version.fields
+        self.assertTrue(manager.get('write_protected'))
+        issues = version.import_manifest['coverage']['selected_engine_issues']
+        self.assertTrue(any(i['code'] == 'human_authored_destination' for i in issues))
+        # Retain the original first mapping and source; the explicit reviewed
+        # exclusion is recovery, never an automatic whole-document success.
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_coverage',
+            'mapping_version': version.pk, **{'exclude_' + i['id']: 'on' for i in issues}})
+        self.assertEqual(response.status_code, 302)
+        reviewed = self.latest(template); self.confirm(template, reviewed)
+        notes = 'This section is for the line manager to add comments: Dr Note Person\nPlan: Rest.'
+        e = self.generated(reviewed, notes)
+        import os
+        from pathlib import Path
+        if location := os.environ.get('QUILLMD_WORD_ARTIFACTS'):
+            capture = Path(location) / 'manager-reserved-statement'
+            capture.mkdir(mode=0o700, parents=True)
+            (capture / 'original.docx').write_bytes(original)
+            (capture / 'first.json').write_text(json.dumps({'notes': notes, 'fields': reviewed.fields,
+                'import_manifest': reviewed.import_manifest, 'answers': e.answers,
+                'configuration': Job.objects.get(encounter=e, kind='generation').config}, indent=2, default=str))
+        self.assertEqual((e.answers[manager['key']]['status'], e.answers[manager['key']]['text']), ('missing', ''))
+        self.assertEqual(e.answers[plan['key']]['text'], 'Rest.')
+        self.assertEqual(self.reviewed(e, reviewed).status_code, 302)
+        self.finalized(e); self.assertEqual(e.status, 'finalized')
+        exported = Document(private_path(e.export_path))
+        self.assertEqual(exported.tables[0].cell(0, 1).text, '')
+        self.assertEqual(exported.tables[0].cell(1, 1).text, 'Rest.')
+        self.assertEqual(private_path(template.original_path).read_bytes(), original)
+
     def test_rf08_mapping_review_reads_bound_roles_before_exclusions_but_admission_stays_held(self):
         from core import import_binding
         doc = Document(); doc.add_heading('Consultant review', level=2)
@@ -1568,7 +1605,8 @@ class MappingReviewCoverage(Walk, V3Fixture, TestCase):
         template, version = self.uploaded(data=original, name='Synthetic RF08 review before exclusions')
         issue = version.import_manifest['coverage']['selected_engine_issues'][0]
         self.assertEqual((issue['code'], issue['slot']), ('unmapped_answer', 'b/tbl[0]/tr[0]/tc[0]'))
-        self.config = generation.configuration()
+        with override_settings(**MAPPING_SETTINGS):
+            self.config = generation.configuration()
         compiled, payload = ModelProposals.compiled(self, version)
         body = ModelProposals.keep_all(payload)
         body['x'] = [ModelProposals.change(payload, 'b/tbl[0]/tr[0]/tc[0]/p[0]',
