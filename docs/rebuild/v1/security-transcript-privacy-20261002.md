@@ -502,7 +502,7 @@ issues and refuse admission binding across accepted engine routes; rejecting a l
 Four direct source-hash controls independently refuse D27/D35 in both legacy/v3 even when all copied coverage metadata
 is stripped. These controls do not replace the writer's separately retained actual original-upload admission checks.
 One definite usefulness failure remains: `Date: [DD / MM / YYYY]` is classified as printed alternatives, loses its date
-writer and holds generation/binding. `word_v3.py:5834`'s date exception accepts no separator whitespace. The distinct
+writer and holds generation/binding. `word_v3.py:5836`'s date exception accepts no separator whitespace. The distinct
 `[MM/DD/YYYY]` and `[dd/mm/yy]` controls map as dates and actual v3 fills write `2026-10-03` correctly. No pre-change
 baseline was measured, so this observation is not attributed solely to the latest diff.
 
@@ -535,7 +535,7 @@ an adversarial model declaring the opposing source independent:
 
 The direct negative/operator/complement paths are `source_scope.negative_clinical_modifiers`,
 `ambiguous_negative_complements`, and `clinical_modifier_negations`; exclusive object/lexical polarity is
-`source_scope.py:128,153,237`, consumed by final relation governance at `generation.py:3867,3876`. These observations
+`source_scope.py:128,153,238`, consumed by final relation governance at `generation.py:3867,3876`. These observations
 refute finished qualification rather than proving every input a regression introduced by this diff. The family's
 embedded denial concerns the explicit patient and same anatomy; it cannot be discarded as an independent denial
 of the father's own symptom. Exclusive lack/nominal absence must keep their actual negative relation rather than
