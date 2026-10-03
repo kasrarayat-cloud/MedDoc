@@ -570,3 +570,36 @@ holds. Those three remain the explicit patient's no-evidence clause, the father'
 patient, and the exclusive father's nominal absence of the same swelling property. `classification-addendum.json`
 binds this correction to the original manifest and raw-result hashes. Clinical8a qualification remains failed;
 a withdrawn finding is not reinstated by the raw flag or the previous summary count.
+
+
+### Final Word7f paired-source refutation
+
+Clean `7f3b003d4b1478cad086ad88d8734166547b6498` received a fresh exact-product pass. Ten committed product files were
+copied and hash-verified before30 actual legacy/v3/auto inspections of ten distinct self-authored paired controls
+(exit0,20.278s), with hashes and HEAD unchanged afterward. No database/network/provider calls or application/service
+mutation occurred. The read-only probe was released immediately after actual exit; the writer was explicitly reminded
+that any separate lead-owned final renderer freeze still takes precedence over editing.
+
+Two new concrete source-coverage omissions remain. In v3/auto, each source maps its later Comments/date field but
+omits the first incomplete slash-bearing source, emits no selected-engine issue and allows admission binding:
+
+- `Site: [left/right; Comments: [enter notes]`
+- `Site: [left/right; Date: [DD/MM/YYYY]`
+
+The unbalanced-range regex at `documents/word_v3.py:5840` requires the unmatched range to run to paragraph end without
+another opening bracket; the following valid bracket prevents it from identifying the earlier unmatched opening.
+The standalone incomplete-range control and properly closed slash-menu/date pair are correctly held. These are
+explicit source-review omissions, not claims that malformed forms are automatically supported or whole-document
+accepted. No job or paid generation was run through these diagnostic sources.
+
+The repaired horizontal date format accepts tabs and nonbreaking spaces, preserves its date kind, and actual v3
+fill replaces the placeholder with `2026-10-03`. An actual line-break date remains held. The regex at5836 also accepts
+U+2028 LINE SEPARATOR as whitespace, despite its stated horizontal-only description; actual date fill succeeds and
+no export/clinical harm was demonstrated. This remains a grammar-boundary diagnostic, not an invented unsafe case.
+New spaced and verb-prefixed non-date menus remain held. All four copied-coverage-stripped D27/D35 legacy/v3
+source-hash controls refuse, and the stored finalized-export view AST remains unchanged. Historical fast-path
+observations retain their previous limited scope and do not become proof of a browser admission bypass.
+
+`word7f-final-refutation/manifest.json` binds exact source/instrument/results and thirteen protected raw DOCX files
+(ten self-authored originals and three actual date exports). No raw binary was committed or declared disposable;
+no native Word or broader corpus acceptance is inferred. Prior Word5f and clinical failures remain retained.
