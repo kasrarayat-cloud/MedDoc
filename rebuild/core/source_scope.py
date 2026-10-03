@@ -506,6 +506,60 @@ def reserved_identity_source(reading, source, claim, field):
         or any(a._fold(t.text).rstrip('.') in a.TITLES | a.CARE_TITLES for t in doc))
 
 
+def conditional_plan_scope(value):
+    """One complete subjectless instruction retains its trailing IF condition.
+
+    This reads grammar, not an action-verb allowlist. A base-form imperative or
+    an explicit AND-coordinated nominal plan can own one trailing conditional
+    clause. An asserted clinical main clause, a lone nominal fragment, another
+    actor, a question, a pointer, uncertainty or a correction cannot use this
+    proof. The caller requires an exact unique Plan label and keeps the entire
+    source value; the returned scope never establishes the condition as a fact.
+    """
+    from . import v3_syntax, v3_actors as a, generation as g
+    if not g.INHERITED_SCOPE.search(value) or not value.endswith('.') or g.v3_shape_holds(value,value):return None
+    if any(g.SELF_CORRECTION.search(t) or g.UNSETTLED.search(t) or g.SCOPE_POINTER.search(t)
+            or any(m.group().casefold()!='if' for m in g.INHERITED_SCOPE.finditer(t))
+            for t in g.safety_readings(value)):return None
+    docs=v3_syntax.docs([value]);doc=docs[0] if docs else None
+    if doc is None:return None
+    roots=[t for t in doc if t.dep_=='ROOT']
+    clauses=[t for t in doc if t.dep_=='advcl']
+    if len(roots)!=1 or len(clauses)!=1:return None
+    root=roots[0];clause=clauses[0]
+    markers=[t for t in clause.children if t.dep_=='mark']
+    subjects=[t for t in clause.children if t.dep_ in ('nsubj','nsubjpass')]
+    if (len(markers)!=1 or a._fold(markers[0].text)!='if' or len(subjects)!=1
+            or clause.pos_!='VERB' or clause.tag_ not in ('VB','VBP','VBZ')
+            or clause.head not in {root,*[t for t in doc if t.dep_=='conj']}
+            or any(t.dep_ in ('ccomp','xcomp','acl','relcl','conj') for t in clause.subtree)):
+        return None
+    conditional=set(clause.subtree)
+    main=[t for t in doc if t not in conditional and not t.is_punct]
+    if (not main or markers[0].i<=max(t.i for t in main)
+            or any(t.dep_ in ('nsubj','nsubjpass','csubj','csubjpass','aux','auxpass','neg') for t in main)
+            or any(t.tag_=='MD' or a._negates(t) for t in main)):
+        return None
+    if any((a.names_person(t) and not a.this_patient(t)) or a.names_carer(t) or t.pos_ in ('PROPN','PRON')
+            for t in doc):return None
+    if not (a.this_patient(subjects[0]) or (subjects[0].pos_=='NOUN'
+            and a.SOLE_CLASSES.get(a._lemma(subjects[0]),frozenset()) & {'symptom','finding','condition'})):
+        return None
+    if root.pos_=='VERB':
+        if root.tag_!='VB' or any(t.pos_ in ('VERB','AUX') and (t.tag_!='VB'
+                or t.dep_ not in ('ROOT','conj')) for t in main):return None
+    elif root.pos_=='NOUN':
+        nominals=[t for t in main if t.pos_=='NOUN' and t.dep_ in ('ROOT','conj')]
+        if (len(nominals)<2 or not any(t.dep_=='cc' and a._fold(t.text)=='and' for t in main)
+                or any(t.pos_ not in ('NOUN','ADJ','CCONJ','DET') for t in main)
+                or any(t.dep_=='cc' and a._fold(t.text)!='and' for t in main)
+                or any(a.SOLE_CLASSES.get(a._lemma(t),frozenset()) & {'symptom','finding','condition','injury','allergy'}
+                       for t in main)):
+            return None
+    else:return None
+    return (markers[0].idx,max(t.idx+len(t.text) for t in conditional))
+
+
 def clause_readings(reading,unit):
     """Keep each finite clause's actor and ended argument together.
 
