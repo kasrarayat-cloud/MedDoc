@@ -249,6 +249,50 @@ class PatientDefault(SimpleTestCase):
         self.check(pain+' '+prefix+'the patient denies knee pain.','Symptoms',[pain],'conflict')
         self.check(source+' '+prefix+'the patient does not take warfarin.','Medications',[source],'conflict')
 
+    def test_detached_passive_cannot_omit_a_medication_list_or_unknown_head(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            for tail in ['warfarin and apixaban were withheld from the patient.',
+                         'warfarin and apixaban was withheld from the patient.',
+                         'apixaban and warfarin were withheld from the patient.',
+                         'medication and apixaban were withheld from the patient.',
+                         'an unknown item and apixaban were withheld from the patient.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+            self.check(source+' '+prefix+'apixaban was withheld from the patient.',label,[source])
+
+    def test_ended_argument_polarity_and_recipient_are_not_the_requesters_role(self):
+        source='Takes warfarin 5 mg daily.'
+        for label in ['Medications','Current medications']:
+            for tail in ['Warfarin was not withheld from the patient.',
+                         "Warfarin was withheld from her father at the patient's request."]:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source])
+            for tail in ['Warfarin was withheld from the patient.',
+                         "Warfarin was withheld from the patient at her father's request.",
+                         'Warfarin was withheld from her father and the patient.',
+                         'Warfarin was withheld from someone.',
+                         "The patient's warfarin was withheld from her father."]:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+tail,label,[source],'conflict')
+
+    def test_known_owned_denial_arguments_bound_only_the_positional_floor(self):
+        source='Takes warfarin 5 mg daily.'
+        prefix='Her father switched from prone to supine positioning and '
+        for label in ['Medications','Current medications']:
+            for tail in ['discontinued warfarin.',
+                         'the patient denies taking apixaban.',
+                         'the patient denies left knee pain.',
+                         'the patient denies that her mother takes warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+            for tail in ['the patient denies taking warfarin.',
+                         'the patient denies taking medication.',
+                         'the patient denies taking an unknown item.',
+                         'the patient denies left knee pain while taking warfarin.',
+                         'the patient denies that the patient takes warfarin.',
+                         'discontinued warfarin and the patient stopped warfarin.']:
+                with self.subTest(label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source],'conflict')
+        pain='The patient reports pain in the left knee.'
+        self.check(pain+' '+prefix+'the patient denies left knee pain.','Symptoms',[pain],'conflict')
+
     def test_nominal_clinical_assertions_gain_only_default_actor_not_drug_status(self):
         for source, label in [('No fever.', 'Examination'),
                               ('Fever.', 'Symptoms'),

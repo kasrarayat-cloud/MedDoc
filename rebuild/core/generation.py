@@ -3862,7 +3862,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
-    from .source_scope import bare_affects,explicit_patient_endings,owned_oppositions,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
+    from .source_scope import bare_affects,ceased_affects,explicit_patient_endings,owned_oppositions,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
     causes.extend((other,None) for other in unresolved_medication_changes(reading)
@@ -3914,7 +3914,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 or v3_ends_labelled(labelled.get(uid), found) or v3_ends_labelled(labelled.get(oid), info)
                 # a cessation of what it claims or names (2026-10-02, RSL-4: 'takes apixaban 5 mg' tags the drug an
                 # adverb, so it claims nothing); one a text answer selects with it is part of that answer (its history)
-                or (found['ceased_keys'] & (mine_claim | info.get('named_keys', frozenset()))
+                or (ceased_affects(reading,other,unit)
                     and not (text_answer and oid in selected))):
             causes.append((other, None))
     # ANOTHER PERSON'S SAME TOPIC (none in a single-patient note)

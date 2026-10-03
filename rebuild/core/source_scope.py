@@ -82,6 +82,10 @@ def bare_affects(reading,change,claim):
     """
     scope=transition_scope(reading,change)
     if scope is None:
+        clauses=clause_readings(reading,change)
+        # The entire sole clause has an explicit foreign subject and no
+        # unresolved pronoun/patient branch. No patient action is inherited.
+        if len(clauses)==1 and clauses[0]['foreign']:return False
         bounded=bounded_mixed_endings(reading,change)
         if bounded is None:return True
         return any(ending_affects(reading,ending,claim) for ending in bounded)
@@ -127,10 +131,14 @@ def detached_passive_theme(predicate):
     theme=predicate.doc[first.i-1];join=predicate.doc[theme.i-1]
     if (theme.pos_ not in ('NOUN','PROPN') or theme.dep_!='conj'
             or 'medication' not in a.SOLE_CLASSES.get(a._lemma(theme),())
-            or theme.head.pos_ not in ('NOUN','PROPN') or theme.head not in set(predicate.head.subtree)
+            or theme.head.pos_!='NOUN' or theme.head not in set(predicate.head.subtree)
+            or a._lemma(theme.head) not in ('position','positioning')
             or join.dep_!='cc' or join.head!=theme.head or a._fold(join.text)!='and'
             or any(t!=theme and t.dep_ not in ('det','compound','amod','poss') for t in theme.subtree)):
         return None
+    # Another medication (or an unknown nominal) may begin a coordinated
+    # theme. Recovering only its last drug would omit an ended source value.
+    # Only the existing explicit position anchor permits this narrow proof.
     return theme
 
 
@@ -178,6 +186,9 @@ def clause_readings(reading,unit):
             words=owned_clause(predicate);inside=set(words)
             subjects=[t for t in predicate.children if t in inside and t.dep_ in ('nsubj','nsubjpass')]
             direct_patient=bool(len(subjects)==1 and a.this_patient(subjects[0]))
+            malformed_denials=[t for t in subjects if t.pos_=='VERB' and a._lemma(t) in a.SOLE_NEGATION
+                and not a._negates(t) and any(c.dep_ in ('nsubj','nsubjpass') and a.this_patient(c)
+                    for c in t.children)]
             themes=[t for t in predicate.children if t in inside and t.dep_ in ('dobj','obj','nsubjpass')]
             passive_theme=detached_passive_theme(predicate)
             if passive_theme is not None:themes.append(passive_theme)
@@ -222,7 +233,9 @@ def clause_readings(reading,unit):
                 and a.this_patient(recipients[0]))
             if (a._lemma(predicate)=='withhold' and topics and len(recipients)==1
                     and a.names_person(recipients[0])
-                    and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head))) for t in words)):
+                    and not direct_patient and not possessed
+                    and not any(a.this_patient(t) or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head)))
+                        for t in recipients[0].subtree)):
                 foreign=True
             generic=bool(any(a._lemma(t) in a.DOSAGE_FORM_NOUNS
                 and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),()) and a.keys({a._lemma(t)}) & topics for t in words)
@@ -235,15 +248,28 @@ def clause_readings(reading,unit):
             separate=bool(sole.get('nouns_ok') and not sole.get('unknown') and not sole.get('reach')
                 and sole.get('classes') and not sole.get('classes') & {'medication','therapy','test','care','allergy'}
                 and a._lemma(predicate) in a.SOLE_CURRENT_VERBS and not floor['bare_cessation'] and not topics)
-            separate |= bool(direct_patient and negative_operator(predicate,a) is not None
-                and sole.get('nouns_ok') and not sole.get('unknown') and sole.get('negation_only')
+            negative_predicate=malformed_denials[0] if len(malformed_denials)==1 else predicate
+            separate |= bool((direct_patient or len(malformed_denials)==1) and negative_operator(negative_predicate,a) is not None
+                and (sole.get('nouns_ok') or len(malformed_denials)==1) and not sole.get('unknown') and sole.get('negation_only')
                 and not sole.get('reach',frozenset()) & {'global','key'}
                 and sole.get('classes') and not sole.get('classes') & {'medication','therapy','test','care','allergy'}
                 and not floor['bare_cessation'] and not topics)
+            # A complete named medication denial has its own argument. This
+            # bounds only the positional floor; its matching denial still
+            # holds that same value through the ordinary opposition checks.
+            claim_topics=frozenset()
+            if (direct_patient and negative_operator(predicate,a) is not None and sole.get('nouns_ok')
+                    and not sole.get('unknown') and sole.get('negation_only')
+                    and not sole.get('reach',frozenset()) & {'global','key'}
+                    and sole.get('classes')==frozenset({'medication'}) and not floor['bare_cessation'] and not topics):
+                medications=[t for t in words if 'medication' in a.SOLE_CLASSES.get(a._lemma(t),())]
+                if medications and all(a._lemma(t) not in a.DOSAGE_FORM_NOUNS for t in medications):
+                    claim_topics=a.keys({a._lemma(t) for t in medications})
             # A finite content clause owns its explicit subject, not its outer
             # speaker. Its carrier has no independent clinical argument here.
-            # Unknown modifiers, negation, intention and ending operators cannot
-            # establish this bounded carrier. No reporting-verb release list.
+            # Its canonical denial retains scope on that owned content; an
+            # extra negation, modifier, intention or ending cannot establish
+            # this bounded carrier. No reporting-verb release list.
             complements=[c for c in predicate.children if c.dep_=='ccomp'
                 or (nominal_carrier(predicate) and c.dep_=='acl')]
             subject_words={t for subject in subjects for t in subject.subtree if t in inside}
@@ -252,11 +278,11 @@ def clause_readings(reading,unit):
                 and (nominal_carrier(predicate) or (len(subjects)==1 and (direct_patient or foreign)))
                 and all(t==predicate or t in subject_words or t.is_punct or t.dep_=='aux' for t in words)
                 and not cancelled and not floor['intention'] and not floor['quantified_denial']
-                and not floor['bare_cessation'] and not topics and negative_operator(predicate,a) is None)
+                and not floor['bare_cessation'] and not topics)
             result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed or recipient_patient,
                 'foreign':foreign,'topics':topics,'generic':generic,'cancelled':cancelled,
                 'bare':floor['bare_cessation'] and not repaired_argument,'position':transition_scope(reading,unit,clause=words)=='position',
-                'separate':separate,'carrier':carrier,'bounded_end':bool(topics and (generic or all(
+                'separate':separate,'carrier':carrier,'claim_topics':claim_topics,'bounded_end':bool(topics and (generic or all(
                     {a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN for t in words
                     if a.keys({a._lemma(t)}) & topics and t.pos_ in a.CONTENT)))})
     cache[unit['id']]=result
@@ -266,6 +292,8 @@ def clause_readings(reading,unit):
 def ending_affects(reading,ending,claim):
     if ending['foreign'] or ending['cancelled'] or ending['position'] or ending['separate'] or ending['carrier']:return False
     info=reading['actors'][claim['id']]
+    if ending['claim_topics']:
+        return bool(ending['claim_topics'] & (reading['claim_keys'][claim['id']] | info.get('named_keys',frozenset())))
     if not ending['patient']:
         if not ending['bounded_end'] or ending['generic']:return True
         return bool(ending['topics'] & (reading['claim_keys'][claim['id']] | info.get('named_keys',frozenset())))
@@ -281,8 +309,26 @@ def bounded_mixed_endings(reading,unit):
     clauses=clause_readings(reading,unit)
     if len(clauses)<2 or not any(c['position'] or c['foreign'] for c in clauses):return None
     if not all(c['foreign'] or c['position'] or c['separate'] or c['carrier'] or (not c['bare']
-        and (c['bounded_end'] or ((c['patient'] or c['foreign']) and c['cancelled']))) for c in clauses):return None
+        and (c['bounded_end'] or c['claim_topics'] or ((c['patient'] or c['foreign']) and c['cancelled']))) for c in clauses):return None
     return clauses
+
+
+def ceased_affects(reading,change,claim):
+    """A proved ended argument retains its own polarity and recipient.
+
+    The original unit-wide ended keys remain the fallback. Only complete owned
+    endings covering every matching key can narrow that old floor. Unparsed
+    endings, unknown arguments and incomplete medication groups remain held.
+    """
+    from . import v3_actors as a
+    shared=reading['actors'][change['id']]['ceased_keys'] & (
+        reading['claim_keys'][claim['id']] | reading['actors'][claim['id']].get('named_keys',frozenset()))
+    if not shared:return False
+    clauses=[c for c in clause_readings(reading,change) if c['topics'] & shared]
+    covered=frozenset().union(*(c['topics'] for c in clauses))
+    if not shared<=covered or any(c['bare'] or not c['bounded_end']
+        or any(t.dep_=='aux' and t.tag_=='MD' for t in c['predicate'].children) for c in clauses):return True
+    return any(ending_affects(reading,c,claim) for c in clauses)
 
 
 def explicit_patient_endings(reading,claim):
@@ -739,8 +785,7 @@ def malformed_denial_dependencies(reading):
         reading['_source_scope_docs']=docs
     found=[]
     for unit,doc in zip(reading['units'],docs or [None]*len(reading['units'])):
-        info=reading['actors'][unit['id']]
-        if doc is None or info.get('other_floor'):continue
+        if doc is None:continue
         for token in doc:
             if (token.pos_=='VERB' and a._lemma(token) in a.SOLE_NEGATION
                     and token.dep_ in ('nsubj','nsubjpass') and token.head.pos_ in ('VERB','AUX')
