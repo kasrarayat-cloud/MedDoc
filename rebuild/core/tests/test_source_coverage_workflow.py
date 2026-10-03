@@ -131,6 +131,89 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
         fill_template(private_path(template.original_path),version.fields,{field['key']:'03/14/2026'},target)
         self.assertEqual(Document(target).paragraphs[0].text,'Date: 03/14/2026')
 
+    @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture'))
+    def test_human_document_acts_refuse_before_money_and_preserve_the_act_after_exact_exclusion(self):
+        from documents.test_source_coverage import AdjacentCheckboxAnswers
+        from core import v3_mapping
+        statements=('I confirm that this clinical record is complete and accurate',
+                    'I verify that the information above is correct',
+                    'I acknowledge that I have read and agree with this document',
+                    'I have personally reviewed and approved this document')
+        for statement in statements:
+            for engine in ('v3','auto'):
+                with self.subTest(statement=statement,engine=engine),override_settings(
+                        QUILLMD_WORD_ENGINE=engine,QUILLMD_WORD_AUTO_PREFER_V3=True):
+                    raw=AdjacentCheckboxAnswers().form('☒ '+statement+'_________')
+                    evidence=None;scratch=Path(os.environ.get('QUILLMD_STATE_DIR','/nonexistent'))
+                    approved=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word/adjacent-writein')
+                    if scratch.is_relative_to(approved) and scratch.is_dir() and not scratch.is_symlink():
+                        evidence=Path(tempfile.mkdtemp(prefix='human-action-'+engine+'-',dir=scratch))
+                        (evidence/'original.docx').write_bytes(raw)
+                    template,version=self.uploaded(data=raw,name='Synthetic source-owned document action')
+                    if evidence:(evidence/'first-import.json').write_text(json.dumps(
+                        {'fields':version.fields,'import_manifest':version.import_manifest},indent=2))
+                    self.assertTrue(version.import_manifest['coverage'].get('block_generation'))
+                    with self.assertRaises(ValidationError):import_binding.verify(version)
+                    self.assertEqual(self.new_encounter(version,'Unrelated note: Synthetic review').status_code,200)
+                    self.assertFalse(Job.objects.filter(encounter__template_version=version).exists())
+                    self.assertFalse(Reservation.objects.filter(job__encounter__template_version=version).exists())
+                    if engine!='v3':continue
+                    issues=version.import_manifest['coverage']['selected_engine_issues']
+                    self.assertEqual(self.client.post(f'/templates/{template.pk}/',dict(action='v3_coverage',
+                        mapping_version=version.pk,**{'exclude_'+issue['id']:'on' for issue in issues})).status_code,302)
+                    reviewed=self.latest(template);import_binding.verify(reviewed);self.confirm(template,reviewed)
+                    self.assertEqual(self.new_encounter(reviewed,'Unrelated note: Synthetic review').status_code,302)
+                    encounter=Encounter.objects.get(template_version=reviewed);job=enqueue(encounter,self.user)
+                    self.assertTrue(run_one());job.refresh_from_db();self.assertEqual(job.state,'succeeded',job.error)
+                    encounter.refresh_from_db();ordinary=next(f for f in reviewed.fields if f['label']=='Unrelated note')
+                    action=next(f for f in reviewed.fields if f['kind']=='checkbox')
+                    if evidence:
+                        from core.models import ProviderReceipt,Usage
+                        import hashlib
+                        raw_result=private_path(job.result_path).read_bytes()
+                        self.assertEqual(hashlib.sha256(raw_result).hexdigest(),job.result_sha256)
+                        receipt=ProviderReceipt.objects.get(job=job);usage=Usage.objects.get(job=job)
+                        self.assertTrue(receipt.simulated);self.assertTrue(usage.simulated)
+                        self.assertEqual(receipt.actual_cost,0);self.assertEqual(usage.charged_cost,0)
+                        (evidence/'first-fixture-result.json').write_bytes(raw_result)
+                        (evidence/'first-pass.json').write_text(json.dumps(encounter.answers,indent=2))
+                        (evidence/'reviewed-mapping.json').write_text(json.dumps({'fields':reviewed.fields,
+                            'import_manifest':reviewed.import_manifest,'corrections':reviewed.corrections},indent=2))
+                        (evidence/'fixture-accounting.json').write_text(json.dumps({'job_id':job.pk,
+                            'request_key':job.request_key,'job_state':job.state,'result_sha256':job.result_sha256,
+                            'receipt_id':receipt.pk,'receipt_simulated':receipt.simulated,'actual_cost':receipt.actual_cost,
+                            'usage_id':usage.pk,'usage_simulated':usage.simulated,'charged_cost':usage.charged_cost,
+                            'provider_requests':0},indent=2,default=str))
+                    self.assertTrue(action['write_protected'])
+                    from django.core.exceptions import ValidationError as Error
+                    with self.assertRaises(Error):v3_mapping.fill_answers([action],{action['key']:{'text':'checked','reviewed':True}})
+                    self.assertEqual(v3_mapping.fill_answers([action],{action['key']:{'text':'','reviewed':True}}),{})
+                    payload={'revision':encounter.revision}
+                    for field in reviewed.fields:
+                        payload['answer_'+field['key']]='Synthetic review' if field['key']==ordinary['key'] else ''
+                        payload['reviewed_'+field['key']]='on'
+                    self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/',
+                        {**payload,'answer_'+action['key']:'checked'}).status_code,400)
+                    self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/',payload).status_code,302)
+                    encounter.refresh_from_db()
+                    self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                        {'revision':encounter.revision,'reviewed':'on'}).status_code,302)
+                    encounter.refresh_from_db();self.assertEqual(encounter.status,'finalized')
+                    response=self.client.get(f'/encounters/{encounter.pk}/export/');self.assertEqual(response.status_code,200)
+                    exported_bytes=b''.join(response.streaming_content)
+                    if evidence:
+                        from core.models import AuditEvent
+                        (evidence/'final.docx').write_bytes(exported_bytes)
+                        (evidence/'review-actions.json').write_text(json.dumps(payload,indent=2))
+                        (evidence/'workflow-audit.json').write_text(json.dumps(list(AuditEvent.objects.filter(
+                            department=encounter.department,target__in=[str(template.pk),str(version.pk),str(reviewed.pk),
+                            str(encounter.pk),str(job.pk)]).order_by('created_at','pk').values(
+                            'id','created_at','actor_id','action','target','details')),indent=2,default=str))
+                    exported=Document(io.BytesIO(exported_bytes))
+                    self.assertEqual(exported.paragraphs[0].text,'☒ '+statement+'_________')
+                    self.assertEqual(exported.paragraphs[1].text,'Unrelated note: Synthetic review')
+                    self.assertEqual(private_path(template.original_path).read_bytes(),raw)
+
     @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture',
                              QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True))
     def test_adjacent_answers_real_upload_worker_review_finalization_and_export(self):

@@ -1642,6 +1642,7 @@ class Detector:
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
+        self.box_action_reasons: dict[str, str] = {}
         self.geometry_regions: dict[str, str] = {}
         self.layout_quarantine = None
         self.floating_initials = False
@@ -2725,14 +2726,29 @@ class Detector:
         controlling box; a separate labelled unit never inherits that box.
         """
         text, pieces = self.ptext(slot.el)
-        spans = self.blank_spans(text, pieces)
         positions = [i for i, ch in enumerate(text) if ch in (BOX, CHECKED)]
-        if (slot.part != 'word/document.xml' or len(spans) != 1 or not positions or not self.tab_source_visible(slot)
+        if not positions:
+            return None
+        # A checkbox can perform a first-person document act. Its physical
+        # option text is read before the supported write-in shape: extra/no
+        # blanks do not grant authority to acknowledge, approve or attest.
+        roles = [self.checkbox_source_action(text[pos + 1:(positions[n + 1] if n + 1 < len(positions) else len(text))])
+                 for n, pos in enumerate(positions)]
+        if any(roles):
+            definite = 'human_signing_action' in roles
+            code = 'human_signing_action' if definite else 'ambiguous_source_action'
+            reason = ('This printed first-person document action is human-owned. Complete it through the established signing workflow.'
+                      if definite else 'This printed first-person action does not establish who performs it. '
+                      'Keep it unchanged and review its precise source role; a review click does not authorize that act.')
+            self.protected_regions.add(slot.id);self.box_action_reasons[slot.id] = reason
+            self.coverage_issue(slot, code, reason + ' Location: ' + slot.id)
+            return None
+        spans = self.blank_spans(text, pieces)
+        if (slot.part != 'word/document.xml' or len(spans) != 1 or not self.tab_source_visible(slot)
                 or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in slot.el.iter())):
             return None
         head = text[:positions[0]].strip()
-        action = re.compile(r'\s*(?:I|we)\s+(?:hereby\s+)?(?:certify|attest|declare|affirm)(?=\W|_|$)', re.I)
-        if self.question_box_signing(head) or any(action.match(text[pos + 1:]) for pos in positions):
+        if self.question_box_signing(head):
             self.protected_regions.add(slot.id)
             self.coverage_issue(slot, 'human_signing_action',
                 'The printed signing or attestation action remains human-owned at ' + slot.id)
@@ -2771,6 +2787,32 @@ class Detector:
                         'option': label, 'condition': 'printed_option', 'box': 0}
         return None
 
+    @staticmethod
+    def checkbox_source_action(text):
+        """Printed first-person performative ownership, not a signer-name guess.
+
+        Ordinary clinical states and recorded-status labels are not this frame.
+        Formal declarations are acts themselves. Other performative predicates
+        require their printed documentary object to establish an attestation;
+        missing object/context stays a precise source-role ambiguity.
+        """
+        source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        person = re.match(r'^(?:I|we)\s+(?:(?:hereby|have|had|personally|do|did|not|cannot|will|would)\s+)*', source, re.I)
+        if not person:
+            return ''
+        predicate = source[person.end():]
+        document = re.search(r'\b(?:this|the|these|above|foregoing)\s+'
+                             r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
+                             r'(?:record|document|form|report|information|statements?|details?)(?=\W|_|$)', predicate, re.I)
+        if re.match(r'(?:certify|attest|declare|affirm)(?=\W|_|$)', predicate, re.I):
+            return 'human_signing_action'
+        if not re.match(r'(?:confirm|verify|acknowledge|agree|accept|approve[ds]?|review(?:ed)?|read|consent)(?=\W|_|$)',
+                        predicate, re.I):
+            # An unfamiliar predicate about the document cannot silently become
+            # authority to make the printed first-person assertion either.
+            return 'ambiguous_source_action' if document else ''
+        return 'human_signing_action' if document else 'ambiguous_source_action'
+
     def adjacent_option_text(self, unit):
         """Separate only a proven explicit trailing condition from its option."""
         ref = unit[0]
@@ -2798,7 +2840,8 @@ class Detector:
                 for area in self.areas:
                     if any(ref.get('part') == slot.part and ref.get('slot', '').startswith(slot.path + '/')
                            for ref in area.target.get('boxes', [])):
-                        area.protection = 'This printed signing or attestation action is human-owned. Complete it through the established signing workflow.'
+                        area.protection = self.box_action_reasons.get(slot.id,
+                            'This printed signing or attestation action is human-owned. Complete it through the established signing workflow.')
                 continue
             if not plan:
                 continue
