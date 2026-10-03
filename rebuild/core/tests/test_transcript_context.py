@@ -283,6 +283,31 @@ class PatientDefault(SimpleTestCase):
         self.check('Reports left ankle pain.', 'Chief complaint', ['Reports left ankle pain.'], 'conflict')
         self.check('Mild swelling over the left ankle.', 'Examination', ['Mild swelling over the left ankle.'], 'conflict')
 
+    def test_negative_nominalization_complements_and_exclusive_polarity_refutations(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['The patient has an absence of swelling over the left ankle.',
+                     'The patient finds swelling absent over the left ankle.',
+                     'The patient reports swelling to be absent over the left ankle.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source],'conflict')
+        negative='No swelling over the left ankle.'
+        for tail in ['Only her father lacks swelling over the left ankle.',
+                     'Only her father has no swelling over the left ankle.']:
+            with self.subTest(tail=tail):self.check(negative+' '+tail,'Examination',[negative],'conflict')
+        for source in ['The patient takes warfarin 5 mg daily.','Takes warfarin 5 mg daily.']:
+            self.check(source+' Only her father has no warfarin.','Medications',[source])
+        for tail in ['Her father lacks swelling over the left ankle.',
+                     'Only her father has no swelling over the right ankle.',
+                     'Only her father lacks pain over the left ankle.']:
+            with self.subTest(tail=tail):self.check(negative+' '+tail,'Examination',[negative])
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['The patient has an absence of swelling over the right ankle.',
+                     'The patient finds swelling absent over the right ankle.',
+                     'The patient reports swelling to be absent over the right ankle.',
+                     "Swelling over her father's left ankle was found to be absent."]:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source])
+        self.check(source+" Swelling over her father's and the patient's left ankle was found to be absent.",
+                   'Examination',[source],'conflict')
+
     def test_independent_refutation_ellipses_cannot_retract_a_patient_claim_silently(self):
         source='Takes warfarin 5 mg daily.'
         for tail,label in [('Only her father does.','Medications'),('Not today.','Medications taken today'),
