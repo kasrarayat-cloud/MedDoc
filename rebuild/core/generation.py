@@ -3862,11 +3862,13 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
-    from .source_scope import bare_affects,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
+    from .source_scope import bare_affects,explicit_patient_endings,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
     causes.extend((other,None) for other in unresolved_medication_changes(reading)
                   if other['id']!=uid and other['id'] not in selected and unresolved_medication_affects(reading,other,unit))
+    causes.extend((other,None) for other in explicit_patient_endings(reading,unit)
+                  if not (text_answer and other['id'] in selected))
     # An elliptical other-person attribution or topicless temporal modifier
     # cannot become independent merely because the model called it so.
     causes.extend((other,None) for other in elliptical_dependencies(reading).get(uid,()))

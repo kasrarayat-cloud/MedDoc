@@ -129,6 +129,46 @@ class PatientDefault(SimpleTestCase):
                      'Her father switched from an unknown medication to supine positioning. Medications are incorrect.']:
             with self.subTest(tail=tail):self.check(source+' '+tail,'Medications',[source],'conflict')
 
+    def test_mixed_actor_endings_keep_their_own_patient_and_named_medication(self):
+        prefix='Her father switched from prone to supine positioning'
+        for source in ['Takes warfarin 5 mg daily.','The patient takes warfarin 5 mg daily.']:
+            for label in ['Medications','Current medications']:
+                for tail in [' and the patient stopped warfarin.', '; the patient stopped warfarin.',
+                             ' and the patient withheld warfarin.',
+                             ' and the patient replaced warfarin with apixaban.',
+                             ' and the patient stopped all medications.',
+                             " and the patient's warfarin was stopped.",
+                             ' and she stopped warfarin.']:
+                    with self.subTest(source=source,label=label,tail=tail):
+                        self.check(source+' '+prefix+tail,label,[source],'conflict')
+                for tail in [' and the patient stopped apixaban.',
+                             ' and the patient did not stop warfarin.',
+                             ' and the patient may stop warfarin tomorrow.',
+                             " and the patient stopped her father's warfarin.",
+                             ' and the patient reports cough.']:
+                    with self.subTest(source=source,label=label,tail=tail):self.check(source+' '+prefix+tail,label,[source])
+        target='The patient takes apixaban 5 mg twice daily.'
+        self.check(target+' '+prefix+' and the patient stopped warfarin and apixaban.',
+            'Current medications',[target],'conflict')
+        self.check(target+' '+prefix+' and the patient replaced warfarin with apixaban.',
+            'Current medications',[target])
+        source='Takes warfarin 5 mg daily.'
+        self.check(source+' The patient switched from prone to supine positioning and her father stopped warfarin.',
+            'Medications',[source])
+
+    def test_mixed_medication_events_do_not_share_an_actor_or_replacement(self):
+        source='The patient takes warfarin 5 mg daily.'
+        other='Her father switched from an unknown medication to supine positioning and the patient reports cough.'
+        self.check(source+' '+other,'Medications',[source])
+        self.check(source+' '+other,'Current medications',[source])
+        target='The patient takes apixaban 5 mg twice daily.'
+        changes='Her father switched from an unknown medication to apixaban and the patient switched from an unknown medication to warfarin.'
+        self.check(target+' '+changes,'Current medications',[target],'conflict')
+        self.check(source+' '+changes,'Current medications',[source])
+        # The separate first policy diagnostic for an 'unidentified substance'
+        # is retained, not certified as a medication contradiction: the noun
+        # does not positively name medication. Do not manufacture that class.
+
     def test_nominal_clinical_assertions_gain_only_default_actor_not_drug_status(self):
         for source, label in [('No fever.', 'Examination'),
                               ('Fever.', 'Symptoms'),
