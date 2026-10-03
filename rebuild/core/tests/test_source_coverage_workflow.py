@@ -162,6 +162,98 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
             'Authorize this treatment', 'Consent to this procedure',
             'The department lead authorizes treatment','Certification of treatment completion')],start=100)
 
+    @override_settings(**dict(SONNET_55_DEFAULT,AI_MODE='fixture'))
+    def test_permission_witness_and_colonless_actions_hold_before_money_and_remain_unchanged(self):
+        cases=[('checkbox',(statement,)) for statement in (
+            'I grant permission for this procedure: ',
+            'I observed the patient signing: ',
+            'The patient signed in my presence: ',
+            'I permit the examination to proceed: ')]
+        cases.extend(('table',(caption,'______')) for caption in (
+            'Manager approval','Witness attestation','Patient consent',
+            'Manager authorization','Witness certification'))
+        self.source_action_workflow(cases,start=201)
+
+    @override_settings(**dict(SONNET_55_DEFAULT,AI_MODE='fixture',
+                             QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True))
+    def test_ordinary_initial_and_signed_receipt_fields_reach_default_worker_and_export(self):
+        import hashlib
+        from core.models import AuditEvent,ProviderReceipt,Usage
+        cases=(('paragraph','Initial symptoms occurred at','09:00'),
+               ('table','Initial diagnosis','Synthetic gastritis'),
+               ('paragraph','Signed consent was received on','2026-09-30'),
+               ('table','Signed consent received on','2026-09-30'))
+        for index,(shape,caption,value) in enumerate(cases,301):
+            with self.subTest(shape=shape,caption=caption):
+                doc=Document()
+                if shape=='table':
+                    table=doc.add_table(rows=1,cols=2);table.cell(0,0).text=caption
+                    table.cell(0,1).text='______'
+                else:doc.add_paragraph(caption+': ______')
+                doc.add_paragraph('Unrelated note: ______')
+                doc.sections[0].header.paragraphs[0].text='Synthetic fixed header'
+                doc.sections[0].footer.paragraphs[0].text='Synthetic fixed footer'
+                out=io.BytesIO();doc.save(out);raw=out.getvalue()
+                scratch=Path(os.environ.get('QUILLMD_STATE_DIR','/nonexistent'));evidence=None
+                approved=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word/adjacent-writein')
+                if scratch.is_relative_to(approved) and scratch.is_dir() and not scratch.is_symlink():
+                    evidence=Path(tempfile.mkdtemp(prefix='ordinary-source-auto-',dir=scratch))
+                    (evidence/'original.docx').write_bytes(raw)
+                template,version=self.uploaded(data=raw,name=f'Synthetic ordinary source field {index}')
+                self.assertEqual(version.import_manifest['engine'],'v3')
+                target=next(f for f in version.fields if f['label']==caption)
+                self.assertEqual(target['kind'],'text');self.assertFalse(target.get('write_protected'))
+                self.assertFalse(version.import_manifest['coverage']['block_generation'])
+                import_binding.verify(version);self.confirm(template,version)
+                notes=caption+': '+value+'\nUnrelated note: Synthetic review'
+                self.assertEqual(self.new_encounter(version,notes).status_code,302)
+                encounter=Encounter.objects.get(template_version=version);job=enqueue(encounter,self.user)
+                self.assertTrue(run_one());job.refresh_from_db();self.assertEqual(job.state,'succeeded',job.error)
+                encounter.refresh_from_db();first=copy.deepcopy(encounter.answers)
+                receipt=ProviderReceipt.objects.get(job=job);usage=Usage.objects.get(job=job)
+                self.assertTrue(receipt.simulated);self.assertTrue(usage.simulated)
+                self.assertEqual(receipt.actual_cost,0);self.assertEqual(usage.charged_cost,0)
+                raw_result=private_path(job.result_path).read_bytes()
+                self.assertEqual(hashlib.sha256(raw_result).hexdigest(),job.result_sha256)
+                if evidence:
+                    (evidence/'first-import.json').write_text(json.dumps(
+                        {'fields':version.fields,'import_manifest':version.import_manifest,'notes':notes},indent=2))
+                    (evidence/'first-fixture-result.json').write_bytes(raw_result)
+                    (evidence/'first-pass.json').write_text(json.dumps(first,indent=2))
+                    (evidence/'fixture-accounting.json').write_text(json.dumps({'job_id':job.pk,
+                        'request_key':job.request_key,'job_state':job.state,'result_sha256':job.result_sha256,
+                        'receipt_id':receipt.pk,'receipt_simulated':receipt.simulated,'actual_cost':receipt.actual_cost,
+                        'usage_id':usage.pk,'usage_simulated':usage.simulated,'charged_cost':usage.charged_cost,
+                        'provider_requests':0},indent=2,default=str))
+                payload={'revision':encounter.revision}
+                for field in version.fields:
+                    payload['answer_'+field['key']]=value if field['key']==target['key'] else 'Synthetic review'
+                    payload['reviewed_'+field['key']]='on'
+                self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/',payload).status_code,302)
+                encounter.refresh_from_db()
+                self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                    {'revision':encounter.revision,'reviewed':'on'}).status_code,302)
+                encounter.refresh_from_db();self.assertEqual(encounter.status,'finalized')
+                response=self.client.get(f'/encounters/{encounter.pk}/export/');self.assertEqual(response.status_code,200)
+                exported=b''.join(response.streaming_content);after=Document(io.BytesIO(exported))
+                if shape=='table':
+                    self.assertEqual(after.tables[0].cell(0,0).text,caption)
+                    self.assertEqual(after.tables[0].cell(0,1).text,value)
+                else:self.assertEqual(after.paragraphs[0].text,caption+': '+value)
+                self.assertEqual(after.paragraphs[-1].text,'Unrelated note: Synthetic review')
+                with ZipFile(io.BytesIO(raw)) as old,ZipFile(io.BytesIO(exported)) as new:
+                    self.assertEqual(old.namelist(),new.namelist())
+                    for part in old.namelist():
+                        if part!='word/document.xml':self.assertEqual(old.read(part),new.read(part),part)
+                self.assertEqual(private_path(template.original_path).read_bytes(),raw)
+                if evidence:
+                    (evidence/'final.docx').write_bytes(exported)
+                    (evidence/'review-actions.json').write_text(json.dumps(payload,indent=2))
+                    (evidence/'workflow-audit.json').write_text(json.dumps(list(AuditEvent.objects.filter(
+                        department=encounter.department,target__in=[str(template.pk),str(version.pk),
+                        str(encounter.pk),str(job.pk)]).order_by('created_at','pk').values(
+                        'id','created_at','actor_id','action','target','details')),indent=2,default=str))
+
     def source_action_workflow(self,cases,*,start=1):
         from core import v3_mapping
         for statement_index,(shape,source) in enumerate(cases,start):
@@ -172,6 +264,7 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     expected_source=[]
                     if shape=='table':
                         table=doc.add_table(rows=1,cols=2);table.cell(0,0).text=source[0]
+                        table.cell(0,1).text=source[1] if len(source)>1 else ''
                     else:
                         expected_source=[*source[:-1],(source[-1] if shape=='paragraph' or '☒' in source[-1]
                                                      else '☒ '+source[-1])+'_________']
@@ -256,7 +349,7 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     self.assertEqual(exported.paragraphs[-1].text,'Unrelated note: Synthetic review')
                     if shape=='table':
                         self.assertEqual(exported.tables[0].cell(0,0).text,source[0])
-                        self.assertEqual(exported.tables[0].cell(0,1).text,'')
+                        self.assertEqual(exported.tables[0].cell(0,1).text,source[1] if len(source)>1 else '')
                     self.assertEqual(private_path(template.original_path).read_bytes(),raw)
 
     @override_settings(**dict(SONNET_55_DEFAULT, AI_MODE='fixture',

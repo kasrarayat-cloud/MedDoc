@@ -381,6 +381,7 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
                 self.assertTrue(any(i['code'] in ('human_signing_action','ambiguous_source_action')
                                     for i in result['coverage_issues']))
                 field=deepcopy(held[0]);field.pop('write_protected');field.pop('review_reason')
+                if field['kind'] in ('signature','initials'):field['kind']='text'
                 self.assertIn(field['key'],word_v3.destination_roles(raw,[field])['violations'])
                 with self.assertRaises(word_v3.V3Failure):
                     word_v3.fill(raw,[field],{field['key']:'checked' if shape=='checkbox' else 'Synthetic completion'})
@@ -430,6 +431,83 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
                     self.assertEqual(word_v3.destination_roles(raw,[target])['violations'],{})
                     word_v3.fill(raw,fields,{target['key']:'checked' if target['kind']=='checkbox'
                                             else 'Synthetic ordinary status'})
+
+    def test_permission_and_witness_arguments_remain_human_owned_in_each_physical_shape(self):
+        for statement in ('I grant permission for this procedure',
+                          'I observed the patient signing',
+                          'The patient signed in my presence',
+                          'I permit the examination to proceed',
+                          'We have given our permission for treatment',
+                          'I saw the patient sign',
+                          'I witnessed their signature'):
+            self.assert_source_act_stays_human_owned(statement)
+
+    def test_colonless_question_cells_keep_their_action_role_without_named_signer_inference(self):
+        for caption in ('Manager approval','Witness attestation','Patient consent',
+                        'Manager authorization','Witness certification','Approval by department lead'):
+            for suffix in ('','.',':'):
+                with self.subTest(caption=caption,suffix=suffix):
+                    doc=Document();table=doc.add_table(rows=2,cols=2)
+                    table.cell(0,0).text=caption+suffix;table.cell(0,1).text='______'
+                    table.cell(1,0).text='Initial diagnosis';table.cell(1,1).text='______'
+                    doc.add_paragraph('Unrelated note: ______');raw=data(doc);result=word_v3.inspect(raw)
+                    held=[f for f in result['fields'] if f.get('write_protected')]
+                    self.assertEqual(len(held),1)
+                    self.assertTrue(any(i['code'] in ('human_signing_action','ambiguous_source_action')
+                                        for i in result['coverage_issues']))
+                    forged=deepcopy(held[0]);forged.pop('write_protected');forged.pop('review_reason')
+                    self.assertIn(forged['key'],word_v3.destination_roles(raw,[forged])['violations'])
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw,[forged],{forged['key']:'SYNTHETIC UNAUTHORIZED ACT'})
+                    ordinary=next(f for f in result['fields'] if f['label']=='Initial diagnosis')
+                    self.assertEqual(ordinary['kind'],'text')
+                    out=Document(io.BytesIO(word_v3.fill(raw,result['fields'],
+                                                        {ordinary['key']:'Synthetic diagnosis'})))
+                    self.assertEqual(out.tables[0].cell(0,0).text,caption+suffix)
+                    self.assertEqual(out.tables[0].cell(0,1).text,'______')
+                    self.assertEqual(out.tables[0].cell(1,1).text,'Synthetic diagnosis')
+
+    def test_incidental_initial_and_recorded_signed_arguments_are_ordinary_new_mapping_fields(self):
+        for caption in ('Initial symptoms occurred at','Initial diagnosis',
+                        'Signed consent was received on','Signed consent received on',
+                        'Recorded signed report status'):
+            for shape in ('paragraph','table'):
+                with self.subTest(caption=caption,shape=shape):
+                    doc=Document()
+                    if shape=='table':
+                        table=doc.add_table(rows=1,cols=2)
+                        table.cell(0,0).text=caption;table.cell(0,1).text='______'
+                    else:doc.add_paragraph(caption+': ______')
+                    doc.add_paragraph('Clinician signature: ______');raw=data(doc);result=word_v3.inspect(raw)
+                    ordinary=next(f for f in result['fields'] if f['label']==caption)
+                    self.assertEqual(ordinary['kind'],'text');self.assertFalse(ordinary.get('write_protected'))
+                    self.assertEqual(word_v3.destination_roles(raw,[ordinary])['violations'],{})
+                    out=Document(io.BytesIO(word_v3.fill(raw,result['fields'],
+                                                        {ordinary['key']:'Synthetic recorded value'})))
+                    if shape=='table':self.assertEqual(out.tables[0].cell(0,1).text,'Synthetic recorded value')
+                    else:self.assertEqual(out.paragraphs[0].text,caption+': Synthetic recorded value')
+                    self.assertIn('Clinician signature: ______',[p.text for p in out.paragraphs])
+                    signer=next(f for f in result['fields'] if f['label']=='Clinician signature')
+                    signer=deepcopy(signer);signer['kind']='text';signer.pop('write_protected',None)
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw,[signer],{signer['key']:'Synthetic finalizer name'})
+
+    def test_witness_words_and_permission_nouns_do_not_replace_ordinary_clinical_arguments(self):
+        for statement in ('I observed the patient walking','I saw ankle swelling',
+                          'I observed Tinel signs','Recorded permission status',
+                          'Consent was obtained by','Signed consent was received on'):
+            for shape,raw in self.source_act_forms(statement):
+                with self.subTest(statement=statement,shape=shape):
+                    result=word_v3.inspect(raw)
+                    self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                      ('human_signing_action','ambiguous_source_action')])
+                    fields=deepcopy(result['fields'])
+                    target=next(f for f in fields if f['kind']=='checkbox') if shape=='checkbox' else \
+                           next(f for f in fields if f['label']!='Unrelated note')
+                    self.assertFalse(target.get('write_protected'))
+                    self.assertEqual(word_v3.destination_roles(raw,[target])['violations'],{})
+                    word_v3.fill(raw,fields,{target['key']:'checked' if target['kind']=='checkbox'
+                                            else 'Synthetic recorded value'})
 
 
 class SourceCoverage(unittest.TestCase):

@@ -2406,6 +2406,13 @@ class Detector:
                 sources.append(area.label)
             roles = [self.checkbox_source_action(source, governing=True) for source in sources]
             if not any(roles):
+                # A lexical kind is not a physical signing role. Only the
+                # printed argument of this destination can show an initial
+                # clinical reading or the receipt/status of a signed document.
+                # Native signature controls retain their structural kind.
+                if (not area.structural and area.kind in SIGNING_KINDS
+                        and self.ordinary_source_kind(sources, area.kind)):
+                    area.kind = 'text'
                 continue
             code = 'human_signing_action' if 'human_signing_action' in roles else 'ambiguous_source_action'
             area.source_action = True
@@ -2881,10 +2888,13 @@ class Detector:
         # A documentary action noun is a governing label, not a recorded-status
         # label. This reads the action, irrespective of a named signer/role.
         if governing:
+            # A question cell is a caption without requiring a literal colon.
+            # Read the complete noun phrase: a status/date/receipt suffix is
+            # not an action caption, and no signer name is inferred.
             heading = re.fullmatch(r'(?:[^:?!\r\n]+?\s+)?'
                                   r'(?P<action>approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
                                   r'certification|attestation|declaration|authori[sz]ation|consent|sign[ -]?off)'
-                                  r'(?:\s+(?:of|for|to|by|from)\s+[^:?!]+)?\s*:',source,re.I)
+                                  r'(?:\s+(?:of|for|to|by|from)\s+[^:?!]+)?\s*[:.]?',source,re.I)
             if heading:
                 explicit = (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
                             or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',
@@ -2904,6 +2914,20 @@ class Detector:
         document_pattern = (r'\b(?:this|the|these|above|foregoing)\s+'
                             r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
                             r'(?:record|document|form|report|information|statements?|details?)(?=\W|_|$)')
+        # Permission and witnessing are acts even when their object is a
+        # procedure/person rather than the document. Their subject/predicate
+        # relationship supplies the role; merely mentioning consent, signing
+        # or a past document receipt does not.
+        permission = (r'(?:permit(?:s|ted|ting)?|allow(?:s|ed|ing)?)(?=\W|_|$)|'
+                      r'(?:grant(?:s|ed|ing)?|giv(?:e|es|en|ing)|gave)\s+'
+                      r'(?:(?:my|our|their|the|explicit|informed)\s+)*(?:permission|consent|authori[sz]ation)\b')
+        witness = (r'\b(?:observ(?:e|es|ed|ing)|see|sees|seen|saw|witness(?:es|ed|ing)?)\b'
+                   r'[^.;:?!\r\n]*\b(?:signing|signed|signatures?|sign(?=\s*(?:[.:;_]|$)))\b')
+        witnessed_presence = (r'\b(?:sign(?:ed|ing)|signatures?)\b[^.;:?!\r\n]*'
+                              r'\bin\s+(?:my|our)\s+presence\b')
+        if (first_person and (re.match(permission,predicate,re.I) or re.search(witness,predicate,re.I))
+                or re.search(witnessed_presence,source,re.I)):
+            return 'human_signing_action'
         if not predicate:
             # A documentary nominal printed as an option is still the act,
             # even without a named signer or a colon-bearing parent label.
@@ -2916,9 +2940,10 @@ class Detector:
             action = (r'certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|'
                       r'affirm(?:s|ed|ing)?|consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing)|'
                       r'confirm(?:s|ed|ing)?|verif(?:y|ies|ied|ying)|acknowledg(?:e|es|ed|ing)|'
-                      r'agree(?:s|d|ing)?|accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?')
+                      r'agree(?:s|d|ing)?|accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?|'
+                      r'permit(?:s|ted|ting)?|allow(?:s|ed|ing)?|grant(?:s|ed|ing)?|giv(?:e|es|en|ing)|gave')
             base_action = (r'certify|attest|declare|affirm|consent|authori[sz]e|confirm|verify|acknowledge|'
-                           r'agree|accept|approve|review|read')
+                           r'agree|accept|approve|review|read|permit|allow|grant|give')
             imperative = re.match(r'^(?:please\s+)?('+base_action+r')(?=\W|_|$)',source,re.I)
             if imperative and re.match(r'\s+(?:is|are|was|were|has|have|had)\b',source[imperative.end():],re.I):
                 imperative = None  # "Consent was obtained" reports a noun's status; it is not an order.
@@ -2933,6 +2958,8 @@ class Detector:
             if not frame:
                 return ''
             predicate = source[frame.start(1 if imperative else 2):]
+            if re.match(permission,predicate,re.I):
+                return 'human_signing_action' if imperative else 'ambiguous_source_action'
             # A request about a clinical observation is not a documentary
             # attestation merely because it says confirm/verify/review.
             if not re.search(document_pattern,predicate,re.I):
@@ -2959,6 +2986,29 @@ class Detector:
             # authority to make the printed first-person assertion either.
             return 'ambiguous_source_action' if document else ''
         return 'human_signing_action' if document else 'ambiguous_source_action' if first_person else ''
+
+    @staticmethod
+    def ordinary_source_kind(sources, kind):
+        """An incidental signing word with an ordinary physical argument.
+
+        This does not release a signature/initials instruction or an attestation.
+        The caller has already excluded action captions and native controls.
+        It uses the original caption/span prefix, never a reviewed field label.
+        """
+        printed = [_plain(source) for source in sources if _plain(source)]
+        if not printed or any(signing_place(source) for source in printed):
+            return False
+        if kind == 'initials':
+            return any(ADJECTIVE_INITIAL.search(source) for source in printed)
+        # A signed noun being received/recorded is a document's history, not
+        # the act of signing it. Terminal explicit status asks for that history
+        # too; a bare "consent form signed" remains a review decision.
+        receipt = (r'\bsigned\s+[^:?!\r\n]+?\s+'
+                   r'(?:(?:was|were|is|are|has\s+been|had\s+been)\s+)?'
+                   r'(?:received|recorded|filed|stored)\b')
+        return any(re.search(receipt,source,re.I) or
+                   re.search(r'\b(?:recorded|documented)\b[^:?!]*\bsigned\b[^:?!]*\bstatus$',source,re.I)
+                   for source in printed)
 
     def adjacent_option_text(self, unit):
         """Separate only a proven explicit trailing condition from its option."""
