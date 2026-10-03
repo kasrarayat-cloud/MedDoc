@@ -135,6 +135,7 @@ qa_database: quillmd_qa_standing_20261002_4
 credential_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/anthropic-api-key
 transcription_credential_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/deepgram-api-key
 qa_database_password_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/qa-db/password
+qa_signing_key_file: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261002-4/access/qa-signing-key
 restricted_inputs_ledger: /opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json
 restricted_inputs_ledger_sha256: 5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7
 ```
@@ -150,6 +151,14 @@ are not touched. Every send and the preflight run only through `scripts/run-rule
 The Stop file `<root>/STOP` halts every send while it exists. A halt between a mapping form's send and its
 encounter's (or a stop before the encounter's attempt) strands that encounter, which needs its form's proposal in the
 same run: the remainder is then refused whole and the mapping stage cannot pass in this campaign.
+
+This previously unused campaign opts into a persistent QA signing identity before its first preflight. The protected
+64-character key is generated once under the ledger lock, at the exact route above; its sidecar and append-only
+preflight/run/attempt records bind only a nonsecret digest and campaign identity. Unsafe parents, links, modes,
+replacement, retroactive opt-in and mismatched request-process keys refuse. The key is never printed, included in
+command arguments or copied into evidence. The private demonstration may read this same protected route to verify
+the original immutable transcript confirmation; it must not re-sign or rewrite an old review. Historical campaigns
+retain their original random-key behavior and all existing records.
 
 ## Inputs
 

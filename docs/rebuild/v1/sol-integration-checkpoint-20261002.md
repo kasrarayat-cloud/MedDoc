@@ -130,3 +130,43 @@ Installed dedac162 and restored14ed2459 services remain unchanged; current priva
 Integrated transcript-review/privacy/leaf-rollback/import union33 checks passed72.906s/exit0 on de2e3d34, database destroyed. Clinical9dc38618 focused53 checks passed39.414s; lead48 previous counterexamples passed, but fresh28 and independent98+8 demonstrated an unresolved unknown-medication transition dependency and an unnecessary patient-medication hold from a separately attributed family positional change. A raw automatic unsafe flag for the unknown-medication case is explicitly withdrawn as a proven contradiction: the exact medication is unknown. It remains a demonstrated dependency-contract failure needing review. No paid send is allowed until repaired finished source passes refutation. Raw results and classification addendum retained, old wrong-subject/stopped-medication and two voice-pick controls unchanged.
 
 Voice-fit ops8aea7b78 is integrated, clean writer source frozen for independent refutation. New campaign4 prospectively pins one independently authored11-destination colonoscopy form (10 ordinary reference facts plus one required correction hold), originalSHA1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e. SOAP retains historicalr1-11; old zero-answer results, owner17 and corpus denominators do not change. First-pass scoring never credits clinician edits. Lead11 pure new-form controls passed; first combined invocation mistakenly named a nonexistent old test class and failed discovery, retained; the correct six transcription-declaration controls passed4.198s. Existing authority and119 consumed attempts are unchanged, new provider requests0. Final CI/private demo and meaningful live voice qualification remain pending.
+
+
+### Continued repair state at 2026-10-03T04:30:52Z
+
+The preceding “03:44 UTC” header was written before its commit at03:39; its
+future timestamp was a transcription error. Its factual evidence is unchanged.
+Current lead source2bd28cabc905469132747afc5d936f16aeeac423 includes the qualified
+persistent QA signing-route repair ea5b65d2 and the supplemental voice scorer
+correction0532fb97. The new signing key has not been created; historical
+campaigns retain random-key behavior. Seventy-three bounded pure signing
+controls pass and root finished-diff inspection found no counterexample.
+Supplemental literal matches do not certify correctness: semantic correctness,
+unsafe release and unnecessary hold metrics remain null pending independent
+actor/polarity/time/certainty/correction adjudication.
+
+Clinical acdd1f2f is NOT qualified or integrated. Its88 affected checks pass,
+but root independently demonstrates8 unsafe releases across four mixed-actor
+sentences and two labels, plus two unnecessary holds. A foreign first clause
+must not mask a separate patient stopped/withheld/replaced-medication predicate.
+The thirteenth repair remains under affected testing. All twelve intermediate
+failures, source hashes, original voice picks and typed raw results remain.
+
+Word adjacent candidate26be6b0b is NOT qualified. Six direct checks pass, but
+root45 independent controls demonstrate that two contradictory pre-ticked
+Yes/No options allow a conditional write-in without resolving the choice.
+The first genuine three-shape workflow exits1/18.091s with three failures;
+only the Age export reached its later assertion, and its test explicitly
+cleared a mapped pre-ticked neighbor. Earlier worker/redirect assertions
+must be corrected from actual behavior. No report of “all three exports” is
+retained as a result. The product repair and affected workflow rerun remain
+pending. Fixture first-pass holds are separate from clinician corrections.
+
+A protected bounded new-demo database/file clone helper is being refuted in
+security's own copy, with no DB/container execution. It must preserve every
+clinical/audit/financial row, original/current transcript proof, all files and
+original persistent signing identity; no reseeding, balance reset or review
+re-signing. Current served private demo remains789c0372; installeddedac162 and
+originalQA14ed2459 remain unchanged. Final CI/live voice/private rebuild remain
+required. New provider requests0. Current filesystem90%, approximately29GB
+available; measured net disposable artifact allocation reduction5412282368B.
