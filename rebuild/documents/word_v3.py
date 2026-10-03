@@ -2732,8 +2732,28 @@ class Detector:
         # A checkbox can perform a first-person document act. Its physical
         # option text is read before the supported write-in shape: extra/no
         # blanks do not grant authority to acknowledge, approve or attest.
-        roles = [self.checkbox_source_action(text[pos + 1:(positions[n + 1] if n + 1 < len(positions) else len(text))])
-                 for n, pos in enumerate(positions)]
+        options = [text[pos + 1:(positions[n + 1] if n + 1 < len(positions) else len(text))]
+                   for n, pos in enumerate(positions)]
+        roles = [self.checkbox_source_action(option) for option in options]
+        head = text[:positions[0]].strip()
+        if head:
+            roles.append(self.checkbox_source_action(head, governing=True))
+        elif not any(re.search(r'\?', option) or self.first_person_source(option)
+                     and not self.checkbox_source_action(option) for option in options):
+            # Only a physically adjacent statement governs a leading response.
+            # Never cross a table/cell, another answer, an independent question,
+            # or a substantive first-person clinical statement printed by a box.
+            previous = slot.el.getprevious()
+            before = self.index.by_el.get(id(previous)) if previous is not None else None
+            if (before is not None and before.kind == 'p' and before.parent is slot.parent
+                    and before.part == slot.part):
+                prior, prior_pieces = self.ptext(before.el)
+                if (prior.strip() and BOX not in prior and CHECKED not in prior
+                        and not self.blank_spans(prior, prior_pieces)
+                        and not any(area.slot is before or before in area.extra_slots for area in self.areas)
+                        and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                                    for n in before.el.iter())):
+                    roles.append(self.checkbox_source_action(prior, governing=True))
         if any(roles):
             definite = 'human_signing_action' in roles
             code = 'human_signing_action' if definite else 'ambiguous_source_action'
@@ -2747,7 +2767,6 @@ class Detector:
         if (slot.part != 'word/document.xml' or len(spans) != 1 or not self.tab_source_visible(slot)
                 or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in slot.el.iter())):
             return None
-        head = text[:positions[0]].strip()
         if self.question_box_signing(head):
             self.protected_regions.add(slot.id)
             self.coverage_issue(slot, 'human_signing_action',
@@ -2788,7 +2807,17 @@ class Detector:
         return None
 
     @staticmethod
-    def checkbox_source_action(text):
+    def first_person_source(text):
+        source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        contractions = {'m':'am','re':'are','ve':'have','d':'would','ll':'will'}
+        source = re.sub(r"\b(I|we)[’'](m|re|ve|d|ll)\b",
+                        lambda m:m[1]+' '+contractions[m[2].casefold()],source,flags=re.I)
+        person = re.match(r'^(?:I|we)\s+(?:(?:hereby|am|are|have|had|been|being|personally|do|did|not|yet|cannot|will|would)\s+)*',
+                          source,re.I)
+        return source[person.end():] if person else ''
+
+    @classmethod
+    def checkbox_source_action(cls,text,*,governing=False):
         """Printed first-person performative ownership, not a signer-name guess.
 
         Ordinary clinical states and recorded-status labels are not this frame.
@@ -2797,16 +2826,40 @@ class Detector:
         missing object/context stays a precise source-role ambiguity.
         """
         source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
-        person = re.match(r'^(?:I|we)\s+(?:(?:hereby|have|had|personally|do|did|not|cannot|will|would)\s+)*', source, re.I)
-        if not person:
+        predicate = cls.first_person_source(source)
+        # A documentary action noun is a governing label, not a recorded-status
+        # label. This reads the action, irrespective of a named signer/role.
+        if governing:
+            heading = re.fullmatch(r'(approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
+                                  r'certification|attestation|declaration|authori[sz]ation|consent|sign[ -]?off)'
+                                  r'(?:\s+(?:of|for|to)\s+[^:?!]+)?\s*:',source,re.I)
+            if heading and (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
+                            or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',heading[1],re.I)):
+                return 'human_signing_action'
+            if ':' in source:
+                caption, statement = source.split(':',1)
+                tail = cls.checkbox_source_action(statement)
+                if tail:
+                    return tail
+                # A printed declaration/statement of witnessing a signing act
+                # governs its response. It supplies no identity or authority.
+                if (re.search(r'\b(?:statement|declaration|attestation)\s*$',caption,re.I)
+                        and cls.first_person_source(statement)
+                        and re.search(r'\bsign(?:ed|ing)?\b',statement,re.I)):
+                    return 'human_signing_action'
+        if not predicate:
             return ''
-        predicate = source[person.end():]
+        if re.match(r'(?:so|this|that)(?=\W|_|$)',predicate,re.I):
+            return 'ambiguous_source_action'
         document = re.search(r'\b(?:this|the|these|above|foregoing)\s+'
                              r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
                              r'(?:record|document|form|report|information|statements?|details?)(?=\W|_|$)', predicate, re.I)
-        if re.match(r'(?:certify|attest|declare|affirm)(?=\W|_|$)', predicate, re.I):
+        if re.match(r'(?:certif(?:y|ied|ying)|attest(?:ed|ing)?|declar(?:e|ed|ing)|affirm(?:ed|ing)?|'
+                    r'consent(?:ed|ing)?|authori[sz](?:e|ed|ing)|(?:give|given|gave)\s+(?:(?:my|our)\s+)?consent)'
+                    r'(?=\W|_|$)', predicate, re.I):
             return 'human_signing_action'
-        if not re.match(r'(?:confirm|verify|acknowledge|agree|accept|approve[ds]?|review(?:ed)?|read|consent)(?=\W|_|$)',
+        if not re.match(r'(?:confirm(?:ed|ing)?|verif(?:y|ied|ying)|acknowledg(?:e|ed|ing)|agree(?:d|ing)?|'
+                        r'accept(?:ed|ing)?|approv(?:e|ed|ing)|review(?:ed|ing)?|read)(?=\W|_|$)',
                         predicate, re.I):
             # An unfamiliar predicate about the document cannot silently become
             # authority to make the printed first-person assertion either.

@@ -224,6 +224,72 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
                 out=word_v3.fill(data(doc),[field],{field['key']:'Synthetic ordinary value'})
                 self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,label+': Synthetic ordinary value')
 
+    def test_contracted_and_aspectual_human_acts_keep_exact_source_roles(self):
+        for statement in ("I'm certifying this document for",'I’m certifying this document for',
+                          'I have given consent to this procedure',"We've approved this form",
+                          'We’ve approved this form','I authorize the treatment for',
+                          'I am verifying this report','I had personally declared this information'):
+            with self.subTest(statement=statement):
+                raw=self.form('☐ '+statement+': ______');result=word_v3.inspect(raw)
+                self.assertTrue(any(i['code']=='human_signing_action' for i in result['coverage_issues']))
+                action=next(f for f in result['fields'] if f['kind']=='checkbox')
+                self.assertTrue(action['write_protected'])
+                forged=deepcopy(action);forged.pop('write_protected',None);forged.pop('review_reason',None)
+                self.assertIn(action['key'],word_v3.destination_roles(raw,[forged])['violations'])
+                with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'checked'})
+                ordinary=next(f for f in result['fields'] if f['label']=='Unrelated note')
+                out=Document(io.BytesIO(word_v3.fill(raw,result['fields'],{ordinary['key']:'Synthetic review'})))
+                self.assertEqual(out.paragraphs[0].text,'☐ '+statement+': ______')
+
+    def test_physically_governing_document_acts_protect_the_response_without_signer_inference(self):
+        for sources in (('I confirm this form is accurate.','☐ Yes, completed by: ______'),
+                        ('Witness statement: I saw the patient sign.','☐ Yes, completed by: ______'),
+                        ('Approval of this report: ☐ I do so on: ______',),
+                        ('I confirm this form is accurate.','☐ I do so on: ______')):
+            with self.subTest(sources=sources):
+                doc=Document()
+                for source in sources:doc.add_paragraph(source)
+                doc.add_paragraph('Unrelated note: ______');raw=data(doc);result=word_v3.inspect(raw)
+                self.assertTrue(any(i['code']=='human_signing_action' for i in result['coverage_issues']))
+                action=next(f for f in result['fields'] if f['kind']=='checkbox')
+                self.assertTrue(action['write_protected'])
+                forged=deepcopy(action);forged.pop('write_protected',None);forged.pop('review_reason',None)
+                with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'checked'})
+                ordinary=next(f for f in result['fields'] if f['label']=='Unrelated note')
+                index=word_v3.SlotIndex(word_v3.open_package(raw));slot=index.by_id[f'word/document.xml#b/p[{len(sources)-1}]']
+                start=word_v3.text_of(slot.el).index('_')
+                manual={'key':'manual_action','label':'Forged completion','kind':'text','locator':{
+                    'contract':'v3','part':slot.part,'slot':slot.path,'fingerprint':word_v3.fingerprint(slot.el),
+                    'target':{'type':'span','start':start,'end':start+6,'shape':'blank'}}}
+                with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[manual],{manual['key']:'Synthetic completion'})
+                out=Document(io.BytesIO(word_v3.fill(raw,result['fields'],{ordinary['key']:'Synthetic review'})))
+                self.assertEqual([p.text for p in out.paragraphs[:-1]],list(sources))
+
+    def test_recorded_status_and_independent_question_or_cell_do_not_inherit_another_act(self):
+        for source in ('Consent was obtained by: ______','Signed consent was received on: ______',
+                       'Initial symptoms occurred at: ______','I take warfarin at: ______'):
+            with self.subTest(source=source):
+                raw=self.form('☐ '+source);result=word_v3.inspect(raw)
+                self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                  ('human_signing_action','ambiguous_source_action')])
+                state=next(f for f in result['fields'] if f['kind']=='checkbox')
+                self.assertFalse(state.get('write_protected'))
+                out=word_v3.fill(raw,result['fields'],{state['key']:'checked'})
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'☒ '+source)
+        for boundary in ('independent_question','table','different_cell','independent_personal_state'):
+            with self.subTest(boundary=boundary):
+                doc=Document();doc.add_paragraph('I confirm this form is accurate.')
+                text='Any symptoms? ☐ No ☐ Yes → if yes, describe: ______'
+                if boundary=='table':doc.add_table(rows=1,cols=1).cell(0,0).text='Fixed unrelated block'
+                if boundary=='different_cell':
+                    table=doc.add_table(rows=1,cols=2)
+                    table.cell(0,0).text='I confirm this form is accurate.'
+                    table.cell(0,1).text='☐ Other, specify_________'
+                else:doc.add_paragraph('☐ I have pain_________' if boundary=='independent_personal_state' else text)
+                doc.add_paragraph('Unrelated note: ______');result=word_v3.inspect(data(doc))
+                self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                  ('human_signing_action','ambiguous_source_action')])
+
 
 class SourceCoverage(unittest.TestCase):
     def inspect(self,doc):

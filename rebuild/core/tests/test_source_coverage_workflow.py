@@ -139,7 +139,7 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     'I verify that the information above is correct',
                     'I acknowledge that I have read and agree with this document',
                     'I have personally reviewed and approved this document')
-        for statement in statements:
+        for statement_index,statement in enumerate(statements,1):
             for engine in ('v3','auto'):
                 with self.subTest(statement=statement,engine=engine),override_settings(
                         QUILLMD_WORD_ENGINE=engine,QUILLMD_WORD_AUTO_PREFER_V3=True):
@@ -149,7 +149,7 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
                     if scratch.is_relative_to(approved) and scratch.is_dir() and not scratch.is_symlink():
                         evidence=Path(tempfile.mkdtemp(prefix='human-action-'+engine+'-',dir=scratch))
                         (evidence/'original.docx').write_bytes(raw)
-                    template,version=self.uploaded(data=raw,name='Synthetic source-owned document action')
+                    template,version=self.uploaded(data=raw,name=f'Synthetic source-owned document action {statement_index} {engine}')
                     if evidence:(evidence/'first-import.json').write_text(json.dumps(
                         {'fields':version.fields,'import_manifest':version.import_manifest},indent=2))
                     self.assertTrue(version.import_manifest['coverage'].get('block_generation'))
