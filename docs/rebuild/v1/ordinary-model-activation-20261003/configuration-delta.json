@@ -1,0 +1,29 @@
+{
+  "status": "source-only preparation; not installed or qualified by this record",
+  "model": "claude-sonnet-5-5",
+  "provider": "anthropic",
+  "input_rate": "2",
+  "output_rate": "10",
+  "cached_rate": "0.20",
+  "thinking": "between_tools",
+  "effort": "medium",
+  "inference_geo": "",
+  "QUILLMD_V3_FIELD_RELATIONS": "1",
+  "ordinary_field_contract": "ordinary-field-relations-v4",
+  "request_profile": {
+    "profile": "claude-sonnet-5-5-ordinary-v1",
+    "max_output_tokens": 20000,
+    "timeout_seconds": 120,
+    "thinking": {
+      "type": "between_tools"
+    },
+    "effort": "medium"
+  },
+  "AI_MODE": "preserved from the protected baseline; fixture remains fixture",
+  "installed_observation": {
+    "release": "dedac1625032e32c7a149e6771be22e26c307eb1",
+    "model": "claude-sonnet-4-6",
+    "mode": "live",
+    "source": "root authenticated MFA services observation; no installed environment read by operations"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "release": "REPLACE_WITH_EXACT_REVIEWED_RELEASE_SHA",
+  "model": "claude-sonnet-5-5",
+  "ordinary_field_contract": "ordinary-field-relations-v4",
+  "request_profile": "claude-sonnet-5-5-ordinary-v1",
+  "sources": {
+    "rebuild/core/generation.py": "e561f5d9fd23e876207a9524c8281e17c9e9601896aa5da1c92ac5a0a75d0e94",
+    "rebuild/core/v3_field_relations.py": "2538e399f3ea447dc59d2458ff48b0671a2c49efc3d550d0c7169db2f24869fd",
+    "rebuild/quillmd/settings.py": "a9d22a57bd0102038b71701626248adc5ca5da94ab0e023d84e642ee5a3147a7",
+    "rebuild/quillmd/application_profile.py": "b051d6faadd682ab38b8f2dff9f80a59266ad32f614ed80dc232a5e8bbde6721"
+  }
+}

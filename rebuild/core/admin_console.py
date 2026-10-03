@@ -389,6 +389,11 @@ def language_model_rows():
     if not live:
         value, severity = 'INACTIVE — no provider request is sent while QUILLMD_AI_MODE is not live. In live mode: ' + value, ''
     rows.append({'name': 'request profile', 'value': value, 'severity': severity})
+    contract = config.get('ordinary_field_contract')
+    rows.append({'name': 'ordinary field contract', 'severity': '',
+                 'value': ((contract + ' — configured for source-bound ordinary v3 fields; this row does not certify '
+                            'clinical or voice qualification') if contract else
+                           'not configured — new ordinary v3 generation uses the base workflow') + inactive})
     rows.append({'name': 'pricing_version', 'value': config['pricing_version'] + inactive, 'severity': ''})
     rows.append(live_generation_queue_row(live))
     return rows
