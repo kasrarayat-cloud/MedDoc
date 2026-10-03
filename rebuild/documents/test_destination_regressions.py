@@ -219,6 +219,29 @@ class DestinationRegressions(unittest.TestCase):
                     self.assertIn(b'Synthetic history witness', word_v3.open_package(word_v3.fill(raw, [field],
                         {field['key']: 'Synthetic history witness'})).zip.read('word/document.xml'))
 
+    def test_retained_signer_qualifiers_containing_dates_remain_human_locations(self):
+        for label in ('Signature (participant, dd/mm/yyyy)', 'Signed (mother, DOB)',
+                      'Signature (father, born)', 'Patient initials (person, date of birth)'):
+            with self.subTest(label=label):
+                doc = Document(); doc.add_paragraph(label + ': ______________'); doc.add_paragraph('Plan: ______')
+                raw = saved(doc); field = next(f for f in word_v3.inspect(raw)['fields'] if f['label'] == label)
+                self.assertIn(field['kind'], word_v3.SIGNING_KINDS)
+                self.assertEqual(word_v3.legacy_role_kind(label), field['kind'])
+                forged = deepcopy(field); forged['label'] = 'Date'; forged['kind'] = 'date'
+                self.assertIn(field['key'], word_v3.destination_roles(raw, [forged])['violations'])
+                with self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(raw, [forged], {field['key']: 'Dr Somebody Else'})
+        for label in ('Signature (date)', 'Signature (date and time)', 'Signature (DOB)',
+                      'Signature (date of birth)', 'Signature (dd/mm/yyyy)', 'Date of signature', 'Date signed'):
+            with self.subTest(date_question=label):
+                doc = Document(); doc.add_paragraph(label + ': ______'); raw = saved(doc)
+                field = word_v3.inspect(raw)['fields'][0]
+                self.assertEqual(field['kind'], 'date')
+                self.assertEqual(word_v3.legacy_role_kind(label), '')
+                self.assertEqual(word_v3.destination_roles(raw, [field])['violations'], {})
+                out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: '2026-10-03'})))
+                self.assertEqual(out.paragraphs[0].text, label + ': 2026-10-03')
+
     def test_counted_answer_restriction_is_not_a_person_granting_permission(self):
         for caption in ('Treatment(s) - only one answer allowed:',
                         'Treatment(s) - one option permitted:'):

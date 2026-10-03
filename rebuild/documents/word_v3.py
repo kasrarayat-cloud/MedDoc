@@ -2151,6 +2151,9 @@ class Detector:
 
     def kind_for(self, label: str) -> str:
         label = re.sub(r"\s+", " ", label or "")
+        qualified = qualified_signing_role(label)
+        if qualified:
+            return qualified
         if SIGNATURE_DATE_PAIR.search(label):
             return "signature"
         if INITIALS_DATE_PAIR.search(label):
@@ -7579,11 +7582,33 @@ def _plain(label) -> str:
     return clean_label(_INVISIBLE.sub("", text), limit=1000).casefold()
 
 
+def qualified_signing_role(label) -> str:
+    """A temporal qualifier cannot erase the person qualified by a signing caption.
+
+    A complete date-only parenthetical still asks for a date. A signature or
+    initials caption whose parenthetical also qualifies a signer remains that
+    person's human destination, without enumerating relationships or titles.
+    """
+    text = _plain(label)
+    match = re.fullmatch(r'([^()]+)\(([^()]*)\)\s*[:.]?', text)
+    if match is None or not DATE_LABEL.search(match[2]):
+        return ''
+    role = signing_place(match[1])
+    if not role:
+        return ''
+    remainder = DATE_LABEL.sub(' ', match[2])
+    remainder = re.sub(r'\b(?:of\s+birth|time|day|and|or)\b', ' ', remainder)
+    return role if re.sub(r'[\s.,;:/&+\-]+', '', remainder) else ''
+
+
 def signing_place(label) -> str:
     """'signature', 'initials' or '' for a PRINTED label (see the section comment above)."""
     text = _plain(label)
     if not text:
         return ""
+    qualified = qualified_signing_role(text)
+    if qualified:
+        return qualified
     if SIGNATURE_DATE_PAIR.search(text):
         return "signature"
     if INITIALS_DATE_PAIR.search(text):
