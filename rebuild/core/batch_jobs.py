@@ -134,6 +134,10 @@ def fixture_response(plan, part):
     selected = {p.key:p.quotes for p in picks.fields}
     body = {'fields':[{'key':key,'unit_ids':[u['id'] for u in plan['units'] if u['quote'] in selected[key]],
                       'conflict':False} for key in part.field_ids]}
+    if plan['config'].get('ordinary_field_contract'):
+        from . import relations_fixture
+        body = relations_fixture.body(plan['notes'], plan['fields'], plan['asked'], plan['context_labels'],
+                                     requested_ids=part.field_ids, units=plan['units'])
     if plan['history_targets']:
         # No invented semantic partitions in the deterministic fixture.
         body['history_context'] = [{'key':key,'units':[{'unit_id':u['id'],'relation':'unresolved'}
