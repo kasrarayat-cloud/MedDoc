@@ -135,3 +135,31 @@ actor-capacity-before-ewfsa_3v/, and pure-twentythird through twentyseventh logs
 The active worker tree stays isolated; lead-only integration, CI, private
 installation and demonstration are pending because the lead session is
 unavailable. There is no configured background deployment.
+
+
+2026-10-03 09:10 UTC original-clause binding correction
+----------------------------------------------------
+
+Independent finished-source refutation disproved 3b0 as well. Security retained
+8 direct human writes (7 without coverage issues) among 63 inputs; Notes retained
+18 zero-issue destination writes from 14 distinct original strings among 45
+originals/75 target attempts. The original results, immutable snapshots and
+exports remain unchanged. Our direct reproduction separately confirmed actor
+blanks before third-person predicates and quoted/conditional ticks. Its first
+incorrect checkbox value was retained as an instrument refusal, then corrected
+in a distinct attempt. These are source/writer findings, not served patient or
+model outcomes.
+
+The follow-up binds every actor/response span to its original printed clause,
+using sentence/question separators and wide independent gaps. It also reads
+paired quoted and explicit conditional actions. Signing events no longer depend
+on a whitelist of object nouns; clinical plural signs and sign-of arguments
+remain ordinary in the tested controls. Third-person and ambiguous actor frames
+remain precise source holds, with no inferred identity or signing authority.
+33 affected pure tests passed in 89.311 seconds, actual exit 0, on this source.
+A new six-case HTTP qualification method is committed but has not run. Both
+independent finished-diff refutation and actual HTTP worker-to-export checks
+remain pending. Conservative receipt defaults reported by reviewers remain an
+explicit usefulness limitation; they have not been reclassified as automatic
+successes. The latest read-only preflight is FIX-AND-GO at 90 percent, 32 GB free,
+with no cleanup, restart, or gate weakening (084934Z report).

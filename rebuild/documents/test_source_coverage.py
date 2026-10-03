@@ -580,7 +580,12 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
                        'I (initials ______) certify that this record is accurate: ______    Reason for visit: ______',
                        'I — [enter full name] — certify that this record is accurate: ______    Reason for visit: ______',
                        'As [enter full name], I certify that this record is accurate: ______    Reason for visit: ______',
-                       'I as [enter full name] allow this procedure: ______    Reason for visit: ______'):
+                       'I as [enter full name] allow this procedure: ______    Reason for visit: ______',
+                       'In my capacity as [enter full name], I certify this record: ______    Reason for visit: ______',
+                       'Acting as [enter full name], I approve this form: ______    Reason for visit: ______',
+                       'As [enter full name] I certify this record: ______    Reason for visit: ______',
+                       'I ______ certify this record: ______    Reason for visit: ______',
+                       'I as ______ allow this procedure: ______    Reason for visit: ______'):
             with self.subTest(source=source):
                 doc=Document();doc.add_paragraph(source);raw=data(doc);result=word_v3.inspect(raw)
                 fields=result['fields'];ordinary=next(f for f in fields if f['label']=='Reason for visit')
@@ -599,6 +604,75 @@ class AdjacentCheckboxAnswers(unittest.TestCase):
         self.assertEqual(word_v3.destination_roles(raw,[identity])['violations'],{})
         out=word_v3.fill(raw,fields,{identity['key']:'Synthetic patient name'})
         self.assertIn('I Synthetic patient name have ankle swelling',Document(io.BytesIO(out)).paragraphs[0].text)
+
+    def test_signing_events_keep_unfamiliar_objects_and_introductory_capacities_source_held(self):
+        for statement in ('I saw the patient sign it',
+                          'I witnessed the patient sign below',
+                          'The nurse saw the patient sign it',
+                          'In my capacity as witness, I confirm this form',
+                          'As a witness I confirm this form',
+                          'Acting as witness, I acknowledge this statement',
+                          'Witness observation of the patient signing'):
+            self.assert_source_act_stays_human_owned(statement)
+        # A literal "sign here" is already a physical signature kind. Its
+        # checkbox still cannot tick even if its ordinary blank is withdrawn.
+        raw=self.form('☐ I watched the patient sign here: ______')
+        result=word_v3.inspect(raw);field=deepcopy(next(f for f in result['fields'] if f.get('write_protected')))
+        field.pop('write_protected');field.pop('review_reason');field['kind']='checkbox'
+        self.assertIn(field['key'],word_v3.destination_roles(raw,[field])['violations'])
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[field],{field['key']:'checked'})
+        for statement in ('Acting as clinician, I saw ankle swelling',
+                          'In my capacity as clinician, I observed signs of dehydration',
+                          'As the patient I have ankle swelling',
+                          'I observed a sign of infection',
+                          'The clinician observed a sign of dehydration'):
+            for shape,raw in self.source_act_forms(statement):
+                with self.subTest(ordinary=statement,shape=shape):
+                    result=word_v3.inspect(raw)
+                    self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                      ('human_signing_action','ambiguous_source_action')])
+                    target=next(f for f in result['fields'] if f['kind']=='checkbox') if shape=='checkbox' else \
+                           next(f for f in result['fields'] if f['label']!='Unrelated note')
+                    self.assertEqual(word_v3.destination_roles(raw,[target])['violations'],{})
+                    word_v3.fill(raw,result['fields'],{target['key']:'checked' if target['kind']=='checkbox'
+                                                    else 'Synthetic clinical finding'})
+
+    def test_all_actor_and_response_destinations_bind_to_the_exact_human_act_clause(self):
+        for human,separator in (('Person ______ saw the patient sign: ______','    '),
+                                ('Name ______ saw the patient sign: ______','\t\t'),
+                                ('The ______ approves this document: ______','; '),
+                                ('The person named ______ permits this procedure: ______','. '),
+                                ('I [enter first name] [enter last name] approve this report: ______','    '),
+                                ('I, Dr. ______, certify this record: ______','; ')):
+            with self.subTest(human=human,separator=separator):
+                source=human+separator+'Initial diagnosis: ______'
+                doc=Document();doc.add_paragraph(source);raw=data(doc);result=word_v3.inspect(raw)
+                ordinary=next(f for f in result['fields'] if f['label']=='Initial diagnosis')
+                self.assertEqual(ordinary['kind'],'text');self.assertFalse(ordinary.get('write_protected'))
+                acts=[f for f in result['fields'] if f['key']!=ordinary['key']]
+                self.assertGreaterEqual(len(acts),2)
+                for field in acts:
+                    self.assertTrue(field.get('write_protected'),field)
+                    forged=deepcopy(field);forged['kind']='text';forged.pop('write_protected');forged.pop('review_reason')
+                    self.assertIn(field['key'],word_v3.destination_roles(raw,[forged])['violations'])
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw,[forged],{field['key']:'Synthetic finalizer name'})
+                out=word_v3.fill(raw,result['fields'],{ordinary['key']:'Synthetic ordinary diagnosis'})
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,
+                                 source.removesuffix('______')+'Synthetic ordinary diagnosis')
+
+    def test_quoted_and_conditional_document_acts_do_not_authorize_the_actor(self):
+        for statement in ('"I approve this document"','“I approve this document”',
+                          "'We consent to this procedure'",'‘We consent to this procedure’',
+                          'If required, I authorise this treatment'):
+            self.assert_source_act_stays_human_owned(statement)
+        for statement in ('"I have ankle swelling"','If required, I record ankle swelling',
+                          '“The clinician observed clinical signs of dehydration”'):
+            for shape,raw in self.source_act_forms(statement):
+                with self.subTest(ordinary=statement,shape=shape):
+                    result=word_v3.inspect(raw)
+                    self.assertFalse([i for i in result['coverage_issues'] if i['code'] in
+                                      ('human_signing_action','ambiguous_source_action')])
 
 
 class SourceCoverage(unittest.TestCase):

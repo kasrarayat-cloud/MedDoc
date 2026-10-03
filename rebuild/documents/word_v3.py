@@ -2393,26 +2393,19 @@ class Detector:
             if area.slot.kind == 'p' and area.target.get('type') == 'span':
                 printed, pieces = self.ptext(area.slot.el)
                 start = area.target['start']
+                boundaries=list(re.finditer(r'[;?]|\.(?=\s+[^\W\d_])|\t{2,}| {4,}',printed))
+                clause_start=max((b.end() for b in boundaries if b.end()<=start),default=0)
+                clause_end=min((b.start() for b in boundaries if b.start()>=area.target['end']),
+                               default=len(printed))
                 before = max((end for _, end, _ in self.blank_spans(printed, pieces)
                               if end <= start), default=0)
-                sources.append(printed[before:start])
-                # A name/role blank inside the subject of an attestation is
-                # part of that human act, even though its predicate is after
-                # the blank. Bound the reading to that printed apposition and
-                # its first clause/answer; never inherit a later question.
-                qualifier = re.match(r'^\s*(?P<speaker>[^\[\](),—–\r\n]+?)\s*'
-                    r'(?P<role>\[[^\[\]\r\n]{1,120}\]|\([^()\r\n]{1,120}\)|'
-                    r',\s*[^,;:?!\r\n]{1,120}\s*,|(?P<dash>[—–-])[^—–\r\n]{1,120}?(?P=dash))\s*',printed)
-                speaker = _plain(qualifier['speaker']) if qualifier else ''
-                subject_role = (speaker in ('i','we','i as','we as') or
-                                speaker=='as' and re.match(r'^,\s*(?:I|we)(?=\W|$)',
-                                                           printed[qualifier.end():],re.I))
-                if (qualifier and subject_role
-                        and area.target['end']>qualifier.start('role') and start<qualifier.end('role')):
-                    following = [a for a,_,_ in self.blank_spans(printed,pieces) if a>=qualifier.end()]
-                    boundary = re.search(r'[.;?]',printed[qualifier.end():])
-                    end = min(following+[qualifier.end()+boundary.start()+1 if boundary else len(printed)])
-                    sources.append(printed[:end])
+                sources.append(printed[max(before,clause_start):start])
+                # Identity and response blanks belong to their original
+                # printed clause even when the acting predicate follows them.
+                # Bind every destination in that clause; never invent a signer
+                # or cross a sentence, question, or printed independent gap.
+                # A period before another blank (Dr. ____) is not a new clause.
+                sources.append(printed[clause_start:clause_end])
             elif area.slot.kind == 'tc':
                 cell = area.slot
                 for source in self.question_cells(cell.parent, cell.info['row'], cell.info['col']):
@@ -2885,7 +2878,8 @@ class Detector:
                         lambda m:m[1]+' '+contractions[m[2].casefold()],source,flags=re.I)
         # An explicit subject remains explicit after a bounded introductory
         # capacity phrase. The printed capacity supplies no signer identity.
-        introductory = re.match(r'^as\s+[^,;:?!\r\n]{1,120},\s*(?=(?:I|we)(?=\W|$))',source,re.I)
+        introductory = re.match(r'^(?:as|acting\s+as|in\s+(?:my|our|the)\s+(?:capacity|role)\s+as)\s+'
+                                r'[^,;:?!\r\n]{1,120}?(?:,\s*|\s+)(?=(?:I|we)(?=\W|$))',source,re.I)
         if introductory:source=source[introductory.end():]
         person = re.match(r'^(?:I|we)(?=\W|$)',source,re.I)
         if not person:return ''
@@ -2920,6 +2914,16 @@ class Detector:
         requests from ordinary clinical questions and nonhuman observations.
         """
         source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        # Quoting or qualifying a printed human act supplies no authority to
+        # perform it. Read only a complete paired quotation / explicit clause;
+        # ordinary quoted clinical statements retain their own arguments.
+        quote_pairs={'"':'"',"'":"'",'“':'”','‘':'’'}
+        if source[:1] in quote_pairs:
+            closer=source.rfind(quote_pairs[source[0]],1)
+            if closer>0 and re.fullmatch(r'[\s:._…]*',source[closer+1:]):
+                return cls.checkbox_source_action(source[1:closer],governing=governing)
+        conditional=re.match(r'^if\s+[^,;:?!\r\n]{1,200},\s*(.+)$',source,re.I)
+        if conditional:return cls.checkbox_source_action(conditional[1],governing=governing)
         condition = re.match(r'^by\s+(?:checking|ticking|selecting|signing|initiall?ing)\b'
                              r'[^,;:\r\n]{0,200}?(?:[,;:]\s*|\s+(?=(?:I|we|you|he|she|they)\b))(.+)$',source,re.I)
         if condition:
@@ -2966,10 +2970,15 @@ class Detector:
                    r'[^.;:?!\r\n]*\b(?:signing|signed|signatures?|sign(?=\s*(?:[.:;_]|$)))\b')
         witnessed_presence = (r'\b(?:sign(?:ed|ing)|signatures?)\b[^.;:?!\r\n]*'
                               r'\bin\s+(?:my|our)\s+presence\b')
-        signing_event = (r'\b(?:signed|signing|signatures?)\b|\bsign(?=\s*(?:[.:;_]|$)|\s+'
-                         r'(?:(?:the|this|that|these|a|an|my|our|their|his|her)\s+)?'
-                         r'(?:consent|declaration|attestation|authori[sz]ation|(?:clinical\s+|medical\s+)?'
-                         r'(?:document|form|report|record))\b)')
+        # A signing event does not require a particular document noun: its
+        # verb may take a pronoun, a printed place, or an unfamiliar object.
+        # "Signs" and "sign of ..." are clinical noun readings. An otherwise
+        # ambiguous singular sign remains a precise source-role decision.
+        signing_event = (r'\b(?:signed|signing|signatures?)\b|'
+                         r'\bsign(?=\W|_|$)(?!\s+of\b)')
+        if (governing and re.search(r'\b(?:observation|witnessing)\s+of\b',source,re.I)
+                and re.search(signing_event,source,re.I)):
+            return 'ambiguous_source_action'
         # Witnessing is a subject + perception predicate + signing event. Its
         # subject need not name a known role, and cannot authorize generation
         # to perform that person's observation. Clinical observations without

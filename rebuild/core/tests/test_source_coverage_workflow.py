@@ -174,6 +174,17 @@ class SourceReviewWorkflow(V3Fixture,TestCase):
             'Manager authorization','Witness certification'))
         self.source_action_workflow(cases,start=201)
 
+    @override_settings(**dict(SONNET_55_DEFAULT,AI_MODE='fixture'))
+    def test_actor_clauses_quoted_and_conditional_acts_hold_then_export_unchanged(self):
+        self.source_action_workflow([
+            ('checkbox',('"I approve this document"',)),
+            ('checkbox',('If required, I authorise this treatment',)),
+            ('paragraph',('Person ______ saw the patient sign: ',)),
+            ('paragraph',('The person named ______ permits this procedure: ',)),
+            ('paragraph',('In my capacity as [enter full name], I certify this record: ',)),
+            ('table',('Witness observation of the patient signing','______')),
+        ],start=401)
+
     @override_settings(**dict(SONNET_55_DEFAULT,AI_MODE='fixture',
                              QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True))
     def test_ordinary_initial_and_signed_receipt_fields_reach_default_worker_and_export(self):
