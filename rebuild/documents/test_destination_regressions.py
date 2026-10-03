@@ -7,12 +7,14 @@ from copy import deepcopy
 import io
 import unittest
 from zipfile import ZipFile
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from . import word_v3
+from . import engine, word_v3
 
 
 def saved(doc):
@@ -134,3 +136,46 @@ class DestinationRegressions(unittest.TestCase):
         self.assertEqual(actual.paragraphs[0].text, Document(io.BytesIO(raw)).paragraphs[0].text)
         self.assertEqual(actual.paragraphs[2].text, 'Neighbor: ______')
         self.assertEqual(actual.paragraphs[0]._p.find(qn('w:hyperlink')).get(qn('w:anchor')), 'retained_reference')
+
+
+class LegacyPhysicalSources(unittest.TestCase):
+    def report(self, labels):
+        doc = Document(); table = doc.add_table(rows=len(labels), cols=2)
+        for number, label in enumerate(labels): table.cell(number, 0).text = label
+        raw = saved(doc)
+        with TemporaryDirectory(prefix='quillmd-legacy-physical-') as directory:
+            path = Path(directory) / 'input.docx'; path.write_bytes(raw)
+            document, paragraphs, cells, fields, _ = engine.docx_inspect(path)
+            result = engine.legacy_roles(fields, fields, source=(raw, document, paragraphs, cells))
+        return raw, fields, result
+
+    def test_retained_ambiguous_consent_and_manager_statements_are_bound_to_original_extent(self):
+        for label in ('Consent form signed', 'Care plan signed and date of next review',
+                      'This section is for the line manager to add comments'):
+            with self.subTest(label=label):
+                raw, fields, result = self.report([label, 'Plan'])
+                actions = result['legacy_unresolved_actions']
+                self.assertTrue(actions)
+                self.assertTrue(all(row['printed_label'] == label for row in actions))
+                self.assertTrue(all(row['place'][0] == 'word/document.xml#b/tbl[0]/tr[0]/tc[1]' for row in actions))
+                self.assertEqual(Document(io.BytesIO(raw)).tables[0].cell(0, 1).text, '')
+
+    def test_ordinary_initial_signed_receipt_and_known_human_signer_controls_keep_their_roles(self):
+        raw, fields, result = self.report(['Initial diagnosis', 'Initial GCS', 'Signed consent was received on',
+                                          'The patient has received the signed document on', 'Electronically signed by',
+                                          'Signature (participant)', 'Nurse initials', 'Plan'])
+        self.assertEqual(result['legacy_unresolved_actions'], [])
+        roles = result['legacy_roles']
+        for field in fields[:4] + fields[-1:]: self.assertEqual(roles[field['key']]['role'], '')
+        for field in fields[4:7]: self.assertTrue(roles[field['key']]['role'])
+
+    def test_direct_legacy_export_refuses_unresolved_original_without_writing_output(self):
+        raw, fields, _ = self.report(['Consent form signed', 'Plan'])
+        with TemporaryDirectory(prefix='quillmd-legacy-export-') as directory:
+            workspace = Path(directory); (workspace / 'input.docx').write_bytes(raw)
+            with self.assertRaises(engine.DocumentFailure) as refusal:
+                engine.process(workspace, {'operation': 'fill', 'format': 'docx', 'engine': 'legacy',
+                                          'mapping': fields, 'answers': {fields[0]['key']: 'Yes'}})
+            self.assertEqual(refusal.exception.code, 'unresolved_legacy_roles')
+            self.assertFalse((workspace / 'output.docx').exists())
+            self.assertEqual((workspace / 'input.docx').read_bytes(), raw)

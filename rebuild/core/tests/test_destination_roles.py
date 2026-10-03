@@ -6,6 +6,7 @@ mocked and no request leaves the process. RF../PC.. ids are the destination-auth
 positive controls (v1-product-20260930 a1 mapping-matrix redfirst.json).
 """
 import copy
+import hashlib
 import io
 import itertools
 import json
@@ -20,7 +21,7 @@ from docx.oxml.ns import qn
 
 from core import destination_roles, generation, mapping_assistance as mapping, v3_mapping
 from core.jobs import enqueue, run_one
-from core.models import Encounter, MappingConfirmation, Template, TemplateVersion
+from core.models import Encounter, Job, MappingConfirmation, Reservation, Template, TemplateVersion
 from core.security import private_path
 from core.tests.test_mapping_assistance import SETTINGS as MAPPING_SETTINGS
 from core.tests.test_word_v3_workflow import V3, V3Fixture, part_text, import_metadata
@@ -210,8 +211,9 @@ class V3Gates(V3Fixture, TestCase):
         self.assertIn('Name: Synthetic Example', part_text(private_path(e.export_path).read_bytes()))
 
 
-@override_settings(**TEST_SETTINGS)
+@override_settings(**dict(TEST_SETTINGS, QUILLMD_WORD_ENGINE='legacy'))
 class LegacyDefaultPath(V3Fixture, TestCase):
+    """The retained ambiguous form refuses; distinct supported legacy forms exercise human review."""
     LABELS = ('Patient signature', 'Consultant signature', 'Initials', 'Consent form signed', 'Initial assessment',
               'Electronically signed by', 'Plan')
     NOTES = ('Patient signature: John Example\nConsultant signature: Dr Example\nInitials: JE\n'
@@ -223,9 +225,35 @@ class LegacyDefaultPath(V3Fixture, TestCase):
         self.template, self.version = self.uploaded(data=self.data, name='Synthetic legacy roles')
         self.by = self.by_label(self.version)
         self.assertEqual(self.version.contract, '')
+        original, imported = self.template, self.version
+        self.assertTrue(imported.import_manifest['coverage']['block_generation'])
+        self.assertEqual(self.new_encounter(imported, notes=self.NOTES).status_code, 302)
+        with self.assertRaisesMessage(ValidationError, 'No generation or charge'):
+            enqueue(Encounter.objects.latest('created_at'), self.user)
+        # A synthetic record representing an old, unbound import keeps the
+        # exact original/map. Its missing manifest cannot authorize this area.
+        historical = Template.objects.create(department=self.department, name='Synthetic historical unbound roles',
+            format=original.format, original_name=original.original_name, original_path=original.original_path,
+            sha256=original.sha256, created_by=self.user)
+        version = TemplateVersion.objects.create(template=historical, number=1, fields=copy.deepcopy(imported.fields),
+                                                 created_by=self.user)
+        self.assertEqual(version.fields, imported.fields)
+        self.assertEqual(self.new_encounter(version, notes=self.NOTES).status_code, 302)
+        with self.assertRaisesMessage(ValidationError, 'human-owned or unresolved answer area'):
+            enqueue(Encounter.objects.latest('created_at'), self.user)
+        self.assertEqual(Job.objects.count(), 0); self.assertEqual(Reservation.objects.count(), 0)
+        self.assertEqual(private_path(original.original_path).read_bytes(), self.data)
+        # Supplemental supported source, not a correction or pass of the
+        # original Consent-form case. Known signing fields stay human-only.
+        labels = tuple('Signed consent was received on' if label == 'Consent form signed' else label for label in self.LABELS)
+        self.supported_data = legacy_rows(*labels)
+        self.template, self.version = self.uploaded(data=self.supported_data, name='Synthetic supported legacy roles')
+        self.by = self.by_label(self.version)
+        self.assertFalse(self.version.import_manifest['coverage'].get('block_generation', False))
+        self.notes = self.NOTES.replace('Consent form signed: Yes', 'Signed consent was received on: 3 October 2026')
 
     def generated(self):
-        self.assertEqual(self.new_encounter(self.version, notes=self.NOTES).status_code, 302)
+        self.assertEqual(self.new_encounter(self.version, notes=self.notes).status_code, 302)
         e = Encounter.objects.latest('created_at')
         enqueue(Encounter.objects.get(pk=e.pk), self.user); self.assertTrue(run_one())
         e.refresh_from_db()
@@ -238,14 +266,14 @@ class LegacyDefaultPath(V3Fixture, TestCase):
                 answer = e.answers[self.by[label]['key']]
                 self.assertEqual((answer['status'], answer['text']), ('missing', ''))
                 self.assertTrue(answer['reason'])
-        for label, text in (('Consent form signed', 'Yes'), ('Initial assessment', 'Stable'), ('Plan', 'Rest.')):
+        for label, text in (('Signed consent was received on', '3 October 2026'), ('Initial assessment', 'Stable'), ('Plan', 'Rest.')):
             with self.subTest(label=label):   # PC09 / PC07: checklist states and adjectives stay ordinary answers
                 self.assertEqual(e.answers[self.by[label]['key']]['text'], text)
         sent = []
         with override_settings(**LIVE), provider_capture(sent):
             generation.generate(e.notes, destination_roles.generation_fields(self.version), generation.configuration())
         asked = [q['label'] for q in json.loads(sent[0]['messages'][0]['content'])['questions']]
-        self.assertEqual(asked, ['Consent form signed', 'Initial assessment', 'Plan'])
+        self.assertEqual(asked, ['Signed consent was received on', 'Initial assessment', 'Plan'])
 
     def review_all(self, e, override=()):
         post = {'revision': e.revision}
@@ -305,9 +333,8 @@ class LegacyDefaultPath(V3Fixture, TestCase):
 
 @override_settings(**TEST_SETTINGS)
 class LegacyIdentityReadsThePrintedLabel(V3Fixture, TestCase):
-    def test_l05_renaming_a_participants_signature_to_signature_makes_it_the_finalizers_as_on_43fcf214(self):
-        """Withdrawn relaxation (FV-01): a clinician who renames a row 'Signature' gets the finalizer-identity rule, as on
-        43fcf214; reading only the printed label here dropped identity from real signing places renamed the same way."""
+    def test_l05_participant_signature_stays_blank_after_mapping_rename(self):
+        """The retained FV-01 source no longer appoints a finalizer after a mapped rename."""
         template, version = self.uploaded(data=legacy_rows("Participant's signature", 'Plan'), name='Synthetic L05')
         by = self.by_label(version)
         response = self.client.post(f'/templates/{template.pk}/', {
@@ -321,8 +348,12 @@ class LegacyIdentityReadsThePrintedLabel(V3Fixture, TestCase):
         key = by["Participant's signature"]['key']
         post = {'revision': e.revision, 'answer_' + key: '', 'blank_' + key: 'on', 'reviewed_' + key: 'on',
                 'answer_' + by['Plan']['key']: 'Rest.', 'reviewed_' + by['Plan']['key']: 'on'}
-        # The renamed row is the finalizer's own signature row, as on 43fcf214: 'Leave blank - reviewed' is refused.
-        self.assertEqual(self.client.post(f'/encounters/{e.pk}/save/', post).status_code, 400)
+        # A mapped rename cannot appoint the finalizer in another person's area.
+        self.assertEqual(self.client.post(f'/encounters/{e.pk}/save/', post).status_code, 302)
+        e.refresh_from_db()
+        self.client.post(f'/encounters/{e.pk}/finalize/', {'revision': e.revision, 'reviewed': 'on'})
+        e.refresh_from_db(); self.assertEqual(e.status, 'finalized')
+        self.assertEqual(Document(private_path(e.export_path)).tables[0].cell(0, 1).text, '')
 
 
 @override_settings(**MAPPING_SETTINGS)
@@ -698,7 +729,7 @@ class V3Round1(Walk, V3Fixture, TestCase):
     def test_r2_04_an_initial_reading_can_be_replaced_by_its_text_answer(self):
         template, version = self.uploaded(data=lines('Initial GCS: ______', 'Plan: ______'), name='Synthetic R2-04')
         gcs = self.by_label(version)['Initial GCS']
-        self.assertEqual(gcs['kind'], 'initials')
+        self.assertEqual(gcs['kind'], 'text')  # ordinary initial clinical measurement is now recovered
         response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
                                                                   'remove_' + gcs['key']: 'on'})
         self.assertEqual(response.status_code, 302)
@@ -707,6 +738,12 @@ class V3Round1(Walk, V3Fixture, TestCase):
                                     'slot': BODY + 'b/p[1]', 'kind': 'text', 'label': 'Initial GCS'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.confirm_status(template, self.latest(template)), 302)
+        reviewed = self.latest(template)
+        e = self.generated(reviewed, 'Initial GCS: 13\nPlan: Rest.')
+        self.assertEqual(e.answers[self.by_label(reviewed)['Initial GCS']['key']]['text'], '13')
+        self.assertEqual(self.reviewed(e, reviewed).status_code, 302)
+        self.finalized(e); self.assertEqual(e.status, 'finalized')
+        self.assertIn('13', part_text(private_path(e.export_path).read_bytes()))
 
     def test_r2_05_an_unlocked_control_inside_a_locked_frame_is_confirmed(self):
         doc = Document(); doc.add_heading('Clinic record', level=2)
@@ -972,7 +1009,7 @@ class SalvageV3(Walk, V3Fixture, TestCase):
                 e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
                 answer = e.answers[field['key']]
                 self.assertEqual((answer['status'], answer['text']), ('missing', ''))
-                self.assertEqual(answer['reason'], destination_roles.IDENTITY_NOT_GENERATED)   # 43fcf214's hold (L1:R1-01)
+                self.assertEqual(answer['reason'], destination_roles.ROLE_NOT_GENERATED)
                 self.assertEqual(self.reviewed(e, version).status_code, 302)
                 self.finalized(e)
                 self.assertEqual(e.status, 'finalized')
@@ -1246,9 +1283,8 @@ class RepairLegacyIdentity(Walk, V3Fixture, TestCase):
 
 @override_settings(**V3)
 class RepairV3Rename(Walk, V3Fixture, TestCase):
-    def test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label(self):
-        """L2:R2-01 / L3:F1 (regression vs 43fcf214): the rename guard reads signature_label, which the widened
-        NOT_THE_CLINICIAN made False, so the rename passed and generation read the new label and wrote the value."""
+    def test_r2_01_other_signer_dated_line_keeps_original_human_role_after_relabel(self):
+        """Retained L2:R2-01 / L3:F1 sources stay blank through actual export after mapping relabel."""
         for n, (label, renamed) in enumerate((('Signature (participant, dd/mm/yyyy)', 'Participant'),
                                               ('Signature (participant, dd/mm/yyyy)', 'Participant signature and date'),
                                               ('Signed (mother, DOB)', 'Mother DOB'), ('Signed (mother, DOB)', 'DOB'),
@@ -1261,9 +1297,23 @@ class RepairV3Rename(Walk, V3Fixture, TestCase):
                 field = self.by_label(version)[label]
                 response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
                                                                           'label_' + field['key']: renamed})
-                self.assertEqual(response.status_code, 400)
-                self.assertIn('A signature question keeps a signature label', response.context['v3_error'])
-                self.assertEqual(self.latest(template).pk, version.pk)
+                self.assertEqual(response.status_code, 302)
+                latest = self.latest(template)
+                mapped = next(f for f in latest.fields if f['key'] == field['key'])
+                self.assertEqual(mapped['locator'], field['locator'])
+                self.assertEqual(mapped['kind'], field['kind'])
+                self.assertFalse(destination_roles.v3_held(latest))
+                self.confirm(template, latest)
+                e = self.generated(latest, f'{renamed}: Dr Somebody Else\nPlan: Rest.')
+                self.assertEqual((e.answers[field['key']]['status'], e.answers[field['key']]['text']), ('missing', ''))
+                page = self.client.get(f'/encounters/{e.pk}/')
+                row = next(r for r in page.context['answer_rows'] if r['key'] == field['key'])
+                self.assertFalse(row['identity'])
+                self.assertEqual(self.reviewed(e, latest).status_code, 302)
+                self.finalized(e); self.assertEqual(e.status, 'finalized')
+                exported = part_text(private_path(e.export_path).read_bytes())
+                self.assertIn(label + ': ______________', exported)
+                self.assertNotIn('Dr Somebody Else', exported)
 
 
 @override_settings(**V3)
@@ -1314,6 +1364,21 @@ class RepairV3Usefulness(Walk, V3Fixture, TestCase):
                                                   name='Synthetic R1-05 %d' % n)
                 field = self.by_label(version)[label]
                 self.assertEqual(field['kind'], kind)
+                if label == 'Care plan signed and date of next review':
+                    self.assertTrue(field['write_protected'])
+                    self.assertEqual(self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm',
+                        'mapping_version': version.pk, 'checked_every_field': 'on'}).status_code, 400)
+                    issues = version.import_manifest['coverage']['selected_engine_issues']
+                    response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_coverage',
+                        'mapping_version': version.pk, **{'exclude_' + i['id']: 'on' for i in issues}})
+                    self.assertEqual(response.status_code, 302)
+                    version = self.confirm(template)
+                    e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                    self.assertEqual(e.answers[field['key']]['text'], '')
+                    self.assertEqual(self.rows_post(e, version, {}).status_code, 302)
+                    self.finalized(e); self.assertEqual(e.status, 'finalized')
+                    self.assertIn(label + ': ______________', part_text(private_path(e.export_path).read_bytes()))
+                    continue  # explicit partial coverage; not a recovered ordinary-field pass
                 version = self.confirm(template)
                 e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
                 self.assertEqual(e.answers[field['key']]['status'], 'supported')
@@ -1321,9 +1386,8 @@ class RepairV3Usefulness(Walk, V3Fixture, TestCase):
                 self.finalized(e)
                 self.assertEqual(e.status, 'finalized')
 
-    def test_r1_05_a_checklist_signed_and_dated_line_can_be_replaced_by_its_answer(self):
-        """L1:R1-05: 'Consent form signed and dated' is typed signature by the kind rule (as on 43fcf214) but is no
-        signing place: the clinician may replace it with the answer it asks, as on 43fcf214."""
+    def test_r1_05_ambiguous_signed_form_stays_human_after_remove_add(self):
+        """Retained L1:R1-05 source requires an exact unchanged exclusion; mapping clicks cannot authorize it."""
         template, version = self.uploaded(data=lines('Consent form signed and dated: ______________', 'Plan: ______________'),
                                           name='Synthetic R1-05 consent')
         field = self.by_label(version)['Consent form signed and dated']
@@ -1332,9 +1396,19 @@ class RepairV3Usefulness(Walk, V3Fixture, TestCase):
                                                                   'remove_' + field['key']: 'on'})
         self.assertEqual(response.status_code, 302)
         latest = self.latest(template)
+        self.assertNotIn(field['key'], {f['key'] for f in latest.fields})
         response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': latest.pk,
                                     'slot': BODY + 'b/p[1]', 'kind': 'text', 'label': 'Consent form signed and dated'})
+        self.assertEqual(response.status_code, 400)
+        issues = latest.import_manifest['coverage']['selected_engine_issues']
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_coverage',
+            'mapping_version': latest.pk, **{'exclude_' + i['id']: 'on' for i in issues}})
         self.assertEqual(response.status_code, 302)
+        reviewed = self.confirm(template)
+        e = self.generated(reviewed, 'Consent form signed and dated: Yes\nPlan: Rest.')
+        self.assertEqual(self.rows_post(e, reviewed, {}).status_code, 302)
+        self.finalized(e); self.assertEqual(e.status, 'finalized')
+        self.assertIn('Consent form signed and dated: ______________', part_text(private_path(e.export_path).read_bytes()))
 
 
 @override_settings(**TEST_SETTINGS)
@@ -1352,6 +1426,16 @@ class RepairLegacyUsefulness(Walk, V3Fixture, TestCase):
             with self.subTest(label=label):
                 template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic R1-04 %d' % n)
                 key = self.by_label(version)[label]['key']
+                if label in ('Care plan signed and date of next review', 'Consent form signed and dated', 'Sign and symptom review'):
+                    before = (Job.objects.count(), Reservation.objects.count())
+                    self.assertTrue(version.import_manifest['coverage']['block_generation'])
+                    self.assertEqual(self.new_encounter(version, f'{label}: {value}\nPlan: Rest.').status_code, 302)
+                    e = Encounter.objects.latest('created_at')
+                    with self.assertRaisesMessage(ValidationError, 'No generation or charge'):
+                        enqueue(e, self.user)
+                    self.assertEqual((Job.objects.count(), Reservation.objects.count()), before)
+                    self.assertEqual(e.answers, {}); self.assertFalse(e.export_path)
+                    continue  # retained source is explicitly unsupported on this legacy route
                 e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
                 self.assertEqual((e.answers[key]['status'], e.answers[key]['text']), ('supported', value))
                 self.assertEqual(self.reviewed(e, version).status_code, 302)
@@ -1472,3 +1556,54 @@ class RoleReportReuse(V3Fixture, TestCase):
                 destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
         finally:
             os.rename(str(path) + '.aside', path)
+
+
+@override_settings(**V3)
+class MappingReviewCoverage(Walk, V3Fixture, TestCase):
+    def test_rf08_mapping_review_reads_bound_roles_before_exclusions_but_admission_stays_held(self):
+        from core import import_binding
+        doc = Document(); doc.add_heading('Consultant review', level=2)
+        doc.add_paragraph('Signed by the consultant:'); box(doc); doc.add_paragraph('Plan: ______')
+        original = saved(doc)
+        template, version = self.uploaded(data=original, name='Synthetic RF08 review before exclusions')
+        issue = version.import_manifest['coverage']['selected_engine_issues'][0]
+        self.assertEqual((issue['code'], issue['slot']), ('unmapped_answer', 'b/tbl[0]/tr[0]/tc[0]'))
+        self.config = generation.configuration()
+        compiled, payload = ModelProposals.compiled(self, version)
+        body = ModelProposals.keep_all(payload)
+        body['x'] = [ModelProposals.change(payload, 'b/tbl[0]/tr[0]/tc[0]/p[0]',
+                                         'Consultant review', 'long_text', role=1)]
+        result = mapping.validate_proposal(version, compiled, body)
+        self.assertEqual(result['fields'], version.fields)
+        self.assertEqual(result['review']['changes'], [])
+        self.assertTrue(any(row.get('proposal') for row in result['review']['unresolved']))
+        self.assertTrue(destination_roles.report(version, mapping_review=True)['roles'])
+        # This allowance is role inspection only: all immutable identities
+        # are still checked, including cached readings of the exact original.
+        for key in ('source_sha256', 'engine', 'engine_version', 'engine_code_sha256', 'mapping_sha256'):
+            with self.subTest(tampered=key):
+                altered = copy.copy(version); altered.import_manifest = copy.deepcopy(version.import_manifest)
+                altered.import_manifest[key] = 'changed'
+                with self.assertRaisesMessage(ValidationError, 'does not match this original'):
+                    destination_roles.report(altered, mapping_review=True)
+        with self.assertRaisesMessage(ValidationError, 'No generation or charge'):
+            destination_roles.report(version)
+        MappingConfirmation.objects.create(version=version, confirmed_by=self.user)
+        self.assertEqual(self.new_encounter(version, 'Plan: Rest.').status_code, 302)
+        blocked = Encounter.objects.latest('created_at')
+        with self.assertRaisesMessage(ValidationError, 'No generation or charge'):
+            enqueue(blocked, self.user)
+        self.assertEqual(Job.objects.count(), 0); self.assertEqual(Reservation.objects.count(), 0)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_coverage',
+            'mapping_version': version.pk, 'exclude_' + issue['id']: 'on'})
+        self.assertEqual(response.status_code, 302)
+        reviewed = self.latest(template); self.assertTrue(import_binding.coverage_reviewed(reviewed))
+        self.confirm(template, reviewed)
+        e = self.generated(reviewed, 'Plan: Rest.')
+        self.assertEqual(self.reviewed(e, reviewed).status_code, 302)
+        self.finalized(e); self.assertEqual(e.status, 'finalized')
+        exported = Document(private_path(e.export_path))
+        self.assertEqual(exported.tables[0].cell(0, 0).text, '')
+        self.assertIn('Rest.', part_text(private_path(e.export_path).read_bytes()))
+        self.assertEqual(hashlib.sha256(private_path(template.original_path).read_bytes()).hexdigest(),
+                         hashlib.sha256(original).hexdigest())

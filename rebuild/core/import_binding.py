@@ -105,5 +105,5 @@ def ordinary_role_fields(version):
             proposed.append(field)
     if not eligible:
         return set()
-    held = destination_roles.v3_held(version, proposed)
+    held = destination_roles.v3_held(version, proposed, mapping_review=True)
     return eligible - set(held)

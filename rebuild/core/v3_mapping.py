@@ -137,6 +137,10 @@ def admission_refusals(version):
     # or reservation; its source-role path otherwise returns before this gate.
     from .import_binding import verify
     verify(version)
+    from . import destination_roles
+    if (not is_v3_version(version) and destination_roles.applies(version)
+            and version.template.format == 'docx'):
+        destination_roles.report(version)
     refusal, inspection = _source_refusal(version)
     if refusal or not counted_tab_column(inspection):
         return refusal, ''
