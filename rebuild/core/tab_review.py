@@ -42,6 +42,8 @@ SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
 #: dd/mm/yyyy)' be renamed away from its signature label and generated. Telling the signer from a person merely named
 #: needs a new wording reader, so the widening is dropped: `Signature (participant)` demands the finalizer's own name
 #: again, exactly as on 43fcf214 (declared residual, design matrix L04 LEAVE); it is never generated.
+#: October 3 supersedes the historical fallback above: unknown qualifiers
+#: now stay human-owned. The retained exclusion list does not appoint anybody.
 NOT_THE_CLINICIAN = re.compile(
     r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
 

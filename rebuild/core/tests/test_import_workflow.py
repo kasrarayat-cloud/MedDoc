@@ -48,11 +48,23 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         super().setUp()
         self.template,self.version=self.uploaded(data=ordinary_form())
 
+    def review_human_actions(self):
+        issues=self.version.import_manifest['coverage']['selected_engine_issues']
+        self.assertTrue(issues)
+        self.assertTrue(all(row['code'] in ('human_signing_action','ambiguous_source_action') for row in issues))
+        response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_coverage',
+            'mapping_version':self.version.pk,**{'exclude_'+row['id']:'on' for row in issues}})
+        self.assertEqual(response.status_code,302,response.content.decode())
+        self.version=self.latest(self.template)
+
     def correct_roles(self):
+        # This ambiguous physical signing caption cannot be reclassified as a
+        # clinical Yes answer. Its exact exclusion remains unchanged for the
+        # human workflow; the ordinary assessment can change text-like kind.
+        self.review_human_actions()
         by=self.by_label(self.version)
         response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
-            'kind_'+by['Initial assessment']['key']:'text','kind_'+by['Consent form signed']['key']:'text',
-            'ordinary_'+by['Initial assessment']['key']:'on','ordinary_'+by['Consent form signed']['key']:'on'})
+            'kind_'+by['Initial assessment']['key']:'long_text'})
         self.assertEqual(response.status_code,302,response.content.decode())
         self.version=self.latest(self.template)
 
@@ -96,13 +108,14 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         self.assertEqual(first.contract,'v3')
         self.assertEqual(manifest['engine'],'v3')
         self.assertEqual(manifest['source_sha256'],self.template.sha256)
-        import_binding.verify(first)
+        import_binding.verify(first,allow_unreviewed=True)
         self.correct_roles()
         self.assertEqual(self.version.import_manifest['initial_mapping_sha256'],manifest['initial_mapping_sha256'])
         self.assertEqual(self.version.import_manifest['engine_version'],manifest['engine_version'])
         self.assertNotEqual(self.version.import_manifest['mapping_sha256'],manifest['mapping_sha256'])
-        self.assertEqual(set(self.version.corrections['ordinary_information_classified']),
-                         {self.by_label(self.version)[label]['key'] for label in ('Initial assessment','Consent form signed')})
+        self.assertEqual(self.version.corrections['kind_changed'],
+                         {self.by_label(self.version)['Initial assessment']['key']:['text','long_text']})
+        self.assertNotIn('ordinary_information_classified',self.version.corrections)
         first.refresh_from_db();self.assertEqual(first.import_manifest,manifest)
         import_binding.verify(self.version)
         with self.assertRaises(DatabaseError),transaction.atomic():
@@ -113,20 +126,28 @@ class AutoImportWorkflow(V3Fixture,TestCase):
             TemplateVersion.objects.create(template=self.template,number=3,fields=self.version.fields,
                                            contract='v3',created_by=self.user)
 
-    def test_ordinary_kinds_require_explicit_review_but_signer_roles_are_not_offered(self):
-        by=self.by_label(self.version);eligible=import_binding.ordinary_role_fields(self.version)
-        self.assertEqual(eligible,{by['Initial assessment']['key'],by['Consent form signed']['key']})
+    def test_initial_clinical_kind_recovers_but_ambiguous_signed_form_stays_human_owned(self):
+        by=self.by_label(self.version)
         page=self.client.get(f'/templates/{self.template.pk}/')
         rows={r['label']:r for r in page.context['v3_rows']}
         self.assertTrue(rows['Initial assessment']['kind_editable'])
-        self.assertEqual(rows['Initial assessment']['chosen_kind'],'initials')
-        self.assertFalse(rows['Nurse initials']['kind_editable'])
-        self.assertFalse(rows['Witness signature']['kind_editable'])
-        # Saving an unrelated label must not silently turn the initial metadata into text.
+        self.assertEqual(rows['Initial assessment']['chosen_kind'],'text')
+        for label in ('Consent form signed','Nurse initials','Witness signature'):
+            self.assertFalse(rows[label]['kind_editable'])
+        self.assertTrue(self.version.import_manifest['coverage']['block_generation'])
+        self.assertEqual(Job.objects.count(),0);self.assertEqual(Reservation.objects.count(),0)
+        response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
+            'kind_'+by['Consent form signed']['key']:'text','ordinary_'+by['Consent form signed']['key']:'on'})
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(self.template.versions.count(),1)
+        self.review_human_actions()
+        self.assertTrue(import_binding.coverage_reviewed(self.version))
+        self.assertEqual(import_binding.ordinary_role_fields(self.version),set())
+        # Saving an unrelated label keeps the ordinary automatic assessment.
         response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
             'label_'+by['Plan']['key']:'Treatment plan'})
         self.assertEqual(response.status_code,302)
-        self.assertEqual(self.by_label(self.latest(self.template))['Initial assessment']['kind'],'initials')
+        self.assertEqual(self.by_label(self.latest(self.template))['Initial assessment']['kind'],'text')
 
     def test_forged_signer_kind_change_is_refused_without_a_new_mapping(self):
         by=self.by_label(self.version)
@@ -137,11 +158,23 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         self.assertEqual(self.template.versions.count(),1)
 
     def test_ambiguous_kind_change_requires_explicit_ordinary_information_classification(self):
-        by=self.by_label(self.version)
-        response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_save','mapping_version':self.version.pk,
-            'kind_'+by['Initial assessment']['key']:'text'})
+        # Existing lexical "initial" metadata with no printed signing action
+        # remains an explicit, source-bound clinician mapping decision.
+        from .test_destination_roles import legacy_rows
+        with override_settings(QUILLMD_WORD_ENGINE='v3'):
+            template,version=self.uploaded(data=legacy_rows('Troponin (initial)','Plan'),name='Synthetic mapping ambiguity')
+        by=self.by_label(version);key=by['Troponin (initial)']['key']
+        self.assertIn(key,import_binding.ordinary_role_fields(version))
+        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_save','mapping_version':version.pk,
+            'kind_'+key:'text'})
         self.assertEqual(response.status_code,400)
-        self.assertEqual(self.template.versions.count(),1)
+        self.assertEqual(template.versions.count(),1)
+        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_save','mapping_version':version.pk,
+            'kind_'+key:'text','ordinary_'+key:'on'})
+        self.assertEqual(response.status_code,302)
+        reviewed=self.latest(template)
+        self.assertEqual(reviewed.corrections['ordinary_information_classified'],[key])
+        self.assertEqual(self.by_label(reviewed)['Troponin (initial)']['kind'],'text')
 
     def test_typed_fixture_runs_worker_review_finalization_and_download_with_bound_engine(self):
         self.correct_roles();self.confirm(self.template,self.version)
@@ -151,12 +184,12 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         job=enqueue(encounter,self.user);self.assertTrue(run_one());job.refresh_from_db()
         self.assertEqual(job.state,'succeeded',job.error)
         encounter.refresh_from_db();by=self.by_label(self.version)
-        for label in ('Nurse initials','Witness signature'):
+        for label in ('Consent form signed','Nurse initials','Witness signature'):
             self.assertFalse(encounter.answers.get(by[label]['key'],{}).get('text'))
         # Keep first provider/fixture adoption distinct from explicit clinician corrections.
         first_output=copy.deepcopy(encounter.answers)
         payload={'revision':encounter.revision}
-        desired={'Reason for visit':'Knee pain','Plan':'Physiotherapy','Initial assessment':'Stable','Consent form signed':'Yes'}
+        desired={'Reason for visit':'Knee pain','Plan':'Physiotherapy','Initial assessment':'Stable'}
         for label,value in desired.items():
             key=by[label]['key'];payload['answer_'+key]=value;payload['reviewed_'+key]='on'
         response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
@@ -168,6 +201,7 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         self.assertEqual(encounter.status,'finalized',[str(m) for m in response.context['messages']])
         exported=private_path(encounter.export_path).read_bytes();body=part_text(exported)
         for value in desired.values():self.assertIn(value,body)
+        self.assertIn('Consent form signed: ____________',body)
         self.assertIn('Nurse initials: ____________',body);self.assertIn('Witness signature: ____________',body)
         self.assertEqual(hashlib.sha256(private_path(self.template.original_path).read_bytes()).hexdigest(),self.template.sha256)
         self.assertEqual(hashlib.sha256(exported).hexdigest(),encounter.export_sha256)
@@ -192,6 +226,7 @@ class AutoImportWorkflow(V3Fixture,TestCase):
 
     def test_binding_mismatch_refuses_even_a_cached_role_read(self):
         from core import destination_roles
+        self.review_human_actions()
         destination_roles.report(self.version)
         bad=copy.deepcopy(self.version.import_manifest);bad['engine']='legacy';self.version.import_manifest=bad
         with self.assertRaises(ValidationError):destination_roles.report(self.version)

@@ -44,6 +44,41 @@ class SignerOwnership(SimpleTestCase):
 
 @override_settings(**ON)
 class WithdrawnSignerOffers(Legacy, TestCase):
+    @override_settings(QUILLMD_WORD_ENGINE='auto', QUILLMD_WORD_AUTO_PREFER_V3=True,
+                       AI_MODEL='claude-sonnet-5-5', V3_FIELD_RELATIONS_SWITCH=None)
+    def test_initial_and_signed_receipt_answers_reach_actual_bound_http_export_without_correction(self):
+        import hashlib
+        from docx import Document
+        from core.security import private_path
+        desired = {'Initial diagnosis': 'Sprain', 'Signed consent was received on': '3 October 2026', 'Plan': 'Rest.'}
+        self.template, self.version = self.uploaded(data=legacy_rows(*desired), name='Synthetic ordinary source roles')
+        self.assertEqual(self.version.contract, 'v3')
+        self.assertFalse(self.version.import_manifest['coverage']['block_generation'])
+        original = private_path(self.template.original_path).read_bytes()
+        self.version = self.confirm(self.template, self.version); self.by = self.by_label(self.version)
+        notes = '\n\n'.join(label + ': ' + value for label, value in desired.items())
+        e = self.generated(notes)
+        for label, value in desired.items():
+            self.assertEqual(e.answers[self.key(label)]['text'], value)
+            self.assertEqual(e.answers[self.key(label)]['status'], 'supported')
+        first = deepcopy(e.answers)
+        self.assertEqual(self.review_all(e).status_code, 302)
+        self.assertEqual({k: a['text'] for k, a in e.answers.items()}, {k: a['text'] for k, a in first.items()})
+        # The stored import determines export even when the new-import default changes.
+        with override_settings(QUILLMD_WORD_ENGINE='legacy'): self.finalized(e)
+        self.assertEqual(e.status, 'finalized')
+        exported = private_path(e.export_path).read_bytes()
+        import io
+        document = Document(io.BytesIO(exported))
+        for n, (label, value) in enumerate(desired.items()):
+            self.assertEqual(document.tables[0].cell(n, 0).text, label)
+            self.assertEqual(document.tables[0].cell(n, 1).text, value)
+        self.assertEqual(private_path(self.template.original_path).read_bytes(), original)
+        self.assertEqual(hashlib.sha256(exported).hexdigest(), e.export_sha256)
+        download = self.client.get(f'/encounters/{e.pk}/export/')
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(b''.join(download.streaming_content), exported)
+
     def test_flag_one_admits_no_role_questions_and_preserves_useful_ordinary_answer(self):
         for flag in ('0', '1'):
             with self.subTest(flag=flag):
