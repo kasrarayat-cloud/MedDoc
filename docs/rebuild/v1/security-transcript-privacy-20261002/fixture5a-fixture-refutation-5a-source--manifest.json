@@ -1,0 +1,10 @@
+{
+  "head": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+  "sources": {
+    "relations_fixture.py": "e956b562b5a48aa0132aaa995980047fc30a033a74f7b211ef763d01a3eaa92f",
+    "v3_field_relations.py": "7831b3c440183441efd1932d3cbf4e352e70ef37c1a8017b9831105708cb529b",
+    "batch_jobs.py": "eaa46b2d494c751fd7f3fb8ec22717af35dcd0f45459ce5ff9624de342f60200",
+    "generation.py": "921ab592c4baa07825aa5043d185fbdabdaa20e6200dd5471d4a9d3a749bbc7f"
+  },
+  "activity": "read-only source witness before fixture refutation"
+}

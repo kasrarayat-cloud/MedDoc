@@ -1,0 +1,1017 @@
+[
+  {
+    "name": "labelled_positive",
+    "notes": "Symptoms: cough.\n\nAllergies: penicillin.",
+    "answers": {
+      "f1": {
+        "status": "supported",
+        "text": "cough."
+      },
+      "f2": {
+        "status": "supported",
+        "text": "penicillin."
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "supported",
+        "text": "cough."
+      },
+      "f2": {
+        "status": "supported",
+        "text": "penicillin."
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              2
+            ]
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [
+            2
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              2
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              1
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unlabelled",
+    "notes": "The patient reports cough.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              1
+            ],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              1
+            ],
+            "independent": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown_context",
+    "notes": "Symptoms: cough.\n\nIt was not the patient.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              2
+            ],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              2
+            ],
+            "independent": [
+              1
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown_label",
+    "notes": "Symptoms: cough.\n\nOther: not this patient.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              2
+            ],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              2
+            ],
+            "independent": [
+              1
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate_labels",
+    "notes": "Symptoms: cough.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "repeated_values",
+    "notes": "Symptoms: cough.\n\nSymptoms: no cough.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1,
+            2
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1,
+              2
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "signing_context",
+    "notes": "Symptoms: cough.\n\nClinician signature: Dr Example.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              2
+            ],
+            "independent": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "signature_only",
+    "notes": "Clinician signature: Dr Example.",
+    "error_type": "ValidationError",
+    "error": "['The complete ordinary relation exceeds one bounded response; nothing was shortened.']"
+  },
+  {
+    "name": "signing_longtext",
+    "notes": "Clinician signature: Dr Example.",
+    "answers": {
+      "f1": {
+        "status": "missing",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "missing",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              1
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "negated_option",
+    "notes": "Smoker: No.\n\nSymptoms: cough.",
+    "answers": {
+      "f1": {
+        "status": "supported",
+        "text": "No"
+      },
+      "f2": {
+        "status": "supported",
+        "text": "cough."
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "supported",
+        "text": "No"
+      },
+      "f2": {
+        "status": "supported",
+        "text": "cough."
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              2
+            ]
+          },
+          "option_ids": [
+            "f1:1"
+          ]
+        },
+        {
+          "key": "f2",
+          "unit_ids": [
+            2
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              2
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              1
+            ]
+          },
+          "option_ids": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "ambiguous_option",
+    "notes": "Smoker: Yes. Corrected to no.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "missing",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": []
+          },
+          "option_ids": []
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              1
+            ]
+          },
+          "option_ids": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "crosslabel_stop",
+    "notes": "Current medications: warfarin 5 mg daily.\n\nPlan: Hold warfarin today.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "supported",
+        "text": "Hold warfarin today."
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "supported",
+        "text": "Hold warfarin today."
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              2
+            ]
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [
+            2
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              2
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              1
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "inherited_family",
+    "notes": "Family history:\nSymptoms: cough.",
+    "answers": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "governed": {
+      "f1": {
+        "status": "conflict",
+        "text": ""
+      },
+      "f2": {
+        "status": "conflict",
+        "text": ""
+      }
+    },
+    "settlement": [
+      "0",
+      {},
+      {},
+      "synthetic-labelled-relations-fixture",
+      "",
+      true
+    ],
+    "partition_checks": [
+      {
+        "key": "f1",
+        "all_units_exactly_once": true
+      },
+      {
+        "key": "f2",
+        "all_units_exactly_once": true
+      }
+    ],
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            2
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              2
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              1
+            ],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [
+              1
+            ],
+            "independent": [
+              2
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "truncated_units_adversary",
+    "result": "refused",
+    "body": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": []
+          }
+        },
+        {
+          "key": "f2",
+          "unit_ids": [],
+          "conflict": false,
+          "context": {
+            "answer": [],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              1
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "part_partition",
+    "wire": {
+      "fields": [
+        {
+          "key": "f1",
+          "unit_ids": [
+            1
+          ],
+          "conflict": false,
+          "context": {
+            "answer": [
+              1
+            ],
+            "qualifier": [],
+            "contrary": [],
+            "unresolved": [],
+            "independent": [
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "partition_units": [
+      1,
+      2
+    ],
+    "selection_count": 1,
+    "synthetic_source": "deterministic-batch-fixture",
+    "no_option_ids_in_text_part": true
+  },
+  {
+    "name": "live_generate_ast_byte_transport_settlement",
+    "unchanged_after_removing_only_nonlive_branch": true
+  }
+]

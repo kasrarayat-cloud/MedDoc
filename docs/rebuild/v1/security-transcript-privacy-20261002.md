@@ -206,3 +206,27 @@ syntax, prepare-only and diff checks pass. These checks prove preparation only. 
 confirmed idle new-demo window. The harness bounds150HTTP requests/180seconds with6second request deadlines and
 3second lock/8second statement limits; source preparation and financial snapshots have their own finite work rather
 than being advertised as covered by the HTTP clock. Raw HTTP credentials/tokens remain unrecorded.
+
+### Finished fixture-only refutation
+
+A read-only pass over root `5a06295a6bcfa7aca82f024e761c0a53f2b92ab5` found no demonstrated counterexample in the
+fixture-only change's scoped claims. Four source hashes were copied before the probes.13 bounded scenarios used
+the actual `g.generate` fixture path, existing validator and current stored-answer governance with database
+connections and sockets denied. Exact labelled positive values and exact printed `No` are supported; unlabelled
+notes, unknown context/labels, repeated labels, contradictory values, inherited family scope and ambiguous options
+remain held/missing. Both a typed signature and a text field whose printed label is a signing area stay empty. The
+signature-only catalogue refuses compilation with no eligible asked field; no signing text is adopted. A labelled
+medication followed by a labelled stop plan holds that medication and retains the exact plan positive.
+
+Every emitted context partition names all source units once. A deliberately truncated fixture source list is
+refused by the real validator. A text-only multipart response keeps the complete source context without introducing
+option IDs from another part. Each returned fixture settlement has cost0, empty quantities/rates and request ID,
+explicit synthetic provider identity and `simulated=True`. The live `v3_field_relations.generate` AST, after excluding
+only the changed nonlive branch, equals the prior888 parent exactly, including request transport and settlement.
+The inspected batch diff changes only its fixture-response builder. These controls do not qualify live clinical
+accuracy or replace the lead's actual101-field workflow evidence.
+
+The first instrument failed before probing because it imported a transcript module not yet integrated in root. Its
+exit1 remains retained. A distinct instrument removed that irrelevant import and completed exit0; no measured tree
+was changed. `fixture5a-refutation-evidence.json` binds the exact outcomes, source witness and first failure. The
+full clinical context freeze and actual new-demo served authorization execution remain pending lead coordination.
