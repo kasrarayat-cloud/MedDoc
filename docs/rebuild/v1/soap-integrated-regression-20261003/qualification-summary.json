@@ -1,0 +1,238 @@
+{
+  "started_commit": "8bcd46dfeb06c3e093addd499ead9ef402e5fbbf",
+  "scope_matches_commit": "331ce431b23afce97b274c46f1e7acbe8907dcd3",
+  "test_count": 17,
+  "passed": 17,
+  "skipped": 0,
+  "duration_seconds": 58.723,
+  "exit_code": 0,
+  "database_destroyed": true,
+  "provider_requests": 0,
+  "methods": [
+    {
+      "method": "test_clinician_long_answer_survives_export_without_duplicate_or_truncation",
+      "original_sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+      "status": "finalized",
+      "export_sha256": "7dc69da060899afcb7a791d7d41d7959c27bd1647029b758ee584aeaba5e803b",
+      "answers": [
+        {
+          "label": "Subjective",
+          "status": "supported",
+          "text_sha256": "08101977c7ae61a927a2b932c354f22611ba4b9cfc8b74ff284ba85e0cae3194",
+          "evidence_count": 1
+        },
+        {
+          "label": "Objective",
+          "status": "supported",
+          "text_sha256": "cb1a387e8cbf1a3e3460be51d78b35fd2271d8f14142bb900dfdaa14fb6081ad",
+          "evidence_count": 1
+        },
+        {
+          "label": "Assessment",
+          "status": "supported",
+          "text_sha256": "cba51803c908dee479fe8353fc7e574754627bf9228c65b437f7f0ddb77a4d2e",
+          "evidence_count": 1
+        },
+        {
+          "label": "Plan",
+          "status": "edited",
+          "text_sha256": "3220c496909b5c83e6daadb360b6fe4906322606b42d714803731cf9a2fb794f",
+          "evidence_count": 1
+        }
+      ],
+      "job_config": {
+        "mode": "fixture",
+        "model": "claude-sonnet-5-5",
+        "provider": "anthropic",
+        "input_rate": "2",
+        "cached_rate": "0.20",
+        "output_rate": "10",
+        "discount_rate": "0",
+        "prompt_version": "extractive-v7-question-context",
+        "voice_max_cost": "0.20",
+        "pricing_version": "configured-v1:240ad0521f69c2b673e505f081f15b269d21073a9802055daed7167c9b20e0f1",
+        "request_profile": {
+          "effort": "medium",
+          "profile": "claude-sonnet-5-5-ordinary-v1",
+          "thinking": {
+            "type": "between_tools"
+          },
+          "timeout_seconds": 120,
+          "max_output_tokens": 20000
+        },
+        "voice_rate_minute": "",
+        "voice_rate_second": "",
+        "v3_evidence_contract": "natural-v1",
+        "ordinary_field_contract": "ordinary-field-relations-v4"
+      }
+    },
+    {
+      "method": "test_missing_clinician_assessment_and_plan_stay_missing_until_explicit_blank_review",
+      "original_sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+      "status": "finalized",
+      "export_sha256": "39b9a31798ca54de51a8823b0df7e0acb74c9f924d56403cf013de8ce6c7200f",
+      "answers": [
+        {
+          "label": "Subjective",
+          "status": "supported",
+          "text_sha256": "391b17e5c4980e5261f37833496d88c9090a181c2b50f2da6fd7d2141d3b4abb",
+          "evidence_count": 1
+        },
+        {
+          "label": "Objective",
+          "status": "supported",
+          "text_sha256": "cb1a387e8cbf1a3e3460be51d78b35fd2271d8f14142bb900dfdaa14fb6081ad",
+          "evidence_count": 1
+        },
+        {
+          "label": "Assessment",
+          "status": "left_blank",
+          "text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "evidence_count": 0
+        },
+        {
+          "label": "Plan",
+          "status": "left_blank",
+          "text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "evidence_count": 0
+        }
+      ],
+      "job_config": {
+        "mode": "fixture",
+        "model": "claude-sonnet-5-5",
+        "provider": "anthropic",
+        "input_rate": "2",
+        "cached_rate": "0.20",
+        "output_rate": "10",
+        "discount_rate": "0",
+        "prompt_version": "extractive-v7-question-context",
+        "voice_max_cost": "0.20",
+        "pricing_version": "configured-v1:240ad0521f69c2b673e505f081f15b269d21073a9802055daed7167c9b20e0f1",
+        "request_profile": {
+          "effort": "medium",
+          "profile": "claude-sonnet-5-5-ordinary-v1",
+          "thinking": {
+            "type": "between_tools"
+          },
+          "timeout_seconds": 120,
+          "max_output_tokens": 20000
+        },
+        "voice_rate_minute": "",
+        "voice_rate_second": "",
+        "v3_evidence_contract": "natural-v1",
+        "ordinary_field_contract": "ordinary-field-relations-v4"
+      }
+    },
+    {
+      "method": "test_typed_soap_notes_use_worker_source_review_finalization_and_faithful_export",
+      "original_sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+      "status": "finalized",
+      "export_sha256": "ec335f8958020739c450c5123a46c2d8a636fac4c820918b534884f186c7a3aa",
+      "answers": [
+        {
+          "label": "Subjective",
+          "status": "supported",
+          "text_sha256": "391b17e5c4980e5261f37833496d88c9090a181c2b50f2da6fd7d2141d3b4abb",
+          "evidence_count": 1
+        },
+        {
+          "label": "Objective",
+          "status": "supported",
+          "text_sha256": "cb1a387e8cbf1a3e3460be51d78b35fd2271d8f14142bb900dfdaa14fb6081ad",
+          "evidence_count": 1
+        },
+        {
+          "label": "Assessment",
+          "status": "supported",
+          "text_sha256": "03fe6f1054d6f83bacb9780edda86e115ddff07ad2ed7a4f78bb1418655c775c",
+          "evidence_count": 1
+        },
+        {
+          "label": "Plan",
+          "status": "supported",
+          "text_sha256": "7becc8e7697030fe6a61016027d621a5766909b3d66cfb936b631a3b7f3308fc",
+          "evidence_count": 1
+        }
+      ],
+      "job_config": {
+        "mode": "fixture",
+        "model": "claude-sonnet-5-5",
+        "provider": "anthropic",
+        "input_rate": "2",
+        "cached_rate": "0.20",
+        "output_rate": "10",
+        "discount_rate": "0",
+        "prompt_version": "extractive-v7-question-context",
+        "voice_max_cost": "0.20",
+        "pricing_version": "configured-v1:240ad0521f69c2b673e505f081f15b269d21073a9802055daed7167c9b20e0f1",
+        "request_profile": {
+          "effort": "medium",
+          "profile": "claude-sonnet-5-5-ordinary-v1",
+          "thinking": {
+            "type": "between_tools"
+          },
+          "timeout_seconds": 120,
+          "max_output_tokens": 20000
+        },
+        "voice_rate_minute": "",
+        "voice_rate_second": "",
+        "v3_evidence_contract": "natural-v1",
+        "ordinary_field_contract": "ordinary-field-relations-v4"
+      }
+    }
+  ],
+  "files": {
+    "source-identity.json": {
+      "bytes": 10303,
+      "sha256": "f30e6c6161492f3c576c805f9f83a21e18b7515553675561db5015a532a83624"
+    },
+    "word-artifacts/soap-http/test_clinician_long_answer_survives_export_without_duplicate_or_truncation/encounter.json": {
+      "bytes": 9731,
+      "sha256": "3e757a5a42209fc611a27e868c67a10ef25617375e662f7895e923938e53a7dd"
+    },
+    "word-artifacts/soap-http/test_clinician_long_answer_survives_export_without_duplicate_or_truncation/export.docx": {
+      "bytes": 37051,
+      "sha256": "7dc69da060899afcb7a791d7d41d7959c27bd1647029b758ee584aeaba5e803b"
+    },
+    "word-artifacts/soap-http/test_clinician_long_answer_survives_export_without_duplicate_or_truncation/original.docx": {
+      "bytes": 36797,
+      "sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa"
+    },
+    "word-artifacts/soap-http/test_clinician_long_answer_survives_export_without_duplicate_or_truncation/source-notes.txt": {
+      "bytes": 83,
+      "sha256": "af72787f53a5701345c3290a1be961433a4323ecc746370b4ceb0cd4cc8bad38"
+    },
+    "word-artifacts/soap-http/test_missing_clinician_assessment_and_plan_stay_missing_until_explicit_blank_review/encounter.json": {
+      "bytes": 7435,
+      "sha256": "2c18cd469519b90d471f585b350f86c860c8a998500fdd93aa71fc7cab842d59"
+    },
+    "word-artifacts/soap-http/test_missing_clinician_assessment_and_plan_stay_missing_until_explicit_blank_review/export.docx": {
+      "bytes": 36851,
+      "sha256": "39b9a31798ca54de51a8823b0df7e0acb74c9f924d56403cf013de8ce6c7200f"
+    },
+    "word-artifacts/soap-http/test_missing_clinician_assessment_and_plan_stay_missing_until_explicit_blank_review/original.docx": {
+      "bytes": 36797,
+      "sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa"
+    },
+    "word-artifacts/soap-http/test_missing_clinician_assessment_and_plan_stay_missing_until_explicit_blank_review/source-notes.txt": {
+      "bytes": 55,
+      "sha256": "fa081acb10db7ea7ad8c1ff9828962b8d46271d19e57be1587ff473146773639"
+    },
+    "word-artifacts/soap-http/test_typed_soap_notes_use_worker_source_review_finalization_and_faithful_export/encounter.json": {
+      "bytes": 6969,
+      "sha256": "3f796c6dea5547e9dc34b336b7d11d80e6f67611c3c8f2503971e66277c7e90b"
+    },
+    "word-artifacts/soap-http/test_typed_soap_notes_use_worker_source_review_finalization_and_faithful_export/export.docx": {
+      "bytes": 36918,
+      "sha256": "ec335f8958020739c450c5123a46c2d8a636fac4c820918b534884f186c7a3aa"
+    },
+    "word-artifacts/soap-http/test_typed_soap_notes_use_worker_source_review_finalization_and_faithful_export/original.docx": {
+      "bytes": 36797,
+      "sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa"
+    },
+    "word-artifacts/soap-http/test_typed_soap_notes_use_worker_source_review_finalization_and_faithful_export/source-notes.txt": {
+      "bytes": 176,
+      "sha256": "d2c89e41446aa253810beedfc592130465dea8a4ac9d6a8b987a977d3e0458c5"
+    }
+  }
+}
