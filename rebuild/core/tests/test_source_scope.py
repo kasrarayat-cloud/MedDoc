@@ -73,3 +73,21 @@ class TransitionScope(Worst, SimpleTestCase):
                        'Dressing changed daily.', 'There is no change in symptoms.']:
             with self.subTest(source=source):
                 self.assert_adopted(WARFARIN+' '+source, ('Medications','Plan'), 'Medications', WARFARIN)
+
+    def test_named_positional_source_and_target_are_not_a_medication_change(self):
+        for tail in ['The patient switched from prone to supine positioning.',
+                     'The patient switched from a prone position to a supine position.',
+                     'The patient changed from upright to lateral positioning.']:
+            with self.subTest(tail=tail):
+                # Only the independently demonstrated first shape reaches the
+                # additional bare-event floor. Other full position phrases
+                # were already independent; do not manufacture a mutation
+                # failure for a guard that their source never enters.
+                if tail=='The patient switched from prone to supine positioning.':
+                    with patch('core.source_scope.bare_affects',return_value=True):
+                        self.assert_held(WARFARIN+' '+tail,('Medications','Plan'),'Medications',WARFARIN)
+                self.assert_adopted(WARFARIN+' '+tail,('Medications','Plan'),'Medications',WARFARIN)
+        for tail in ['The patient switched from warfarin to supine positioning.',
+                     'The patient switched from an UNKNOWN medication to supine positioning.',
+                     'The patient switched from prone to supine positioning and stopped.']:
+            with self.subTest(tail=tail):self.assert_held(WARFARIN+' '+tail,('Medications','Plan'),'Medications',WARFARIN)

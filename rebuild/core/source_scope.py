@@ -19,13 +19,42 @@ def transition_scope(reading,unit):
             targets=[g for p in root.children if p.dep_=='prep' and a._fold(p.text)=='to'
                      for g in p.children if g.dep_=='pobj']
             verbs=[t for t in doc if t.pos_=='VERB']
+            def position_argument(token,excluded=()):
+                # The explicit position noun includes its grammatical noun
+                # nominalization. No orientation-word whitelist supplies it.
+                word=a._lemma(token)
+                named=token.pos_=='NOUN' and (word=='position' or (word.endswith('ing') and word[:-3]=='position'))
+                members=[t for t in token.subtree if t not in excluded]
+                return bool(named and any(t.dep_ in ('amod','compound') and t.pos_=='ADJ' for t in members)
+                    and all(t==token or t.pos_ in ('ADJ','ADV','DET','PUNCT') for t in members)
+                    and not any(a.SOLE_CLASSES.get(a._lemma(t),frozenset()) for t in members))
+            sources=[p for p in root.children if p.dep_=='prep' and a._lemma(p)=='from']
+            positional_targets=[(p,g) for p in doc if p.dep_=='prep' and a._lemma(p)=='to'
+                for g in p.children if g.dep_=='pobj' and position_argument(g)]
+            positional=False
+            if len(sources)==1 and len(positional_targets)==1:
+                source=sources[0];target_prep,target=positional_targets[0]
+                objects=[t for t in source.children if t.dep_=='pobj']
+                adjectival=[t for t in source.subtree if t not in set(target_prep.subtree)]
+                adjective_source=bool(not objects and any(t.pos_=='ADJ' for t in adjectival)
+                    and all(t==source or t.pos_ in ('ADJ','ADV','PUNCT') for t in adjectival)
+                    and not any(a.SOLE_CLASSES.get(a._lemma(t),frozenset())
+                        or a._fold(t.text) in a.SOLE_UNCERTAIN for t in adjectival))
+                noun_source=bool(len(objects)==1 and position_argument(objects[0],set(target_prep.subtree)))
+                positional=bool((adjective_source or noun_source)
+                    and (target_prep.head==root or (noun_source and target_prep.head==objects[0])))
+            if (positional and a._lemma(root) in ('switch','change') and len(verbs)==1
+                    and all(a.this_patient(t) or a._fold(t.text) in ('he','she') for t in subjects)
+                    and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in root.children)
+                    and not any(t.dep_=='prep' and a._fold(t.text) in ('with','by','of','for') for t in doc)):
+                answer='position'
             complete=bool(a._lemma(root) in ('switch','change') and len(verbs)==1 and len(targets)==1
                 and all(a.this_patient(t) or a._fold(t.text) in ('he','she') for t in subjects)
                 and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in root.children)
                 and not any(t.dep_=='prep' and a._fold(t.text) in ('from','with','by','of','for') for t in doc)
                 and not any(a.names_person(t) for t in targets[0].subtree)
                 and not any(t.pos_ in ('PRON',) for t in targets[0].subtree))
-            if complete:
+            if complete and answer is None:
                 if (a._lemma(targets[0])=='position'
                         and any(t.dep_ in ('amod','compound') for t in targets[0].children)):
                     answer='position'
@@ -523,10 +552,22 @@ def uncertain_negative_arguments(token,a):
     classes=a.SOLE_CLASSES.get(a._lemma(token),frozenset()) | a.SOLE_CLASSES.get(a._fold(token.text),frozenset())
     if not classes & a.SOLE_CLINICAL:return []
     result=[]
-    if token.dep_ in ('pobj','pcomp') and token.head.pos_=='ADP' and a._lemma(token.head)=='of':
-        container=token.head.head
+    current=token;seen=set();intermediate=0
+    # Walk the entire same grammatical OF chain, bounded by this source doc.
+    # An unknown intermediate nominal relation cannot prove a named topic
+    # independent of its explicit negative container. A known separate clinical
+    # or treatment object, another person or a non-OF relation stops the path.
+    while current.i not in seen and len(seen)<len(token.doc):
+        seen.add(current.i)
+        if current.dep_ not in ('pobj','pcomp') or current.head.pos_!='ADP' or a._lemma(current.head)!='of':break
+        container=current.head.head
         container_classes=a.SOLE_CLASSES.get(a._lemma(container),frozenset()) | a.SOLE_CLASSES.get(a._fold(container.text),frozenset())
-        if container.pos_=='NOUN' and not container_classes and a._negates(container):result.append(container)
+        if container.pos_!='NOUN' or container_classes or a.names_person(container):break
+        operator=negative_operator(container,a)
+        negative=bool(a._negates(container) or any(t.dep_ in ('amod','det')
+            and negative_operator(t,a) is not None for t in container.children))
+        if (operator is not None and intermediate) or (operator is None and negative):result.append(container)
+        current=container;intermediate+=1
     clause=token if token.dep_=='ccomp' else token.head if token.dep_ in (
         'dobj','obj','nsubj','nsubjpass','csubj','csubjpass') else None
     if clause is not None and clause.dep_=='ccomp' and negative_operator(clause.head,a) is not None:
