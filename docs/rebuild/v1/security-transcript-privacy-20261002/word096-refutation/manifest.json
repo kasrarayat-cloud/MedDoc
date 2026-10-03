@@ -1,0 +1,205 @@
+{
+  "files": [
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word096-refutation/result.json",
+      "sha256": "a25711385c8cad78b7a5fca97ba0b913bc17318b7adb58d748f45e98fb089142",
+      "bytes": 29792,
+      "rights": "self-authored synthetic diagnostic output; no provider upload"
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096.log",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word096-refutation/instrument.log",
+      "sha256": "adec6f8ad9e899434b650baa35dbbcc8562ff751867a3d2097b72cfa5d0128a1",
+      "bytes": 9220,
+      "rights": "self-authored synthetic diagnostic output; no provider upload"
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_word096.py",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word096-refutation/instrument.py",
+      "sha256": "fde488e5efdb021db216eed6d089d87b148b7b736f54c9c33c785a24878577c4",
+      "bytes": 5144,
+      "rights": "self-authored synthetic diagnostic output; no provider upload"
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-source/manifest.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word096-refutation/source-manifest.json",
+      "sha256": "49c4339dfe9414a0e3d8fae77439d613cedb724865388d1887c43c6ecf946ccf",
+      "bytes": 1352,
+      "rights": "self-authored synthetic diagnostic output; no provider upload"
+    }
+  ],
+  "raw_docx_files": [
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/action_alternatives-actual-export.docx",
+      "sha256": "37b4723c3d989defed5c85170250dcf4361a6d85a30889b8d1ed7b3c25b16a01",
+      "bytes": 36674,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/action_alternatives-original.docx",
+      "sha256": "d4885b76dabd0e99956563272619b13740acdc0c7e3ef7c5528060d6c53dbfa3",
+      "bytes": 36624,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/date_positive-actual-export.docx",
+      "sha256": "9fc3333af35aa0063c2be4297c7b593f1ed6cac0023a410b9c33287fb27e977d",
+      "bytes": 36673,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/date_positive-original.docx",
+      "sha256": "2125a27ffeea372b5fa2be772817d51dc6b2a4d2f62cc113a2624afae6788cfd",
+      "bytes": 36623,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/directive_positive-actual-export.docx",
+      "sha256": "b3d69760ac9ffb5c0e77d57cd0e1a87b60f0aa7c39c92ca334e2c8bf666949d6",
+      "bytes": 36673,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/directive_positive-original.docx",
+      "sha256": "f8704074d8445fc911bcc576856697355e4f5d38c9c7a0ebc7119a1abe12f306",
+      "bytes": 36624,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/initials_forged-original.docx",
+      "sha256": "2d8df52cd2174be8c8714fab6b3691d3604db31c7265198353c9fe083bea4599",
+      "bytes": 36617,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/middle_empty_alternative-actual-export.docx",
+      "sha256": "04b3a9b7d7b95783d7dfe8150d72e5c85385bb9adebc41b2ed609cffa260bd98",
+      "bytes": 36673,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/middle_empty_alternative-original.docx",
+      "sha256": "c9a2e97c4ac9bf8c3a2e2ad758a4f1b465c3f944fd7fdc2fecdcd5679cbf427a",
+      "bytes": 36624,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/newline_inside_alternative-original.docx",
+      "sha256": "c8b401b170453a030f4f8ca59ce72595dfe746a75326eefd1515f2fac22403f6",
+      "bytes": 36630,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/ordinary_initial-original.docx",
+      "sha256": "11e4dc896dca5823fc2c54c0fc4b6f11d91488a338828ec5a903386dc3224c0d",
+      "bytes": 36619,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/ordinary_split_runs-original.docx",
+      "sha256": "342bcbfb5a0d5b58c9e807af477df2f23a5d69fd6865267b3af363d1044c8797",
+      "bytes": 36636,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/patient_policy_forged-original.docx",
+      "sha256": "019b89a5fcd30ddfc29cc31508d95334156a97f9c0f2c06a9f1be72288c2d297",
+      "bytes": 36648,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/punctuation_split_runs-original.docx",
+      "sha256": "597b1273d3f74536194bbdff29e99c37dbef594fa7e9fbba4b39590f145f3d71",
+      "bytes": 36639,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/signature_forged-original.docx",
+      "sha256": "b3a5b09d6a9984a9031297760916a48d685e08feda2cb1c1757763ad08204f0f",
+      "bytes": 36619,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/state_label_alternatives-actual-export.docx",
+      "sha256": "2eb296db46ce2a7cdc47f66a02833bfe2e32953df57c720bd91576dbdc156af3",
+      "bytes": 36676,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/state_label_alternatives-original.docx",
+      "sha256": "62814dadc2b2318cc9270c7a20ec0d19d0022a929febbe6d7335079bc830f6ac",
+      "bytes": 36629,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/tab_inside_alternative-original.docx",
+      "sha256": "0b94c2f258e535770458ac869dc3d19c109ca595d9613a636b59a9788eb8990d",
+      "bytes": 36631,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/trailing_empty_alternative-actual-export.docx",
+      "sha256": "04b3a9b7d7b95783d7dfe8150d72e5c85385bb9adebc41b2ed609cffa260bd98",
+      "bytes": 36673,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/trailing_empty_alternative-original.docx",
+      "sha256": "dbf42e87f41402783ebd16d6348e7c1ece6db07164704952db7390d555da3ebb",
+      "bytes": 36624,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/type_label_alternatives-actual-export.docx",
+      "sha256": "1a61650c97c7156cf6e46c15b1c4907a647081b86948c9df5a59f73474a2b3cf",
+      "bytes": 36678,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/type_label_alternatives-original.docx",
+      "sha256": "6bde00fe9f8d2897427d3e11de6b2d587a414b586b13818eec01e7035dcd7065",
+      "bytes": 36629,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word096-cases/witness_forged-original.docx",
+      "sha256": "962e7dac8c30941e463201ab77054e54096db5055fdb759ee9c319acf7704832",
+      "bytes": 36619,
+      "rights": "self-authored synthetic structural fixture or engine export; no provider upload",
+      "disposable": false
+    }
+  ],
+  "originals": 16,
+  "actual_exports": 7,
+  "retention": "raw binaries remain protected canonical scratch only; repository hook blocks direct DOCX commits; no override used",
+  "source_commit": "09644640759200813c40c3246b92299999a64aca",
+  "case_count": 16,
+  "elapsed_seconds": 11.792,
+  "actual_exit": 0,
+  "qualification": "FAILED; instrument completion is not qualification",
+  "no_provider_requests": true,
+  "no_database_connections": true
+}

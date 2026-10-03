@@ -396,3 +396,42 @@ no billed generation occurred and no native/rendered Word result is claimed. Sou
 after exit for the writer's coherent slash-part repair. `word224-refutation/manifest.json` retains all eight
 self-authored synthetic originals, three actual failed exports, raw results and source binding. These supplemental
 cases do not alter the original corpus or held-back denominators.
+
+
+### Frozen Word096 slash grammar, omission and forged-role refutation
+
+Clean `09644640759200813c40c3246b92299999a64aca` was checked against eight exact committed relevant files and copied
+before sixteen bounded read-only actual sandbox inspections and in-process DOCX fills. All eight hashes remained
+unchanged afterward. Actual instrument exit0,11.792s; no database connections, network/provider calls, source edits
+or service changes. This instrument refutes engine qualification; it is not browser/worker/full-corpus acceptance.
+The source was released to the writer immediately after exit, before documenting the findings.
+
+Three new printed alternatives import as unrestricted text with zero selected-engine issues and
+`block_generation=False`; actual DOCX export replaces their printed alternatives with
+`SYNTHETIC UNRESTRICTED REPLACEMENT`:
+
+- `Procedure type: [type A/type B]`
+- `Jurisdiction: [state/local]`
+- `Action: [add/remove]`
+
+The frozen `documents/word_v3.py:701,707` treats the first alternative's leading word as an authoring verb, and
+`:5674` consequently exempts the complete range from the printed-alternative source hold. The ordinary authoring
+control `Plan: [enter left/right]` remains writable; this does not establish that every verb-prefixed range has the
+same role. Ambiguous printed parts need a precise source-review decision rather than unrestricted replacement.
+
+Two malformed slash-range controls, `Role: [patient/carer/]` and `Role: [patient//carer]`, also import with no source
+issue and produce the same unrestricted overwrite because `:5672` requires every split part to be nonempty before
+holding it. A third source boundary, `Role: [patient/\ncarer]` with an actual OOXML line break, maps no role writer
+and emits no selected-engine issue or generation hold: `BRACKET_ANY` at695 excludes the line break. This is a
+concrete silent omission, distinct from the actual overwrite cases. Malformed formats need explicit unresolved
+handling; these diagnostics do not assert support for their intended choice semantics.
+
+Ordinary and apostrophe-bearing alternatives split across separately formatted runs are correctly held, as is a
+tab inside the bracketed range. Forged text fields relabeling the original Patient/Witness signatures and Nurse
+initials all refuse `protected_signing_area`; removing the printed patient-author policy from a forged field refuses
+`mapping_mismatch`. The date placeholder remains typed as a date. `Initial assessment` remains signing-typed
+metadata and is refused by raw fill; this does not retest its established explicit structural mapping-kind review.
+No signing or patient-author scope was released. `word096-refutation/manifest.json` binds the exact source manifest,
+instrument, raw result/log, sixteen self-authored originals and seven actual exports. The23 raw DOCX files remain
+in protected canonical scratch and are not committed or disposable. All prior failed qualifications are retained;
+these supplemental cases change no frozen corpus or held-back denominator and claim no native Word inspection.
