@@ -1961,8 +1961,24 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
             if evidence_needs_review(notes, scope['preceding']['named'].get('smoker', ()), evidence):
                 warnings += scope['units']
         if re.search(SUBJECTS[0], str(label or ''), re.I):
-            spans = {span[:2] for entry in evidence if (span := v3_evidence_span(entry))}
-            warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
+            from .source_scope import completed_receipt_question
+            from .v3_field_relations import read as ordinary_read
+            preceding=scope['preceding'];matches=preceding['named'].get(question_key(label),())
+            target=next((f for f in matches if f['key']==field_key),None) if field_key is not None else None
+            target=target if target is not None else matches[0] if len(matches)==1 else None
+            # A source-labelled completed receipt records document information;
+            # it grants no consent or signing act. Only the full bound relation
+            # can discharge this note-wide consent floor. All specific source
+            # opposition/correction/actor warnings above remain in force.
+            receipt=bool(target and target.get('kind') in ('text','long_text')
+                and not target.get('write_protected') and not target.get('answer_policy')
+                and completed_receipt_question(target)
+                and all((pair:=preceding['parsed'].get(u['id'])) and pair[0]==question_key(label)
+                    for u in v3_evidence_units(preceding,evidence).values())
+                and ordinary_read(preceding,label,evidence,ordinary_relation,text=answer_text,field_key=field_key)['valid'])
+            if not receipt:
+                spans = {span[:2] for entry in evidence if (span := v3_evidence_span(entry))}
+                warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
         if warnings:
             # Keep every warning's location; never turn this into an adoptable suggestion.
             unique = {unit['id']: unit for unit in warnings}
