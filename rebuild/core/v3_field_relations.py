@@ -613,6 +613,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
         literal_ids = complete_ids(field, ordered, reading)
+        from .source_scope import resumed_current
+        literal_ids |= {u['id'] for u in ordered if any(resumed_current(reading,u,other) for other in units)}
         def evidenced(u):
             own = reading['parsed'][u['id']]
             return bool(own or reading['patients'].get(u['id']) or policy_patient

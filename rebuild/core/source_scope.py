@@ -22,12 +22,19 @@ def transition_scope(reading,unit,*,clause=None):
             targets=[g for p in children if p.dep_=='prep' and a._fold(p.text)=='to'
                      for g in p.children if g in inside and g.dep_=='pobj']
             verbs=[t for t in doc if t.pos_=='VERB']
+            def test_purpose(prep):
+                objects=[t for t in prep.children if t in inside and t.dep_=='pobj']
+                return bool(a._lemma(prep)=='for' and len(objects)==1
+                    and objects[0].text.isupper() and a._fold(objects[0].text) in a.SOLE_INITIALISMS
+                    and all(t==objects[0] or t.pos_ in ('DET','PUNCT') for t in objects[0].subtree if t in inside))
+            purposes={p for p in doc if p.dep_=='prep' and test_purpose(p)}
             def position_argument(token,excluded=()):
                 # The explicit position noun includes its grammatical noun
                 # nominalization. No orientation-word whitelist supplies it.
                 word=a._lemma(token)
                 named=token.pos_=='NOUN' and (word=='position' or (word.endswith('ing') and word[:-3]=='position'))
-                members=[t for t in token.subtree if t in inside and t not in excluded]
+                purpose_words={t for p in purposes if p.head==token for t in p.subtree}
+                members=[t for t in token.subtree if t in inside and t not in excluded and t not in purpose_words]
                 return bool(named and any(t.dep_ in ('amod','compound') and t.pos_=='ADJ' for t in members)
                     and all(t==token or t.pos_ in ('ADJ','ADV','DET','PUNCT') for t in members)
                     and not any(a.SOLE_CLASSES.get(a._lemma(t),frozenset()) for t in members))
@@ -50,7 +57,7 @@ def transition_scope(reading,unit,*,clause=None):
             if (positional and a._lemma(root) in ('switch','change') and len(verbs)==1
                     and all(a.this_patient(t) or a.names_person(t) or a._fold(t.text) in ('he','she') for t in subjects)
                     and not any(t.dep_ in ('dobj','obj','ccomp','xcomp','advcl','conj','neg') for t in children)
-                    and not any(t.dep_=='prep' and a._fold(t.text) in ('with','by','of','for') for t in doc)):
+                    and not any(t.dep_=='prep' and a._fold(t.text) in ('with','by','of','for') and t not in purposes for t in doc)):
                 answer='position'
             complete=bool(a._lemma(root) in ('switch','change') and len(verbs)==1 and len(targets)==1
                 and all(a.this_patient(t) or a._fold(t.text) in ('he','she') for t in subjects)
@@ -203,6 +210,193 @@ def denied_ending(predicate, words):
             for t in arguments[0].subtree if t in inside and t.pos_ in a.CONTENT))
 
 
+def replacement_relation(predicate, words):
+    """Read the old argument of an explicit grammatical replacement relation.
+
+    IN PLACE OF attaches the former value to its OF argument, irrespective of
+    which verb describes introducing the replacement. The passive medication
+    theme and an explicit FOR recipient belong to this event; a requester or
+    another clause cannot supply that recipient. This only adds review holds.
+    It never establishes that the replacement is a current medication.
+    """
+    from . import v3_actors as a
+    inside=set(words)
+    if predicate.pos_ not in ('VERB','AUX'):return None
+    themes=[t for t in predicate.children if t in inside and t.dep_ in ('nsubjpass','dobj','obj')]
+    prepositions=[p for p in words if p.dep_=='prep' and a._lemma(p)=='in'
+        and (p.head==predicate or p.head in themes)]
+    arguments=[]
+    for prep in prepositions:
+        places=[t for t in prep.children if t in inside and t.dep_=='pobj'
+            and t.pos_=='NOUN' and a._lemma(t)=='place']
+        for place in places:
+            if any(t.dep_ not in ('prep','det') for t in place.children if t in inside):continue
+            for former in place.children:
+                if former in inside and former.dep_=='prep' and a._lemma(former)=='of':
+                    arguments.extend(t for t in former.children if t in inside and t.dep_=='pobj'
+                        and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),()))
+    if not arguments:return None
+    topics=a.keys({a._lemma(t) for argument in arguments for t in argument.subtree
+        if t in inside and t.pos_ in a.CONTENT})-a.keys({'patient'})
+    generic=any(a._lemma(argument) in a.DOSAGE_FORM_NOUNS for argument in arguments)
+    owned=any(c.dep_=='poss' and a.this_patient(c) for argument in arguments+themes for c in argument.children)
+    subjects=[t for t in predicate.children if t in inside and t.dep_=='nsubj']
+    direct=bool(len(subjects)==1 and a.this_patient(subjects[0]))
+    recipients=[t for prep in predicate.children if prep in inside and prep.dep_=='prep' and a._lemma(prep)=='for'
+        for t in prep.children if t in inside and t.dep_=='pobj']
+    recipient=recipients[0] if len(recipients)==1 else None
+    patient=bool(direct or owned or (recipient is not None and a.this_patient(recipient)))
+    foreign=bool(recipient is not None and a.names_person(recipient) and not patient
+        and not any(t.dep_=='conj' or a.this_patient(t)
+            or (t.pos_=='PRON' and (t.dep_!='poss' or not a.names_person(t.head)))
+            for t in recipient.subtree))
+    # Canonical event negation precedes its predicate. A trailing "not merely
+    # proposed" or focus modifier cannot negate a completed introduction.
+    negative=[t for t in predicate.children if t in inside and t.dep_=='neg']
+    auxiliaries=[t for t in predicate.children if t in inside and t.dep_ in ('aux','auxpass')]
+    negated=bool(len(negative)==1 and negative[0].i<predicate.i
+        and all(t==negative[0] or t.pos_ in ('AUX','PART') for t in words
+            if min([negative[0].i]+[t.i for t in auxiliaries])<=t.i<predicate.i))
+    modal=bool(any(t.tag_=='MD' for t in auxiliaries)
+        and not any(a._lemma(t)=='have' for t in auxiliaries))
+    return {'topics':topics,'generic':generic,'patient':patient,'foreign':foreign,'cancelled':negated or modal}
+
+
+def future_event_at(reading,unit,start,end):
+    """A future modal governs this event, not a completed neighbouring claim.
+
+    Only one explicit patient event with a named medication and a positively
+    future temporal argument is proved. Perfect modals, reporting clauses,
+    conditions and additional actors retain the inherited uncertainty floor.
+    """
+    from . import v3_syntax,v3_actors as a
+    docs=v3_syntax.docs([unit['quote']]);doc=docs[0] if docs else None
+    if doc is None:return False
+    roots=[t for t in doc if t.dep_=='ROOT'];verbs=[t for t in doc if t.pos_=='VERB']
+    if len(roots)!=1 or verbs!=roots:return False
+    root=roots[0];children=list(root.children)
+    subjects=[t for t in children if t.dep_=='nsubj']
+    modals=[t for t in children if t.dep_=='aux' and t.tag_=='MD']
+    arguments=[t for t in children if t.dep_ in ('dobj','obj')]
+    if (a._lemma(root) not in a.CESSATION_VERBS or len(subjects)!=1 or not a.this_patient(subjects[0])
+            or len(modals)!=1 or unit['start']+modals[0].idx!=start
+            or start+len(modals[0].text)!=end or len(arguments)!=1
+            or 'medication' not in a.SOLE_CLASSES.get(a._lemma(arguments[0]),())
+            or a._lemma(arguments[0]) in a.DOSAGE_FORM_NOUNS
+            or any(t.dep_ in ('neg','mark','ccomp','xcomp','advcl','conj') for t in children)
+            or any(a._lemma(t)=='have' for t in children if t.pos_=='AUX')):return False
+    temporals=[t for t in children if t.dep_=='prep' and a._lemma(t)=='after']
+    if len(temporals)!=1:return False
+    objects=[t for t in temporals[0].children if t.dep_=='pobj']
+    if len(objects)!=1 or not a.SOLE_CLASSES.get(a._lemma(objects[0]),()):return False
+    future=[t for t in objects[0].subtree if t.dep_=='poss' and a._lemma(t) in a.SOLE_TIME_WORDS
+        and any(c.dep_=='amod' and a._lemma(c)=='next' for c in t.children)]
+    if len(future)!=1:return False
+    allowed=set(subjects[0].subtree)|set(arguments[0].subtree)|set(temporals[0].subtree)|{root,modals[0]}
+    return bool(all(t in allowed or t.is_punct for t in doc)
+        and not any(t.pos_=='PRON' or a.names_person(t) for t in temporals[0].subtree)
+        and all({a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN or t in future
+            for t in arguments[0].subtree if t.pos_ in a.CONTENT))
+
+
+def continued_medication(predicate,words):
+    """Bound a complete present continuation's dependency to medication.
+
+    This does not resolve its pronoun or adopt an answer. It only prevents a
+    separate positional clause from changing an unrelated examination.
+    """
+    from . import v3_actors as a
+    children=[t for t in predicate.children if t in words]
+    subjects=[t for t in children if t.dep_=='nsubj']
+    objects=[t for t in children if t.dep_ in ('dobj','obj')]
+    if (a._lemma(predicate)!='continue' or predicate.tag_ not in ('VBP','VBZ')
+            or len(subjects)!=1 or not (a.this_patient(subjects[0]) or a._fold(subjects[0].text) in ('he','she'))
+            or len(objects)!=1 or 'medication' not in a.SOLE_CLASSES.get(a._lemma(objects[0]),())
+            or a._lemma(objects[0]) in a.DOSAGE_FORM_NOUNS
+            or any(t.dep_ in ('neg','aux','auxpass','mark','prep','advcl','conj','xcomp') for t in children)):return False
+    allowed=set(subjects[0].subtree)|set(objects[0].subtree)|{predicate}
+    return bool(all(t in allowed or t.is_punct for t in words)
+        and all({a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN for t in objects[0].subtree if t.pos_ in a.CONTENT))
+
+
+def resumed_current(reading,claim,ended):
+    """A completed restart plus explicit present use supersedes a dated stop.
+
+    Source order alone is insufficient. The exact same named medication must
+    be the sole argument of an explicit patient's completed restart and current
+    taking clause. Nothing here releases a later stop or an intended restart.
+    """
+    from . import v3_syntax,v3_actors as a
+    old=reading['actors'][ended['id']]
+    if (ended['end']>=claim['start'] or not old['past_time'] or not old['finite_past']
+            or old['present_tense'] or old['other_floor']):return False
+    docs=v3_syntax.docs([claim['quote']]);doc=docs[0] if docs else None
+    if doc is None:return False
+    roots=[t for t in doc if t.dep_=='ROOT']
+    if len(roots)!=1:return False
+    root=roots[0];children=list(root.children)
+    subjects=[t for t in children if t.dep_=='nsubj']
+    objects=[t for t in children if t.dep_ in ('dobj','obj')]
+    auxiliaries=[t for t in children if t.dep_=='aux']
+    current=[t for t in children if t.dep_=='conj' and t.pos_=='VERB']
+    if (a._lemma(root)!='restart' or root.tag_!='VBN' or len(subjects)!=1 or not a.this_patient(subjects[0])
+            or len(auxiliaries)!=1 or a._lemma(auxiliaries[0])!='have' or auxiliaries[0].tag_ not in ('VBP','VBZ')
+            or len(objects)!=1 or 'medication' not in a.SOLE_CLASSES.get(a._lemma(objects[0]),())
+            or a._lemma(objects[0]) in a.DOSAGE_FORM_NOUNS or len(current)!=1
+            or len([t for t in doc if t.pos_=='VERB'])!=2 or any(a._negates(t) or t.tag_=='MD' for t in doc)):return False
+    take=current[0];arguments=[t for t in take.children if t.dep_ in ('dobj','obj')]
+    if (a._lemma(take)!='take' or take.tag_ not in ('VBP','VBZ') or len(arguments)!=1
+            or not (a._fold(arguments[0].text)=='it' or a._lemma(arguments[0])==a._lemma(objects[0]))
+            or not any(t.dep_=='advmod' and a._lemma(t)=='now' for t in take.children)
+            or any(t.dep_ in ('nsubj','nsubjpass','prep','aux','neg','conj','advcl','ccomp','xcomp') for t in take.children)
+            or not any(t.dep_=='cc' and a._fold(t.text)=='and' for t in children)):return False
+    allowed=set(subjects[0].subtree)|set(objects[0].subtree)|set(take.subtree)|{root,auxiliaries[0]}
+    if any(t not in allowed and not t.is_punct and t.dep_!='cc' for t in doc):return False
+    key=a.keys({a._lemma(objects[0])})
+    # The pronoun has exactly one medication antecedent. An added medication,
+    # recipient or embedded event cannot borrow this present-taking proof.
+    if any(t!=objects[0] and (t.dep_ in ('prep','poss','conj','acl','relcl')
+            or ('medication' in a.SOLE_CLASSES.get(a._lemma(t),())
+                and not (t.dep_=='npadvmod' and any(c.dep_=='nummod' and c.pos_=='NUM' for c in t.children))))
+            for t in objects[0].subtree):return False
+    endings=clause_readings(reading,ended)
+    if len(endings)!=1:return False
+    earlier=endings[0];predicate=earlier['predicate'];children=list(predicate.children)
+    themes=[t for t in children if t.dep_=='nsubjpass']
+    dates=[t for t in children if t.dep_=='npadvmod' and a._lemma(t) in a.SOLE_FREQUENCY_NOUNS
+        and any(c.dep_=='amod' and a._lemma(c)=='last' for c in t.children)]
+    if (a._lemma(predicate) not in a.CESSATION_VERBS or earlier['cancelled'] or len(themes)!=1
+            or a._lemma(themes[0])!=a._lemma(objects[0]) or len(dates)!=1
+            or any(t.pos_=='VERB' and t!=predicate for t in earlier['words'])):return False
+    dated_words=set(themes[0].subtree)|set(dates[0].subtree)|{predicate}
+    if any(t not in dated_words and not t.is_punct and t.dep_!='auxpass' for t in earlier['words']):return False
+    return bool(old['ceased_keys'] and old['ceased_keys']<=key
+        and all({a._lemma(t),a._fold(t.text)} & a._SOLE_KNOWN for t in objects[0].subtree if t.pos_ in a.CONTENT))
+
+
+def completed_receipt_question(field):
+    """A grammatical past receipt asks about that event, not a current signer.
+
+    This only bounds the dated-past floor. Role protection, selected-source
+    identity, attribution, contradictions and model relation guards still apply.
+    """
+    from . import v3_syntax,v3_actors as a,generation as g
+    if g.V3_NOW_QUESTION.search(str(field.get('label')or'')+' '+str(field.get('context')or'')):return False
+    docs=v3_syntax.docs([str(field.get('label')or'')]);doc=docs[0] if docs else None
+    if doc is None:return False
+    roots=[t for t in doc if t.dep_=='ROOT']
+    if len(roots)!=1:return False
+    root=roots[0];children=list(root.children)
+    subjects=[t for t in children if t.dep_ in ('nsubj','nsubjpass')]
+    past=bool(root.tag_=='VBD' or any(t.dep_=='auxpass' and t.tag_=='VBD' for t in children))
+    return bool(a._lemma(root)=='receive' and past and len(subjects)==1
+        and subjects[0].pos_=='NOUN' and subjects[0].i<root.i
+        and not any(a.names_person(t) or a.this_patient(t) or t.pos_=='PRON' or t.tag_=='MD' or a._negates(t) for t in doc)
+        and all(t==root or t.pos_!='VERB' or (t.dep_=='amod' and t.head in set(subjects[0].subtree)) for t in doc)
+        and all(t.dep_ in ('nsubj','nsubjpass','auxpass','punct')
+            or (t.dep_=='prep' and a._lemma(t)=='on' and not list(t.children)) for t in children))
+
+
 def clause_readings(reading,unit):
     """Keep each finite clause's actor and ended argument together.
 
@@ -271,6 +465,10 @@ def clause_readings(reading,unit):
             if repaired_argument:
                 topics |= a.keys({a._lemma(t) for argument in nominal for t in argument.subtree
                     if t in inside and t.pos_ in a.CONTENT})
+            replacement=replacement_relation(predicate,words)
+            if replacement:
+                topics |= replacement['topics']
+                foreign |= replacement['foreign']
             foreign_themes=[t for t in themes if any(c.dep_=='poss' and a.names_person(c) for c in t.children)
                 and not any(a.this_patient(c) for c in t.subtree if c in inside)]
             foreign_keys=a.keys({a._lemma(t) for theme in foreign_themes for t in theme.subtree
@@ -292,8 +490,10 @@ def clause_readings(reading,unit):
                 and 'medication' in a.SOLE_CLASSES.get(a._lemma(t),()) and a.keys({a._lemma(t)}) & topics for t in words)
                 and not any('medication' in a.SOLE_CLASSES.get(a._lemma(t),())
                     and a._lemma(t) not in a.DOSAGE_FORM_NOUNS and a.keys({a._lemma(t)}) & topics for t in words))
+            if replacement:generic |= replacement['generic']
             denied_end=denied_ending(predicate,words)
             cancelled=bool(a._negates(predicate) or denied_end or any(t.dep_=='aux' and t.tag_=='MD' for t in predicate.children))
+            if replacement:cancelled=replacement['cancelled']
             span=doc[min(t.i for t in words):max(t.i for t in words)+1]
             sole=(a._sole_reading(span,predicate,value_start=0,colon=False,age=False,opener=False,explicit=direct_patient)
                 if all(t in inside or t.is_punct for t in span) else {})
@@ -331,9 +531,12 @@ def clause_readings(reading,unit):
                 and all(t==predicate or t in subject_words or t.is_punct or t.dep_=='aux' for t in words)
                 and not cancelled and not floor['intention'] and not floor['quantified_denial']
                 and not floor['bare_cessation'] and not topics)
-            result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed or recipient_patient,
+            result.append({'unit':unit,'predicate':predicate,'words':words,'patient':direct_patient or possessed or recipient_patient
+                or bool(replacement and replacement['patient']),
                 'foreign':foreign,'topics':topics,'generic':generic,'cancelled':cancelled,
                 'denied_end':denied_end,
+                'cancelled_replacement':bool(replacement and replacement['cancelled']),
+                'medication_continuation':continued_medication(predicate,words),
                 'unresolved_theme':unresolved_theme,
                 'bare':floor['bare_cessation'] and not repaired_argument,'position':transition_scope(reading,unit,clause=words)=='position',
                 'separate':separate,'carrier':carrier,'claim_topics':claim_topics,'bounded_end':bool(topics and (generic or all(
@@ -346,14 +549,15 @@ def clause_readings(reading,unit):
 def denied_ending_keys(reading, unit):
     """Only keys of the proved denied event avoid the lexical value-denial floor."""
     clauses=clause_readings(reading,unit)
-    if not all(c['denied_end'] or c['foreign'] or c['position'] or c['carrier'] for c in clauses):
+    if not all(c['denied_end'] or c['cancelled_replacement'] or c['foreign'] or c['position'] or c['carrier'] for c in clauses):
         return frozenset()
-    return frozenset().union(*(c['topics'] for c in clauses if c['denied_end'] and c['bounded_end']))
+    return frozenset().union(*(c['topics'] for c in clauses if (c['denied_end'] or c['cancelled_replacement']) and c['bounded_end']))
 
 
 def ending_affects(reading,ending,claim):
     if ending['foreign'] or ending['cancelled'] or ending['position'] or ending['separate'] or ending['carrier']:return False
     info=reading['actors'][claim['id']]
+    if ending['medication_continuation']:return medication_affects(reading,claim)
     if ending['claim_topics']:
         return bool(ending['claim_topics'] & (reading['claim_keys'][claim['id']] | info.get('named_keys',frozenset())))
     if not ending['patient']:
@@ -370,7 +574,7 @@ def ending_affects(reading,ending,claim):
 def bounded_mixed_endings(reading,unit):
     clauses=clause_readings(reading,unit)
     if len(clauses)<2 or not any(c['position'] or c['foreign'] for c in clauses):return None
-    if not all(c['foreign'] or c['position'] or c['separate'] or c['carrier'] or (not c['bare']
+    if not all(c['foreign'] or c['position'] or c['separate'] or c['carrier'] or c['medication_continuation'] or (not c['bare']
         and (c['bounded_end'] or c['claim_topics'] or ((c['patient'] or c['foreign']) and c['cancelled']))) for c in clauses):return None
     return clauses
 
@@ -383,6 +587,7 @@ def ceased_affects(reading,change,claim):
     endings, unknown arguments and incomplete medication groups remain held.
     """
     from . import v3_actors as a
+    if resumed_current(reading,claim,change):return False
     shared=reading['actors'][change['id']]['ceased_keys'] & (
         reading['claim_keys'][claim['id']] | reading['actors'][claim['id']].get('named_keys',frozenset()))
     if not shared:return False
@@ -398,6 +603,7 @@ def explicit_patient_endings(reading,claim):
     keys=reading['claim_keys'][claim['id']] | reading['actors'][claim['id']].get('named_keys',frozenset())
     for unit in reading['units']:
         if unit['id']==claim['id']:continue
+        if resumed_current(reading,claim,unit):continue
         for ending in clause_readings(reading,unit):
             if ending['unresolved_theme'] and medication_affects(reading,claim):
                 if unit not in result:result.append(unit)
