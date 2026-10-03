@@ -193,3 +193,52 @@ writes before eventual refusal. No actual preparation, cloning or activation ran
 Protected witnesses and current worker checkpoints remain under
 `rebuild/.runtime/v1-sol-continuation-20261002/`. Prior measured net artifact reclaim
 remains5412282368B; the later65 cache targets were all refused, removing0B.
+
+### 2026-10-03 07:33 UTC — clearance after verified cleanup; two candidates still fail
+
+The lead independently verified eight clinical cases against the immutable
+`562dc645b13ed2e17ebed0ef9bc904c2c120366b` source. Four coordinated-passive
+withheld-medication cases still release current warfarin. Exit0 is the probe's
+execution result, not a qualification pass. The different negated-withholding
+input used in this lead probe passed; Security's standalone negated case remains
+its own retained failure. No denominator or first outcome was rewritten.
+
+The lead independently reproduced all nine additional human-action writes on
+Word `6e205e4c9614d4afa3398e059f882981a3e175bc`; all nine neighboring ordinary
+positive controls still export. Consent/permission, witnessing a signature and
+colonless manager/witness/patient action labels remain unqualified. Four ordinary
+initial/signed labels in Security's separate corpus remain unnecessary holds.
+Neither finished failed candidate is integrated or enabled.
+
+The replacement demo-custody helper pair also failed: the lead independently
+reproduced two actual writes into replacement directories between `mkdir` and
+its first `stat`. `clone_campaign_demo_custody.py` SHA b25306b5… and
+`prepare_demo_guarded_custody.py` SHA f11a3ff6… are therefore withdrawn from
+adoption. Their source, author tests, peer failures and lead reproductions stay
+protected under the continuation runtime. New helper qualification is required
+before preparation or database copy, and no candidate activation occurred.
+
+The exact original cleanup proposal selected 19 targets; the certificate/key
+`nginx-check` target was excluded. Before deletion every byte of all 4,609
+files was retained in a protected deduplicated archive, then hash-verified.
+Fresh process/container/launcher/mount and source/output custody checks passed.
+The original document/private-file shred procedure ran with bounded actual exits;
+no physical secure-erasure claim is made. Cleanup exit0; a second invocation
+returned already-complete with zero new deletions. Removed allocation179,597,312
+bytes; current protected archive/manifest/journal allocation56,045,568 bytes;
+net verified saving123,551,744 bytes. The previously denied transcript tree,
+original evidence, databases, credentials and shared dependencies are untouched.
+
+Cumulative enumerated net saving is6,098,935,808 bytes, including earlier
+preservation costs. Filesystem available34,040,123,392 bytes at07:33. The larger
+filesystem improvement occurred separately from this selected cleanup and is
+not attributed to it. The full preflight at07:31 is FIX-AND-GO,89%, with all six
+private Django surfaces and expected co-tenant statuses healthy. Its report is
+`docs/preflight-reports/preflight-20261003T073135Z.md` in the shared audit tree.
+The new repair rounds are released; heavy DB/provider work stays serialized.
+
+New provider calls remain0; standing authority, prior119 attempts, original
+unknown-outcome accounting, and unavailable provider invoices are unchanged.
+Runtime evidence: `rebuild/.runtime/v1-sol-continuation-20261002/`;
+`cleanup-measurement-after-legacy19-20261003.json`, lead clinical562/Word6e and
+custody-creation results retain actual exit statuses and original hashes.
