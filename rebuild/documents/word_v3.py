@@ -3062,6 +3062,11 @@ class Detector:
                 # a clinician's reviewed label cannot establish this reading.
                 descriptive = re.fullmatch(re.escape(heading['action']) + r's?\s+of\s+[^:?!]+\s*[:.]?', source, re.I)
                 formal_object = re.search(r'\b(?:consent|permission|authori[sz]ation|attestation|certification|declaration)s?\b', source, re.I)
+                # The nominal act's complete agentive complement appoints its
+                # author, regardless of that person's name or job title. It is
+                # not an ordinary observation category even for clinical objects.
+                if descriptive and re.search(r'\s+by\s+\S[^:?!]*\s*[:.]?$', source, re.I):
+                    return 'human_signing_action'
                 if descriptive and not explicit and not formal_object:
                     return ''
                 return 'human_signing_action' if explicit else 'ambiguous_source_action'

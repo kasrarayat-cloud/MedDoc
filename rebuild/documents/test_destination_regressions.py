@@ -265,6 +265,21 @@ class DestinationRegressions(unittest.TestCase):
                 doc.add_paragraph('Clinical reason: ______')
                 self.assert_held(saved(doc))
 
+    def test_retained_nominal_review_appoints_its_by_author_at_the_actual_destination(self):
+        from .test_word_v3 import _sdt, ff_text_field
+        for caption in ('Review of symptoms by the line manager', 'Review of symptoms by Alex Reed',
+                        'Confirmation of accuracy by the line manager'):
+            for native in ('sdt', 'ff'):
+                for shape in ('body', 'table'):
+                    with self.subTest(caption=caption, native=native, shape=shape):
+                        doc = Document()
+                        p = doc.add_paragraph() if shape == 'body' else doc.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0]
+                        p.add_run(caption + ': ')
+                        if native == 'sdt': p._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                        else: ff_text_field(p, name=caption)
+                        doc.add_paragraph('Clinical reason: ______')
+                        self.assert_held(saved(doc))
+
     def test_counted_answer_restriction_is_not_a_person_granting_permission(self):
         for caption in ('Treatment(s) - only one answer allowed:',
                         'Treatment(s) - one option permitted:'):
