@@ -28,7 +28,7 @@
     {% else %}<div class="notice warning">No answer areas were found automatically. Add each answer area of your form below.</div>{% endif %}
 
     <details {% if find or posted_slot %}open{% endif %} data-v3-add><summary>Add a missed field</summary><div class="details-body">
-      <p class="small">Choose the place on the form where the missed answer goes. Places that already belong to a field are not listed. A paragraph with printed text takes the answer after its text; an empty paragraph or cell takes it as its content. Printed text is never replaced.</p>
+      <p class="small">Choose the place on the form where the missed answer goes. Places that already belong to a field are not listed. A paragraph with printed text takes the answer after its text; an empty paragraph or cell takes it as its content. For a complete empty ruled narrative area, choose its first answer line and Long text; its printed question, guidance and all answer lines stay bound together. Printed text is never replaced.</p>
       <form method="get" class="inline-form" data-v3-find><label for="v3-find">Search the form's text</label> <input id="v3-find" name="find" value="{{ find }}" maxlength="120"> <button type="submit" class="secondary">Search</button>{% if find %} <a href="?">Show all places</a>{% endif %}</form>
       {% if outline_error %}<p class="small error-text">The form's places could not be listed: {{ outline_error }}</p>{% endif %}
       {% if places %}

@@ -6159,6 +6159,89 @@ class Detector:
                     options=options, extra_slots=slots[1:], context=context,
                     complete_source=True, source_questions=[relation])
 
+    def ruled_paragraph_stop(self, slot):
+        """An explicit single flowing underscore leader, not a column or guessed line."""
+        if slot.kind != 'p' or slot.part != 'word/document.xml' or slot.parent is not None:
+            return None
+        tabs = slot.el.findall('./' + q('w:pPr') + '/' + q('w:tabs') + '/' + q('w:tab'))
+        if len(tabs) != 1 or tabs[0].get(q('w:leader')) != 'underscore' or tabs[0].get(q('w:val')) != 'right':
+            return None
+        geometry = self.tab_column_properties(slot)
+        if geometry is None or len(geometry[0]) != 1 or geometry[0][0][1] != 'right':
+            return None
+        return geometry
+
+    def manual_ruled_paragraphs(self, chosen, kind):
+        """Explicitly recover a complete body narrative made of printed ruled lines.
+
+        All answer lines, intervening ruled spacers, the adjacent caption and
+        optional fixed bracket guidance belong to one source-bound relation.
+        The line group must start here; a middle line never creates a suffix.
+        Tables, hidden/unknown formatting, filled lines and column tabs refuse.
+        """
+        geometry = self.ruled_paragraph_stop(chosen)
+        if kind != 'long_text' or geometry is None or self.ptext(chosen.el)[0] != '\t':
+            return None
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:sectPr'), q('w:br')}
+        def safe(slot):
+            return (slot is not None and slot.kind == 'p' and slot.part == chosen.part
+                    and slot.parent is chosen.parent and self.tab_source_visible(slot)
+                    and not self.question_box_paragraph(slot.el)[2]
+                    and not any(node.tag in unsafe for node in slot.el.iter()))
+        def ref(slot):
+            return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el),
+                    'text': self.ptext(slot.el)[0]}
+        node, preceding = chosen.el.getprevious(), []
+        while node is not None and node.tag == q('w:p') and len(preceding) < 3:
+            slot = self.index.by_el.get(id(node))
+            if not safe(slot) or self.ruled_paragraph_stop(slot) is not None:
+                return None
+            text = self.ptext(node)[0].strip()
+            if text:
+                break
+            preceding.append(slot); node = node.getprevious()
+        guidance = []
+        if node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); text = self.ptext(node)[0].strip()
+            if text.startswith('[') and text.endswith(']') and text.count('[') == text.count(']') == 1:
+                if not safe(slot): return None
+                guidance = [slot]; node = node.getprevious()
+        question = self.index.by_el.get(id(node)) if node is not None else None
+        if not safe(question): return None
+        prompt = self.ptext(question.el)[0].strip()
+        if (not prompt or ':' not in prompt and not self.question_box_request(prompt)
+                or len(prompt) > MAX_MAPPING_LABEL or self.blank_spans(*self.ptext(question.el))
+                or self.question_box_reference(prompt) or self.question_box_authorship(prompt)
+                or self.checkbox_source_action(prompt, governing=True) or self.question_box_signing(prompt)):
+            return None
+        lines, descriptors = [], []
+        node = chosen.el
+        while node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); stop = self.ruled_paragraph_stop(slot) if slot else None
+            if stop is None:
+                if slot is not None and (self.ptext(node)[0] == '\t'
+                        or not self.ptext(node)[0].strip() and node.find('./' + q('w:pPr') + '/' + q('w:tabs')) is not None):
+                    return None  # an inconsistent empty line cannot shorten the complete group
+                break
+            text = self.ptext(node)[0]
+            if (not safe(slot) or stop != geometry or text not in ('', '\t') or len(descriptors) >= 100):
+                return None
+            if text == '\t': lines.append(slot)
+            descriptors.append(ref(slot)); node = node.getnext()
+        if len(lines) < 2:
+            return None
+        context = ' > '.join(value for value in (self.context_for(question, complete=True), prompt,
+                            *[self.ptext(slot.el)[0].strip() for slot in guidance]) if value)
+        if len(context) > MAX_MAPPING_CONTEXT:
+            return None
+        relation = {'relation': 'manual_ruled_paragraph_answer', 'question': prompt, 'source': ref(question),
+                    'descriptors': descriptors, 'instructions': [ref(slot) for slot in guidance + preceding],
+                    'definitions': {name: hashlib.sha256(self.package.zip.read(name)).hexdigest()
+                                    for name in ('word/styles.xml',) if name in self.package.names}}
+        return Area('long_text', prompt, lines[0], {'type': 'ruled_paragraphs'}, extra_slots=lines[1:],
+                    context=context, complete_source=True, source_questions=[relation])
+
     def rule_question_boxes(self, *, list_only=False):
         """A printed body question followed by its own empty one-cell bordered table.
 
@@ -7242,7 +7325,7 @@ class _PlaceReader:
                 out.append((_place_id(part, target.get("table")), None, None))
         elif typ != "none":
             out.extend((_place_id(p, path), None, None) for p, path in anchors)
-        if typ == "paragraph":
+        if typ in ("paragraph", "ruled_paragraphs"):
             out.extend((_place_id(x.get("part"), x.get("slot")), None, None)
                        for x in loc.get("extra", []) or [] if isinstance(x, dict))
         if not out:
@@ -8513,7 +8596,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 fail("The related question mapping is invalid.", "invalid_mapping")
             if relation.get("relation") == "immediate_previous_question":
                 refs = [relation.get("source"), relation.get("reference")]
-            elif relation.get("relation") in ('paragraph_list_answer', 'manual_paragraph_options') and isinstance(relation.get("descriptors"), list):
+            elif relation.get("relation") in ('paragraph_list_answer', 'manual_paragraph_options', 'manual_ruled_paragraph_answer') and isinstance(relation.get("descriptors"), list):
                 instructions = relation.get("instructions", [])
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
@@ -8529,8 +8612,15 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     fail("The related question source is missing.", "invalid_mapping")
                 resolve(ref.get("part"), ref.get("slot"), ref["fingerprint"])
         if relations:
+            manual_ruled = any(relation.get('relation') == 'manual_ruled_paragraph_answer' for relation in relations)
             manual_list = any(relation.get('relation') == 'manual_paragraph_options' for relation in relations)
-            if manual_list:
+            if manual_ruled:
+                current = source_detector.manual_ruled_paragraphs(source_detector.index.by_id[anchors[0].id], field.get('kind'))
+                expected_extra = ([{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)}
+                                   for s in current.extra_slots] if current else [])
+                owns = bool(current and current.target == target and current.source_questions == relations
+                            and loc.get('extra', []) == expected_extra)
+            elif manual_list:
                 current = source_detector.manual_paragraph_options(source_detector.index.by_id[anchors[0].id],
                                                                    field.get('kind'))
                 owns = bool(current and current.target == target and current.source_questions == relations
@@ -8554,6 +8644,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                        and area.options == field.get('options') for area in source_detector.areas):
                 fail('The printed option group has no source-bound review. Review the complete list mapping again.',
                      'mapping_mismatch')
+        elif target.get('type') == 'ruled_paragraphs':
+            fail('The ruled answer area has no complete source-bound review. Choose its first line and review the mapping.',
+                 'mapping_mismatch')
         for extra in loc.get("extra", []):
             resolve(extra["part"], extra["slot"], extra["fingerprint"])
         for copy in target.get("copies", []):
@@ -8577,7 +8670,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     value = printed_options(field)[_options_chosen(field, answer)[0]]
                 ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"), whole=bool(target.get("all")), append=(kind == "cell_append"):
                             write_cell(el, v, rep, whole, append), part))
-            elif kind == "paragraph":
+            elif kind in ("paragraph", "ruled_paragraphs"):
                 paras = [anchor] + [resolve(x["part"], x["slot"], x["fingerprint"]) for x in loc.get("extra", [])]
                 lines = str(answer).replace("\r\n", "\n").split("\n")
                 chunks = lines[:len(paras) - 1] + ["\n".join(lines[len(paras) - 1:])] if len(paras) > 1 else [str(answer)]
@@ -8983,6 +9076,20 @@ def constrained_scalar_value(original, final, field, written):
         # The old cell remains visible and may contain an existing answer.
         # Colour and a successful append cannot prove a unique scalar value.
         return None
+    elif kind == 'ruled_paragraphs':
+        refs = [loc] + list(loc.get('extra', []))
+        chunks = []
+        for ref in refs:
+            old = original.by_id.get('%s#%s' % (ref.get('part'), ref.get('slot')))
+            new = final.by_id.get('%s#%s' % (ref.get('part'), ref.get('slot')))
+            if old is None or new is None:
+                return None
+            source, current = paragraph_text(old.el)[0], paragraph_text(new.el)[0]
+            if source != '\t' or not current.endswith(source):
+                return None
+            chunks.append(current[:-len(source)])
+        while chunks and not chunks[-1]: chunks.pop()
+        value = '\n'.join(chunks)
     elif kind in ("cell", "cell_replace", "paragraph"):
         anchors = [after]
         if kind == "paragraph":
@@ -9316,9 +9423,14 @@ def locate(data: bytes, targets: list) -> list:
             if slot.kind == "glyphs":
                 slot = slot.parent
         elif slot.kind == "p":
-            group = detector.manual_paragraph_options(slot, kind)
+            group = detector.manual_paragraph_options(slot, kind) or detector.manual_ruled_paragraphs(slot, kind)
             if group is not None:
                 slot, target, options = group.slot, group.target, group.options
+            elif kind == 'long_text' and (detector.ruled_paragraph_stop(slot) is not None
+                                         or detector.ptext(slot.el)[0] == '\t'):
+                fail('Choose the first line of the complete empty ruled answer area, immediately after its printed '
+                     'question and optional guidance. Filled, hidden or inconsistent lines need another mapping.',
+                     'invalid_mapping')
             elif kind == 'multi_choice':
                 fail('For several printed options, choose the question or first item of its complete adjacent '
                      'plain list. Existing selections, hidden fields and incomplete lists need another mapping.',
@@ -9380,7 +9492,7 @@ def locate(data: bytes, targets: list) -> list:
         context = supplied_context or detector.context_for(slot, complete=True)
         if len(context) > MAX_MAPPING_CONTEXT:
             fail("The complete source section exceeds %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
-        if target['type'] == 'paragraph_options':
+        if target['type'] in ('paragraph_options', 'ruled_paragraphs'):
             area = group
             area.label = label
             if supplied_context:

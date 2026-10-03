@@ -725,10 +725,10 @@ def v3_add_field(request,t):
     field=locate_fields(v3_original(t),[target])['fields'][0]
     if field.get('kind') in ('choice','multi_choice') and not field.get('options'):
         raise ValidationError('Choose a Word dropdown, a legacy dropdown, or the question or first item of a complete printed option list. Use text for a narrative answer.')
-    if field.get('locator',{}).get('target',{}).get('type')=='paragraph_options':
+    if field.get('locator',{}).get('target',{}).get('type') in ('paragraph_options','ruled_paragraphs'):
         if any(v3_mapping.is_mapped(place,v3_mapping.mapped_slots(latest.fields))
                for place in v3_mapping.mapped_slots([field])):
-            raise ValidationError('One of these printed options already belongs to a field. Correct that mapping before adding the complete list.')
+            raise ValidationError('One of these answer destinations already belongs to a field. Correct that mapping before adding the complete area.')
     if any(f['key']==field['key'] for f in latest.fields):raise ValidationError('That place already belongs to a field with this label.')
     with transaction.atomic():
         Template.objects.select_for_update().get(pk=t.pk)
