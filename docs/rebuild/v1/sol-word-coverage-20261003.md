@@ -181,3 +181,32 @@ review issues; no free writer or guessed choice is added. Two new pure source,
 actual fill and preservation controls passed in 4.054 seconds, exit 0 without a
 database or provider request. Their real binding/export and exclusion workflow
 checks, final rendered supplement and finished source refutation remain queued.
+
+## Preserved paired-range failure and bounded repair
+
+The two 7f3b003d binding/export and exclusion-to-worker-to-final-export workflow
+methods passed in 42.231 seconds, real exit 0, with the synthetic database
+destroyed. Root's 47-control component pass found no unsafe writes or false holds
+and measured unchanged code hashes. Security's separate final 30-inspection pass
+in 20.278 seconds nevertheless demonstrated two concrete omissions:
+`Site: [left/right; Comments: [enter notes]` and
+`Site: [left/right; Date: [DD/MM/YYYY]`. Their first unfinished slash range
+disappeared from coverage when a later opening bracket followed it. Both selected
+v3 and auto could admit the mapping. The failed candidate and exact raw evidence
+remain in `security/refute-word7f-final.*`; none of the frozen corpus results is
+regraded.
+
+The unfinished-range detector now ends at the next opening bracket or paragraph
+end. It records the exact unresolved source extent without guessing a choice or
+making that extent writable. The later placeholder or date retains its own
+writer. Two focused controls passed in 3.355 seconds, runner exit 0 without a
+database or provider request. Both incomplete and properly closed paired ranges
+preserve the original choice text while actual fill updates only the later
+field; the adjacent reason field remains unchanged. The existing two workflow
+methods and nine original quarantine admission routes are reused where their
+measured code and behavior are unaffected. Final finished-component refutation
+and same-first-value rendered verification remain required.
+
+Security also recorded U+2028 acceptance in the date whitespace grammar. Its
+actual date fill succeeded; this remains a grammar-boundary diagnostic, not a
+demonstrated export harm or a newly asserted clinical failure.

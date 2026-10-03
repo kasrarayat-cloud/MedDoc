@@ -152,6 +152,40 @@ class SourceCoverage(unittest.TestCase):
         out=word_v3.fill(data(doc),result['fields'],{result['fields'][0]['key']:'Synthetic review'})
         self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'Site: [left/right')
 
+    def test_unclosed_slash_before_another_placeholder_keeps_exact_source_and_later_writer(self):
+        for suffix,answer in (('Comments: [enter notes]','Synthetic notes'),
+                              ('Date: [DD/MM/YYYY]','03/14/2026')):
+            with self.subTest(suffix=suffix):
+                text='Site: [left/right; '+suffix
+                doc=Document();doc.add_paragraph(text);doc.add_paragraph('Reason: ______')
+                result=self.inspect(doc);issues=result['import_manifest']['coverage']['selected_engine_issues']
+                self.assertEqual(len(issues),1);issue=issues[0]
+                self.assertEqual(issue['code'],'unbalanced_bracketed_source')
+                later=text.index('[',text.index('[')+1)
+                self.assertEqual((issue['start'],issue['end']),(6,later))
+                self.assertEqual(text[issue['start']:issue['end']],'[left/right; '+suffix.split('[')[0])
+                self.assertTrue(result['import_manifest']['coverage']['block_generation'])
+                field=next(f for f in result['fields'] if f['locator']['slot']=='b/p[0]')
+                target=field['locator']['target'];self.assertGreaterEqual(target['start'],issue['end'])
+                out=word_v3.fill(data(doc),result['fields'],{field['key']:answer})
+                exported=Document(io.BytesIO(out))
+                self.assertEqual(exported.paragraphs[0].text,text[:later]+answer)
+                self.assertEqual(exported.paragraphs[1].text,'Reason: ______')
+
+    def test_closed_alternatives_do_not_consume_the_later_placeholder_or_date(self):
+        for suffix,answer in (('Comments: [enter notes]','Synthetic notes'),
+                              ('Date: [DD/MM/YYYY]','03/14/2026')):
+            with self.subTest(suffix=suffix):
+                text='Site: [left/right]; '+suffix
+                doc=Document();doc.add_paragraph(text);doc.add_paragraph('Reason: ______')
+                result=self.inspect(doc);issues=result['import_manifest']['coverage']['selected_engine_issues']
+                self.assertEqual(len(issues),1);issue=issues[0]
+                self.assertEqual(issue['code'],'printed_bracket_alternatives')
+                self.assertEqual(text[issue['start']:issue['end']],'[left/right]')
+                field=next(f for f in result['fields'] if f['locator']['slot']=='b/p[0]')
+                out=word_v3.fill(data(doc),result['fields'],{field['key']:answer})
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text,'Site: [left/right]; '+suffix.split('[')[0]+answer)
+
     def test_long_bracketed_source_is_not_silently_discarded_at_grammar_limit(self):
         for length in (121,2100):
             with self.subTest(length=length):
