@@ -2151,6 +2151,9 @@ class Detector:
 
     def kind_for(self, label: str) -> str:
         label = re.sub(r"\s+", " ", label or "")
+        qualified = qualified_signing_role(label)
+        if qualified:
+            return qualified
         if SIGNATURE_DATE_PAIR.search(label):
             return "signature"
         if INITIALS_DATE_PAIR.search(label):
@@ -2354,6 +2357,7 @@ class Detector:
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
+        self.guard_action_participants()
         self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
@@ -2468,6 +2472,78 @@ class Detector:
             extent = ({'start': area.target['start'], 'end': area.target['end']}
                       if area.target.get('type') == 'span' else {})
             self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
+
+    def guard_action_participants(self):
+        """A native witness identity belongs to its physically continuous act.
+
+        The complete source caption appoints a witness, and the immediately
+        preceding paragraph owns a protected document act. Plain spacers and
+        adjacent single-column table rows preserve that continuity. Both physical
+        relations are required; a witness recorded in clinical history or a
+        receipt has no such signing authority. Reviewed labels supply neither.
+        """
+        acts = [a for a in self.areas if a.source_action]
+        def previous_paragraph(host):
+            node = host.el.getprevious()
+            while node is not None and node.tag == q('w:p'):
+                candidate = self.index.by_el.get(id(node))
+                if candidate is None or candidate.parent is not host.parent or candidate.part != host.part:
+                    return None
+                if self.ptext(node)[0].strip():
+                    return candidate
+                if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                        or any(self.question_box_paragraph(node)[::2])):
+                    return None
+                node = node.getprevious()
+            # One-column, unmerged adjacent rows are a continuous printed
+            # document-act block. A different column, nested table, heading,
+            # intervening row or unresolved merge cannot appoint a witness.
+            cell = self.host_cell(host)
+            if (cell is None or host.parent is not cell or self.grid_cols(cell.parent) != 1
+                    or node is not None and node is not cell.el.find(q('w:tcPr'))):
+                return None
+            rows = self.grid(cell.parent); number = cell.info['row']
+            current, previous = rows.get(number, []), rows.get(number - 1, [])
+            if (number < 1 or len(current) != 1 or current[0] is not cell or len(previous) != 1
+                    or any(c.info['col'] != 0 or c.info['span'] != 1
+                           or c.el.find('./' + q('w:tcPr') + '/' + q('w:vMerge')) is not None
+                           or any(child.kind != 'p' for child in c.children)
+                           for c in current + previous)):
+                return None
+            paragraphs = [child for child in previous[0].children if child.kind == 'p']
+            for candidate in reversed(paragraphs):
+                if self.ptext(candidate.el)[0].strip():
+                    return candidate
+                if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                        or any(self.question_box_paragraph(candidate.el)[::2])):
+                    return None
+            return None
+        for area in self.areas:
+            if area.slot.kind not in ('sdt', 'ff') or area.source_action:
+                continue
+            if not re.fullmatch(r'(?:name of (?:the )?witness|(?:the )?witness(?: name)?)',
+                                clean_label(area.label), re.I):
+                continue
+            host = self.host_paragraph(area.slot)
+            before = previous_paragraph(host) if host is not None else None
+            ambiguous = False
+            if before is None and host is not None:
+                cell = self.host_cell(host)
+                # A nearby act in a complex table is evidence of an unresolved
+                # witness area, not permission to guess which column owns it.
+                if cell is not None:
+                    ambiguous = any((prior := self.host_cell(a.slot)) is not None
+                                    and prior.parent is cell.parent and prior.info['row'] == cell.info['row'] - 1
+                                    for a in acts)
+            if not ambiguous and (before is None or not any(self.host_paragraph(a.slot) is before for a in acts)):
+                continue
+            area.source_action = True
+            area.protection = (('This witness area is beside a human document act in a table whose ownership cannot be resolved. '
+                                if ambiguous else 'This witness identity belongs to the preceding human document act. ')
+                               + "Ordinary notes and the finalizer cannot supply this person's identity or act; "
+                               'complete it through the explicit human workflow.')
+            self.coverage_issue(area.slot, 'human_document_participant',
+                                area.protection + ' Location: ' + area.slot.id)
 
     def guard_fixed_containers(self):
         """Unqualified fixed geometry remains visible, source-held and unwritable.
@@ -2979,6 +3055,20 @@ class Detector:
                 explicit = (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
                             or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',
                                         heading['action'],re.I))
+                # A complete nominal "review/confirmation/... of <clinical
+                # object>" names an observation category. It has neither an
+                # appointed author nor a document/formal act argument. Keep
+                # bare/assigned reviews ambiguous and formal objects held;
+                # a clinician's reviewed label cannot establish this reading.
+                descriptive = re.fullmatch(re.escape(heading['action']) + r's?\s+of\s+[^:?!]+\s*[:.]?', source, re.I)
+                formal_object = re.search(r'\b(?:consent|permission|authori[sz]ation|attestation|certification|declaration)s?\b', source, re.I)
+                # The nominal act's complete agentive complement appoints its
+                # author, regardless of that person's name or job title. It is
+                # not an ordinary observation category even for clinical objects.
+                if descriptive and re.search(r'\s+by\s+\S[^:?!]*\s*[:.]?$', source, re.I):
+                    return 'human_signing_action'
+                if descriptive and not explicit and not formal_object:
+                    return ''
                 return 'human_signing_action' if explicit else 'ambiguous_source_action'
             if ':' in source:
                 caption, statement = source.split(':',1)
@@ -3072,7 +3162,17 @@ class Detector:
             third_person = re.match(r'^([^.;:?!\r\n]+?)\s+('+action+r')(?=\W|_|$)',source,re.I)
             if third_person:
                 subject,verb = third_person[1].strip(),third_person[2]
-                if (re.fullmatch(base_action,verb,re.I)
+                # A terminal passive restriction counts printed answers, not
+                # a human actor granting permission. Reuse the selection
+                # grammar and require that its counted noun is the subject's
+                # complete tail; an actor + permission complement stays held.
+                counted = ONE_ANSWER.search(subject) or COUNTED_ANSWERS.search(subject)
+                if (governing and counted and not subject[counted.end():].strip()
+                        and limit_language(subject, local=True) and verb.lower().endswith('ed')
+                        and re.match(permission, verb, re.I)
+                        and not source[third_person.end():].strip(' \t\r\n:.;')):
+                    third_person = None
+                if (third_person and re.fullmatch(base_action,verb,re.I)
                         and not re.fullmatch(r'you|they|he|she|it',subject,re.I)
                         and not re.search(r's\s*$',subject,re.I)):
                     third_person = None  # "Signed consent" is a noun phrase, not subject + finite verb.
@@ -6064,6 +6164,89 @@ class Detector:
                     options=options, extra_slots=slots[1:], context=context,
                     complete_source=True, source_questions=[relation])
 
+    def ruled_paragraph_stop(self, slot):
+        """An explicit single flowing underscore leader, not a column or guessed line."""
+        if slot.kind != 'p' or slot.part != 'word/document.xml' or slot.parent is not None:
+            return None
+        tabs = slot.el.findall('./' + q('w:pPr') + '/' + q('w:tabs') + '/' + q('w:tab'))
+        if len(tabs) != 1 or tabs[0].get(q('w:leader')) != 'underscore' or tabs[0].get(q('w:val')) != 'right':
+            return None
+        geometry = self.tab_column_properties(slot)
+        if geometry is None or len(geometry[0]) != 1 or geometry[0][0][1] != 'right':
+            return None
+        return geometry
+
+    def manual_ruled_paragraphs(self, chosen, kind):
+        """Explicitly recover a complete body narrative made of printed ruled lines.
+
+        All answer lines, intervening ruled spacers, the adjacent caption and
+        optional fixed bracket guidance belong to one source-bound relation.
+        The line group must start here; a middle line never creates a suffix.
+        Tables, hidden/unknown formatting, filled lines and column tabs refuse.
+        """
+        geometry = self.ruled_paragraph_stop(chosen)
+        if kind != 'long_text' or geometry is None or self.ptext(chosen.el)[0] != '\t':
+            return None
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:sectPr'), q('w:br')}
+        def safe(slot):
+            return (slot is not None and slot.kind == 'p' and slot.part == chosen.part
+                    and slot.parent is chosen.parent and self.tab_source_visible(slot)
+                    and not self.question_box_paragraph(slot.el)[2]
+                    and not any(node.tag in unsafe for node in slot.el.iter()))
+        def ref(slot):
+            return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el),
+                    'text': self.ptext(slot.el)[0]}
+        node, preceding = chosen.el.getprevious(), []
+        while node is not None and node.tag == q('w:p') and len(preceding) < 3:
+            slot = self.index.by_el.get(id(node))
+            if not safe(slot) or self.ruled_paragraph_stop(slot) is not None:
+                return None
+            text = self.ptext(node)[0].strip()
+            if text:
+                break
+            preceding.append(slot); node = node.getprevious()
+        guidance = []
+        if node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); text = self.ptext(node)[0].strip()
+            if text.startswith('[') and text.endswith(']') and text.count('[') == text.count(']') == 1:
+                if not safe(slot): return None
+                guidance = [slot]; node = node.getprevious()
+        question = self.index.by_el.get(id(node)) if node is not None else None
+        if not safe(question): return None
+        prompt = self.ptext(question.el)[0].strip()
+        if (not prompt or ':' not in prompt and not self.question_box_request(prompt)
+                or len(prompt) > MAX_MAPPING_LABEL or self.blank_spans(*self.ptext(question.el))
+                or self.question_box_reference(prompt) or self.question_box_authorship(prompt)
+                or self.checkbox_source_action(prompt, governing=True) or self.question_box_signing(prompt)):
+            return None
+        lines, descriptors = [], []
+        node = chosen.el
+        while node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); stop = self.ruled_paragraph_stop(slot) if slot else None
+            if stop is None:
+                if slot is not None and (self.ptext(node)[0] == '\t'
+                        or not self.ptext(node)[0].strip() and node.find('./' + q('w:pPr') + '/' + q('w:tabs')) is not None):
+                    return None  # an inconsistent empty line cannot shorten the complete group
+                break
+            text = self.ptext(node)[0]
+            if (not safe(slot) or stop != geometry or text not in ('', '\t') or len(descriptors) >= 100):
+                return None
+            if text == '\t': lines.append(slot)
+            descriptors.append(ref(slot)); node = node.getnext()
+        if len(lines) < 2:
+            return None
+        context = ' > '.join(value for value in (self.context_for(question, complete=True), prompt,
+                            *[self.ptext(slot.el)[0].strip() for slot in guidance]) if value)
+        if len(context) > MAX_MAPPING_CONTEXT:
+            return None
+        relation = {'relation': 'manual_ruled_paragraph_answer', 'question': prompt, 'source': ref(question),
+                    'descriptors': descriptors, 'instructions': [ref(slot) for slot in guidance + preceding],
+                    'definitions': {name: hashlib.sha256(self.package.zip.read(name)).hexdigest()
+                                    for name in ('word/styles.xml',) if name in self.package.names}}
+        return Area('long_text', prompt, lines[0], {'type': 'ruled_paragraphs'}, extra_slots=lines[1:],
+                    context=context, complete_source=True, source_questions=[relation])
+
     def rule_question_boxes(self, *, list_only=False):
         """A printed body question followed by its own empty one-cell bordered table.
 
@@ -6336,7 +6519,10 @@ class Detector:
                 txt = self.text(ps.el).strip()
                 if not txt or len(txt) > 200 or BOX in txt or "\x00" in self.ptext(ps.el)[0]:
                     continue
-                if UNDERSCORES.search(txt) or DOTS.search(txt):
+                # A printed heading can contain its own digit, underline or
+                # placeholder answer. That precise source blank owns the
+                # response; following empty paragraphs are not its answer.
+                if self.blank_spans(*self.ptext(ps.el)):
                     continue
                 label = clean_label(txt)
                 signing = bool(SIGNATURE.search(label) or INITIALS.search(label) or re.match(r"^(?:date|printed name|name)\b", label, re.I))
@@ -7144,7 +7330,7 @@ class _PlaceReader:
                 out.append((_place_id(part, target.get("table")), None, None))
         elif typ != "none":
             out.extend((_place_id(p, path), None, None) for p, path in anchors)
-        if typ == "paragraph":
+        if typ in ("paragraph", "ruled_paragraphs"):
             out.extend((_place_id(x.get("part"), x.get("slot")), None, None)
                        for x in loc.get("extra", []) or [] if isinstance(x, dict))
         if not out:
@@ -7493,11 +7679,36 @@ def _plain(label) -> str:
     return clean_label(_INVISIBLE.sub("", text), limit=1000).casefold()
 
 
+def qualified_signing_role(label) -> str:
+    """A temporal qualifier cannot erase the person qualified by a signing caption.
+
+    A complete date-only parenthetical still asks for a date. A signature or
+    initials caption whose parenthetical also qualifies a signer remains that
+    person's human destination, without enumerating relationships or titles.
+    """
+    text = _plain(label)
+    head, separator, qualifier = text.partition('(')
+    if not separator or not DATE_LABEL.search(qualifier):
+        return ''
+    role = signing_place(head)
+    if not role:
+        return ''
+    match = re.fullmatch(r'([^()]*)\)\s*[:.]?', qualifier)
+    if match is None:
+        return role  # unresolved/nested qualification cannot become an ordinary date
+    remainder = DATE_LABEL.sub(' ', match[1])
+    remainder = re.sub(r'\b(?:of\s+birth|time|day|and|or)\b', ' ', remainder)
+    return role if re.sub(r'[\s.,;:/&+\-]+', '', remainder) else ''
+
+
 def signing_place(label) -> str:
     """'signature', 'initials' or '' for a PRINTED label (see the section comment above)."""
     text = _plain(label)
     if not text:
         return ""
+    qualified = qualified_signing_role(text)
+    if qualified:
+        return qualified
     if SIGNATURE_DATE_PAIR.search(text):
         return "signature"
     if INITIALS_DATE_PAIR.search(text):
@@ -8390,7 +8601,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 fail("The related question mapping is invalid.", "invalid_mapping")
             if relation.get("relation") == "immediate_previous_question":
                 refs = [relation.get("source"), relation.get("reference")]
-            elif relation.get("relation") in ('paragraph_list_answer', 'manual_paragraph_options') and isinstance(relation.get("descriptors"), list):
+            elif relation.get("relation") in ('paragraph_list_answer', 'manual_paragraph_options', 'manual_ruled_paragraph_answer') and isinstance(relation.get("descriptors"), list):
                 instructions = relation.get("instructions", [])
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
@@ -8406,8 +8617,15 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     fail("The related question source is missing.", "invalid_mapping")
                 resolve(ref.get("part"), ref.get("slot"), ref["fingerprint"])
         if relations:
+            manual_ruled = any(relation.get('relation') == 'manual_ruled_paragraph_answer' for relation in relations)
             manual_list = any(relation.get('relation') == 'manual_paragraph_options' for relation in relations)
-            if manual_list:
+            if manual_ruled:
+                current = source_detector.manual_ruled_paragraphs(source_detector.index.by_id[anchors[0].id], field.get('kind'))
+                expected_extra = ([{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)}
+                                   for s in current.extra_slots] if current else [])
+                owns = bool(current and current.target == target and current.source_questions == relations
+                            and loc.get('extra', []) == expected_extra)
+            elif manual_list:
                 current = source_detector.manual_paragraph_options(source_detector.index.by_id[anchors[0].id],
                                                                    field.get('kind'))
                 owns = bool(current and current.target == target and current.source_questions == relations
@@ -8431,6 +8649,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                        and area.options == field.get('options') for area in source_detector.areas):
                 fail('The printed option group has no source-bound review. Review the complete list mapping again.',
                      'mapping_mismatch')
+        elif target.get('type') == 'ruled_paragraphs':
+            fail('The ruled answer area has no complete source-bound review. Choose its first line and review the mapping.',
+                 'mapping_mismatch')
         for extra in loc.get("extra", []):
             resolve(extra["part"], extra["slot"], extra["fingerprint"])
         for copy in target.get("copies", []):
@@ -8454,7 +8675,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     value = printed_options(field)[_options_chosen(field, answer)[0]]
                 ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"), whole=bool(target.get("all")), append=(kind == "cell_append"):
                             write_cell(el, v, rep, whole, append), part))
-            elif kind == "paragraph":
+            elif kind in ("paragraph", "ruled_paragraphs"):
                 paras = [anchor] + [resolve(x["part"], x["slot"], x["fingerprint"]) for x in loc.get("extra", [])]
                 lines = str(answer).replace("\r\n", "\n").split("\n")
                 chunks = lines[:len(paras) - 1] + ["\n".join(lines[len(paras) - 1:])] if len(paras) > 1 else [str(answer)]
@@ -8860,6 +9081,20 @@ def constrained_scalar_value(original, final, field, written):
         # The old cell remains visible and may contain an existing answer.
         # Colour and a successful append cannot prove a unique scalar value.
         return None
+    elif kind == 'ruled_paragraphs':
+        refs = [loc] + list(loc.get('extra', []))
+        chunks = []
+        for ref in refs:
+            old = original.by_id.get('%s#%s' % (ref.get('part'), ref.get('slot')))
+            new = final.by_id.get('%s#%s' % (ref.get('part'), ref.get('slot')))
+            if old is None or new is None:
+                return None
+            source, current = paragraph_text(old.el)[0], paragraph_text(new.el)[0]
+            if source != '\t' or not current.endswith(source):
+                return None
+            chunks.append(current[:-len(source)])
+        while chunks and not chunks[-1]: chunks.pop()
+        value = '\n'.join(chunks)
     elif kind in ("cell", "cell_replace", "paragraph"):
         anchors = [after]
         if kind == "paragraph":
@@ -9193,9 +9428,14 @@ def locate(data: bytes, targets: list) -> list:
             if slot.kind == "glyphs":
                 slot = slot.parent
         elif slot.kind == "p":
-            group = detector.manual_paragraph_options(slot, kind)
+            group = detector.manual_paragraph_options(slot, kind) or detector.manual_ruled_paragraphs(slot, kind)
             if group is not None:
                 slot, target, options = group.slot, group.target, group.options
+            elif kind == 'long_text' and (detector.ruled_paragraph_stop(slot) is not None
+                                         or detector.ptext(slot.el)[0] == '\t'):
+                fail('Choose the first line of the complete empty ruled answer area, immediately after its printed '
+                     'question and optional guidance. Filled, hidden or inconsistent lines need another mapping.',
+                     'invalid_mapping')
             elif kind == 'multi_choice':
                 fail('For several printed options, choose the question or first item of its complete adjacent '
                      'plain list. Existing selections, hidden fields and incomplete lists need another mapping.',
@@ -9257,7 +9497,7 @@ def locate(data: bytes, targets: list) -> list:
         context = supplied_context or detector.context_for(slot, complete=True)
         if len(context) > MAX_MAPPING_CONTEXT:
             fail("The complete source section exceeds %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
-        if target['type'] == 'paragraph_options':
+        if target['type'] in ('paragraph_options', 'ruled_paragraphs'):
             area = group
             area.label = label
             if supplied_context:

@@ -137,6 +137,164 @@ class DestinationRegressions(unittest.TestCase):
         self.assertEqual(actual.paragraphs[2].text, 'Neighbor: ______')
         self.assertEqual(actual.paragraphs[0]._p.find(qn('w:hyperlink')).get(qn('w:anchor')), 'retained_reference')
 
+    def test_native_witness_identity_requires_its_immediate_source_document_act(self):
+        from .test_word_v3 import _sdt, ff_text_field
+        for governed in (True, False):
+            for native in ('sdt', 'ff'):
+                with self.subTest(governed=governed, native=native):
+                    doc = Document(); prior = doc.add_paragraph('Consent obtained: ' if governed else 'Signed document was received on: ______')
+                    if governed: prior._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                    p = doc.add_paragraph('Witness: ')
+                    if native == 'sdt': p._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                    else: ff_text_field(p, name='Witness')
+                    raw = saved(doc); info = word_v3.inspect(raw)
+                    field = next(f for f in info['fields'] if f['label'] == 'Witness')
+                    if governed:
+                        with self.assertRaises(word_v3.V3Failure):
+                            word_v3.locate(raw, [{'slot': field['locator']['part'] + '#' + field['locator']['slot'],
+                                                 'label': 'Clinical answer', 'kind': 'text'}])
+                        forged = deepcopy(field); forged.pop('write_protected', None); forged.pop('review_reason', None)
+                        with self.assertRaises(word_v3.V3Failure):
+                            word_v3.fill(raw, [forged], {forged['key']: 'Synthetic finalizer'})
+                    else:
+                        self.assertFalse(field.get('write_protected'))
+                        out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: 'Synthetic witness recorded in history'})))
+                        self.assertEqual(word_v3.text_of(out.paragraphs[1]._p),
+                                         'Witness: Synthetic witness recorded in history')
+
+    def test_retained_native_witness_continuity_crosses_plain_spacers_and_single_column_rows(self):
+        from .test_word_v3 import _sdt, ff_text_field
+        for prior_label in ('Consent obtained', 'I approve this document',
+                            'Signed document was received on', 'Clinical history'):
+            governed = prior_label in ('Consent obtained', 'I approve this document')
+            for native in ('sdt', 'ff'):
+                for shape in ('spacer', 'three_spacers', 'rows', 'history_boundary', 'heading_boundary', 'marked_boundary'):
+                    with self.subTest(prior=prior_label, native=native, shape=shape):
+                        doc = Document()
+                        if shape == 'rows':
+                            table = doc.add_table(rows=2, cols=1)
+                            prior, witness = (row.cells[0].paragraphs[0] for row in table.rows)
+                        else:
+                            prior = doc.add_paragraph()
+                            if shape == 'heading_boundary': doc.add_heading('Clinical history', level=2)
+                            elif shape == 'marked_boundary':
+                                p = doc.add_paragraph(); p.add_run('      ').underline = True
+                            else:
+                                for _ in range(3 if shape == 'three_spacers' else 1):
+                                    doc.add_paragraph('Clinical history' if shape == 'history_boundary' else '')
+                            witness = doc.add_paragraph()
+                        prior.add_run(prior_label + ': ')
+                        prior._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                        witness.add_run('Witness: ')
+                        if native == 'sdt': witness._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                        else: ff_text_field(witness, name='Witness')
+                        raw = saved(doc); field = next(f for f in word_v3.inspect(raw)['fields'] if f['label'] == 'Witness')
+                        if governed and shape in ('spacer', 'three_spacers', 'rows'):
+                            self.assertTrue(field.get('write_protected'))
+                            field = deepcopy(field); field['label'] = 'Clinical answer'; field.pop('write_protected', None)
+                            with self.assertRaises(word_v3.V3Failure):
+                                word_v3.fill(raw, [field], {field['key']: 'Dr Synthetic Finalizer'})
+                        else:
+                            self.assertFalse(field.get('write_protected'))
+                            out = word_v3.open_package(word_v3.fill(raw, [field], {field['key']: 'Synthetic history witness'}))
+                            self.assertIn(b'Synthetic history witness', out.zip.read('word/document.xml'))
+
+    def test_complex_table_witness_ownership_stays_held_instead_of_guessing_columns(self):
+        from .test_word_v3 import _sdt
+        for prior_label, held in (('Consent obtained', True), ('Signed document was received on', False)):
+            with self.subTest(prior=prior_label):
+                doc = Document(); table = doc.add_table(rows=2, cols=2)
+                prior = table.cell(0, 0).paragraphs[0]; prior.add_run(prior_label + ': ')
+                prior._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                table.cell(0, 1).text = 'Different column'
+                witness = table.cell(1, 1).paragraphs[0]; witness.add_run('Witness: ')
+                witness._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                raw = saved(doc); field = next(f for f in word_v3.inspect(raw)['fields'] if f['label'] == 'Witness')
+                if held:
+                    self.assertTrue(field.get('write_protected'))
+                    forged = deepcopy(field); forged.pop('write_protected', None)
+                    with self.assertRaises(word_v3.V3Failure): word_v3.fill(raw, [forged], {field['key']: 'Dr Synthetic Finalizer'})
+                else:
+                    self.assertFalse(field.get('write_protected'))
+                    self.assertIn(b'Synthetic history witness', word_v3.open_package(word_v3.fill(raw, [field],
+                        {field['key']: 'Synthetic history witness'})).zip.read('word/document.xml'))
+
+    def test_retained_signer_qualifiers_containing_dates_remain_human_locations(self):
+        for label in ('Signature (participant, dd/mm/yyyy)', 'Signed (mother, DOB)',
+                      'Signature (father, born)', 'Patient initials (person, date of birth)',
+                      'Signature (person (DOB))', 'Patient initials (person, date'):
+            with self.subTest(label=label):
+                doc = Document(); doc.add_paragraph(label + ': ______________'); doc.add_paragraph('Plan: ______')
+                raw = saved(doc); field = next(f for f in word_v3.inspect(raw)['fields'] if f['label'] == label)
+                self.assertIn(field['kind'], word_v3.SIGNING_KINDS)
+                self.assertEqual(word_v3.legacy_role_kind(label), field['kind'])
+                forged = deepcopy(field); forged['label'] = 'Date'; forged['kind'] = 'date'
+                self.assertIn(field['key'], word_v3.destination_roles(raw, [forged])['violations'])
+                with self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(raw, [forged], {field['key']: 'Dr Somebody Else'})
+        for label in ('Signature (date)', 'Signature (date and time)', 'Signature (DOB)',
+                      'Signature (date of birth)', 'Signature (dd/mm/yyyy)', 'Date of signature', 'Date signed'):
+            with self.subTest(date_question=label):
+                doc = Document(); doc.add_paragraph(label + ': ______'); raw = saved(doc)
+                field = word_v3.inspect(raw)['fields'][0]
+                self.assertEqual(field['kind'], 'date')
+                self.assertEqual(word_v3.legacy_role_kind(label), '')
+                self.assertEqual(word_v3.destination_roles(raw, [field])['violations'], {})
+                out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: '2026-10-03'})))
+                self.assertEqual(out.paragraphs[0].text, label + ': 2026-10-03')
+
+    def test_nominal_clinical_review_caption_is_not_an_assigned_document_act(self):
+        for caption in ('Review of systems', 'Review of symptoms', 'Confirmation of blood pressure',
+                        'Verification of medication dose'):
+            for shape in ('table', 'paragraph'):
+                with self.subTest(caption=caption, shape=shape):
+                    doc = Document()
+                    if shape == 'table':
+                        table = doc.add_table(rows=1, cols=2); table.cell(0, 0).text = caption
+                    else: doc.add_paragraph(caption + ': ______')
+                    raw = saved(doc); field = word_v3.inspect(raw)['fields'][0]
+                    self.assertFalse(field.get('write_protected'))
+                    self.assertEqual(word_v3.destination_roles(raw, [field])['violations'], {})
+                    out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: 'Synthetic clinical result'})))
+                    self.assertEqual(out.tables[0].cell(0, 1).text if shape == 'table' else out.paragraphs[0].text,
+                                     'Synthetic clinical result' if shape == 'table' else caption + ': Synthetic clinical result')
+        for caption in ('Manager review', 'Review by the line manager', 'Review of this form',
+                        'Review of consent', 'Attestation', 'I certify this form'):
+            with self.subTest(human_act=caption):
+                doc = Document(); table = doc.add_table(rows=1, cols=2); table.cell(0, 0).text = caption
+                doc.add_paragraph('Clinical reason: ______')
+                self.assert_held(saved(doc))
+
+    def test_retained_nominal_review_appoints_its_by_author_at_the_actual_destination(self):
+        from .test_word_v3 import _sdt, ff_text_field
+        for caption in ('Review of symptoms by the line manager', 'Review of symptoms by Alex Reed',
+                        'Confirmation of accuracy by the line manager'):
+            for native in ('sdt', 'ff'):
+                for shape in ('body', 'table'):
+                    with self.subTest(caption=caption, native=native, shape=shape):
+                        doc = Document()
+                        p = doc.add_paragraph() if shape == 'body' else doc.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0]
+                        p.add_run(caption + ': ')
+                        if native == 'sdt': p._p.append(_sdt('rich', placeholder='Click or tap here to enter text.'))
+                        else: ff_text_field(p, name=caption)
+                        doc.add_paragraph('Clinical reason: ______')
+                        self.assert_held(saved(doc))
+
+    def test_counted_answer_restriction_is_not_a_person_granting_permission(self):
+        for caption in ('Treatment(s) - only one answer allowed:',
+                        'Treatment(s) - one option permitted:'):
+            with self.subTest(caption=caption):
+                doc = Document(); doc.add_paragraph(caption + ' ☐ Therapy ☐ Exercise')
+                raw = saved(doc); info = word_v3.inspect(raw); field = info['fields'][0]
+                self.assertFalse(field.get('write_protected'))
+                out = Document(io.BytesIO(word_v3.fill(raw, [field], {field['key']: 'Exercise'})))
+                self.assertIn('☒ Exercise', out.paragraphs[0].text)
+        for source in ('☐ I allow only one answer', '☐ Person allowed this procedure',
+                       '☐ Person allowed one answer to this form'):
+            with self.subTest(source=source):
+                doc = Document(); doc.add_paragraph(source); doc.add_paragraph('Clinical reason: ______')
+                self.assert_held(saved(doc))
+
     def test_reserved_authorship_is_physical_and_does_not_depend_on_a_job_title_list(self):
         for author in ('the line manager', 'the radiology supervisor', 'Dr. Synthetic'):
             for shape in ('table', 'paragraph'):

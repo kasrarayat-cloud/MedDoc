@@ -446,11 +446,17 @@ class Unticking(unittest.TestCase):
         self.assertIsNone(printed["Cough"], "nothing printed ticked, nothing recorded")
 
     def test_a_checkbox_answered_unticked_is_exported_unticked(self):
-        out = self.fill({"Consent obtained": False, "Hypertension": False, "Band applied": False})
+        out = self.fill({"Hypertension": False, "Band applied": False})
         text = paragraphs(out)
-        self.assertIn("Consent obtained ☐", text)
+        self.assertIn("Consent obtained ☒", text)  # human-owned existing act stays as printed
         self.assertIn("Hypertension ☐", text)
-        self.assertEqual(control_states(out), (["0"], ["0"]))
+        self.assertEqual(control_states(out), (["1"], ["0"]))
+
+    def test_printed_consent_cannot_be_unticked_or_reasserted_from_ordinary_answers(self):
+        for value in (False, True):
+            with self.subTest(value=value), self.assertRaises(DocumentError):
+                self.fill({"Consent obtained": value}, name='consent-' + str(value) + '.docx')
+            self.assertFalse((self.dir / ('consent-' + str(value) + '.docx')).exists())
 
     def test_a_choice_ticks_the_chosen_and_unticks_the_others(self):
         out = self.fill({"Smoker?": "Yes", "Symptoms (check all that apply)": ["Swelling"], "Laterality": "Left",
@@ -1040,6 +1046,8 @@ class CheckboxNeedsABox(unittest.TestCase):
         doc.add_paragraph("Synthetic consent")
         doc.add_paragraph("Consent obtained: ")._p.append(_sdt("rich", placeholder="Click or tap here to enter text."))
         ff_text_field(doc.add_paragraph("Witness: "), name="Witness")
+        doc.add_paragraph("Clinical history: ")._p.append(_sdt("rich", placeholder="Click or tap here to enter text."))
+        ff_text_field(doc.add_paragraph("Plan: "), name="Plan")
         self.form = self.dir / "consent.docx"
         self.form.write_bytes(docx_bytes(doc))
         self.places = {row["slot"]: row for row in outline_template(self.form)["slots"]}
@@ -1056,11 +1064,17 @@ class CheckboxNeedsABox(unittest.TestCase):
             self.assertIn("is not a checkbox", str(refused.exception), slot)
 
     def test_the_same_places_still_take_text(self):
-        for n, slot in enumerate(("word/document.xml#b/p[1]/sdt[0]", "word/document.xml#b/p[2]/ff[0]")):
-            field = locate_fields(self.form, [{"slot": slot, "kind": "text", "label": "Consent note"}])["fields"][0]
+        for n, slot in enumerate(("word/document.xml#b/p[3]/sdt[0]", "word/document.xml#b/p[4]/ff[0]")):
+            field = locate_fields(self.form, [{"slot": slot, "kind": "text", "label": "Clinical answer"}])["fields"][0]
             out = self.dir / ("text-%d.docx" % n)
-            fill_template(self.form, [field], {field["key"]: "Signed by synthetic patient"}, out)
-            self.assertIn("Signed by synthetic patient", part_text(out))
+            fill_template(self.form, [field], {field["key"]: "Synthetic clinical text"}, out)
+            self.assertIn("Synthetic clinical text", part_text(out))
+
+    def test_human_act_text_places_cannot_be_released_by_an_ordinary_review_label(self):
+        for slot in ("word/document.xml#b/p[1]/sdt[0]", "word/document.xml#b/p[2]/ff[0]"):
+            with self.subTest(slot=slot), self.assertRaises(DocumentError) as refused:
+                locate_fields(self.form, [{"slot": slot, "kind": "text", "label": "Consent note"}])
+            self.assertIn(refused.exception.code, ("destination_role", "protected_signing_area"))
 
 
 class SurvivingMutantPins(unittest.TestCase):
