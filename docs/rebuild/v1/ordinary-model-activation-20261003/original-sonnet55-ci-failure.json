@@ -1,0 +1,9 @@
+[
+  {
+    "job": 111306810073,
+    "line": 4463,
+    "header": "FAIL: test_the_production_renderer_and_profile_carry_the_settings_for_this_model (core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_production_renderer_and_profile_carry_the_settings_for_this_model)",
+    "block": "FAIL: test_the_production_renderer_and_profile_carry_the_settings_for_this_model (core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_production_renderer_and_profile_carry_the_settings_for_this_model)\nNo model allowlist exists in the deployment profile or the renderer: they accept environment NAMES (and the\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_sonnet55_profile.py\", line 294, in test_the_production_renderer_and_profile_carry_the_settings_for_this_model\n    self.assertEqual(config['request_profile'], {'profile': 'claude-sonnet-5-5-v1', 'max_output_tokens': 8000,\nAssertionError: {'pro[21 chars]-5-5-ordinary-v1', 'max_output_tokens': 20000,[101 chars]'us'} != {'pro[21 chars]-5-5-v1', 'max_output_tokens': 8000, 'timeout_[91 chars]'us'}\n  {'effort': 'medium',\n   'inference_geo': 'us',\n-  'max_output_tokens': 20000,\n?                       ^^\n\n+  'max_output_tokens': 8000,\n?                       ^\n\n-  'profile': 'claude-sonnet-5-5-ordinary-v1',\n?                                ---------\n\n+  'profile': 'claude-sonnet-5-5-v1',\n   'thinking': {'type': 'between_tools'},\n   'timeout_seconds': 120}",
+    "cause": "AssertionError: {'pro[21 chars]-5-5-ordinary-v1', 'max_output_tokens': 20000,[101 chars]'us'} != {'pro[21 chars]-5-5-v1', 'max_output_tokens': 8000, 'timeout_[91 chars]'us'}"
+  }
+]

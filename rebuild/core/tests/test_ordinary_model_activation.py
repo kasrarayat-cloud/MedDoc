@@ -1,10 +1,12 @@
 """The prepared profile is selected by the application's real configuration function, never by a campaign override."""
 import hashlib
+import json
 from io import StringIO
+import os
 from pathlib import Path
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from dotenv import dotenv_values
 
 from core import admin_console, generation
@@ -12,6 +14,8 @@ from core.soap_document import original_bytes
 from documents import word_v3
 from ops import ordinary_generation_activation as activation
 from quillmd.application_profile import field_relations_switch
+from core.models import Encounter, Job, Template
+from .test_word_v3_workflow import V3, V3Fixture
 
 
 class OrdinaryModelApplicationConfiguration(SimpleTestCase):
@@ -69,3 +73,51 @@ class OrdinaryModelApplicationConfiguration(SimpleTestCase):
         with override_settings(**self.configured(mode='live')):
             self.assertEqual(generation.job_request_profile(plain), plain['request_profile'])
 
+
+@override_settings(**{**V3, 'AI_MODE': 'live', 'AI_PROVIDER': 'anthropic', 'AI_MODEL': activation.MODEL,
+                      'AI_INPUT_RATE': '2', 'AI_OUTPUT_RATE': '10', 'AI_CACHED_RATE': '0.20',
+                      'AI_THINKING': 'between_tools', 'AI_EFFORT': 'medium', 'AI_INFERENCE_GEO': '',
+                      'V3_FIELD_RELATIONS_SWITCH': field_relations_switch({}), 'V3_FIELD_RELATIONS': False})
+class OrdinaryModelDefaultJobSnapshot(V3Fixture, TestCase):
+    def test_unset_synthetic_switch_selects_default_v4_in_an_actual_queued_http_job(self):
+        # Real mode requires an explicit switch. This checks the existing synthetic default, independently of the
+        # explicit activation builder, using the application original and normal mapping/encounter/admission routes.
+        from core.jobs import enqueue
+        with patch('anthropic.Anthropic') as provider:
+            self.assertEqual(self.client.post('/templates/soap/', {'department': self.department.pk}).status_code, 302)
+            template = Template.objects.exclude(name='').latest('created_at')
+            version = self.confirm(template)
+            self.assertEqual(private_original_hash(template), hashlib.sha256(original_bytes()).hexdigest())
+            self.assertEqual(self.new_encounter(version, notes='Objective: Normal heart sounds.').status_code, 302)
+            encounter = Encounter.objects.latest('created_at')
+            page = self.client.get(f'/encounters/{encounter.pk}/')
+            response = self.client.post(f'/encounters/{encounter.pk}/generate/', {
+                'revision': encounter.revision, 'usage_quote': page.context['usage_quote']})
+            artifact_root = os.getenv('QUILLMD_WORD_ARTIFACTS')
+            if artifact_root:
+                folder = Path(artifact_root) / 'ordinary-default-job'
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / 'snapshot-before-assert.json').write_text(json.dumps({
+                    'http_status': response.status_code, 'redirect': getattr(response, 'url', ''),
+                    'original_sha256': private_original_hash(template), 'mapping': version.fields,
+                    'import_manifest': version.import_manifest,
+                    'jobs': list(Job.objects.filter(encounter=encounter).values('kind', 'state', 'config', 'error')),
+                }, default=str, indent=2) + '\n')
+            self.assertEqual(response.status_code, 302)
+            job = Job.objects.get(encounter=encounter, kind='generation')
+            self.assertEqual(job.state, 'queued')
+            self.assertEqual(job.config['ordinary_field_contract'], activation.CONTRACT)
+            self.assertEqual(job.config['request_profile'], {
+                'profile': activation.PROFILE, 'max_output_tokens': 20000, 'timeout_seconds': 120,
+                'thinking': {'type': 'between_tools'}, 'effort': 'medium'})
+            self.assertEqual(job.config['model'], activation.MODEL)
+            self.assertEqual(generation.job_request_profile(job.config), job.config['request_profile'])
+            # Repeating the exact admission reuses the persisted request rather than another charge reservation.
+            self.assertEqual(enqueue(encounter, self.user).pk, job.pk)
+            self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation').count(), 1)
+            provider.assert_not_called()
+
+
+def private_original_hash(template):
+    from core.security import private_path
+    return hashlib.sha256(private_path(template.original_path).read_bytes()).hexdigest()
