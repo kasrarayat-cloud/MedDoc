@@ -435,3 +435,54 @@ No signing or patient-author scope was released. `word096-refutation/manifest.js
 instrument, raw result/log, sixteen self-authored originals and seven actual exports. The23 raw DOCX files remain
 in protected canonical scratch and are not committed or disposable. All prior failed qualifications are retained;
 these supplemental cases change no frozen corpus or held-back denominator and claim no native Word inspection.
+
+
+### Eighth finished clinical source992: repaired controls and fresh failures
+
+Frozen `99262258ee6e316f6949258ead43e402ad3ac2d6` was verified against all19 committed component bytes and copied
+before a bounded44-case full-validator/current-governance/finalization refutation (exit0,11.312s). Four additional
+attribution and baseline controls completed exit0,5.567s. All19 hashes remained identical before and after both
+passes. The writer's untracked temporary Word0035 migration and fixture-only local compatibility edit were
+explicitly excluded and never used in this no-database instrument. No provider/network calls or source/service
+mutation occurred. The source was released to the writer immediately after the second actual exit.
+
+Five new unsafe releases remain supported with their exact selected original text and empty finalization
+governance decisions despite an adversarial model marking the other source units independent. Selecting
+`Examination mild swelling over the left lateral ankle.` remains supported beside each exact source:
+
+- `The patient has an absence of swelling over the left ankle.`
+- `The patient finds swelling absent over the left ankle.`
+- `The patient reports swelling to be absent over the left ankle.`
+
+Selecting `No swelling over the left ankle.` also remains supported beside either exact source:
+
+- `Only her father lacks swelling over the left ankle.`
+- `Only her father has no swelling over the left ankle.`
+
+The relevant finished paths are `source_scope.py:383` (direct negative modifiers),407 (bounded negative-complement
+paths),128 (exclusive attribution/polarity), and `generation.py:3867,3876` (final relation causes). These are concrete
+finished-candidate failures; no pre-change baseline was measured to attribute each finding to the new diff.
+
+One definite unnecessary-hold mechanism is positively attributed using an explicit patient source:
+`The patient takes warfarin 5 mg daily. Only her father has no warfarin.` gives conflict/empty. The confirmed
+subjectless current-medication variant behaves identically. The exclusive father clause denies the father's
+possession, so its opposite polarity does not retract the explicit patient's use. A same-negative explicit patient
+control (`The patient takes no warfarin.` with that father clause) is correctly held; an explicit patient negative
+swelling claim with same-polarity exclusive father denial is also correctly held. These distinctions remain
+recorded rather than replacing the subjectless negative-claim failure with the passing explicit variant.
+
+The four prior unsafe3b9 predicative cases now hold. The deliberately malformed `has not absent swelling` remains
+held and is retained as a conservative control, without demanding an automatic release. A nominal selected-absence
+plus other-side clause also holds, but its standalone baseline already holds, so this pass withdraws a causal
+wrong-side assertion for that observation; the explicit patient absence plus opposite-side positive control
+releases correctly. Independent other-person gerunds/properties, ordinary side controls, non-medication positional
+change and the wrong-subject/stopped-medication positive regression controls pass within this instrument.
+
+The exact original voice first response remains unchanged: no reviewed patient context gives zero supported fields;
+exact context gives only `v3_7`, with original unsafe `v3_2` and `v3_4` still conflict/empty. This deterministic replay
+adds no first-pass audio, live-provider, billing, human microphone or workflow acceptance result. The primary raw
+instrument flags three holds and the control instrument two; after baseline and malformed-grammar analysis, this
+report identifies one definite unnecessary-hold mechanism and preserves every raw outcome. No denominator or
+previous failure is reset. `clinical-99262258-refutation/manifest.json` hashes both exact instruments/results/logs
+and the complete source manifest; the19 original source copies remain in protected scratch and the writer's commit.
+Finished clinical qualification remains failed pending repair and a new immutable independent pass.

@@ -1,0 +1,52 @@
+{
+  "source_commit": "99262258ee6e316f6949258ead43e402ad3ac2d6",
+  "cases": 44,
+  "elapsed_seconds": 11.312,
+  "unsafe": [
+    "fresh_nominal_absence",
+    "fresh_finds_complement",
+    "fresh_reports_open_complement",
+    "fresh_negative_exclusive_lacks",
+    "fresh_negative_exclusive_no"
+  ],
+  "unnecessary_holds": [
+    "modifier_cancelled",
+    "fresh_selected_absence_other_side",
+    "fresh_positive_opposite_exclusive_medication"
+  ],
+  "errors": [],
+  "original_replay": [
+    {
+      "patient_context": false,
+      "supported": [],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    },
+    {
+      "patient_context": true,
+      "supported": [
+        "v3_7"
+      ],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "source_commit": "99262258ee6e316f6949258ead43e402ad3ac2d6",
+  "source_components": 19,
+  "primary_cases": 44,
+  "primary_elapsed_seconds": 11.312,
+  "primary_exit_code": 0,
+  "attribution_control_cases": 4,
+  "control_elapsed_seconds": 5.567,
+  "control_exit_code": 0,
+  "unsafe_releases": 5,
+  "definite_unnecessary_hold_mechanisms": 1,
+  "qualification": "FAILED; terminal instrument success is not clinical qualification",
+  "source_released_after_both_real_exits": true,
+  "files": [
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-99262258.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-99262258-refutation/result.json",
+      "sha256": "b46dafa30f4dcea53316c362c19ad22b74f6db211bc1a2ac962d70dc497f17bf",
+      "bytes": 36860,
+      "classification": "retained exact frozen-source synthetic clinical diagnostic evidence",
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-99262258.log",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-99262258-refutation/instrument.log",
+      "sha256": "533f1080f74b4efc198a31c45e8d5c58997c058a3a6f90e157fc4a97388aa694",
+      "bytes": 1145,
+      "classification": "retained exact frozen-source synthetic clinical diagnostic evidence",
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_99262258.py",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-99262258-refutation/instrument.py",
+      "sha256": "f876121078c06a20e99ede6f2e3a5a5f7d9a4f3f140783d853afbe71657a468b",
+      "bytes": 10642,
+      "classification": "retained exact frozen-source synthetic clinical diagnostic evidence",
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-99262258-controls.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-99262258-refutation/attribution-controls.json",
+      "sha256": "2c8e3c246c6744e8b99c95954c87401359eea11e3b4937ffa47f5aab5acc0502",
+      "bytes": 7422,
+      "classification": "retained exact frozen-source synthetic clinical diagnostic evidence",
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-99262258-controls.log",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-99262258-refutation/attribution-controls.log",
+      "sha256": "b129adfc63e4ad0a03cba77a29443b0ce3faa3bcd348e1c01e7d7e101e03e11d",
+      "bytes": 963,
+      "classification": "retained exact frozen-source synthetic clinical diagnostic evidence",
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_99262258_controls.py",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-99262258-refutation/attribution-controls.py",
+      "sha256": "f6975e22b59be6b9412feeb50aa593ade04cb23d56adae770f7578e9468107ba",
+      "bytes": 5754,
+      "classification": "retained exact frozen-source synthetic clinical diagnostic evidence",
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-99262258-source/manifest.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-99262258-refutation/source-manifest.json",
+      "sha256": "95e8a8cd40633f6acc5aadd93d1f3fb1878e52873bd4e380a8f29d264a59e7f9",
+      "bytes": 3314,
+      "classification": "retained exact frozen-source synthetic clinical diagnostic evidence",
+      "disposable": false
+    }
+  ],
+  "provider_requests": 0,
+  "database_connections": 0
+}
