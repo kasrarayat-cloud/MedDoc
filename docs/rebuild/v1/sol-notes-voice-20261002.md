@@ -186,3 +186,9 @@ Retain `focused-01.log`, `focused-02.log`, `focused-03.log`, `affected-01.log`,
 `replay-existing.py`, `original-counts.json`, `original-profiles.json` and probes.
 The scratch/linked environment contains no provider credentials. Disposable caches require
 lead's verified cleanup manifest; no shared environment or retained evidence was removed.
+
+### Fourth source snapshot — refuted, not eligible for live use
+
+`source_scope.py` SHA256 `8b83a04c7e57778ca5896c51827fd4c2f5c304b6b60a39080a6dfc529878e3a8` passed 20 local semantic tests in 15.856s (`refutation-4-local-after-2.log`); its first harness expectation failure remains in `refutation-4-local-after.log`. Independent security refutation then demonstrated a supported current medication claim after `No longer the daily medication`, and unnecessary holds for three negative exclusive family clauses. Exact whole-validator/governance and parser evidence is retained under the sibling security scratch as `refute-notes-repaired-governance-5.json` and `refute-notes-repaired-parser-3.json`. This snapshot remains unqualified. A successful local suite does not erase these outcomes.
+
+Hypothetical new reviewed-context replay found five completed retained voice generations across three campaigns, rather than the four reported at handoff. The two current v4 outputs still adopt zero fields with confirmation. Two older plain outputs do not admit v4 context and one old v3 wire refuses v4 parsing. No original transcript or model output was changed, and no new request, actual review or export qualification occurred. `replay-voice-context-4.log` retains the corrected replay; earlier harness failures and the erroneously confirmed baseline in replay3 remain explicitly diagnostic.
