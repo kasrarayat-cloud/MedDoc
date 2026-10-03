@@ -220,6 +220,63 @@ class PatientDefault(SimpleTestCase):
         self.check(negative+' Her father reports pain in the left knee.','Symptoms',[negative])
         self.check('Takes warfarin. No diabetes.','Medications',['Takes warfarin.'])
 
+    def test_independent_predicative_refutation_keeps_argument_actor_side_and_polarity(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['The patient has entirely absent swelling over the left ankle.',
+                     'The patient has completely absent swelling over the left ankle.',
+                     'Swelling over the left ankle is absent.',
+                     "The patient's swelling over the left ankle is absent.",
+                     'Swelling is absent over the left ankle.',
+                     'The left ankle is free of swelling.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source],'conflict')
+        for tail in ['The patient has entirely absent swelling over the right ankle.',
+                     'Swelling over the right ankle is absent.',
+                     'Swelling is absent over the right ankle.',
+                     'Swelling over the left ankle is not absent.',
+                     "Her father's swelling over the left ankle is absent.",
+                     'The patient has completely absent pain over the left ankle.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source])
+        # A malformed nested cancellation supplies no positive assertion.
+        self.check(source+' The patient has not absent swelling over the left ankle.',
+                   'Examination',[source],'conflict')
+        negative='The patient has a left ankle without swelling.'
+        self.check(negative+' The patient has swelling over the right ankle.','Examination',[negative])
+        self.check(negative+' The patient has swelling over the left ankle.','Examination',[negative],'conflict')
+        self.check(source+" Her father's swelling over the patient's left ankle is absent.",
+                   'Examination',[source],'conflict')
+
+    def test_unknown_negative_complement_keeps_only_its_named_clinical_dependency(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['Swelling over the left ankle was found to be absent.',
+                     'There is absent swelling over the left ankle.',
+                     'Swelling over the left ankle was considered to be absent.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source],'conflict')
+        for tail in ['Swelling over the right ankle was found to be absent.',
+                     'There is absent swelling over the right ankle.',
+                     'Pain over the left ankle was found to be absent.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source])
+        patient='The patient reports pain in the left knee.'
+        self.check(patient+' The patient has no pain relief.','Symptoms',[patient])
+        self.check(patient+' The patient goes without treatment for pain.','Symptoms',[patient])
+
+    def test_existing_negative_operator_arguments_need_no_new_word_whitelist(self):
+        source='Examination mild swelling over the left lateral ankle.'
+        for tail in ['Swelling absent over the left ankle.',
+                     'The patient lacks swelling over the left ankle.',
+                     'Lack of swelling over the left ankle.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source],'conflict')
+        for tail in ['The patient lacks swelling over the right ankle.',
+                     'Lack of swelling over the right ankle.',
+                     'Her father lacks swelling over the left ankle.']:
+            with self.subTest(tail=tail):self.check(source+' '+tail,'Examination',[source])
+        self.check(source+' Her father lacks swelling over her left ankle.',
+                   'Examination',[source],'conflict')
+        patient='The patient reports pain in the left knee.'
+        self.check(patient+' The patient lacks pain relief.','Symptoms',[patient])
+        # An ambiguous negative relationship cannot itself supply an answer.
+        self.check('The patient has swelling absent over the left ankle.',
+                   'Examination',['The patient has swelling absent over the left ankle.'],'conflict')
+
     def test_confirmation_does_not_tune_around_an_unresolved_parser_failure(self):
         # Pinned syntax still reads left as a past verb in this sentence. Retain
         # the first failed result; a clinician can edit and explicitly re-review.
