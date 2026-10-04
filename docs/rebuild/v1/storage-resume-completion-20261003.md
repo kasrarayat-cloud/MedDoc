@@ -141,7 +141,7 @@ The actual101-field mocked batch rehearsal passed on7a22: two100+1 SDK bodies ma
 Eight remaining affected nonfinancial CI assertions passed on readonly37268192 with actual child/outer0 in21.253seconds; no DB/provider source mutation occurred. Original7907 CI failures are preserved, and exact final CI is still pending. Current root capacity has316523438080 available bytes of633927315456, with35039505 free inodes; latest actual preflight GO101910 remains unchanged. No cleanup, expansion or installed/demo mutation occurred. Prospective provider campaigns2/3 remain unstarted. The final fixed33 eligible DEV application plan preserves the60/20 denominators, seven held development originals and family/safety criteria; its mixed-engine result union is being implemented before execution.
 
 
-## Frozen application qualification — 2026-10-04 11:55 UTC
+## Frozen application qualification — 2026-10-04 11:44 UTC
 
 Functional candidate `481b65adb8ffa97053b694f0de3ba4dbaac72d0a` contains the
 independently refuted D10 automatic ruled destination repair. Root16 controls

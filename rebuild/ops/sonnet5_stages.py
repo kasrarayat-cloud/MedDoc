@@ -581,6 +581,42 @@ def export_read_back(original, exported, fields, answers):
     return {'passed': not problems, 'problems': problems, 'fields': readings, 'outside_written_fields': outside}
 
 
+def saved_export_verification(original, exported, fields, saved, *, reviewed_answers=None):
+    """Keep the frozen check and require complete independent readback.
+
+    The frozen text_of reader concatenates w:t and discards visible breaks.
+    Its multiline false negative is corrected only when the destination's
+    independent scalar reader shows the EXACT saved value, including breaks.
+    Missing/reordered text, wrong fields and changed neighbors still refuse.
+    Frozen diagnostic bytes and their original result remain unchanged.
+    """
+    frozen = steps.export_verification(original, exported, fields, saved)
+    read_back = export_read_back(original, exported, fields,
+                                 saved if reviewed_answers is None else reviewed_answers)
+    written = dict(frozen['supported_answers_in_their_fields'])
+    corrections = {}
+    if read_back['passed']:
+        for field in fields:
+            key = field['key']
+            value = saved.get(key) or {}
+            text = value.get('text') or ''
+            reading = read_back['fields'].get(key) or {}
+            if (written.get(key) is False and field.get('kind') in SCALAR_KINDS
+                    and not field.get('write_protected') and value.get('status') == 'supported'
+                    and ('\n' in text or '\t' in text)
+                    and reading.get('answered') is True and reading.get('set_by_export') is True
+                    and reading.get('expected') == text and reading.get('read') == text):
+                written[key] = True
+                corrections[key] = 'Exact saved visible breaks read in the physical destination.'
+    result = {**frozen, 'supported_answers_in_their_fields': written,
+              'frozen_export_verification': frozen,
+              'visible_break_readback_corrections': corrections,
+              'workflow_success': (frozen['zip_members_unchanged']
+                                   and set(frozen['changed_parts']) <= {'word/document.xml'}
+                                   and all(written.values()) and read_back['passed'])}
+    return result, read_back
+
+
 def stop_decision(verdict, path):
     """Whether one send's verdict stops the stage. Unsafe output and contract failures stop it — EXCEPT unsafe output on
     the paused, default-off field_relations path, which is recorded as veto evidence (a contract failure there still
@@ -1458,14 +1494,14 @@ class Run:
             # (the frozen check, on what the clinician SAVED: an edited answer must be in its field as edited)
             saved = {k: {**v, 'status': 'supported' if v.get('status') in ('supported', 'edited') and v.get('text')
                                         else v.get('status')} for k, v in reviewed.items()}
-            verified = steps.export_verification(original, exported, version.fields, saved)
+            verified, read_back = saved_export_verification(original, exported, version.fields, saved,
+                                                            reviewed_answers=encounter.answers)
             record.update(verified)
             if not verified['workflow_success']:
                 findings.append({'code': 'export_verification_failed',
                                  'why': 'the export does not preserve the form or an answer is outside its field'})
             # (and the stage's own read-back, which the frozen check is not: every field's mark or value as SAVED, and
             # nothing printed changed outside the written fields — refutation EXPORT-CHECK-DOES-NOT-READ)
-            read_back = export_read_back(original, exported, version.fields, encounter.answers)
             record['read_back'] = read_back
             if not read_back['passed']:
                 findings.append({'code': 'export_verification_failed',

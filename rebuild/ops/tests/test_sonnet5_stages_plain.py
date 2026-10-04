@@ -793,6 +793,85 @@ class ExportReadBackTests(unittest.TestCase):
         self.assertEqual(self.problems(result), ['export'])
 
 
+    def test_complete_multiline_saved_value_keeps_the_original_false_negative(self):
+        original, fields, saved = self.case('N01')
+        text = 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'
+        saved['v3_9'] = {'status': 'supported', 'text': text, 'reviewed': True}
+        exported = self.honest(original, fields, saved)
+        result, reading = st.saved_export_verification(original, exported, fields, saved)
+        self.assertFalse(result['frozen_export_verification']['workflow_success'])
+        self.assertTrue(result['workflow_success'])
+        self.assertIn('v3_9', result['visible_break_readback_corrections'])
+        for key in result['visible_break_readback_corrections']:
+            self.assertEqual(reading['fields'][key]['read'], saved[key]['text'])
+        self.assertEqual(reading['fields']['v3_9']['read'], text)
+
+    def test_complete_saved_tab_is_read_as_a_tab(self):
+        original, fields, saved = self.case('N01')
+        text = 'Synthetic medication\t10 mg\nSynthetic follow-up\t6 weeks'
+        saved['v3_9'] = {'status': 'supported', 'text': text, 'reviewed': True}
+        result, reading = st.saved_export_verification(original, self.honest(original, fields, saved), fields, saved)
+        self.assertTrue(result['workflow_success'])
+        self.assertEqual(reading['fields']['v3_9']['read'], text)
+
+    def test_a_break_replaced_by_a_space_cannot_correct_the_frozen_failure(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        written = v3_mapping.fill_answers(fields, saved)
+        for replacement in ('First sentence. Second sentence.', 'First sentence.',
+                            'Second sentence.\nFirst sentence.', 'First sentence.\nWrong sentence.'):
+            with self.subTest(replacement=replacement):
+                exported = self.export(original, fields, {**written, 'v3_9': replacement})
+                result, reading = st.saved_export_verification(original, exported, fields, saved)
+                self.assertFalse(result['workflow_success'])
+                self.assertFalse(result['supported_answers_in_their_fields']['v3_9'])
+                self.assertNotIn('v3_9', result['visible_break_readback_corrections'])
+
+    def test_complete_multiline_text_in_another_field_cannot_pass(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N01')
+        text = 'First sentence.\nSecond sentence.'
+        saved['v3_9'] = {'status': 'supported', 'text': text, 'reviewed': True}
+        written = v3_mapping.fill_answers(fields, saved)
+        exported = self.export(original, fields, {**written, 'v3_9': 'Wrong destination value.', 'v3_7': text})
+        result, reading = st.saved_export_verification(original, exported, fields, saved)
+        self.assertFalse(result['workflow_success'])
+        self.assertEqual(result['visible_break_readback_corrections'], {})
+
+    def test_correct_multiline_value_with_wrong_marks_still_refuses(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), 'v3_6': 'Yes'})
+        result, reading = st.saved_export_verification(original, exported, fields, saved)
+        self.assertFalse(result['workflow_success'])
+        self.assertIn('v3_6', self.problems(reading))
+        self.assertEqual(result['visible_break_readback_corrections'], {})
+
+    def test_correct_multiline_value_with_a_changed_question_still_refuses(self):
+        import io
+        from zipfile import ZipFile
+        from lxml import etree
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        stream = io.BytesIO()
+        with ZipFile(io.BytesIO(self.honest(original, fields, saved))) as source, ZipFile(stream, 'w') as out:
+            for item in source.infolist():
+                raw = source.read(item.filename)
+                if item.filename == 'word/document.xml':
+                    root = etree.fromstring(raw)
+                    question = root.xpath('.//w:tr[1]/w:tc[1]//w:t', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
+                    self.assertTrue(question)
+                    question[0].text = 'Changed neighboring question'
+                    raw = etree.tostring(root, xml_declaration=True, encoding='UTF-8', standalone=True)
+                out.writestr(item, raw)
+        result, reading = st.saved_export_verification(original, stream.getvalue(), fields, saved)
+        self.assertFalse(result['workflow_success'])
+        self.assertIn('outside the written fields', self.problems(reading))
+        self.assertEqual(result['visible_break_readback_corrections'], {})
+
+
 def positional(body):
     """The engine's wire (contract v4) of a body written keyed (field key -> entry, context unit ID -> relation), test
     code only: a list of answers naming their keys, each context the partition of its units by relation."""
