@@ -57,7 +57,13 @@ def size(path):
             if item.is_symlink():
                 require(item.resolve().is_relative_to(path), 'Owned asset has an external linked file.')
                 continue
-            total += item.stat().st_size
+            try:
+                total += item.stat().st_size
+            except FileNotFoundError:
+                # pip atomically publishes/removes temporary files while this
+                # monitor walks our own directory. An already removed file
+                # consumes no bytes; other filesystem errors still stop work.
+                continue
     return total
 
 
@@ -71,7 +77,7 @@ def bounded(command, label, directory, *, deadline):
         os.chmod(log, 0o600)
         process = subprocess.Popen(command, cwd=directory, env=environment,
             stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT)
-        reason = None
+        reason = monitor_error = None
         try:
             while process.poll() is None:
                 if time.monotonic() >= deadline:
@@ -81,9 +87,9 @@ def bounded(command, label, directory, *, deadline):
                 if reason:
                     break
                 time.sleep(0.2)
-        except BaseException:
+        except BaseException as error:
             reason = 'owned_monitor_failure'
-            raise
+            monitor_error = error
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -91,10 +97,22 @@ def bounded(command, label, directory, *, deadline):
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     process.kill(); process.wait(timeout=5)
+    try:
+        owned_bytes = size(directory)
+    except BaseException as error:
+        owned_bytes = None
+        reason = reason or 'owned_monitor_failure'
+        monitor_error = monitor_error or error
     record = {'step': label, 'exit_code': process.returncode, 'stop_reason': reason,
-              'log_sha256': sha(log.read_bytes()), 'owned_bytes': size(directory)}
+              'log_sha256': sha(log.read_bytes()), 'owned_bytes': owned_bytes}
+    if monitor_error is not None:
+        import traceback
+        raw = ''.join(traceback.format_exception(type(monitor_error), monitor_error,
+                    monitor_error.__traceback__)).encode()
+        write(directory / (label + '-monitor-failure.txt'), raw)
+        record['monitor_failure'] = {'kind': type(monitor_error).__name__, 'original_sha256': sha(raw)}
     write(directory / (label + '.json'), record)
-    require(process.returncode == 0 and reason is None and record['owned_bytes'] <= MAX_BYTES,
+    require(process.returncode == 0 and reason is None and owned_bytes is not None and owned_bytes <= MAX_BYTES,
             'Owned dependency verification failed; inspect protected step evidence.')
     return record
 
@@ -177,7 +195,7 @@ def prepare(source, expected, run_id):
             'def refuse(*args,**kwargs): raise RuntimeError("Offline dependency verification forbids network")\n'
             'socket.socket.connect=refuse\n')
         installer = network_guard + ('from pip._internal.cli.main import main\nraise SystemExit(main('
-            + repr(['install', '--no-index', '--only-binary=:all:', '--require-hashes', '--find-links',
+            + repr(['install', '--no-index', '--only-binary=:all:', '--require-hashes', '--no-compile', '--find-links',
                     str(directory / 'wheelhouse'), '-r', str(directory / 'offline.lock')]) + '))\n')
         record['steps'].append(bounded([str(python), '-B', '-c', installer], 'offline-install', directory, deadline=deadline))
         checker = network_guard + 'from pip._internal.cli.main import main\nraise SystemExit(main(["check"]))\n'

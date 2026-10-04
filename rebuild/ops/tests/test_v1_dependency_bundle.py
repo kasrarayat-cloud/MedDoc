@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from ops import dependency_lock as lock
@@ -50,6 +51,16 @@ class PrivateDependencyBundleTests(unittest.TestCase):
             (root / 'foreign').symlink_to(Path(external), target_is_directory=True)
             with self.assertRaises(ValueError): bundle.size(root)
 
+    def test_removed_owned_temporary_file_is_not_a_monitor_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / 'temporary').write_bytes(b'temporary'); (root / 'retained').write_bytes(b'12345')
+            original = Path.stat
+            def stat(path, *args, **kwargs):
+                if path.name == 'temporary':
+                    raise FileNotFoundError('owned transient was removed')
+                return original(path, *args, **kwargs)
+            with patch.object(Path, 'stat', stat): self.assertEqual(bundle.size(root), 5)
+
     def test_actual_failed_child_exit_and_output_are_retained_instead_of_called_success(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / 'home').mkdir(); (root / 'tmp').mkdir()
@@ -69,6 +80,18 @@ class PrivateDependencyBundleTests(unittest.TestCase):
             result = json.loads((root / 'deadline.json').read_bytes())
             self.assertLess(time.monotonic() - started, 5)
             self.assertLess(result['exit_code'], 0); self.assertEqual(result['stop_reason'], 'technical_deadline')
+
+    def test_actual_monitor_fault_stops_child_and_retains_original_cause_plus_real_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / 'home').mkdir(); (root / 'tmp').mkdir()
+            with patch.object(bundle, 'size', side_effect=[PermissionError('retained owned monitor failure'), 0]), \
+                    self.assertRaises(ValueError):
+                bundle.bounded([sys.executable, '-B', '-c', 'import time;time.sleep(20)'], 'monitor', root,
+                    deadline=time.monotonic() + 10)
+            result = json.loads((root / 'monitor.json').read_bytes())
+            self.assertLess(result['exit_code'], 0); self.assertEqual(result['stop_reason'], 'owned_monitor_failure')
+            self.assertEqual(result['monitor_failure']['kind'], 'PermissionError')
+            self.assertIn(b'retained owned monitor failure', (root / 'monitor-monitor-failure.txt').read_bytes())
 
 
 if __name__ == '__main__':
