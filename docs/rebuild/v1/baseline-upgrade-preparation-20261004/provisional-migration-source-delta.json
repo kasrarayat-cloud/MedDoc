@@ -1,0 +1,2195 @@
+{
+  "scope": "read-only provisional source preparation, not installed or final-release certification",
+  "baseline": "dedac1625032e32c7a149e6771be22e26c307eb1",
+  "candidate": "6d44ff862d93f1e7f2f4a0fa85c329f33190dc0d",
+  "baseline_prefix": [
+    {
+      "name": "0001_initial",
+      "sha256": "8b18a901ddfcacf2718024d91750cf50be03e132569927f9d93445a4adf0bc26",
+      "byte_identical": true
+    },
+    {
+      "name": "0002_job_payer",
+      "sha256": "6937439b5cce26ce8041c1fb5f1307a4fbd82f1666d87b50328029d01763c850",
+      "byte_identical": true
+    },
+    {
+      "name": "0003_immutable_records",
+      "sha256": "454a3ebb31305a95438a12945ef47c2952025a8833f4b6351a4ab3426e5c2ad0",
+      "byte_identical": true
+    },
+    {
+      "name": "0004_job_config",
+      "sha256": "8009f1b7d4d1fd2f8fe800d113c7027c178c716bd47314bfa19f1b676432be21",
+      "byte_identical": true
+    },
+    {
+      "name": "0005_providerreceipt",
+      "sha256": "3554c7198e10f030dc9e36761b0d88eb0ffaf3ae8a374eb1fa0b7b33507f000b",
+      "byte_identical": true
+    },
+    {
+      "name": "0006_receipt_immutable",
+      "sha256": "664d620f5682770f42364cb69fd4e70deaa8cf2b9453fe6f13549718277bd184",
+      "byte_identical": true
+    },
+    {
+      "name": "0007_job_result_path_job_result_sha256",
+      "sha256": "89a8dec663f20466c6cf8efbf9e55a14a43dace7871704de38c57f062ccb22ec",
+      "byte_identical": true
+    },
+    {
+      "name": "0008_payment_event_evidence",
+      "sha256": "cb6548a14f7699feba6a691704a81bb239ba096cbb51b66a493d80185e205ef6",
+      "byte_identical": true
+    },
+    {
+      "name": "0009_provider_identifiers",
+      "sha256": "964b2ff0ffffa12526035fc69705d79305020eaedb472ea7399c0569af44b663",
+      "byte_identical": true
+    },
+    {
+      "name": "0010_canonical_provider_settlement",
+      "sha256": "17ac79c2aab38e18c45a06670721a2d980393ce226d09d9b46ac9665cca82403",
+      "byte_identical": true
+    },
+    {
+      "name": "0011_template_clinical_review",
+      "sha256": "708ecd99271d4e8b2919fdb18853cb9f5ec0a32e774675a7a54a1cde507e2927",
+      "byte_identical": true
+    },
+    {
+      "name": "0012_billing_policy",
+      "sha256": "2eb5c932625717cef3e687c5f8ecac90adc55537f8919a28aea2df44abb192e4",
+      "byte_identical": true
+    },
+    {
+      "name": "0013_recording_charge_limit",
+      "sha256": "424b7b1255b98f4b86fac89d6b1ea604027a534b58d13aebd2084beadb26789e",
+      "byte_identical": true
+    },
+    {
+      "name": "0014_encounter_service_date",
+      "sha256": "2119a159682ea0da03523f80e6dd38f7ac0aab16733101ea6d2a60eb3deda01c",
+      "byte_identical": true
+    },
+    {
+      "name": "0015_reconciliation_evidence_guard",
+      "sha256": "c749bb07a9325059b34a995b77d121ee065f8e07227f029520fa0dcdfec59e62",
+      "byte_identical": true
+    },
+    {
+      "name": "0016_user_session_version",
+      "sha256": "b69b2382c4136e0ed553a939f0c51267cb61154c2cc53a842afb96e04d8ef67e",
+      "byte_identical": true
+    },
+    {
+      "name": "0017_reconciliation_evidence_kind",
+      "sha256": "82453d071e34d737d84a3bf6a1b9caae56197214fec7f3c748125efec5ff7bcb",
+      "byte_identical": true
+    },
+    {
+      "name": "0018_servicehealth",
+      "sha256": "f1382977ec80fda51f39bdc6ae329efcce0c7398ee0d864ceefbd74507267f9c",
+      "byte_identical": true
+    }
+  ],
+  "forward_migrations": [
+    {
+      "name": "0019_clinicinvitation",
+      "sha256": "aa92ae3550b051f34e9a7ecfbd26931ed9e3570bcb52138348cd7241129ffac8"
+    },
+    {
+      "name": "0020_payment_livemode",
+      "sha256": "56f29d3fe71f6652973b305272fdbac850fd5398130dba4ffbf7e87ad1a777d4"
+    },
+    {
+      "name": "0021_word_v3_mapping_review",
+      "sha256": "408c2210c3b244356b6d387c826287a0a8b63ce49730299e008142f9ba725be2"
+    },
+    {
+      "name": "0022_mapping_job_scope",
+      "sha256": "676524cdd12693c58ba56b06644c0b197c5ae6bd69ec6909a87b66185cc9e549"
+    },
+    {
+      "name": "0023_retention_preservation",
+      "sha256": "958487f6c3e4adeb1059a6aa5b5324962fe1acc62c680be7572b254c9a928240"
+    },
+    {
+      "name": "0024_preserved_file",
+      "sha256": "21babc41e8c119cf9bbe6ed57f0cf118c26639cd56e3b520616d9c44f7994f7c"
+    },
+    {
+      "name": "0025_preservation_guards",
+      "sha256": "33a8d1e3b6d20ff73cc0c1fecb91344ec67a738425c9607352d8549db95da268"
+    },
+    {
+      "name": "0026_preservation_scope_identity",
+      "sha256": "8c6c7a516e7e9da34aa10d495659313fac4947e7f0d499a9b2901742b94a3a44"
+    },
+    {
+      "name": "0027_generation_batches",
+      "sha256": "911a9c4f846a5441cd672d99571a6fd1389005b35aec4161a9a3bbe6b84d9d9c"
+    },
+    {
+      "name": "0028_disposition_preparation",
+      "sha256": "a29506a90269672983ee79da6d19adb802e2c5bc944486d3fff1b6ce50a6d379"
+    },
+    {
+      "name": "0029_merge_batch_disposition",
+      "sha256": "f8910d3e3ab81cd81b0d43db61dfcebd5bb8b09aa473b41281107f3f64879a82"
+    },
+    {
+      "name": "0030_empty_draft_disposition",
+      "sha256": "ac0610f2112577addc1ddd8dca15c69a65a22df5489dceb349e70a76740fa5c7"
+    },
+    {
+      "name": "0031_previous_release_mapping_writes",
+      "sha256": "585af52ce4faf98e41f5c364dd9e841d016e97f538c9ebdef5d35a1884a57766"
+    },
+    {
+      "name": "0032_restore_hold_replay_admission",
+      "sha256": "ab50b3c3b5d57bea681c1f304f8771a0e19522373d852787703d19d26f1fa428"
+    },
+    {
+      "name": "0033_redaction_tombstone",
+      "sha256": "a60c7bd76fd61087b0dd9c9643cca3fb4d89e0e0f4c6cc8a24bf1feb733e4213"
+    },
+    {
+      "name": "0034_coding_ledger",
+      "sha256": "e0e936770284f2fbbf25c0382435b07ce5b9ea2ed7e80eb256c76d3225469aeb"
+    },
+    {
+      "name": "0035_import_manifest",
+      "sha256": "627bb0430cfa942a92e38f97609b3dd2d80212683f1e0a6ff48428f97cb697bf"
+    },
+    {
+      "name": "0036_transcript_review",
+      "sha256": "ea0a01cb6bc512759d3961638a5a6a1348d7c15d456d49a85ba7ebaddafbce97"
+    },
+    {
+      "name": "0037_transcript_redaction_boundary",
+      "sha256": "a238cb5412eea595995a31c4f2bc95ad62e72219ce53fcb0447678072ff1271f"
+    }
+  ],
+  "application_delta": [
+    {
+      "status": "M",
+      "path": "rebuild/.env.example",
+      "sha256": "b99a64f95205b26608a027948819df43da64dc4bf068a931e092f22e061fcc03"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/README.md",
+      "sha256": "206fff58eef4f272de97435f4e8de02edeb175e49ad5910e7bc850188b3f5c84"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/admin_authority.py",
+      "sha256": "a15dd4d5e449754f7538a554749fe8ca8b220c2770b472cce61f65346af183f4"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/admin_console.py",
+      "sha256": "f72defc5a4994ad40981a9bd9b8dfa5c7792f8956ca8a026441894519a2fbcb5"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/admin_queries.py",
+      "sha256": "2ed112bc00ac44b0584acc825c717ee620c43c839d9b2197013ce31bff771e4a"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/admin_views.py",
+      "sha256": "9f17d5e770e0cb08289b36d9a16348af5d4dc24dfcc44e25351ac08f503d4f5c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/batch_jobs.py",
+      "sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/billing.py",
+      "sha256": "7d408d239a71aa131d0f971edadc12ec808a3f5877154f37804756aec4db2810"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/clinic_invitations.py",
+      "sha256": "3183cb5b95c2994cc1e34a8671e412d6e4a0a8e7bffff503e4d0b7adb54a2185"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/coding.py",
+      "sha256": "500d05b5bd1626fff412e4715cee0129ff069317b8f22874277152c16922490e"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/context.py",
+      "sha256": "1fb355ed2a558b2b34fbaa7667e6711ae3eb2d8dc7f59b824ce23d558990e52e"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/destination_roles.py",
+      "sha256": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/disposition.py",
+      "sha256": "20880be77bec77f127b0b2f74647b566967f43bd350828e0cafc6af05382e1b9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/disposition_catalog.py",
+      "sha256": "344b92b017a16152dfb5339af35c3d992b7aa0245f52c0b3554d75f30858f22a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/disposition_execution.py",
+      "sha256": "84a1f9d4722c8112aefe343afaeab1238f02bcdf91089343c0fd1af420224ff7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/disposition_execution_views.py",
+      "sha256": "b728b9f55ba4c6b2e9d99ddd0b78c81d4ee074c75218ce72df217287505ee5d5"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/disposition_journal.py",
+      "sha256": "ad1e3716aed8541302dbd5e12b1d9ff9259a9f70977e46aa098099da307674a3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/disposition_policy.py",
+      "sha256": "fc00df4c14bbdb31cd042e28a5adaf04299ecf85e32c8ee09942f2e40af8a971"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/disposition_views.py",
+      "sha256": "98207f6460ddf65e9a97789a6e0c1f291dba375cacce8358fc0158e1a012dca0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/doctor_status.py",
+      "sha256": "f637bc8996f3cd4b0f2ddd6a14f66d3b97ce9d97109cd708d970767d177e878c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/email_backend.py",
+      "sha256": "d09f8379b1b26efcd47f92f24f8f742347465049232024bfe549c19a24951d4c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/email_delivery.py",
+      "sha256": "e382453fd255a8e0dd3b74635a6896b216b80d987b43971069b31c5bac2cc5a3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/exposure.py",
+      "sha256": "9a7a58a639a63d67059032702f3eaf1b049eaac29f02d4276e9a87ff632ea7d2"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/field_location.py",
+      "sha256": "8c7a1a01aecca13957f75de4cf291e75521189f08abf3bb2b379b1516e4adbe3"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/forms.py",
+      "sha256": "b9f463580089acc4db44aa24acf87a69c8b9ede35944c4de1b12aaa3445bfd9b"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/generation.py",
+      "sha256": "e561f5d9fd23e876207a9524c8281e17c9e9601896aa5da1c92ac5a0a75d0e94"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/generation_batch.py",
+      "sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/import_binding.py",
+      "sha256": "1fb50ff996071f8125f701c7675a3e0bd211d0110ee17405b3d379ba7716b6bb"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/jobs.py",
+      "sha256": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/_admin_change.py",
+      "sha256": "dc87991d806fc2bcf5c0363a0cdca2f231cd98de7e66e3533399244b5e6146b1"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/account_email_audit.py",
+      "sha256": "c94e29dd6f929968369749c67898ce4202739983427e013b01b1f357ef943c64"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/management/commands/audit_billing.py",
+      "sha256": "890362cf8c3f54b4cbe10c13192ca256a67b355aa61af1b25500d006654b94a5"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/backup_exposure_ledger.py",
+      "sha256": "3917ffdb134a7ef6b22cdd365d16519366115394b4ff795e1561b25530a281d2"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/bootstrap_first_admin.py",
+      "sha256": "b9f0e91d828461616146b1bf6bbcc3b5ec3aa260f112796845b4317c3a0dc529"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/management/commands/configuration_status.py",
+      "sha256": "fa434c87941bd8dba2a1b490398c36cf18ed0773df4af9edd4c378de7ef73490"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/elevate_additional_admin.py",
+      "sha256": "8aab0dd85d250b6c418a51a810a8f0a5a9e3865cd4f3a7ede34d69b7b2dc499b"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/management/commands/import_terminology.py",
+      "sha256": "5320c2e15ef7ebe1edba726ca1c69a1baf17cd473aabfaaf785f7a01a245f5e3"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/management/commands/publish_operations_status.py",
+      "sha256": "873a6f51d5d12f535c3377416b265e31325408a6e6478da6029a86fb531a7934"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/real_mode_payment_check.py",
+      "sha256": "769b92e58c81b3427284795475a3bd14c8dde810a407bc3a87b909bac777c7db"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/recover_generation_batch.py",
+      "sha256": "ccb755113dbd5149db493c032ef6622547d41fca711dbdde12dd9765b1972331"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/redaction.py",
+      "sha256": "6631603427a521670906d5208217c1394398963fa633022141ca0bd194ed8ba1"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/reset_admin_mfa.py",
+      "sha256": "a41a4826bda510290ba3cbc2cbeeebadb17166109694b15a1e9f62efe8a59565"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/restore_admission.py",
+      "sha256": "8346985b9683fc17abb4eb3e52868eb19fddf183855bc4575810d5ab65fcab95"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/management/commands/retention_readiness.py",
+      "sha256": "a4fc2d293e107a027d186e9a91c82cfc35d6e68996e03fb9a5d5970b6135f1e0"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/management/commands/seed_private.py",
+      "sha256": "3a86101980029ed07a23ab226bfa8c6e738130e3d831e2f55a6af54a29c83759"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/management/commands/worker.py",
+      "sha256": "4aaf40e16c06701119b29a86646d5d072d775d69bf43c0bae46c2552b54f57d8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/mapping_assistance.py",
+      "sha256": "0fa8575c205574ee98aa966db79186e97feb815046042a7e7ad69eeaf21501a9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/mapping_jobs.py",
+      "sha256": "ed043fe30712241398a4631cb3d78c8ce8a199f5e4f928a59cac7f77795df941"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/mapping_views.py",
+      "sha256": "e541e177a0a9097267b4b7e18c6a9096d20386f7c3f748ee1c7e660f2eac15a8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/mapping_wire.py",
+      "sha256": "454523a384d8c969d1f642578bd62e42a979f5030e6f868de781596e4120987e"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/media.py",
+      "sha256": "47ea2c41c2627ee237ad4d32263415c6c9c6443fa7b5419e846b40688a518376"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/middleware.py",
+      "sha256": "35f987f92bba9d5ddb56c46e137f971617677b882fd50997138b4b994f5bd965"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0019_clinicinvitation.py",
+      "sha256": "aa92ae3550b051f34e9a7ecfbd26931ed9e3570bcb52138348cd7241129ffac8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0020_payment_livemode.py",
+      "sha256": "56f29d3fe71f6652973b305272fdbac850fd5398130dba4ffbf7e87ad1a777d4"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0021_word_v3_mapping_review.py",
+      "sha256": "408c2210c3b244356b6d387c826287a0a8b63ce49730299e008142f9ba725be2"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0022_mapping_job_scope.py",
+      "sha256": "676524cdd12693c58ba56b06644c0b197c5ae6bd69ec6909a87b66185cc9e549"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0023_retention_preservation.py",
+      "sha256": "958487f6c3e4adeb1059a6aa5b5324962fe1acc62c680be7572b254c9a928240"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0024_preserved_file.py",
+      "sha256": "21babc41e8c119cf9bbe6ed57f0cf118c26639cd56e3b520616d9c44f7994f7c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0025_preservation_guards.py",
+      "sha256": "33a8d1e3b6d20ff73cc0c1fecb91344ec67a738425c9607352d8549db95da268"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0026_preservation_scope_identity.py",
+      "sha256": "8c6c7a516e7e9da34aa10d495659313fac4947e7f0d499a9b2901742b94a3a44"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0027_generation_batches.py",
+      "sha256": "911a9c4f846a5441cd672d99571a6fd1389005b35aec4161a9a3bbe6b84d9d9c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0028_disposition_preparation.py",
+      "sha256": "a29506a90269672983ee79da6d19adb802e2c5bc944486d3fff1b6ce50a6d379"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0029_merge_batch_disposition.py",
+      "sha256": "f8910d3e3ab81cd81b0d43db61dfcebd5bb8b09aa473b41281107f3f64879a82"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0030_empty_draft_disposition.py",
+      "sha256": "ac0610f2112577addc1ddd8dca15c69a65a22df5489dceb349e70a76740fa5c7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0031_previous_release_mapping_writes.py",
+      "sha256": "585af52ce4faf98e41f5c364dd9e841d016e97f538c9ebdef5d35a1884a57766"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0032_restore_hold_replay_admission.py",
+      "sha256": "ab50b3c3b5d57bea681c1f304f8771a0e19522373d852787703d19d26f1fa428"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0033_redaction_tombstone.py",
+      "sha256": "a60c7bd76fd61087b0dd9c9643cca3fb4d89e0e0f4c6cc8a24bf1feb733e4213"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0034_coding_ledger.py",
+      "sha256": "e0e936770284f2fbbf25c0382435b07ce5b9ea2ed7e80eb256c76d3225469aeb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0035_import_manifest.py",
+      "sha256": "627bb0430cfa942a92e38f97609b3dd2d80212683f1e0a6ff48428f97cb697bf"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0036_transcript_review.py",
+      "sha256": "ea0a01cb6bc512759d3961638a5a6a1348d7c15d456d49a85ba7ebaddafbce97"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/migrations/0037_transcript_redaction_boundary.py",
+      "sha256": "a238cb5412eea595995a31c4f2bc95ad62e72219ce53fcb0447678072ff1271f"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/models.py",
+      "sha256": "7d28a39627e51cba320f5d11c502aac827a19dca1fd41f4218eb4ba8dc7baaec"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/preview_access.py",
+      "sha256": "e68a8ea4da717803a9bf8d4dc1c0fbe46c6472fba24b63585da6f05c99dc00cb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/readiness.py",
+      "sha256": "bd6e15cee9046162d91b19ac484c86e9d7ac2cc0ca055f9aaf21dd0d4f802df6"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/recovery.py",
+      "sha256": "4991cf436f5a4126184337409990a17450688b11f907397f5154daa185b20737"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/redaction.py",
+      "sha256": "52f41ba9168c15fe5edb37fd513660e3862834e457dd5154347754d16ebad6e3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/relations_fixture.py",
+      "sha256": "6d4932e54698e6acfd23628c58d8d0ab0742eb68a408176daf799feef6d88d02"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/restore_admission.py",
+      "sha256": "29eeed5b2fda0cc432a44526980c6520b647d3267a8819ff0fb38e7a9cd4b6b0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/retention.py",
+      "sha256": "1ff75ea0bd4a27dbe998f8daa009a879e2edec6c944a40a0162b99cd7bf3a78c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/retention_forms.py",
+      "sha256": "fb798a5e3318bf78ce6ca575c2c950145e61e1efa3cc17c677243a7e48cd5411"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/retention_readiness.py",
+      "sha256": "fee1a3dea33c269e787bc25ee96295ff76938d936897df4bfc3caea3ec009d34"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/retention_views.py",
+      "sha256": "9320bea0752f57b2516d746e269b5c1b1cdca7a178ec582f4f5d317f09a5ff28"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/security.py",
+      "sha256": "4942edea280f2d3d29c6696c46a0915380579120ac739075bf22c6080bfa39b7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/soap_document.py",
+      "sha256": "77c625e74f50afc666a3b3800c1282295cb602efcd9afe0a2ddbf59a87e18e7b"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/soap_views.py",
+      "sha256": "56c1158002e99e5dd67899f89e32e40c9b95b400c249788f209c484e0d94c012"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/source_scope.py",
+      "sha256": "446d8463f9b80c4c88cfbe7ed8e23bc2a7ca37dac1af2b7112d0bf482b259ad4"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/stripe_validation.py",
+      "sha256": "2790cf0e5c4188d9220b132e0016c569b2835b105abb0b0bd1e3d133d23da631"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tab_review.py",
+      "sha256": "e9c280571fb93dc3f5932692c926f2253957409c602a2478fd199bce5592789d"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/__init__.py",
+      "sha256": "564e28a7759652cfc52a0e947b8a5305b78f9e1b056d758e88fef28f1ba41d1a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/benchmarks/wm_narrative/cases.json",
+      "sha256": "480e59d90fb71e4f42de11a49c11e775198e6a2fd2dc7e81feea10141930367d"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/benchmarks/wm_narrative/heldout-cases.json",
+      "sha256": "0cd5e5a0ffa0bfc0912b478c456725e9e42d6eb0cdbe4a7db4abb87ade752442"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/benchmarks/wm_narrative/heldout-responses-careful.json",
+      "sha256": "a72480fe14540f56ed831dc80296dcb3299971fef0eb4b6c5840e8cff414b730"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/benchmarks/wm_narrative/mapping.json",
+      "sha256": "2473e31108304985e7e7d72f4a835f36271ebbe654d60e9537aa48c306a15963"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/benchmarks/wm_narrative/responses-careful.json",
+      "sha256": "f81f5d6794694df9826c796ae6c7c428d03af0036190402a87721f57617af9ec"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/benchmarks/wm_narrative/responses-weak.json",
+      "sha256": "415a77bd09b9474f6023e3197e1a1cad57e4f9aa43c70c2b394fa941d50f41a9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/fixtures/batch_v1_plan.json",
+      "sha256": "cbe186b2a9ac569756f3e4b1da1e1d6328eb10855feb27d71e6294676a49b97e"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/fixtures/ordinary_literal_cases.json",
+      "sha256": "df243ae6ce6fed36d4afa79537d84634eef9d674a781d72ee077dd06c8342d71"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/surfaces.py",
+      "sha256": "8e8dd48ccad5b8e38451a4fa7ac3f413f066f82e4e1e64f09090c09b2a7d4400"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_account_email_idn.py",
+      "sha256": "c7f1885efd05246c9b61594f728d5ebe806a1112b726c15dca165d7482389fd7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_account_email_idn_repair.py",
+      "sha256": "55f3eb06c8fec4e93a2862532789bf33917ac269c808bd51ef0fdb3a351b1ea8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_account_email_rule.py",
+      "sha256": "3f3440696b81cdf683499ca54802c5df106455df3dbfeb82e408694d6cb9355e"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_account_session_revocation.py",
+      "sha256": "56ed208a04c23e894164b1c8c6ac27345f7233a55c8dbea2374a85edda5ea4a6"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_admin_authority.py",
+      "sha256": "0eadbe8670832e5b2a3ce427c41115f86bb15e6771e50167262afab398dacbed"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_admin_console.py",
+      "sha256": "c397d85336583e6fef998c1e9f70a2cf77cdd8cdc1c123d94b983b912d2a5015"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_admin_evidence.py",
+      "sha256": "885ae8485d0043ce3a0c299f9d053173d0e677df0d9a2b842454e00638540124"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_anthropic_schema_compatibility.py",
+      "sha256": "f5f31ff6ba0fdddf92a638d351b44fd6e8483c27dffa274a53d5e7f3021b9993"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_backup_exposure.py",
+      "sha256": "e668d182772b5d1cbd4dd2a5b5217063e8caad3db8a0879f06fcc64f98ffd154"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_batch_closeout.py",
+      "sha256": "a037316a61370ffc7bcff669c5d44f540e1fb927c6ba1a7ae15ee47dda52beac"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_batch_effective_constraints.py",
+      "sha256": "ab2a0fab42817e7ce3b6f260bb29f4a12b3b552c94e9d61efb88ff1d4a0706a9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_batch_payload.py",
+      "sha256": "b9a59ebb47155f5d23b4f3020b34d2e01adb01cde324b37da4cf3e7b9c170c67"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_batch_preserved_values.py",
+      "sha256": "03af0d751dc22489036f604b359361636335e151c1f42d6d198fea29f6454f15"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_billing_boundary.py",
+      "sha256": "e1e17d36e3d5672bcb2065479ccdf244f9b2b548d1be58122ef6d7dd479dbb5d"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_billing_boundary_regressions.py",
+      "sha256": "8506d65c3e2faf8cebd934ca2840b6ee161cc6434dc02ed7d09799a29ca79be5"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_billing_lifecycle.py",
+      "sha256": "a9cae174246a1c57181f122cae45fabbf8d9585db9ddbcaf8ba0c84bbbb21ccb"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_billing_policy.py",
+      "sha256": "7cadaf1dbfa3288db7c8463243cb28862008ae2bf8e3516ba2e1a42fe3a065c2"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_code_release_dates.py",
+      "sha256": "2d7f7bbf47c14448e5ccd70b71c58c560c71ae5304154d60b2a612fc3eddb147"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_coding_ledger.py",
+      "sha256": "6f125cf1dfbf0e2b97b0caea5518d48cab3f7b74676702e9dceddb5f8e6b7fef"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_conditional_plan_scope.py",
+      "sha256": "0b2cbb106e87933cd6a784257eb3d1bda673341dd85767d19ad1b88e67d99392"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_configuration_status.py",
+      "sha256": "870dd9e8baa3ddcaa4f4fb69c39e7d623cdcdde9b1940b4e73130f60227aaa40"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_console_surface.py",
+      "sha256": "fde5ff7e9648a7ce7b7ed8d24fd66b5367646cb98e33313ca3fde97b1bca6465"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_department_billing_isolation.py",
+      "sha256": "1d00f098ea418ec8e063103e3fa6d03b59640739d686bb77d740afb94eb86596"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_destination_roles.py",
+      "sha256": "e3a7ce7f1f3e8954cb72d41ff5c77f2f5cf9868249e3dc2b5964701dffa0077e"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_disposition_execution.py",
+      "sha256": "7952041967771d6c6fb0b256d268f0526bcdf46e8e9d1788269f359e7cf33016"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_disposition_integration.py",
+      "sha256": "4e5a2a0f82a0754a9e8e1cb79e473bc6d1b341de2a5ac946998607ebdf0a0bc9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_disposition_preparation.py",
+      "sha256": "a100a6228e5366b75c62d29a67c1b3b01c6b13929ed7c12cb67ef1ebfb5097cb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_doctor_status.py",
+      "sha256": "03c6c2b9fd520bfc96d2bcd0274d4de551ed8f55f2ef473a9af871574a0c45fe"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_doctor_status_ledger.py",
+      "sha256": "f1ebe607d7a46755e3eb6562c070e0500f4cfd2c0fc3d90800c27c2a31250087"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_encounter_snapshot.py",
+      "sha256": "ce61c36407219eee7556a3b39e76da2aefdb6b515cfbc11d58ff639b504566e3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_field_relations_startup.py",
+      "sha256": "77008faaa6ad013a5b0bfef253298030e3fd46725c931f780966b8c35edb2d73"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_generation_batch.py",
+      "sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_guidance_constraints.py",
+      "sha256": "e7d7bc5c198572cdf5072b3d10ab367a0d702543d3e010be44d60f018464bf04"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_icd_configuration.py",
+      "sha256": "af3b7d3cafc0c010dfcca0e73e7b90de1173fd92b054c7a57c6fddcf4370e902"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_import_workflow.py",
+      "sha256": "826684f23f37e5b3816e8c2f1c3eb7becab9c751072429719a0fdfd91c61ed51"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_input_workflow.py",
+      "sha256": "1b7c15d07d9f5b9be26b22e93578aa10adad28a3a1e3c38bff856055c8449a4c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_invitation_account_race.py",
+      "sha256": "2e002fb1f27bda6d9f6ec54495a20a7625faf08848bc1b831d46d2f850fca4ec"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_isolation_matrix.py",
+      "sha256": "4019533641282a4d7231cf72d2e8681082de6944fc6d87b09a95d4c0fef5da3f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_layout_generation_gate.py",
+      "sha256": "35fca5b7b00dbd3c7998fd3127d92e05c2ff64ceeff6d1be516641bddbf0ff8d"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_login_failure_classification.py",
+      "sha256": "ada9fef0f29a0a1a735cbe87bc6365f05a8513e88b5b99263005dc1cac1a0e0f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_mapping_assistance.py",
+      "sha256": "42f2bcd438c65ca36612fabe55160ac753e796f5121b10d560c8c6cd6d7310bf"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_mapping_outcome_unknown.py",
+      "sha256": "4bdf5252fe8b21de70dcfd6b18ad4ab5fa53c682d466ea29822cd9c18e1ca93d"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_mapping_wire.py",
+      "sha256": "7648848f5231b1df5c5277f553cb386b87d054a0947395f2035aece2886956d6"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_migration_rollback_safety.py",
+      "sha256": "eb81330f545a6d193472d7cfac580e369fdd5f3435b020015469bfa661fbefc0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_money_closeout.py",
+      "sha256": "67befb55e595c7d8fa2a565243fda3dda6d5afa83513cc7851234e360fd00a35"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_natural_smoker.py",
+      "sha256": "126a13c5e7b443b5456a08999138160369dca8b2677e9de11eba3cf875a4aadb"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_natural_tab_generation.py",
+      "sha256": "5c9083dc4726f4068c8157fe2a316437f11d73c0cef0acd0af4aba6018c09ea8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_ordinary_model_activation.py",
+      "sha256": "d686a45eb102a1e0886564c27b0c91e1350fea02f56ea02206f0f856a481052b"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_paragraph_option_recovery.py",
+      "sha256": "40e67f1e70de811227607ffa4af48c74bf14cab1ba8cdefb029b782a6c662aa8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_path_info_gates.py",
+      "sha256": "d21c8424fe0ee6a6ad59e006484c726f21183eb92cc7acb2284f611ee7159969"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_private_email.py",
+      "sha256": "49b7c9ec272c04958bb5911a922b404d5ed9c34bf2f3789b8ead1cee00fb3c35"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_production_first_admin.py",
+      "sha256": "e9a20ea44e51b794575e00e24335cb994752f2b9873b2eb09fac997def0573e4"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_production_operations_status.py",
+      "sha256": "b458924672a943ea33dd8fe2b6aa3537e1832dfd176780c634376aec3b1e1760"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_prospective_voice_review.py",
+      "sha256": "aa2a260022048ae5e8adb2e6650805d45ae3d29e5bea147972e1517157719554"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_provider_dedup_refutation.py",
+      "sha256": "47a2ac276cdbfc86241389bccd117fb1dde73c3d6851d7e09ea55178150e1168"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_provider_refusal.py",
+      "sha256": "3d3f6bbe01b41c80e279e96fa31e5b9c0c8f5132efaffda7fe5d62fc46e87ca1"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_question_box_workflow.py",
+      "sha256": "36191e922632a8c1764dbfe24a56a01b3456288c1237e3991f284175fd890ac0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_readiness.py",
+      "sha256": "9f841127922de567dbf9f0507a026b740c65069bd10d40c9d852ab17e0d5f45a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_received_information.py",
+      "sha256": "771d31928293d6cddfc872824ee287e5ff9a62d0efafaaaca17e3aae16490aa5"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_reconciliation_and_license_gates.py",
+      "sha256": "65ae8ddc9400f20b49c5f097adcac1702e5216cb9bc75f33188da66a541a568c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_reconciliation_evidence_kind.py",
+      "sha256": "08dca0c6c15700a3c35c04aa0f8df0882a56bcbf4e382f61bc6eea0895d28620"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_redaction.py",
+      "sha256": "df47fd8e1764319d1e79e43fab617f83d281a3c593091e8a3d040e4e48167c74"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_redaction_late.py",
+      "sha256": "c9ee3fca31836e24a16c67f3cd34f65c04cfcc5c1d76b393398672f936c8a7d0"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_refutation.py",
+      "sha256": "6830d6df2196d1d7978116f65b4ece495d6afdb2a69a375dfde82d2ee7bffa48"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_relations_fixture.py",
+      "sha256": "3107654a989252859e2e572f2ccb4d6303f9fd3b9e8796e1e18aa53e974181cd"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_reserved_source_context.py",
+      "sha256": "cd30a1eaba7ca3d453446f94b330e3da0f9c8971c87e97226f255f56124aaff9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_restore_admission.py",
+      "sha256": "62efd847afcbcaef10cf04de3cc556443d7fd36fdc320976fb0057d35da47c09"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_restore_integrity_contract.py",
+      "sha256": "8d40983039c93ad3480c509b6718381d2fb1f56700f3e8c15320ade0dd02fc70"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_restore_preparation_steps.py",
+      "sha256": "21cf2205f290297f4574cbb09017092477a1dac866794e686e322f7f78495e99"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_retention_flow_locks.py",
+      "sha256": "b629487e1bdb4bebce157c8c2f57f2c1ca14903e46c2425b631b919bdd241739"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_retention_hold_journal.py",
+      "sha256": "eaea759d2551851fd720c9bb5ea784151843a6d44dbeb667a23d5dbbd3742ce1"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_retention_journal_repair.py",
+      "sha256": "2c9f7aa1a3a96a4c579b0a46d9219bf2b56d1a7be03b9685b3d8bb3a5578ef4f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_retention_preservation.py",
+      "sha256": "fc9625047d2f1534297fc93e3c44ffaf681f154e05335d4555a076f9ccd77779"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_retention_readiness.py",
+      "sha256": "c885da6ddc73a53e89a12dd074826d32c82931418e2d70047c347dc645757af9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_retention_release_after_reinsertion.py",
+      "sha256": "dd892000b399b56cb4b1869a82c9249c3a98733890d8adbd2647bc1d34de1cfa"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_review_guards.py",
+      "sha256": "18bf2923e93a8fb3f0fcce458ffa69b4dbf3db655cc37fc5543d122a84ec1c69"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_role_output_bound.py",
+      "sha256": "2889a3e567ab912eddd9aafd4e7a0e7c97a234229dcc9c98b3b815a31a290adb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_role_suggestions.py",
+      "sha256": "0d16c1d24c8da0a5f968da128bf3a45f5a4786ddaf0279d76cadfe7834e101b0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_ruled_paragraph_recovery.py",
+      "sha256": "f272cc75be380f344156f07a056d0718d7c4c2f94161260f52a6f5875835d23c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_security.py",
+      "sha256": "26c8fc5bdf227af91e3e13c568f8f2e53948ef3ef4d64862109277fcc76872bb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_settlement_database_error.py",
+      "sha256": "b61a1eeadc7b3a407875fd431a57636c6b62b6d5bfc43f2c405b84de20279f88"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_settlement_outcome_unknown.py",
+      "sha256": "25ed0ffe304dbd1d2b2e8b2d5183adbecdd547ec4d6fd2e8382c15f5553dbbe2"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_settlement_single_worker.py",
+      "sha256": "bce223ecb5a3fe8bdfd6f3c95021958fb59529a2dea2dfb630fc67c09fd23d15"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_signer_authority.py",
+      "sha256": "eb92eb455b374bf9ca74ce53257686e57804a6b6654c945f02411276c54cade7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_signing_areas.py",
+      "sha256": "09b193d9dfa05de5bb1e51efc8568443d496b75339190131097b5589bd931355"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_soap_workflow.py",
+      "sha256": "c5efa712977f2219cbf6f767b4298949f4778cff339e9f643718bc5ee5c53c8e"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "sha256": "cf1c4c3d3e95a9b7836987cf721a4b0eb178660aa8bdec46dbb0bf9b70dcb5f4"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "sha256": "57d6da4b3d7bd0814ff20c9786f2e9fbc21388ea59323b9bf1b836a2d28709e0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_source_coverage_workflow.py",
+      "sha256": "36169ce0d106b471a6a3e191284049dcf2dbdf3600038b8ea0f5d5c4622ef471"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_source_scope.py",
+      "sha256": "95eba1269b2c33a358516608da8b3efa8ca5a02d175f8ff4f409ba30be34509a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_source_scope_cancellation.py",
+      "sha256": "c85c5510ca2bc9ac06f161f0f3f537a1a7d64b695b46924bd342018f97283766"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_stripe_credentials.py",
+      "sha256": "af08b1664326e303c6597070aacac0fc117d0070b6e5ec4dc55cdf1d735e5574"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_tab_form_policy.py",
+      "sha256": "1edbc615c2f3f82fe911b5a1301332dec894473311df3bd2a25b4a72502d7c27"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_tab_independent_sections.py",
+      "sha256": "f9a853deaa16a1721ebcfc720a253eabe90871bc8337430d3f7b1dab5135e8ed"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_terminology.py",
+      "sha256": "52d6fadd94f97a921a94915952cf13d66807f68cbda3f69d2fe21fb49000f4ff"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_transcript_context.py",
+      "sha256": "6db1f255b6823335b1ed9382c71b0786d0f3bd32beba218592e8fd6638b1bada"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_transcript_privacy.py",
+      "sha256": "535b8ecc58b2920d23b7430dcf2b65eb011299b4e7d0cd5f747c4a0e8ae3b686"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_unlabelled_source_scope.py",
+      "sha256": "0f8a973af7385a3d12ae2dee45000ecc6b282cc73486dc37a032bcfee629fb02"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_admin_tls.py",
+      "sha256": "07626eccc11b4139d953988e39f0041660d53d0d0f3700463d5d4e73850065ed"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_data_mode.py",
+      "sha256": "29f6c905cdd32c8bb862255d8a3259da0f1e1f5797fbd1e051b0b6c535121669"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_deepgram.py",
+      "sha256": "38e86792476a86bec03f406fa9c93490251ce1356fc1a7b0791095a1b012ea46"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_email_copy.py",
+      "sha256": "443cbd0e969b800ba7d0ffa4f1c1592c864112db014200618fe38d1dc6e2e0d5"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_invite_only.py",
+      "sha256": "d3c5dcbdd3f1842098c5775c60464d75aa6e06351421ca0a228d60818245f92f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_mfa_required.py",
+      "sha256": "f0b0f32fea34874e82c9964db58348077b2970265082780b0cabc5fe18f9fea8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_payment_evidence_guards.py",
+      "sha256": "5d64b30480003e0f4a9bc4057190d8a4026da70ed49ff848e16715fec6cf8007"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_payment_refutation_r5.py",
+      "sha256": "e0246a2e00e22bd55031efaa2cf9f52917edc190f5bf1cf23a91cbfd3fa731da"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_rate_limit_client.py",
+      "sha256": "ad807e4e1d98781decd2b08c62bd6a3bf6baaa5fae2f302391eca3f5c0f9bac5"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_real_data_mode_signal.py",
+      "sha256": "bb096ce9e75aa00400e75220d4795ef6911b39e6d965d6ca5f96e2026685f7b5"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_real_mode_payments.py",
+      "sha256": "8b71d6db772c325d2ba426f31fe9e2f6cbaa159be318a1e8cf15a7b5e114db59"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v1_stripe_live.py",
+      "sha256": "b69bb2808f90e97cca5861eae33f4ffebd17185ec3f11b09ee59df25ab7efd2a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_bare_predicate.py",
+      "sha256": "6d8b13934f8b5d6f63f93e70baf401a594f55c4f54f367e01001ad9c796b7636"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_destination.py",
+      "sha256": "d1a822a7a1687113ab131a7599fb8420f21b9c860b6d620e539849973993708b"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_field_relations.py",
+      "sha256": "65bcf2cedd5f73715d233f2e265f1994363bc5477c515e7c0d3c833651d55bdf"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_field_relations_batch.py",
+      "sha256": "58002c82869cd75038ea0f89e80ff5838ca24ad7d15a6208f0be010859f9a71d"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_field_relations_contract.py",
+      "sha256": "bb27ba56e2b348e64c06dd0f3b46e437e16c72cb801ffa401ff48781407bedcd"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_field_relations_stage_judge.py",
+      "sha256": "397418cb1c7c2872f559525c8d2f4ff833aa6a4d9b6d3a9bd636c8cb877f3eb4"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_field_relations_workflow.py",
+      "sha256": "64bc7361ba228e6ac6bedfb447d840fc21a9d9b0a3c5735bf095e6bedb2b029e"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_history_context.py",
+      "sha256": "b21315a40f92340d86b56b2450ece66a961ebcd13a10517c02e263044d2fb9ae"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_literal_facts.py",
+      "sha256": "1900898021d0824ee4818d4772a2c138fecf05053fc972ea82f80091412ebc2b"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_literal_subjects.py",
+      "sha256": "4447e84df1ad94f644c02e7a654d9d866db9912d1bd9a268f2ae1983e055c6d5"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_notes_floors.py",
+      "sha256": "775a906ee49fde3a569fe191070d35afe3a2fe88b01e21f05a313ff5210c5dd0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_notes_repair.py",
+      "sha256": "582428fe4b35cc8aeb3e005e1e9a9f2c415e87c0d2f0a0f0fda31754d44c3bd0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_notes_round5_default.py",
+      "sha256": "ad93debd7ea4ec41c6d315fed8bcaa753e92ad977c255bcf7c0ff212646f0d31"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_notes_sole_patient.py",
+      "sha256": "31c96d70cf5fe1414e2a83d62683d7e5f1229ce347f83a0f5461ab62ea38b2ba"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_notes_tightening.py",
+      "sha256": "76220a2fdc2d05365822e2dd09f5620e2da584e6b81d93767f59874b4a00ba04"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_notes_usefulness.py",
+      "sha256": "23aee623c258c00c8188d0dcee9b4b0a5dace4f4b499f25de5e302d609c7a02b"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_ordinary_context.py",
+      "sha256": "d4dcb7213ec9ec09173380923893eae7049c48c90a97df5dd1d56b7e1146e801"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_ordinary_input.py",
+      "sha256": "dab9de55c4a5a87cdf59fe00f7bde9219fded3d0d85ca1186e6ffb989da6d289"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_ordinary_notes.py",
+      "sha256": "6ab57109e6537ef733fae0fb9040412182dfbc1152ebff12590476d67123afc7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_ordinary_profile.py",
+      "sha256": "4e5cff761d853d416fa992e6993689f3802319d5e37c3290d9d88705e772c17a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_ordinary_topics.py",
+      "sha256": "8f7223beb5646c0d8f71f94b20a4cd57e18cfbe5bcce70020ed8496c487a7546"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_patient_topics.py",
+      "sha256": "710877a83a02c3d93a4fa4f4626afc626d8b4cb3dbe95a9dc2b07303d5fea6a3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_record_retraction.py",
+      "sha256": "e1a402c57b336be73935d7cedbe3fc5e5f3e004cb9616d4ff521a9764d73cdf4"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_relation_selection_prompt.py",
+      "sha256": "c826286b892f4991670073a416f831c93bfe1a1e444c0430870fa1d60a20f3f9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_sentence_syntax.py",
+      "sha256": "5ec88879df568cf2b1f8f3d2be65c68e2e443af97afef608ec5ee0722ffb6d23"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_v3_supersession_floor.py",
+      "sha256": "cd8ebd21e86067e7722c81b0df6598e962cd393b9f6c3dc0c5f504c051715fe8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_voice_redaction_serialization.py",
+      "sha256": "8c6a36b635204343b7c653427d46a80c17f8bdfc1bd55c19335b93e8ecbde529"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_wm_narrative.py",
+      "sha256": "15723eaba067b649fc2e110af320bae17a9e7dcd715ae068a7c93e2b33950252"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_wm_narrative_sonnet5.py",
+      "sha256": "34a37864d4d6272587b9f7d546a2e0c002a1183e7919ac098799654bfafde453"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_wm_review.py",
+      "sha256": "dc11eccd968fe01e5e4b3fcac4b6954af48c77d37827b24c7de2d5adaf4fd645"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/tests/test_wm_workflow.py",
+      "sha256": "80dddd6f406181960b021b61cff1cbab61c193c3a0691765bf919302519e69ff"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_word_authority_fixture.py",
+      "sha256": "25aa97fcc34d3af10afa3c555d787bf2141315fad5e58ac777735a134f52900b"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/test_word_v3_workflow.py",
+      "sha256": "b8c3a6039218465b214470c21281dbb9d409713d44ca9d7c83c78f50f73b4000"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/voice_first_pass_controls.json",
+      "sha256": "4cec016f52a1b07acd42ea5d86f8ca517608ab04abbb139cb6fa438e57352f01"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/tests/wm_narrative_benchmark.py",
+      "sha256": "3fad63a0f3b4b28d65538b58c58b17ed6b86ce70b883296dc4dfd930123cf936"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/transcript_context.py",
+      "sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_actors.py",
+      "sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_destination.py",
+      "sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_field_relations.py",
+      "sha256": "08a4f809f22b9edd5b7ddc1e727c938e7e383d213c300e3c281fffa1d4e7f99a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_history_context.py",
+      "sha256": "447208e118543aeb89f7a92758781d35bed3a106ee283a7d2794cb206c8fc4c0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_literal_facts.py",
+      "sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_mapping.py",
+      "sha256": "987a5a7100bc9f793037842e136f958ef9f87995a7768d0a0b4e9fe4bd885355"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_nonsmoker.py",
+      "sha256": "953f75c941311eb64e4efff7429b107656be148924b8b38f3a634c182546fb48"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_patient_topics.py",
+      "sha256": "56f687a3f22fc4c7ce6acd494ff396f97d92cd020e0c7f3492afad079dd7119a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_syntax.py",
+      "sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/v3_syntax_model.json",
+      "sha256": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/views.py",
+      "sha256": "dfb7861ad6731dc2cb065950a176efebe12860707ffeeedb9378eb81d515ef18"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/wm_conflicts.py",
+      "sha256": "bcb8e2cc3ffafc8e968711d623bf5acf4175ececd3ec6c3be9c60c7560d4467c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/wm_narrative.py",
+      "sha256": "c29e0896bb630d487b5ff1ee44c983841d3307c392342cca7bebaac8e6c8de14"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/core/wm_review.py",
+      "sha256": "a84ef5972c5ae768140561c80d9695ec802e7e1d50dc04648ec4dadb833c3d8c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/core/worker_lock.py",
+      "sha256": "701450cc75972e9ec14103e3622f339cca6aa96aff1c7fdaec906fc11cf189b5"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/documents/__init__.py",
+      "sha256": "407f74ecb566fc1a0d3f21f3b2b35720f846ed137a9b4853f9264c4eaf19b216"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/assistance.py",
+      "sha256": "5e870bdd279d69a68b417cd13873667d62311461ab37c4ce28a51ef2fbd0c9d9"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/documents/engine.py",
+      "sha256": "f4a5ee0e2e02c6b17e39fd110bb9058de7622066c5f37724a3761a1ce29f2e01"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/import_selection.py",
+      "sha256": "06df2620f8d52891511f9f6e20785c52ee215012cece0d3180a582449fed4128"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/layout_geometry.py",
+      "sha256": "2c7f7e7acc34712888d7bd9ba0643466b909cd0ddf7d10ef5ee569c3480411b3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/layout_pdf_worker.py",
+      "sha256": "c7521f102c23c87b7777389ecaa9ca46372145677823c2ebe22ea12d0ea99e46"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/layout_server.py",
+      "sha256": "bf2ff57032b192dcb721b910748b10f7a6d54c3896d18695d18470e38cc8a382"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/layout_source.py",
+      "sha256": "98aac0e7e530d871f39ea91acaabf768e2ea2e977f243491509688c63f63e901"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/layout_transport.py",
+      "sha256": "3ec5b4b1ee367d1e82c55088c8649731d2bd3617b272ca0fdf2ccb2a16e4c75a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/mapping_limits.py",
+      "sha256": "bdebe9b5f9ec8268164177600176404917af22537e60ef7b971f065b8d396802"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/documents/sdk_service.py",
+      "sha256": "16f3a37033e64115f0e8fd41ea4a994bfd61a82c01d911fe534fcf64cf22c028"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/documents/sdk_word/Adapter/WmAdapter.cs",
+      "sha256": "883273448d427245e2026efa17ce4c7e38deff354834ae014a3659918a192441"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/documents/service.py",
+      "sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/source_policy.py",
+      "sha256": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_checkbox_history.py",
+      "sha256": "c9ef7769ab94f41550ff8287b48433e018d31d1005aab4c72c5abe847c02dcfd"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_composite_kind.py",
+      "sha256": "d53a38fb83b105a08a07993920933091de76b8f64669044277321c57e0d38baa"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_destination_regressions.py",
+      "sha256": "99626a38827a84c453a99310e2b457306991546432abc1621cf999092d4d7a99"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_destination_roles.py",
+      "sha256": "6435da2277ea00f8272fb6303a8264bcd9815d60658992b76f7f6cdf71021322"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_document_relations.py",
+      "sha256": "4f70b0da0c9d3b64a7d832450e5110176803bef7ab9dad03598fcb3b511ed97f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_guidance_preservation.py",
+      "sha256": "8ff7e6c8ccf363eee07a46bbcd59555fdef12fd140cfea204a8c614868bc0397"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_hyperlink_destinations.py",
+      "sha256": "ac66ef5eca388df6312ad50be464a8790931c1eb2d0b4510a1bf48992b3852d9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_import_selection.py",
+      "sha256": "bdf7f39b63e05a67ffe88bf718c5003ecc2d808c4b10b6318da7cc72758827ef"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_layout_containment.py",
+      "sha256": "4633c785426042448995e7eeac239ee226e2c2f5a16bb3e4d0de9b4889c54d1a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_layout_verification.py",
+      "sha256": "88c6c401757f4e1fb3c8c8ca1a147099aad7598e1ffca50b8d1a91b118a73c28"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_paragraph_list_boxes.py",
+      "sha256": "5e20a5e965fc42b0b0b64eedb3adab5ab4f5d1baba7535f882543f05559f5509"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_paragraph_option_recovery.py",
+      "sha256": "986e61e280193c573c2a4aeef591f73c5138d1e02a4c780aa4b2a1a60054bdba"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_question_boxes.py",
+      "sha256": "9332932b0a174706e02424b9b119e0b3c438924c19eee1ba8f16e00e7fd68582"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_ruled_paragraph_recovery.py",
+      "sha256": "310f19e23b6700559f193667991cb06eab1a38f7e99102ece7a0a2145b90291a"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/documents/test_sdk_service.py",
+      "sha256": "61b21cbf8eb5aeadc1a55c3f5ce7d62c7578768743a9dfaecdcbd0a572486bd9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_signing_areas.py",
+      "sha256": "bb626d587ec7afdc12b4f7e8684e0565bb3e232f1b959f3d1d7001271498ef53"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_source_coverage.py",
+      "sha256": "f3226b233ceab0485c1fa4cc95b7b974e6ab69cd573a64efd4c9a8b9b798bd0b"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_source_policy.py",
+      "sha256": "7593b97440dc5ed8783242245e10d1316122119903756a6325d5e3d686b83e06"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_structural_columns.py",
+      "sha256": "b81d7d7c1d0160057795a8826da20b1d620f845f9ea7565d268c76f1c542fa2e"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/test_word_v3.py",
+      "sha256": "e8c7a20b77514610bd0755b6a3289b2c860655dc758fbc37182505fd4e3cb7bf"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/documents/word_v3.py",
+      "sha256": "44d59e97ba3d49ef0cf4615afddf3c7d6a2aafe96a73621fcee69f0931f28119"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/alarms.json",
+      "sha256": "c2ba7833baa4d93921f05832efba6cffbebf502d30037856d1e9e8274f8fa692"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/aws_backup_status.py",
+      "sha256": "96c2f987c58952234086c4c88382628aa644c0f14af78c331e8ce68bba2efbaa"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/backup_alerts.py",
+      "sha256": "138bd702d4b6cc0f096ea78be09f2fcee87a409343d99fb18ff1a5b9e8c34aef"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/backup_restore.py",
+      "sha256": "f9a1f8257b70b938d0151c9eb426f6d82846cea0d7cad6a20bf13c127c02fdef"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/ci_test_runner.py",
+      "sha256": "3a567bad423cc4836207dc74228f46394a8809fee62bc426fee91f30615c5944"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/ci_test_shards.py",
+      "sha256": "c78c0519b7a95318bd4c1651ca60d97a8fb9160f871ee7194afa57d6205bb80c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/database_roles.py",
+      "sha256": "685f589ef0f1e085824369057e3bfd207591eaf743f3a4688b0a16f6d64ee8fe"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/dependency_lock.py",
+      "sha256": "2361ddfae54c18175baff1bbfc55370a19aeccc2d36b3eca3b65cf092142567a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/deployment_profile.py",
+      "sha256": "0f947205649f9ef63a5baba54e40d55d82aeb9ee220e4885e05acdbd08eaba0a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/fixtures/builtin-soap-voice-v1.json",
+      "sha256": "fa7692791c91bed18261e0301e636e12c9d606853c8612a48a244438e34860ad"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/fixtures/reviewed-synthetic-voice-v1.json",
+      "sha256": "81153aa063ca4020204e5028eaabf611d549f294b949d913137da89c7621c7d6"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/fixtures/service_launcher_private_baseline.py",
+      "sha256": "bab701c41b68e20d055bead5536595396752d372ab8d4bb35bf657a1fe86489a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json",
+      "sha256": "64fed2b82500f1bc9f8533eb28da27c75abfbacb3b2c91d6c7184846df6a3381"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/fixtures/with_db_role_private_baseline.py",
+      "sha256": "a077d5b49fb233115da392b6e2f84a8cebdf525169ce001140de2fb681a93515"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/integrity_contract.py",
+      "sha256": "493821a60d963c531f794bcdbd2d2dfa70b01eab7afd553f39ef23e99b7090c3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/ordinary_generation_activation.py",
+      "sha256": "3715d6e91add64bd435e0ef4ee8888bd83b9f6e7b83593e2637f3d1c2583e7c2"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/production_database_roles.py",
+      "sha256": "c1f8532a23d55c7651daa6e985ed5f4957a88f63ba12c36a580584c4fd7d5920"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/production_operator.py",
+      "sha256": "46f48ad7528dd73e019ed8e0ae618f56dd7f4ace11e11abd79283dfafc890bb3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/production_profile.json",
+      "sha256": "3a86bc911764d0deee52f67e25f8dcc4c567cff9ee7cf685cfb0cab40fefcba6"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/production_restore_check.py",
+      "sha256": "acc19c3f19609d1422b43e2e60295049db73d2c1de865486288c95dbf41ee321"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/provider_campaign.py",
+      "sha256": "71e2140499cf0ae4dd675fb5d7d84f635f517d0ae403dd6eb8141d393272f953"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/publish_production_status.py",
+      "sha256": "a9922531d4c7eb9dff0a514f63430219e2d2fcf0715dbbfd0085d0ff94807b79"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/recover_qa_http_rejection.py",
+      "sha256": "13ab9f3095e751077cdfc01763d30e51b8e6d39618e8c093e450d95b13a25d03"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/release_artifact.py",
+      "sha256": "512e4847a7601d19132dd1543d900fe2be44cb6707876c80b3b3a89b8c5d94d9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/render_production_environment.py",
+      "sha256": "586107e54d506cb2e50d72259b7fb044716609853dd4b410f84cd006744613c3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/retention/policy.schema.json",
+      "sha256": "f47a54493fa118c294e77fa35b22c8a490605c4ef9ab01c0d6cdb56b2526408f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/retention/policy.unset.json",
+      "sha256": "a76c9e47c068337b67a71a56b699baa2cd8f5c5a59fa684d727c919045a47cf8"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/service_launcher.py",
+      "sha256": "c6ef3716352b0801ac72ec1153150fb700a523fa617d682db4c194c4962e2ca9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/sonnet5_qa.py",
+      "sha256": "efe1877ae74d45eeaadd8c3258f54d1885bc3539fdef2378bdf30500df8d11f8"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/sonnet5_stages.py",
+      "sha256": "fef6bea8abd5f24c514cf256a136bfdd8f2b32747aa3a273dcc74528c1a858e1"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/standing_qa.py",
+      "sha256": "ce74dcb22b18555ef4e80a80123c1a8583448e629856cc07cd9e59a8be62a08c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/standing_qa_signing.py",
+      "sha256": "dd577a709242de2974b7ef0c0f8bf99c382b4dede9fe101b1d4c98977b6f2fbb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/standing_qa_soap_form.py",
+      "sha256": "69f5d2afd2c32bd6eff79c8b4165aedca3b6dfb6df32c3dc74aa0bfd8c49a9bb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/standing_qa_transcription.py",
+      "sha256": "0909f21b6866e3d0a76ec381f6ae6c98b079daf7cc43eef3df5430c6acde9d31"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/standing_qa_voice_forms.py",
+      "sha256": "68e4b8b37f89cde34304bd62fd6738055b872ef560b1c247837f624c29a86c51"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/standing_qa_voice_review.py",
+      "sha256": "8f236bb78b2ffe61b9c35cf94b3e169bdece08abab5a182083ebbfed3846c27c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/test_automatic_offsite.py",
+      "sha256": "ed445b571af9471030d42dbcd2751b17bb3e4566a205e0095eaebbfe3ac5ebaf"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_aws_backup_status.py",
+      "sha256": "d45668cc8af99d11a10f823e4515c37043a206ff66d07144210be9083849d074"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/test_backup_alerts.py",
+      "sha256": "64a8aabb669f94b25f824c563c950bc4bf4e5a93f707e1af4868e7772562defd"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_ci_gate_partitions.py",
+      "sha256": "838726c4d6815427d2a23df0822cc2491e8841dbd92c23d59ba9d87fd2065c66"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_ci_test_shards.py",
+      "sha256": "d7cb3fab2d6a571f7b4f0f9a595b9bb0af89e0dbca6ef90f494836f76fe24d56"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_cost_scanner_contract.py",
+      "sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_dependency_lock.py",
+      "sha256": "aa86eb8aab6d32d814d6b2ce4d154c8becc859e61594b81348006dac9d1a490f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_deployment_profile.py",
+      "sha256": "230b650db577b74562881c85ca4462e8d3d3cb5d775d5288254b9f2ba224afd0"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_heartbeat_readiness.py",
+      "sha256": "ae66a817e96aee1ca53f42eff208d056f8dfc2d92e6bd89fc1cf64fd549ae786"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_link_worktree_venv.py",
+      "sha256": "52ec1f4692c265fbbdfba96f0a0dd6ef3bc6d06022ac4f345f6264f5ddd450c1"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/test_offsite_shared_accounting.py",
+      "sha256": "9bdc6071dd85b46d803c0152388791bf1ec06a95b28d874fc8b4f18064eded90"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_operator_trigger_counts.py",
+      "sha256": "65eda94368400f4bee05d527e2038c85e8f361b6145b3de6d0f30eed6e532d54"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_ordinary_generation_activation.py",
+      "sha256": "10ad99fd9009d2ff4e8b7ab016e27522f6d90adff4b0339785675acc865fb41a"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_production_deploy.py",
+      "sha256": "39a75626ec3ea1a21812ed4eb294205a98f52d97827c847185330a21e6b989fe"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_production_operator.py",
+      "sha256": "7a1992237a48e93ed7e8b46789c7e05aa4caefadc7bdacc01fea143d8dd3a5b1"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_production_restore_check.py",
+      "sha256": "8e097667affc9b71278b0a846d79892d6945272d03445aee49bc103331868af9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_recover_qa_http_rejection.py",
+      "sha256": "c3446b20d184b33f2caff365ecdbb225ef7ebfd524ce525efc9118f2509cff8c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_service_launcher_profiles.py",
+      "sha256": "9be53939073a22154ec921bb4d2b500e8dab7c02b003ed049bf45b54ad7d2471"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/test_with_db_role_profiles.py",
+      "sha256": "36f6826592d3e9974b151ab89e339d1b8b20144e13f6c2d4f237a1dd242c4016"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/__init__.py",
+      "sha256": "d8aa8a72b3b9c9953387f018985784bbb30bc9ce42da87cee7af4d5263df49ad"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/amendment_plan_driver.py",
+      "sha256": "c010b8bd8faf9cca96d85a6c28c36fd8745f39fcfa15e12f2ff5b93b744a5e43"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/fixtures/standing-declaration-test.md",
+      "sha256": "1be64fbf5659354b1552a82701dcee3e16be82946f2daab62252717a13b80bec"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/network_guard.py",
+      "sha256": "7dc6595aee78c1bde0a9bd343f901536a5bf60385182378a77694f10bba9f3ad"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_builtin_soap_voice.py",
+      "sha256": "080e5cc3bd43227d5b9f3c892ef5ad3b6402dc5880d6abdae4dcf1e5efa034e3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_provider_campaign.py",
+      "sha256": "cf46c128e5077335931b83a756a93e0ff94214558ff4618d79c14d00b6c3d96f"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_qa_signing_key.py",
+      "sha256": "14359b4027183373a6d70b66d140d06a4235bda7f7e97f0ca9eac9604c630535"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_scoped_reap.py",
+      "sha256": "577728f0b762ab6e5accfc3707bcd7ce731319e878c9d757553a90a8b47572d3"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_sonnet5_amendment_plan.py",
+      "sha256": "9196c0e2fa3bf5a2f06e81b8610a834efabf6c428c21745963e403e6fcb9a82c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_sonnet5_qa.py",
+      "sha256": "3fc773a00436025623391c561d800ee6c3c5bc22c3989014262281633ca24b42"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_sonnet5_stages.py",
+      "sha256": "44fdad4759e25123df00fb37fb472cdb217c66e9a9204c253ed8ea7b0e911794"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_sonnet5_stages_plain.py",
+      "sha256": "3053f2c117be8f2e44ff237dd40b77744ed95f846e09c411636214c92aae4d96"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_stage_graders.py",
+      "sha256": "6b4748dff36317c0e8b1c5722f0e88e9b4a63f0c6d99cb10aefa313274445957"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_standing_qa.py",
+      "sha256": "58d91df0e6d63023a70fdf8c8864dbb270072c570ceb7cc3a2b9a9a37174cb35"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_standing_qa_django.py",
+      "sha256": "302672cd3278ab2e67b09b3e979fca35055220496fd1e48b464f766d39874b95"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_standing_qa_voice_review.py",
+      "sha256": "12faf55cf8a406a8764654f9df98d2b731c9ba002935d5b6195171ee4facec2c"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/tests/test_voice_form_fit.py",
+      "sha256": "1053f87dc3f1cb743170cf18562ae5d3d5e137ec2c75d6c6557762d6551a73f9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/ops/verify_qa_authorization.py",
+      "sha256": "4f302009fcef6590faa8e0dca7c05e19f06c496b92a1ea6ed48a1cd75ca7b2e2"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/ops/with_db_role.py",
+      "sha256": "d1d78d46790494c3f9f33eedd5c30f7631f8942d06cf6ec42ff2abdb64703bdb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/quillmd/application_profile.py",
+      "sha256": "b051d6faadd682ab38b8f2dff9f80a59266ad32f614ed80dc232a5e8bbde6721"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/quillmd/settings.py",
+      "sha256": "a9d22a57bd0102038b71701626248adc5ca5da94ab0e023d84e642ee5a3147a7"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/quillmd/urls.py",
+      "sha256": "33d0c0e0958613120fbf8d2a0ba2957ca82bb3550acf5762ae2d81f642a4c6b9"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/quillmd/urls_doctor.py",
+      "sha256": "5ca4d166286298e6f90ef922ab1c7f69abeee8d218b365676207386dd78e6e94"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/quillmd/urls_doctor_role_suggestions.py",
+      "sha256": "4a27dc24e1cd7c2ba76221d319ceaf638ec60383adc84c47f02e47b8794f3f63"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/admin_account.html",
+      "sha256": "458a213c479ea4eb97177eaa5f89e9fb956cca46e4160343dc4c5602aa1b0ddd"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/admin_clinic_invitations.html",
+      "sha256": "27fb8ce15fbdd5013b28a9630bd79c3a8e2bd2d75f799161ebb139f4bfaf4f22"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/admin_dashboard.html",
+      "sha256": "e71935e6dfe8a9d4c3657719cda3136764de6e3179df35e2bf69dbe93d31bdc6"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/admin_organizations.html",
+      "sha256": "68f2d47a9f026a597428bb4d89cbddbed89b8b7ee2e453e13def3c020948e688"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/admin_services.html",
+      "sha256": "0bd7e3c956a43669dc0ccc6416f001de202d4a89b01de809f996905f7dbc17f9"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/base.html",
+      "sha256": "fe3a417f12231153c1cdbf56360e556719e2942e0b4feca7e43c923e2869736a"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/billing.html",
+      "sha256": "2f642bd0d311e7d880d6696f75148bcd0c00076ecf52812c601fc0a9ebc6acca"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/clinic_invite.html",
+      "sha256": "37af36e50af529bb4b45ade7ccf51eeb770e0ef18996232855bb2017e645bd4c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/confirm.html",
+      "sha256": "4fee52f57f8566cc989bf3d82eaa75c3208b96bdd996723bc80415f52a8eedf8"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/dashboard.html",
+      "sha256": "805288bef4392a77b5365e38591ba6a9e90028d99ea777f87d82dd07c8d4259e"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/disposition_execution.html",
+      "sha256": "d83da881da0fde3737d5ed7b3bb41f1f8c7a1c1c7bc502894d3918ff09c2f571"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/disposition_review.html",
+      "sha256": "76d7ecca243f8fe280630fb50074092542537b8b82d0b8f943ce70199aca3395"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/encounter_answer_v3.html",
+      "sha256": "a97e2e8d5e0f4a0bc24de3c19a0d8f6cda2d8f9dd2506df9a607a5328c538d6c"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/encounter_detail.html",
+      "sha256": "8a52725505cdb4c2df7ea153b0644f2961245934b195f1476b26b00b18fb64a6"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/encounter_form.html",
+      "sha256": "f6349371531f1d0e93b9330e271f39deae6ef83c8d97edb96d403f4a7b89a76a"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/encounter_input.html",
+      "sha256": "651cc3308726beecd027bd4076d86471ce3d6a48d6ad2a516b6c11f4d0829807"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/financial_detail.html",
+      "sha256": "5ceb30162269a1e67ea0415dc00109f4921727e5832f4930d7e8538962213256"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/login.html",
+      "sha256": "5e274e8ba783a3295721af417430a1c0bbbee754dcf1eb2ddf5245138b78e574"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/mapping_assistance.html",
+      "sha256": "e293ecd7c4689eb8b7598ab268b62d90009640ff45d96bd1852e46bb55154388"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/mfa_setup.html",
+      "sha256": "4d3e9353a1bfc38b0ff5aad6c5e105cdc9ca30545389e166b2a859298015e3bb"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/patients.html",
+      "sha256": "c837518334642c302b2461b997035942dbb03b33ef372cd9f204b7a5145d79d6"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/recovery.html",
+      "sha256": "8fdcc0ccd41c80d07dedaa7580fd43d76aa6d2f4708f9bd083a6e3a8d082a2d0"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/register.html",
+      "sha256": "b4f5462de137ee37f5e2c3b14e825e8a0a3bb896b375abdf35897a32fbfafdcb"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/restore_preparation.html",
+      "sha256": "8f60bdc1a91114237419d0c669f3569a1783fcac6da01ab7426916449d7033a4"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/retention_holds.html",
+      "sha256": "eee9532502d79109160bed896999df29090b3ccfd7cbb9c8df8f65c829af5ff7"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/soap_start.html",
+      "sha256": "730f65e2c5d230db8917ca60ca13b83c7e6f82fa976821a9af505daf5afb094a"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/team.html",
+      "sha256": "4c82e408fc18733f0be36c07f0ea829e6bf10e908985ea6bfa372483a8bf5d41"
+    },
+    {
+      "status": "M",
+      "path": "rebuild/templates/template_detail.html",
+      "sha256": "302cdef9432f7ab76156fb69d8b765591224517252b80ce3dce064c289e296ad"
+    },
+    {
+      "status": "A",
+      "path": "rebuild/templates/template_detail_v3.html",
+      "sha256": "6a2239a062f18ebf0550b5f81a9eccbda7f83502b02978391caaed4d2b27170f"
+    }
+  ],
+  "application_change_count": 403,
+  "no_installed_access": true,
+  "no_execution": true
+}
