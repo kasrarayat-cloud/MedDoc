@@ -1,0 +1,183 @@
+{
+  "parent_commit": "a161bd75d51aa1b10ced06001ee2974941dc4ed5",
+  "source_hashes": {
+    "rebuild/documents/word_v3.py": "679374c82731b9a301fd26edfe1196f76c789137b730f544b19dc2b061531988",
+    "rebuild/documents/test_source_coverage.py": "68725462313305ce6827f305c697353f6712caecb5ccff50c39ea9a16b0f42d7"
+  },
+  "prior_23_method_result": {
+    "tests": 23,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 61.91233946599823,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "c4a59e770b1af1dab57a657b99fc892ec96e5fcd0dda68a016d1e2d18bc92c34",
+      "rebuild/documents/test_source_coverage.py": "196b318528632b1a1b208c4be9e3bb0ae1a8aeb19f756459fa03157ce8fa780c"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 218,
+    "refused": 108,
+    "exports": 110,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "prior_23_method_actual_exit": 0,
+  "final_16_method_result": {
+    "tests": 16,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 40.882730014003755,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "679374c82731b9a301fd26edfe1196f76c789137b730f544b19dc2b061531988",
+      "rebuild/documents/test_source_coverage.py": "68725462313305ce6827f305c697353f6712caecb5ccff50c39ea9a16b0f42d7"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 129,
+    "refused": 54,
+    "exports": 75,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "final_16_method_actual_exit": 0,
+  "fixed_original_result": {
+    "source_word_sha256": "679374c82731b9a301fd26edfe1196f76c789137b730f544b19dc2b061531988",
+    "source_unchanged": true,
+    "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+    "groundtruth_sha256": "172ad655015aaa9eb02d6c099e5424f7e09d80807966f9640c9bfe928bf05618",
+    "mapping_summary": {
+      "n": 88,
+      "ok": 49,
+      "missed": 29,
+      "wrong": 10,
+      "extras": 2,
+      "strict": false
+    },
+    "attempts": [
+      {
+        "plan": "ordinary-root",
+        "expected_refusal": false,
+        "refused": false,
+        "export_sha256": "26376ee104af5fc615e85000a8735c351c7e2d25e38b07a844f6316e99abfbb3",
+        "states": {
+          "Food/beverage": [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "Wine": [
+            false,
+            false
+          ],
+          "Alcohol beverages": [
+            false,
+            false
+          ]
+        },
+        "untargeted_paragraphs_exact": true,
+        "untargeted_parts_raw_exact": true
+      },
+      {
+        "plan": "parent-children-other",
+        "expected_refusal": false,
+        "refused": false,
+        "export_sha256": "7fb05a35e5a3d74737262fe85bc7223744150727df66a530f4b0b09e26a5d2cc",
+        "states": {
+          "Food/beverage": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          "Wine": [
+            true,
+            true
+          ],
+          "Alcohol beverages": [
+            true,
+            true
+          ]
+        },
+        "untargeted_paragraphs_exact": true,
+        "untargeted_parts_raw_exact": true,
+        "other_readback": "Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail"
+      },
+      {
+        "plan": "unselected-parent",
+        "expected_refusal": true,
+        "refused": true,
+        "code": "conditional_answer_unselected",
+        "message": "This subgroup has a selected answer while its own printed parent is unselected. Review the parent and child answers; no selection was inferred."
+      }
+    ],
+    "no_answer_original_bytes": true,
+    "elapsed_seconds": 15.09410971399484,
+    "full_application_route": false,
+    "manual_mapping_corrections": 0,
+    "provider_calls": 0,
+    "database_calls": 0,
+    "renderer_calls": 0
+  },
+  "fixed_original_actual_exit": 0,
+  "first_reader_failure": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-hierarchy-original-final-proof-20261004",
+    "actual_exit": 1,
+    "cause": "Writer output was complete, but constrained scalar readback rejected the underscore Other prefix after a separately owned hierarchy glyph changed. Exports were archived before assertion."
+  },
+  "prior_failures": [
+    {
+      "path": "d03-hierarchy-first-controls-20261004",
+      "actual_exit": 1,
+      "cause": "Test syntax error: else9"
+    },
+    {
+      "path": "d03-hierarchy-second-controls-20261004",
+      "actual_exit": 1,
+      "cause": "Proved bracket was counted as another scalar blank"
+    },
+    {
+      "path": "d03-hierarchy-third-controls-20261004",
+      "actual_exit": 1,
+      "cause": "Bracket offset instrument assumed inner rather than full delimiter extent"
+    },
+    {
+      "path": "d03-hierarchy-fourth-controls-20261004",
+      "actual_exit": 1,
+      "cause": "Whole-cell own scope hid a later wider single-choice instruction; separate test field lookup assumed options on a scalar"
+    },
+    {
+      "path": "d03-hierarchy-fifth-controls-20261004",
+      "actual_exit": 0,
+      "cause": "Eight controls passed before additional human-option controls"
+    },
+    {
+      "path": "No readback artifact path produced",
+      "actual_exit": 1,
+      "cause": "First shell redirection used an absent scratch path before test creation; corrected invocation ran once"
+    }
+  ],
+  "limits": {
+    "full_application_route": false,
+    "native_word": false,
+    "automatic_full_document_pass": false,
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "manual_corrections": 0,
+    "provider_calls": 0,
+    "database_calls": 0,
+    "renderer_calls": 0
+  },
+  "artifact_seal_sha256": "3131df52f839357171222d2245cab15697ef55913412f8b1eef293cdc74d552f",
+  "sealed_file_count": 656
+}

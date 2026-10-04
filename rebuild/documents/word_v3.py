@@ -2380,6 +2380,7 @@ class Detector:
         self.rule_lines_below_label(write_requests_only=True)
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
+        self.rule_bracketed_checkbox_hierarchy()
         self.rule_checkboxes()
         self.rule_adjacent_write_ins()
         self.rule_question_boxes(list_only=True)
@@ -4142,6 +4143,143 @@ class Detector:
                 else:
                     self.notes.append("Layout verification required for coded-column answer at " + row.id +
                                       ". Printed question: " + area.label + ". Section: " + area.context)
+
+    def checkbox_label_size(self, paragraph, position):
+        """Explicit printed label size, never the checkbox glyph's font.
+
+        Inherited/mixed sizes cannot establish a parent/child relationship.
+        Delimiter and blank-rule glyphs are not words in the option label.
+        """
+        text, pieces = self.ptext(paragraph.el)
+        boxes = [i for i, char in enumerate(text) if char in (BOX, CHECKED)]
+        start = boxes[position] + 1
+        stop = boxes[position + 1] if position + 1 < len(boxes) else len(text)
+        sizes = set()
+        for piece in pieces:
+            ink = text[max(start, piece.start):min(stop, piece.end)]
+            if not any(char.isalpha() for char in ink):
+                continue
+            if piece.run is None or hyperlink_run(piece.run):
+                return None
+            node = piece.run.find('./' + q('w:rPr') + '/' + q('w:sz'))
+            if node is None or not str(node.get(q('w:val'), '')).isdigit():
+                return None
+            sizes.add(int(node.get(q('w:val'))))
+        return next(iter(sizes)) if len(sizes) == 1 else None
+
+    def rule_bracketed_checkbox_hierarchy(self):
+        """A complete membership panel owns a finite two-line option tree.
+
+        One colon parent continues the root-size options; its smaller child
+        labels contain one explicitly bracketed sub-list. Every control and
+        delimiter is accounted for. Other shapes remain source-held, rather
+        than flattening parents and children into mutually exclusive peers.
+        """
+        for cell in [s for s in self.index.slots if s.kind == 'tc' and s.part == 'word/document.xml']:
+            paragraphs = self.own_paragraphs(cell)
+            for n, first in enumerate(paragraphs[:-1]):
+                first_units = self.box_units(first)
+                second = paragraphs[n + 1]
+                units = self.box_units(second)
+                if (len(first_units) < 2 or len(units) != 5 or not first_units[0][2].strip().endswith(':')
+                        or units[0][2].strip() or not units[0][1].strip().endswith(':')
+                        or '[' not in units[1][1] or ']' not in units[3][1]):
+                    continue
+                source = [p for p in paragraphs[:n] if self.text(p.el).strip()]
+                problem = 'The printed parent, child options and selection permission need exact source review.'
+                eligible = (len(source) == 2 and all(not self.box_units(p)
+                    and not self.blank_spans(*self.ptext(p.el)) for p in source)
+                    and all(p.kind == 'p' for p in cell.children)
+                    and all(self.tab_source_visible(p) and not self.region_hidden(p.el) for p in [*source, first, second])
+                    and not any(node.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX, q('w:hyperlink'))
+                                for p in [*source, first, second] for node in p.el.iter()))
+                title = self.text(source[0].el).strip() if source else ''
+                instruction = self.text(source[-1].el).strip() if source else ''
+                membership = re.fullmatch(r'(?:[^;?!\r\n]+\.\s+)?(?:Please\s+)?indicate\s+if\s+any\s+of\s+the\s+'
+                    r'[^.;:?!\r\n]+\s+below\s+are\s+[^.;:?!\r\n]+\.?', instruction, re.I)
+                explicit_many = many_evidence([instruction], [option_text(u[1]) for u in first_units])[0]
+                eligible = eligible and bool(membership or explicit_many)
+                texts = [self.text(p.el).strip() for p in [*source, first, second]]
+                human_texts = [*texts, first_units[0][2], *[unit[1] for unit in [*first_units, *units]]]
+                human = any(self.checkbox_source_action(LIST_MARKER.sub('', clause.strip()), governing=True)
+                    or signing_place(clause) for text in human_texts
+                    for clause in [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip())
+                if human:
+                    self.protected_regions.update([first.id, second.id])
+                    eligible = False
+                    problem = 'The printed hierarchy contains a human-owned signing or response act; keep it unchanged.'
+                parent = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+):\s*', units[0][1])
+                branch = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+)\s*\[\s*', units[1][1])
+                inside = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+?)\s*', units[2][1])
+                close = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+?)\s*\]\s*,?\s*', units[3][1])
+                tail = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+?)\s*:\s*_+\s*', units[4][1])
+                eligible = eligible and all((parent, branch, inside, close, tail))
+                second_text = self.ptext(second.el)[0]
+                eligible = eligible and second_text.count('[') == 1 and second_text.count(']') == 1
+                # The proven bracket contains its two child controls, not a
+                # separate scalar blank. Other bracket/blank extents stay held.
+                bracket = (second_text.find('['), second_text.find(']') + 1)
+                spans = [span for span in self.blank_spans(*self.ptext(second.el))
+                         if not (span[:2] == bracket and span[2] == 'bracket')]
+                eligible = (eligible and len(spans) == 1 and spans[0][2] == 'blank'
+                            and set(self.ptext(second.el)[0][spans[0][0]:spans[0][1]]) == {'_'})
+                root_sizes = [self.checkbox_label_size(first, i) for i in range(len(first_units))]
+                sizes = [self.checkbox_label_size(second, i) for i in range(5)]
+                eligible = (eligible and root_sizes[0] is not None and all(s == root_sizes[0] for s in root_sizes)
+                            and sizes[0] == root_sizes[0] and sizes[1] is not None and sizes[1] < sizes[0]
+                            and all(s == sizes[1] for s in sizes[1:]))
+                root_label = clean_label(first_units[0][2])
+                context = ' > '.join(x for x in (title, instruction) if x)
+                own = {id(p.el) for p in [*source, first, second]}
+                group_options = [[option_text(u[1]) for u in first_units] + ([parent[1].strip()] if parent else []),
+                                 [branch[1].strip(), tail[1].strip()] if branch and tail else [],
+                                 [inside[1].strip(), close[1].strip()] if inside and close else []]
+                if eligible:
+                    # A binary question and every complete one/count command
+                    # retain the established cardinality guard. Membership is
+                    # local to this exact panel, never a global option alias.
+                    eligible = not any(all(YESNO.match(o) for o in opts) for opts in group_options)
+                    eligible = eligible and not one_only(texts, texts) and not any(
+                        limit_language(clause, local=True) for text in texts for clause in _clauses(text))
+                    eligible = eligible and not self.scope_limit(own, subject_stems(root_label, context, *group_options[0]))
+                    eligible = eligible and len(context) <= MAX_MAPPING_CONTEXT
+                if not eligible:
+                    for p in (first, second):
+                        self.coverage_issue(p, 'unmapped_answer', problem)
+                        self.claimed.add(id(p.el))
+                    continue
+                ref = lambda p: {'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+                grouping = [(root_label, [*first_units, units[0]], None),
+                            (parent[1].strip(), [units[1], units[4]], units[0][0]),
+                            (branch[1].strip(), [units[2], units[3]], units[1][0])]
+                child_owner = None
+                for position, (label, controls, required_parent) in enumerate(grouping):
+                    boxes = [unit[0] for unit in controls]
+                    anchors = [self.index.by_id.get(box['part'] + '#' + box['slot'])
+                               or (first if box in [u[0] for u in first_units] else second) for box in boxes]
+                    anchor = anchors[0]
+                    relation = {'relation': 'bracketed_checkbox_hierarchy', 'sources': [ref(p) for p in [cell, *source, first, second]],
+                        'bands': [ref(first), ref(second)], 'parent': required_parent,
+                        'question': label, 'context': context, 'options': group_options[position], 'cardinality': 'multi_choice'}
+                    area = Area('multi_choice', label, anchor, {'type': 'checkboxes', 'boxes': boxes},
+                        context=context, options=group_options[position], complete_source=True,
+                        source_questions=[relation], extra_slots=list(dict.fromkeys(s for s in anchors[1:] if s is not anchor)))
+                    self.add(area)
+                    if position == 1:
+                        child_owner = area
+                label = tail[1].strip()
+                write_context = ' > '.join((context, child_owner.label,
+                    'Only when the printed option ' + label + ' is selected'))
+                start, end, shape = spans[0]
+                relation = {'relation': 'adjacent_checkbox_answer', 'question': label, 'context': write_context,
+                    'source': ref(second), 'owner': ref(child_owner.slot), 'owner_label': child_owner.label,
+                    'owner_context': child_owner.context, 'owner_kind': child_owner.kind,
+                    'owner_options': list(child_owner.options), 'owner_target': dict(child_owner.target),
+                    'condition': 'printed_option', 'control': dict(units[4][0]), 'option_index': 1,
+                    'printed_option': label, 'source_text': self.ptext(second.el)[0]}
+                self.add(Area('text', label, second, {'type': 'span', 'start': start, 'end': end, 'shape': shape},
+                    context=write_context, complete_source=True, source_questions=[relation]))
+                self.claimed.update(id(p.el) for p in [*source, first, second])
 
     def rule_checkboxes(self, leftovers=False):
         # paragraph-level units, then grouping. A cell holding ONLY a box under a column header is left for the
@@ -9230,6 +9368,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relation.get('relation') == 'named_selection_instruction' for relation in area.source_questions)]
     scalar_alternatives = [area for area in source_detector.areas if any(
         relation.get('relation') == 'scalar_checkbox_alternative' for relation in area.source_questions)]
+    hierarchy_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'bracketed_checkbox_hierarchy' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
@@ -9271,6 +9411,42 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 and field.get('label') == area.label and field.get('context') == area.context
                 and field.get('options', []) == area.options
                 and field.get('source_questions', []) == area.source_questions)
+
+    for area in hierarchy_choices:
+        relation = area.source_questions[0]
+        regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None}
+                   for ref in relation['sources'][1:]]
+        active = [f for f in fields if answers.get(f['key']) not in (None, '', [])
+                  and any(reader.touches(place, region) for place in reader.of(f) for region in regions)]
+        if not active:
+            continue
+        if any(not any(exact_original_area(f, candidate) for candidate in [*hierarchy_choices, *adjacent_answers])
+               for f in active):
+            fail('This printed parent/subgroup hierarchy requires its exact original question and controls. '
+                 'Review the separate groups; a former flat mapping cannot authorize these destinations.', 'mapping_mismatch')
+        matches = [f for f in fields if exact_original_area(f, area)]
+        if len(matches) > 1:
+            fail('This printed subgroup has more than one mapped writer. Review each destination once.', 'mapping_mismatch')
+        parent = relation['parent']
+        if parent is None:
+            continue
+        parent_areas = [a for a in hierarchy_choices if parent in a.target['boxes']]
+        if len(parent_areas) != 1:
+            fail('The printed subgroup no longer has one controlling parent.', 'mapping_mismatch')
+        parent_area = parent_areas[0]
+        parent_fields = [f for f in fields if exact_original_area(f, parent_area)]
+        if len(parent_fields) > 1:
+            fail('The controlling parent has more than one mapped writer.', 'mapping_mismatch')
+        parent_value = answers.get(parent_fields[0]['key']) if parent_fields else None
+        parent_position = parent_area.target['boxes'].index(parent)
+        parent_selected = (parent_position in _options_chosen(parent_fields[0], parent_value)
+                           if parent_value not in (None, '', []) else box_state(index, parent) is True)
+        value = answers.get(matches[0]['key']) if matches else None
+        selected = (bool(_options_chosen(matches[0], value)) if value not in (None, '', [])
+                    else any(box_state(index, box) is True for box in area.target['boxes']))
+        if selected and not parent_selected:
+            fail('This subgroup has a selected answer while its own printed parent is unselected. '
+                 'Review the parent and child answers; no selection was inferred.', 'conditional_answer_unselected')
 
     # The printed Or is an exclusive alternative, not an invitation to silently
     # clear an existing selection. Read the exact original pair before queuing
@@ -9498,7 +9674,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -9531,7 +9707,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 owns = (any(original_branch_mapping(field, area) for area in relation_areas)
                         or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas))
@@ -9947,7 +10123,8 @@ def _adjacent_glyph_prefix(original, before, field, source, current, start):
     """
     loc = field.get('locator') or {}
     relations = field.get('source_questions') or []
-    if (loc.get('target', {}).get('shape') != 'after_label' or len(relations) != 1
+    shape = loc.get('target', {}).get('shape')
+    if (shape not in ('after_label', 'blank') or len(relations) != 1
             or relations[0].get('relation') != 'adjacent_checkbox_answer'
             or fingerprint(before.el) != loc.get('fingerprint') or len(current) < start):
         return False
@@ -9961,9 +10138,26 @@ def _adjacent_glyph_prefix(original, before, field, source, current, start):
     if len(matches) != 1:
         return False
     relation = matches[0].source_questions[0]
+    owners = [area for area in detector.areas if area.slot.id == relation['owner']['part'] + '#' + relation['owner']['slot']
+              and not area.protection and area.target == relation['owner_target']
+              and area.kind == relation['owner_kind'] and area.label == relation['owner_label']
+              and area.context == relation['owner_context'] and area.options == relation['owner_options']]
+    hierarchies = [r for owner in owners for r in owner.source_questions
+                   if r.get('relation') == 'bracketed_checkbox_hierarchy']
+    if shape == 'blank' and (len(owners) != 1 or len(hierarchies) != 1):
+        return False
+    refs = relation['owner_target'].get('boxes', [])
+    if len(hierarchies) == 1:
+        # A fresh hierarchy proves all parents/children on this same original
+        # band. Its other owned glyphs can change while the conditional scalar
+        # remains in place; unrelated controls and every other character cannot.
+        refs = [ref for area in detector.areas for r in area.source_questions
+                if r.get('relation') == 'bracketed_checkbox_hierarchy'
+                and r['sources'] == hierarchies[0]['sources'] and r['bands'] == hierarchies[0]['bands']
+                for ref in area.target.get('boxes', [])]
     glyphs = glyph_boxes(before.el)
     normalized = list(current[:start]); owned = False
-    for ref in relation['owner_target'].get('boxes', []):
+    for ref in refs:
         if ref.get('part') != before.part or ref.get('slot') != before.path + '/glyphs':
             continue
         ordinal = ref.get('glyph')

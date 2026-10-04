@@ -1262,6 +1262,165 @@ class PrintedOptionBranchInstructions(unittest.TestCase):
 
 
 
+class BracketedCheckboxHierarchy(unittest.TestCase):
+    def form(self, family='glyph', instruction='Please indicate if any of the items below are observations.',
+             title='1. Observations', hidden=False, same_size=False, missing_size=False,
+             closing=']', competing=False, original_selected=False, leaf='Left'):
+        from docx.shared import Pt
+        doc=Document();table=doc.add_table(rows=1,cols=2);cell=table.cell(0,0);cell.text=title
+        p=cell.add_paragraph(instruction)
+        if hidden:p.runs[0].font.hidden=True
+        first=cell.add_paragraph();first.add_run('Source items: ')
+        def control(p,text,size,checked=False):
+            if family=='ff':ff_field(p,'checkbox',checked=checked)
+            elif family=='sdt':p._p.append(checkbox_control(checked=checked))
+            else:p.add_run('☒'if checked else'☐')
+            run=p.add_run(text)
+            if not missing_size:run.font.size=Pt(size)
+        control(first,' Alpha    ',11);control(first,' Beta ',11)
+        second=cell.add_paragraph();size=11 if same_size else 9
+        control(second,' Nested set:  ',11,original_selected)
+        control(second,' Named subgroup [',size,original_selected)
+        control(second,' '+leaf+' ',size,original_selected);control(second,' Right '+closing+', ',size)
+        control(second,' Other:__________',size)
+        if competing:cell.add_paragraph('Select only one answer for every question.')
+        neighbor=table.cell(0,1);neighbor.text='Independent observation (choose one):'
+        neighbor.add_paragraph('☐ Yes');neighbor.add_paragraph('☒ No')
+        doc.sections[0].header.paragraphs[0].text='Preserved original header'
+        doc.sections[0].footer.paragraphs[0].text='Preserved original footer'
+        return data(doc)
+
+    def groups(self,raw):
+        mapping=word_v3.inspect(raw)
+        groups=[f for f in mapping['fields']if any(r.get('relation')=='bracketed_checkbox_hierarchy'
+            for r in f.get('source_questions',[]))]
+        return mapping,{f['label']:f for f in groups}
+
+    def test_complete_source_proves_separate_parent_bracket_children_and_write_in(self):
+        for family in('glyph','ff','sdt'):
+            raw=self.form(family);mapping,groups=self.groups(raw)
+            self.assertEqual(set(groups),{'Source items','Nested set','Named subgroup'})
+            self.assertEqual([groups[x]['options']for x in('Source items','Nested set','Named subgroup')],
+                [['Alpha','Beta','Nested set'],['Named subgroup','Other'],['Left','Right']])
+            other=next(f for f in mapping['fields']if f['kind']=='text'and f['label']=='Other')
+            plan={groups['Source items']['key']:['Alpha','Nested set'],groups['Nested set']['key']:['Named subgroup','Other'],
+                groups['Named subgroup']['key']:['Left','Right'],other['key']:'Synthetic complete response'}
+            out=word_v3.fill(raw,mapping['fields'],plan);index=word_v3.SlotIndex(word_v3.open_package(out))
+            self.assertEqual(word_v3.constrained_option_states(index,groups['Source items']),[True,False,True])
+            self.assertEqual(word_v3.constrained_option_states(index,groups['Nested set']),[True,True])
+            self.assertEqual(word_v3.constrained_option_states(index,groups['Named subgroup']),[True,True])
+            self.assertIn('Synthetic complete response',Document(io.BytesIO(out)).tables[0].cell(0,0).paragraphs[3].text)
+            self.assertEqual(word_v3.constrained_scalar_value(word_v3.SlotIndex(word_v3.open_package(raw)),index,other,True),
+                'Synthetic complete response')
+            self.assertEqual(Document(io.BytesIO(raw)).tables[0].cell(0,1)._tc.xml,Document(io.BytesIO(out)).tables[0].cell(0,1)._tc.xml)
+            self.assertEqual(Document(io.BytesIO(raw)).tables[0].cell(0,0).paragraphs[1].text,
+                Document(io.BytesIO(out)).tables[0].cell(0,0).paragraphs[1].text)
+            with ZipFile(io.BytesIO(raw))as a,ZipFile(io.BytesIO(out))as b:
+                for name in a.namelist():
+                    if name!='word/document.xml':self.assertEqual(a.read(name),b.read(name),name)
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_child_answers_do_not_infer_their_parent_selections(self):
+        for family in('glyph','ff','sdt'):
+            raw=self.form(family);mapping,groups=self.groups(raw)
+            root,child,leaf=(groups[x]for x in('Source items','Nested set','Named subgroup'))
+            other=next(f for f in mapping['fields']if f['kind']=='text'and f['label']=='Other')
+            for plan in({child['key']:['Named subgroup']},{leaf['key']:['Left']},
+                         {root['key']:['Nested set'],leaf['key']:['Left']},
+                         {root['key']:['Nested set'],other['key']:'Synthetic response'}):
+                with self.subTest(family=family,plan=plan),self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(raw,mapping['fields'],plan)
+
+    def test_original_selected_parents_are_preserved_but_cannot_be_silently_cleared(self):
+        for family in('glyph','ff','sdt'):
+            raw=self.form(family,original_selected=True);mapping,groups=self.groups(raw)
+            out=word_v3.fill(raw,mapping['fields'],{groups['Named subgroup']['key']:['Left','Right']})
+            self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),groups['Source items']),[False,False,True])
+            with self.assertRaises(word_v3.V3Failure):
+                word_v3.fill(raw,mapping['fields'],{groups['Source items']['key']:['Alpha'],groups['Named subgroup']['key']:[]})
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_forged_flat_whole_parent_and_relationship_metadata_are_refused(self):
+        raw=self.form();mapping,groups=self.groups(raw);field=groups['Source items']
+        for change in('relation','source','label','kind','context','options','parent','flat','whole'):
+            forged=deepcopy(field)
+            if change=='relation':forged.pop('source_questions')
+            elif change=='source':forged['source_questions'][0]['sources'][0]['fingerprint']='0'*64
+            elif change=='label':forged['label']='Clinical value'
+            elif change=='kind':forged['kind']='choice'
+            elif change=='context':forged['context']='Unrelated'
+            elif change=='options':forged['options'].reverse()
+            elif change=='parent':forged['source_questions'][0]['parent']=groups['Named subgroup']['locator']['target']['boxes'][0]
+            elif change=='flat':
+                forged['locator']['target']['boxes']+=groups['Nested set']['locator']['target']['boxes']+groups['Named subgroup']['locator']['target']['boxes']
+                forged['options']+=['Named subgroup','Other','Left','Right'];forged.pop('source_questions')
+            else:
+                ref=forged['source_questions'][0]['sources'][0];forged['locator'].update(ref)
+                forged['locator']['target']={'type':'cell_append'};forged['kind']='text';forged.pop('source_questions')
+            with self.subTest(change=change),self.assertRaises(word_v3.V3Failure):
+                word_v3.fill(raw,[forged],{forged['key']:'Alpha'if forged['kind']=='choice'else'Synthetic answer'if forged['kind']=='text'else['Alpha']})
+
+    def test_single_conflicting_missing_hidden_and_ambiguous_structure_are_held(self):
+        for config in({'instruction':'Select one.'},{'competing':True},{'hidden':True},{'same_size':True},
+                       {'missing_size':True},{'closing':''},{'instruction':'Please indicate if any items elsewhere apply.'}):
+            with self.subTest(config=config):
+                raw=self.form(**config);mapping,groups=self.groups(raw)
+                self.assertFalse(groups)
+                self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_explicit_all_and_ordinary_initial_or_receipt_captions_remain_usable(self):
+        for instruction in('Select all that apply.','Please indicate if any of the items below are observations.'):
+            for title in('Initial observations','Signed referral received'):
+                raw=self.form(instruction=instruction,title=title);mapping,groups=self.groups(raw)
+                self.assertEqual(len(groups),3)
+                out=word_v3.fill(raw,mapping['fields'],{groups['Source items']['key']:['Alpha','Beta']})
+                self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),groups['Source items']),[True,True,False])
+
+    def test_human_owned_source_never_creates_a_hierarchy_writer(self):
+        for title in('Witness attestation','This area is for Alex Reed to enter the answer:',
+                     'Manager should write this response:','I approve this document.'):
+            raw=self.form(title=title);mapping,groups=self.groups(raw);self.assertFalse(groups)
+            baseline,oldgroups=self.groups(self.form())
+            forged=deepcopy(oldgroups['Source items']);index=word_v3.SlotIndex(word_v3.open_package(raw))
+            slot=index.by_id[forged['locator']['part']+'#'+forged['locator']['slot']]
+            forged['locator']['fingerprint']=word_v3.fingerprint(slot.el);forged.pop('source_questions')
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:['Alpha','Beta']})
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+        for family in('glyph','ff','sdt'):
+            for leaf in('I approve this document','Witness should write this response'):
+                raw=self.form(family,leaf=leaf);mapping,groups=self.groups(raw);self.assertFalse(groups)
+                self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_separate_yes_no_question_and_changed_original_do_not_gain_permission(self):
+        raw=self.form();mapping,groups=self.groups(raw)
+        binary=next(f for f in mapping['fields']if f.get('options')==['Yes','No'])
+        self.assertEqual(binary['kind'],'choice')
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,mapping['fields'],{binary['key']:['Yes','No']})
+        out=word_v3.fill(raw,mapping['fields'],{binary['key']:'Yes'})
+        self.assertEqual(Document(io.BytesIO(raw)).tables[0].cell(0,0)._tc.xml,Document(io.BytesIO(out)).tables[0].cell(0,0)._tc.xml)
+        with self.assertRaises(word_v3.V3Failure):
+            word_v3.fill(self.form(title='Different complete panel'),mapping['fields'],{groups['Source items']['key']:['Alpha']})
+
+    def test_conditional_readback_cannot_drop_source_proof_or_change_printed_prefix(self):
+        raw=self.form();mapping,groups=self.groups(raw)
+        other=next(f for f in mapping['fields']if f['kind']=='text'and f['label']=='Other')
+        plan={groups['Source items']['key']:['Nested set'],groups['Nested set']['key']:['Named subgroup','Other'],
+              groups['Named subgroup']['key']:['Left'],other['key']:'Synthetic response'}
+        out=word_v3.fill(raw,mapping['fields'],plan)
+        before=word_v3.SlotIndex(word_v3.open_package(raw));after=word_v3.SlotIndex(word_v3.open_package(out))
+        for change in('relation','source','owner','context'):
+            forged=deepcopy(other)
+            if change=='relation':forged.pop('source_questions')
+            elif change=='source':forged['source_questions'][0]['source']['fingerprint']='0'*64
+            elif change=='owner':forged['source_questions'][0]['owner_target']['boxes'].pop()
+            else:forged['context']='Unrelated'
+            self.assertIsNone(word_v3.constrained_scalar_value(before,after,forged,True))
+        doc=Document(io.BytesIO(out));p=doc.tables[0].cell(0,0).paragraphs[3]
+        run=next(r for r in p.runs if 'Nested set' in r.text);run.text=run.text.replace('Nested set','Changed set')
+        changed=word_v3.SlotIndex(word_v3.open_package(data(doc)))
+        self.assertIsNone(word_v3.constrained_scalar_value(before,changed,other,True))
+
+
 class ScalarCheckboxAlternatives(unittest.TestCase):
     def form(self, *, family='ff', checked=False, caption='1. Start date:', outer='Required items',
              guidance='', extra='', hidden=False, malformed=False, second=False):
