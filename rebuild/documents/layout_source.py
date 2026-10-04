@@ -43,6 +43,14 @@ def source_elements(root):
         first = first.getnext()
 
 
+UPDATING_RESOURCE_FIELD = re.compile(r"\b(?:INCLUDETEXT|INCLUDEPICTURE|DDE|DDEAUTO|LINK|DATABASE)\b", re.I)
+
+
+def check_field_instruction(text):
+    if UPDATING_RESOURCE_FIELD.search(text):
+        w.fail("An updating resource field cannot be rendered safely.", "layout_unsafe_source")
+
+
 def safety(package):
     """Rendering has a narrower active-resource boundary than ordinary inspection."""
     fonts = set()
@@ -55,10 +63,26 @@ def safety(package):
                 if (rel.get("TargetMode") or "").lower() == "external" and not kind.endswith("/hyperlink"):
                     w.fail("Linked resources cannot be used for layout verification.", "layout_unsafe_source")
         if name.endswith(".xml"):
+            instructions = []
             for node in source_elements(package.tree(name)):
-                if node.tag == w.q("w:instrText") and re.search(
-                        r"\b(?:INCLUDETEXT|INCLUDEPICTURE|DDE|DDEAUTO|LINK|DATABASE)\b", node.text or "", re.I):
-                    w.fail("An updating resource field cannot be rendered safely.", "layout_unsafe_source")
+                if node.tag == w.q("w:fldSimple"):
+                    check_field_instruction(node.get(w.q("w:instr")) or "")
+                if node.tag == w.q("w:fldChar"):
+                    kind = node.get(w.q("w:fldCharType"))
+                    if kind == "begin":
+                        instructions.append({"parts": [], "reading": True})
+                    elif kind in ("separate", "end") and instructions:
+                        check_field_instruction("".join(instructions[-1]["parts"]))
+                        if kind == "end":
+                            instructions.pop()
+                        else:
+                            instructions[-1]["reading"] = False
+                if node.tag == w.q("w:instrText"):
+                    # Comments do not contribute characters; their tails do.
+                    text = "".join(node.itertext())
+                    check_field_instruction(text)
+                    if instructions and instructions[-1]["reading"]:
+                        instructions[-1]["parts"].append(text)
                 if node.tag == w.q("w:rFonts"):
                     fonts.update(node.get(w.q("w:" + key)) for key in ("ascii", "hAnsi", "eastAsia", "cs")
                                  if node.get(w.q("w:" + key)))
@@ -69,6 +93,8 @@ def safety(package):
                 if node.tag.startswith("{http://schemas.openxmlformats.org/drawingml/2006/main}"):
                     if node.get("typeface"):
                         fonts.add(node.get("typeface"))
+            for instruction in instructions:
+                check_field_instruction("".join(instruction["parts"]))
     if len(fonts) > 200 or any(len(font) > 200 or any(ord(c) < 32 for c in font) for font in fonts):
         w.fail("The source font profile exceeds its bounded format.", "layout_unsafe_source")
     return sorted(fonts)

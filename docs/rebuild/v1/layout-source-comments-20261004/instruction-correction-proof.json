@@ -1,0 +1,62 @@
+{
+  "prior_commit": "cf982b0d769de609ac601ce5fdd2aae03c007320",
+  "base_commit": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "source_sha256": "9fa186cc6841f97a7d19c4c25ed3d04f5f668f4ac771828cdf24eb71c687ba32",
+  "test_sha256": "cbbdd83b3a835f6b93254791510bf023bcd096d65204549bfe6530608a398a08",
+  "original_Ops_result": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/layout-resource-refute-20261004T171000Z/result.json",
+    "sha256": "3d8e212516fdcb1d8223d797cb96ed878a05406b25df5cbeacaf4c184be8bebe"
+  },
+  "artifact_manifest": {
+    "instruction-r3/result.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/result.json",
+      "sha256": "6e54160d4c17cd4519669fd2c894d4f45500fd9a349b7eb2b1c5753c6dc222fd"
+    },
+    "instruction-r3/pure-exit.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/pure-exit.json",
+      "sha256": "6441a14d0f42f3574eecabb3efccf7b317d9b0d4d96b2ab3b082e1183d5e1ec8"
+    },
+    "instruction-r3/pure.stdout.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/pure.stdout.log",
+      "sha256": "f1a0161ab8c315fa44fd8b2cea561597145d9c27b794f359463dc88aee20b283"
+    },
+    "instruction-r3/pure.stderr.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/pure.stderr.log",
+      "sha256": "afbecd98f8200f87a666431d8007c05c2417f1a8f0165ab96d18e12563c1f86f"
+    },
+    "instruction-r3/prior-cf982-layout_source.py.source": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/prior-cf982-layout_source.py.source",
+      "sha256": "31ff3f8ef16375011a9c1832e60c9132cf7f9b5cc2786573106e36fe9d251266"
+    },
+    "instruction-r3/additional-complete-field-baseline.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/additional-complete-field-baseline.json",
+      "sha256": "4dad50aac5c90680fd648cfe471746966780511220cba08ec5ce35f9b927f891"
+    },
+    "instruction-r3/simple-attribute.docx": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/simple-attribute.docx",
+      "sha256": "81cdce1f34eb3bbeb740ca00ebbb039d89e03f03c30dd3f26ca6c1921cae5fbf"
+    },
+    "instruction-r3/complex-split.docx": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/instruction-r3/complex-split.docx",
+      "sha256": "47171cdb5b41643f6be5b6e619d7bbc7c1929545c69b4ff9fe763d8cb74ed9cc"
+    },
+    "verify-instructions.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/verify-instructions.py",
+      "sha256": "e3adb19cf0b74dfe4ffcbb967d3ecd6ba73f955fed3b77523fa9bd9eeb94b771"
+    }
+  },
+  "actual_exit": {
+    "actual_child_exit": 0,
+    "timed_out": false,
+    "reaped": true,
+    "elapsed_seconds": 0.8686479439929826,
+    "stdout_sha256": "f1a0161ab8c315fa44fd8b2cea561597145d9c27b794f359463dc88aee20b283",
+    "stderr_sha256": "afbecd98f8200f87a666431d8007c05c2417f1a8f0165ab96d18e12563c1f86f"
+  },
+  "methods": 13,
+  "unchanged_Ops_controls": 19,
+  "additional_actual_source_controls": 2,
+  "exact_P01_sources": 7,
+  "network_attempts": [],
+  "scope": "Pure complete instruction refusal with existing six commands; no external-execution or rendered-layout claim."
+}
