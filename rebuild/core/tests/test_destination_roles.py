@@ -1005,15 +1005,26 @@ class SalvageV3(Walk, V3Fixture, TestCase):
                 template, version = self.uploaded(data=lines(label + ': ______________', 'Plan: ______'),
                                                   name='Synthetic RR1-10 v3 %d' % n)
                 field = self.by_label(version)[label]
-                self.confirm(template, version)          # not a role place: confirmable, as on 43fcf214
+                self.assertEqual(field['kind'], 'signature')
+                self.confirm(template, version)          # Actual v3 hand-signing kind remains confirmable.
                 e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
                 answer = e.answers[field['key']]
                 self.assertEqual((answer['status'], answer['text']), ('missing', ''))
-                self.assertEqual(answer['reason'], destination_roles.ROLE_NOT_GENERATED)
+                self.assertEqual(answer['evidence'], [])
+                self.assertEqual(answer['reason'], generation.V3_NOT_GENERATED_REASON['signature'])
+                from core.tab_review import clinician_identity
+                self.assertFalse(clinician_identity(field))
                 self.assertEqual(self.reviewed(e, version).status_code, 302)
                 self.finalized(e)
                 self.assertEqual(e.status, 'finalized')
-                self.assertNotIn(value, part_text(private_path(e.export_path).read_bytes()))
+                original = private_path(template.original_path).read_bytes()
+                exported = private_path(e.export_path).read_bytes()
+                self.assertNotIn(value, part_text(exported))
+                self.assertNotIn(self.user.get_full_name(), part_text(exported))
+                slot = field['locator']['part'] + '#' + field['locator']['slot']
+                before = word_v3.SlotIndex(word_v3.open_package(original)).by_id[slot]
+                after = word_v3.SlotIndex(word_v3.open_package(exported)).by_id[slot]
+                self.assertEqual(word_v3.fingerprint(before.el), word_v3.fingerprint(after.el))
 
 
 def control_line(before, alias, after):
