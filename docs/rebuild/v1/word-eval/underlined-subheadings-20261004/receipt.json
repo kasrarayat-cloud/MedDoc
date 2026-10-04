@@ -1,0 +1,68 @@
+{
+  "source_base": "fcd68c9b43b0d65b0411d031b16ea66e2b2b104d",
+  "changed_files": {
+    "rebuild/documents/word_v3.py": "684a3c40c42398fb2f4cc2aaaa1c35c93fe4cd6d4de4650eb5a45bba1a50cfad",
+    "rebuild/documents/test_underlined_subheadings.py": "abd6c150f5c3491cba1781a2dcd841aee4dec5cf1b6a4b17e665c0e1729f261e"
+  },
+  "runtime": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05-d16-extra-source-cause-20261004",
+  "seal_sha256": "cb276dae8468211bcd23a534d665a1555a68e2c4b63d3ceaac06660143e8b801",
+  "files": 46,
+  "bytes": 3470346,
+  "original_sha256": "51c6e400e89d631bf81959418c9cc5cc9631bfb3ac741a3bdce5d8f9a1e0273f",
+  "groundtruth_sha256": "834c6c09b07c194bf8da3b776e7a753c2227b306fbcf3d3762f282c5574c483e",
+  "first_wrong_export_sha256": "ace4ad63bb5e3dc1e4fe8b4d14799e0ec7723c1f0856cc4cbce5d449a4e64cba",
+  "fixed_scorer_unchanged_sha256": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+  "source_only_detection": {
+    "n": 55,
+    "ok": 55,
+    "missed": 0,
+    "wrong": 0,
+    "extras": 0,
+    "dup_bad": 0,
+    "strict": true
+  },
+  "before_detection": "55/55 +3extras, strictfalse",
+  "raw_historical_refusals": [
+    {
+      "key": "v3_14",
+      "code": "mapping_mismatch",
+      "message": "This mapping writes into a fixed underlined group heading, not an answer. Reinspect the original and review its separate answer lines before exporting."
+    },
+    {
+      "key": "v3_18",
+      "code": "mapping_mismatch",
+      "message": "This mapping writes into a fixed underlined group heading, not an answer. Reinspect the original and review its separate answer lines before exporting."
+    },
+    {
+      "key": "v3_33",
+      "code": "mapping_mismatch",
+      "message": "This mapping writes into a fixed underlined group heading, not an answer. Reinspect the original and review its separate answer lines before exporting."
+    }
+  ],
+  "two_child_export_sha256": "e5bcb259ee5d400fcf31ae2390565b120f45083aaa9b25a0c0df01358f1fa205",
+  "untargeted_paragraphs_preserved": 79,
+  "raw_parts_preserved": 11,
+  "old_new_empty_byte_identity": true,
+  "affected_methods": 34,
+  "affected_process": {
+    "pid": 3235260,
+    "exit": 0,
+    "wall_s": 99.28691628000524,
+    "timed_out": false,
+    "reaped": true,
+    "source_before": "684a3c40c42398fb2f4cc2aaaa1c35c93fe4cd6d4de4650eb5a45bba1a50cfad",
+    "source_after": "684a3c40c42398fb2f4cc2aaaa1c35c93fe4cd6d4de4650eb5a45bba1a50cfad"
+  },
+  "original_process": {
+    "pid": 3231321,
+    "exit": 0,
+    "wall_s": 1.9763307380053448,
+    "timed_out": false,
+    "reaped": true
+  },
+  "initial_instrument_failure": "Package.read absent; first exported bytes and failed actual exit1 retained; corrected Package.zip.read without app/scorer change",
+  "D05_scope": "read-only; no source field removal or geometry qualification",
+  "new_db_renderer_provider_requests": 0,
+  "whole_document_application_qualified": false,
+  "gate_denominators": "54/60 overall and18/20 holdout unchanged; original failures and previously exposed status retained"
+}

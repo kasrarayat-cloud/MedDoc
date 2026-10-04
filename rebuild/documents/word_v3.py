@@ -1677,6 +1677,7 @@ class Detector:
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
         self.response_header_corners: set[str] = set()
+        self.fixed_subheading_slots: set[str] = set()
         self.box_action_reasons: dict[str, str] = {}
         self.geometry_regions: dict[str, str] = {}
         self.layout_quarantine = None
@@ -1734,8 +1735,48 @@ class Detector:
             # It need not use a Word heading style: e.g. 'Left knee:' over a grid.
             if side_phrase(txt) and txt.endswith(":") and len(txt.split()) <= 6 and "\x00" not in self.ptext(p)[0]:
                 result = True
+            slot = self.index.by_el.get(id(p))
+            if not result and slot is not None and self.fixed_underlined_subheading(slot):
+                result = True
+                self.fixed_subheading_slots.add(slot.id)
         self._is_heading[id(p)] = result
         return result
+
+    def fixed_underlined_subheading(self, slot) -> bool:
+        """A completely underlined caption owns two separate literal-list answer lines.
+
+        The caption itself has no answer gap. Underlining alone, a following
+        blank line or one question cannot establish this hierarchy. Actual XML
+        siblings, rather than a paragraph-only view across tables, own the scope.
+        """
+        if slot.kind != 'p' or not self.tab_source_visible(slot):
+            return False
+        text, pieces = self.ptext(slot.el)
+        if (not text or text != text.strip() or not text.endswith(':')
+                or text.count(':') != 1 or len(text.split()) > MAX_LABEL_WORDS
+                or re.match(r'^[-\u2022]\s', text) or self.list_info(slot.el) is not None
+                or self.blank_spans(text, pieces) or '\x00' in text or BOX in text or CHECKED in text
+                or self.checkbox_source_action(text, governing=True)):
+            return False
+        runs = [r for r in slot.el.iter(R) if any((n.text or '').strip() for n in r.iter(T))]
+        if not runs or any((u := r.find('./' + q('w:rPr') + '/' + q('w:u'))) is None
+                           or u.get(q('w:val'), 'single') not in ('single', 'double') for r in runs):
+            return False
+        children = []
+        node = slot.el.getnext()
+        while node is not None and node.tag == q('w:p'):
+            child = self.index.by_el.get(id(node))
+            if child is None or child.parent is not slot.parent or not self.tab_source_visible(child):
+                break
+            printed, _ = self.ptext(node)
+            match = re.fullmatch(r'\s*-\s+([^:?!\t\n\x00]+):([ \u00a0\u2002\u2003]+)', printed)
+            if (match is None or len(match.group(1).split()) > MAX_LABEL_WORDS
+                    or not re.search(r'[A-Za-z]', match.group(1))
+                    or BOX in printed or CHECKED in printed or self.list_info(node) is not None):
+                break
+            children.append(clean_label(match.group(1)))
+            node = node.getnext()
+        return len(children) >= 2 and len(set(children)) == len(children)
 
     def _compute_headings(self):
         last = {}
@@ -10023,6 +10064,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     role_refusals = role_violations(reader, fields, original_roles)
     fixed_response_headers = [{'place': place, 'start': None, 'end': None}
                               for place in source_detector.response_header_corners]
+    fixed_subheadings = [{'place': place, 'start': None, 'end': None}
+                         for place in source_detector.fixed_subheading_slots]
     unresolved_brackets = [{'place': _place_id(issue['part'], issue['slot']),
                             'start': issue.get('start'), 'end': issue.get('end')}
                            for issue in source_detector.coverage_issues
@@ -10179,6 +10222,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if any(reader.touches(place, region) for place in reader.of(field) for region in fixed_response_headers):
             fail("This mapping writes into fixed response-column header spacing, not an answer. "
                  "Reinspect the original and review the row's checkbox choices before exporting.", "mapping_mismatch")
+        if any(reader.touches(place, region) for place in reader.of(field) for region in fixed_subheadings):
+            fail("This mapping writes into a fixed underlined group heading, not an answer. "
+                 "Reinspect the original and review its separate answer lines before exporting.", "mapping_mismatch")
         if any(reader.touches(place, region) for place in reader.of(field) for region in unresolved_brackets):
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
