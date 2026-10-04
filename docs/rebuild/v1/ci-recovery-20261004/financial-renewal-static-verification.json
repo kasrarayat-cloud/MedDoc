@@ -1,0 +1,43 @@
+{
+  "artifacts": {
+    "COST-ADDENDUM.PENDING.md": "f18e9d07c502d55751161f26afa49ff7ec6ed6b6a597c3ab71645fe57e5e3918",
+    "NEW-DEPENDENCY-GUARD.PENDING.patch": "dd2ffff4bcc788f36904c61ec16a8d3992768a9d91b8bbce8bc450a8b08a2561",
+    "RENEWAL-GATE.PREPARED.md": "6b8d03de58b5a38e299df3d377a42d19d8456a79ec33ff5d6f746917ce1c957d",
+    "SCANNER-RENEWAL.PENDING.patch": "6f4f60a085ea7e35e22bd5ac15fe58a90b371691fdff103e9f1c60499b5a9036",
+    "compiler-send-quote-reserve-settle.PREPARED.json": "e79c1961ea2828be97a847ea91e4eb060975709fb2103d3e3b9de636d1be0bac",
+    "direct-import-dependency-diff.PREPARED.json": "496c212a4fa27a91be591ffdab13af965c6cd000239a6d95c968c16c72861221",
+    "new-clinical-dependency.PREPARED.json": "0f57c1d9a2a5de03011533cac974600d4e2b802808e14014fc72e9bb5de5f9fd",
+    "prepare-bindings.py": "5b18faa5b00adacf1257604dc99c0fbf36a71c5a50a52347eba1bdf17548aa83",
+    "prepare-direct-dependencies.py": "9872e983b14b5e7c354aaaf073847c49227f2a4e3543a02d0502e4de8e9d406b",
+    "selector-packets.PREPARED.json": "6a1d93fe7fcda8625d2051ac45e376c2e646c3de569c0a4fd0fd2dac4cb269b8",
+    "source-diff-inventory.json": "0525f0ba479184c0fca7595468ebb5f62970d3b40711d9b16ff90cc4da90b898",
+    "source-extension-7ccd.json": "788452bf0e98d538f76b4fd8a55833a5f1e224f66d17a80a10046b1ff3f54dc1"
+  },
+  "complete_direct_import_comparisons": 33,
+  "credential_reads": 0,
+  "current_candidate_qualified": false,
+  "database_queries": 0,
+  "direct_project_dependency_paths": 25,
+  "exact_selectors_exist_by_ast": 119,
+  "final_source_rebinding_required": true,
+  "fingerprints_changed": false,
+  "functions_bound_by_source_bytes": 32,
+  "invoice_reconciliation": false,
+  "new_dependency_unfinished_and_unqualified": true,
+  "packet_counts": {
+    "historical_profiles_wires_and_metering": 67,
+    "persisted_quotes_holds_settlement_and_payers": 28,
+    "pure_scanner_and_prepared_witness": 24
+  },
+  "pending_final_source_and_prospective_capture": true,
+  "protected_runtime_evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/financial-renewal-preparation-6da3b3d6-20261004",
+  "provider_requests": 0,
+  "quote_view_extensions": 3,
+  "selector_and_binding_snapshot": "7ccdcb6e75241685e90519774b909ecbd5b1e827",
+  "selector_file_sha256": "1ffca6f01a6242046e5c26c0582883612f2d1bcb7a1fede757c547161384e0f9",
+  "service_actions": 0,
+  "source_diff_snapshot": "6da3b3d65c7a9172b1fc1235c027d81d7fa06b89",
+  "source_proof_renewal_or_test_execution_performed": false,
+  "status": "static_preparation_verified",
+  "tests_executed": 0
+}
