@@ -1,0 +1,384 @@
+{
+  "source": "b44e049f5527601f8fd21c69157354da0d0954fa",
+  "rows": [
+    {
+      "notes": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.\nThat statement was about the patient's brother.",
+      "target": {
+        "key": "v3_25",
+        "label": "In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?",
+        "kind": "text",
+        "context": "Part B > Social Supervisor\u2019s Report > Relationships > Related preceding question: If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[5]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0,
+            "shape": "after_label"
+          },
+          "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "source_questions": [
+          {
+            "source": {
+              "part": "word/document.xml",
+              "slot": "b/p[97]",
+              "fingerprint": "5054841d6d719424db1a9edd0e862bc12019407f5db40e5d266222b9b86c7fd9"
+            },
+            "question": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+            "relation": "immediate_previous_question",
+            "reference": {
+              "part": "word/document.xml",
+              "slot": "b/p[99]",
+              "fingerprint": "5d7fb6f4812a21c477a1d48e94ad771d62f99b9fe14262a747c52e2095d4b665"
+            }
+          }
+        ]
+      },
+      "answer": {
+        "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "start": 0,
+            "end": 155
+          }
+        ],
+        "reviewed": false,
+        "ordinary_relation": ".eJxVkNGKhDAMRf-lzwq2VTv6K4NIbONQtpNKW2d3GPz3aWdlYV8CuffmJOTFtKcUQCc2Mh-MJQjPerXoTB3QQbKeYv1oWcUWS9m-5ZxpOG-VQNGAEhxX6NVFLBKHhrdtKzveX3gnVy5BSGWwG4xYuFSDBKV0DzLD7t6gyyjtYDdYR0-Eqe6y84XPrD_kLEqn_X3DZJMPkY3XU57-dLrNfk_bnq9_neZ45dNRsYgOdbm-OP-ZO9k0WxM_0YKi1dnygBVcxIr5rcydid9Awp9U9gPFbwyZkX-BG-ZCiU3H8QZChWh0:1xDQX2:rTW2M5Y_8xTL8iWBe1lDFmhSYNxzm3f4UVc9WYl_nd8"
+      },
+      "page": {
+        "key": "v3_25",
+        "label": "In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?",
+        "kind": "text",
+        "context": "Part B > Social Supervisor\u2019s Report > Relationships > Related preceding question: If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[5]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0,
+            "shape": "after_label"
+          },
+          "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "source_questions": [
+          {
+            "source": {
+              "part": "word/document.xml",
+              "slot": "b/p[97]",
+              "fingerprint": "5054841d6d719424db1a9edd0e862bc12019407f5db40e5d266222b9b86c7fd9"
+            },
+            "question": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+            "relation": "immediate_previous_question",
+            "reference": {
+              "part": "word/document.xml",
+              "slot": "b/p[99]",
+              "fingerprint": "5d7fb6f4812a21c477a1d48e94ad771d62f99b9fe14262a747c52e2095d4b665"
+            }
+          }
+        ],
+        "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "start": 0,
+            "end": 155
+          }
+        ],
+        "reviewed": false,
+        "ordinary_relation": ".eJxVkNGKhDAMRf-lzwq2VTv6K4NIbONQtpNKW2d3GPz3aWdlYV8CuffmJOTFtKcUQCc2Mh-MJQjPerXoTB3QQbKeYv1oWcUWS9m-5ZxpOG-VQNGAEhxX6NVFLBKHhrdtKzveX3gnVy5BSGWwG4xYuFSDBKV0DzLD7t6gyyjtYDdYR0-Eqe6y84XPrD_kLEqn_X3DZJMPkY3XU57-dLrNfk_bnq9_neZ45dNRsYgOdbm-OP-ZO9k0WxM_0YKi1dnygBVcxIr5rcydid9Awp9U9gPFbwyZkX-BG-ZCiU3H8QZChWh0:1xDQX2:rTW2M5Y_8xTL8iWBe1lDFmhSYNxzm3f4UVc9WYl_nd8"
+      },
+      "final_decisions": [],
+      "ordinary_read": {
+        "ids": [
+          1
+        ],
+        "warnings": [],
+        "valid": true,
+        "value": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+        "self_reference": false,
+        "syntax_ids": [
+          1
+        ],
+        "elicited_ids": [
+          1
+        ],
+        "shared_ids": [],
+        "owned_subject_ids": []
+      },
+      "existing_backward_attribution": true,
+      "tail_parse": [
+        {
+          "text": "That",
+          "lemma": "that",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "statement",
+          "morph": "Number=Sing|PronType=Dem"
+        },
+        {
+          "text": "statement",
+          "lemma": "statement",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "was",
+          "morph": "Number=Sing"
+        },
+        {
+          "text": "was",
+          "lemma": "be",
+          "pos": "AUX",
+          "tag": "VBD",
+          "dep": "ROOT",
+          "head": "was",
+          "morph": "Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin"
+        },
+        {
+          "text": "about",
+          "lemma": "about",
+          "pos": "ADP",
+          "tag": "IN",
+          "dep": "prep",
+          "head": "was",
+          "morph": ""
+        },
+        {
+          "text": "the",
+          "lemma": "the",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient",
+          "morph": "Definite=Def|PronType=Art"
+        },
+        {
+          "text": "patient",
+          "lemma": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "poss",
+          "head": "brother",
+          "morph": "Number=Sing"
+        },
+        {
+          "text": "'s",
+          "lemma": "'s",
+          "pos": "PART",
+          "tag": "POS",
+          "dep": "case",
+          "head": "patient",
+          "morph": ""
+        },
+        {
+          "text": "brother",
+          "lemma": "brother",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "pobj",
+          "head": "about",
+          "morph": "Number=Sing"
+        },
+        {
+          "text": ".",
+          "lemma": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "was",
+          "morph": "PunctType=Peri"
+        }
+      ]
+    },
+    {
+      "notes": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.\nThe patient denies making that report.",
+      "target": {
+        "key": "v3_25",
+        "label": "In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?",
+        "kind": "text",
+        "context": "Part B > Social Supervisor\u2019s Report > Relationships > Related preceding question: If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[5]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0,
+            "shape": "after_label"
+          },
+          "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "source_questions": [
+          {
+            "source": {
+              "part": "word/document.xml",
+              "slot": "b/p[97]",
+              "fingerprint": "5054841d6d719424db1a9edd0e862bc12019407f5db40e5d266222b9b86c7fd9"
+            },
+            "question": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+            "relation": "immediate_previous_question",
+            "reference": {
+              "part": "word/document.xml",
+              "slot": "b/p[99]",
+              "fingerprint": "5d7fb6f4812a21c477a1d48e94ad771d62f99b9fe14262a747c52e2095d4b665"
+            }
+          }
+        ]
+      },
+      "answer": {
+        "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "start": 0,
+            "end": 155
+          }
+        ],
+        "reviewed": false,
+        "ordinary_relation": ".eJxVkNFuwyAMRf-F5yAVCEnJr1RRRMBUaBQicLpVVf59sEWT9mLJ914fW34TkyJmbZBMJGXro84v6jwESzMEjT7FQp896cjqY7XvNWeuhl-UGpm7OAnCDEy5Veh-cKuWg-SSXY3hq-hZrxXXoxm1ZTAYq4TkSooKeyQLoaGC3i3QkmIEpLI6H_Cq-lMsvHUmPTZAjykXMt1Oef7T431JO257vf59mtONzUdHCgQw7frm_Gfu0ePibfmJNlR0wbcHOB0KdCRtbe5M_AYQvrDt17F8Qq6M-gvYoJaIZD6Ob3Cyaag:1xDQX5:QLjIfO6ucYv_CLgmIOGRqRaDmVvUMsG4bZjPEfixhjo"
+      },
+      "page": {
+        "key": "v3_25",
+        "label": "In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?",
+        "kind": "text",
+        "context": "Part B > Social Supervisor\u2019s Report > Relationships > Related preceding question: If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/p[5]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0,
+            "shape": "after_label"
+          },
+          "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "source_questions": [
+          {
+            "source": {
+              "part": "word/document.xml",
+              "slot": "b/p[97]",
+              "fingerprint": "5054841d6d719424db1a9edd0e862bc12019407f5db40e5d266222b9b86c7fd9"
+            },
+            "question": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+            "relation": "immediate_previous_question",
+            "reference": {
+              "part": "word/document.xml",
+              "slot": "b/p[99]",
+              "fingerprint": "5d7fb6f4812a21c477a1d48e94ad771d62f99b9fe14262a747c52e2095d4b665"
+            }
+          }
+        ],
+        "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "start": 0,
+            "end": 155
+          }
+        ],
+        "reviewed": false,
+        "ordinary_relation": ".eJxVkNFuwyAMRf-F5yAVCEnJr1RRRMBUaBQicLpVVf59sEWT9mLJ914fW34TkyJmbZBMJGXro84v6jwESzMEjT7FQp896cjqY7XvNWeuhl-UGpm7OAnCDEy5Veh-cKuWg-SSXY3hq-hZrxXXoxm1ZTAYq4TkSooKeyQLoaGC3i3QkmIEpLI6H_Cq-lMsvHUmPTZAjykXMt1Oef7T431JO257vf59mtONzUdHCgQw7frm_Gfu0ePibfmJNlR0wbcHOB0KdCRtbe5M_AYQvrDt17F8Qq6M-gvYoJaIZD6Ob3Cyaag:1xDQX5:QLjIfO6ucYv_CLgmIOGRqRaDmVvUMsG4bZjPEfixhjo"
+      },
+      "final_decisions": [],
+      "ordinary_read": {
+        "ids": [
+          1
+        ],
+        "warnings": [],
+        "valid": true,
+        "value": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+        "self_reference": false,
+        "syntax_ids": [
+          1
+        ],
+        "elicited_ids": [
+          1
+        ],
+        "shared_ids": [],
+        "owned_subject_ids": []
+      },
+      "existing_backward_attribution": false,
+      "tail_parse": [
+        {
+          "text": "The",
+          "lemma": "the",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient",
+          "morph": "Definite=Def|PronType=Art"
+        },
+        {
+          "text": "patient",
+          "lemma": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "denies",
+          "morph": "Number=Sing"
+        },
+        {
+          "text": "denies",
+          "lemma": "deny",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "denies",
+          "morph": "Number=Sing|Person=3|Tense=Pres|VerbForm=Fin"
+        },
+        {
+          "text": "making",
+          "lemma": "make",
+          "pos": "VERB",
+          "tag": "VBG",
+          "dep": "xcomp",
+          "head": "denies",
+          "morph": "Aspect=Prog|Tense=Pres|VerbForm=Part"
+        },
+        {
+          "text": "that",
+          "lemma": "that",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "report",
+          "morph": "Number=Sing|PronType=Dem"
+        },
+        {
+          "text": "report",
+          "lemma": "report",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "making",
+          "morph": "Number=Sing"
+        },
+        {
+          "text": ".",
+          "lemma": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "denies",
+          "morph": "PunctType=Peri"
+        }
+      ]
+    }
+  ],
+  "provider_calls": 0,
+  "DB_calls": 0,
+  "elapsed_seconds": 3.6852300120081054
+}

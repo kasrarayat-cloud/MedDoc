@@ -568,6 +568,48 @@ def own_heading_reference(reading, field, chosen, related, literal_ids):
         or uid in reading.get('confirmed_patient',()) or uid in literal_ids for uid in chosen)
 
 
+def elicited_reference_holds(reading, field, elicited_ids):
+    """A source pointer cannot be independent of the reported assertion.
+
+    Reuse the full-source bearer guard, then retain explicit denial of a
+    pointed record assertion or its creation. Reading/receiving another
+    document is not a retraction of what the patient said.
+    """
+    from . import reviewed_source, v3_syntax, v3_actors as a
+    docs = v3_syntax.docs(u['quote'] for u in reading['units'])
+    labels = v3_syntax.docs([field['label']])
+    if docs is None or labels is None or labels[0] is None or any(doc is None for doc in docs):
+        return True
+    selected = [u for u in reading['units'] if u['id'] in elicited_ids]
+    if reviewed_source.backward_attribution(reading, selected, docs, labels[0]):
+        return True
+    for unit, doc in zip(reading['units'], docs):
+        if unit['id'] in elicited_ids:
+            continue
+        for target in doc:
+            if (target.pos_ != 'NOUN' or target.dep_ != 'dobj'
+                    or not (g.V3_RECORD_REFERENCE.fullmatch(target.text) or a._lemma(target) == 'report')
+                    or not any('Dem' in t.morph.get('PronType') or 'Def' in t.morph.get('Definite')
+                               for t in target.children if t.dep_ == 'det')
+                    or any(t.dep_ == 'poss' for t in target.children)):
+                continue
+            action = target.head
+            # A direct denial of that assertion, or denial of making it.
+            # The closed creation complement cannot borrow a separate read,
+            # request or appointment action merely because it names a report.
+            if a._lemma(action) == 'deny':
+                denial = action
+            elif a._lemma(action) == 'make' and action.dep_ in ('xcomp', 'ccomp') and a._lemma(action.head) == 'deny':
+                denial = action.head
+            elif a._lemma(action) == 'make' and a._negates(action):
+                return True
+            else:
+                continue
+            if not a._negates(denial):
+                return True
+    return False
+
+
 def read(reading, label, evidence, record, *, text=None, field_key=None):
     """One revalidation on generation, review, save and finalization."""
     empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False,
@@ -658,6 +700,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         literal_ids = complete_ids(field, ordered, literal_reading)
         elicited_ids = {uid for uid in literal_ids
                         if (g.question_key(label), uid) in literal_reading['_literal_elicited']}
+        if elicited_ids and elicited_reference_holds(reading, field, elicited_ids):
+            return refused
         from . import reviewed_source
         reviewed_ids = reviewed_source.complete_ids(reading, field, ordered)
         literal_ids |= reviewed_ids

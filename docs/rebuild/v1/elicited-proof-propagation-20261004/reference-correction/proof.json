@@ -1,0 +1,109 @@
+{
+  "base": "b44e049f5527601f8fd21c69157354da0d0954fa",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-reference-b44e049f",
+  "source_hashes": {
+    "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+    "rebuild/core/v3_field_relations.py": "88c197b1f460c262b270ae33e946c2c256bfc96af2df98a4c3fdc3e0a66107ab",
+    "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0",
+    "rebuild/core/tests/test_elicited_source_reference.py": "bf4afdc5ae131d8450d5d5661dbe92e20bffaf7d02d4dc705b2801fbe905718d"
+  },
+  "files": [
+    {
+      "name": "baseline-b44-two-concrete-failures.json",
+      "sha256": "5abecf9e882d23bb633e16ca5525dba83f5991339f8def220ac2c2d44dec6344",
+      "bytes": 15346
+    },
+    {
+      "name": "corrected-two-concrete-captures.json",
+      "sha256": "3bbccdd3d6baa40f3c8e8993776022b8dd6317e01589f27ba0e74b7035d6a22e",
+      "bytes": 20919
+    },
+    {
+      "name": "corrected-two-concrete-stale-final-r2.json",
+      "sha256": "fd16015dae477df8c32d2074fa3f5e9f4f50d05242c1012473eeb7704cab475a",
+      "bytes": 29097
+    },
+    {
+      "name": "result-r1.json",
+      "sha256": "c5f096eba639b7e29aff604c024f03bacb2856ad777134a9c89e8288803e60ba",
+      "bytes": 1263
+    },
+    {
+      "name": "child-result-r1.json",
+      "sha256": "b3d11eae765288c7754d9a2a12d2e463ee511aba389933a3bf9095e525538038",
+      "bytes": 431
+    },
+    {
+      "name": "stderr-r1.log",
+      "sha256": "7a52d8bbdfccc749fbadfa54d7e1e1a25f39a487a99bafe3f6dcadffd4fed21a",
+      "bytes": 3371
+    },
+    {
+      "name": "priced-source-inventory.json",
+      "sha256": "db98ecf340064ecc2a7ae39e8b5d0994576644b130139388da1b0936b98fc8ce",
+      "bytes": 10628
+    }
+  ],
+  "changed_priced_ASTs": [
+    {
+      "path": "core/v3_field_relations.py",
+      "base_bytes": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "new_bytes": "88c197b1f460c262b270ae33e946c2c256bfc96af2df98a4c3fdc3e0a66107ab",
+      "base_ast": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+      "new_ast": "a063524ce25b757ee85c1ebb1b5db4fd1c76191916b7943979c419a7ab73a667",
+      "changed_definitions": [
+        {
+          "name": "elicited_reference_holds",
+          "base_line": null,
+          "new_line": 571,
+          "base_ast": null,
+          "new_ast": "7fca3b27ecefb3f7b0e6af9a86b7532dbfb3830be588769beff075c6c606b082"
+        },
+        {
+          "name": "read",
+          "base_line": 571,
+          "new_line": 613,
+          "base_ast": "6c6a034e8d4f378f56861a90535e11da77b24698e645711a058fb3b4785285a9",
+          "new_ast": "9fe8d0b5405640cb796c9eb8f04998ff942f3e8e73048f948ba75f6587c77ede"
+        }
+      ],
+      "module_ast_equal": false
+    },
+    {
+      "path": "core/generation.py",
+      "base_bytes": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "new_bytes": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+      "base_ast": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "new_ast": "840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227",
+      "changed_definitions": [
+        {
+          "name": "v3_added_causes",
+          "base_line": 3437,
+          "new_line": 3438,
+          "base_ast": "c9f119db0fde46fcbaf0a6d1caf9480774a5294b7da427df90d46cc08cc6bde2",
+          "new_ast": "8abf74c49e8fdfa10cdfebdb56863ed5c88bb37bab856cb70bbc4c3d909d04a8"
+        },
+        {
+          "name": "v3_preceding_warnings",
+          "base_line": 3331,
+          "new_line": 3331,
+          "base_ast": "1dd37a32cbfa9a4a8668a0c32acc3ae8e5c2cda79dcb826e0d8d888a39ce710b",
+          "new_ast": "ddef1f46fdedfabcc52d9c635045d6bd34811a562f239186a79feea83c42d900"
+        },
+        {
+          "name": "v3_relation_causes",
+          "base_line": 3795,
+          "new_line": 3797,
+          "base_ast": "f520dc5a8687b7a6b4794add11d286d0b0a23aa01385a0f76c58c1eadcc79ecd",
+          "new_ast": "d07a857fc2c8a73417a58b95c0abd46e7e71813a4811dfb7fa3d1ac1038d5484"
+        }
+      ],
+      "module_ast_equal": false
+    }
+  ],
+  "accepted_pins_unchanged": true,
+  "provider_calls": 0,
+  "DB_calls": 0,
+  "renderer_calls": 0,
+  "scope": "Source-reference safety correction after unsafe finished-b44 refutation; exact original failures remain preserved."
+}
