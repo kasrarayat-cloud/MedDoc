@@ -1676,6 +1676,7 @@ class Detector:
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
+        self.response_header_corners: set[str] = set()
         self.box_action_reasons: dict[str, str] = {}
         self.geometry_regions: dict[str, str] = {}
         self.layout_quarantine = None
@@ -1825,8 +1826,13 @@ class Detector:
                            or self.box_units(p) or self.blank_spans(*self.ptext(p.el))
                            for p in label.children)):
                 break
-            if any(not self.is_box_cell(c) or not list(self.own_paragraphs(c))
-                   or any(not self.tab_source_visible(p) for p in self.own_paragraphs(c)) for c in body[1:]):
+            def one_response_box(cell):
+                paras = list(self.own_paragraphs(cell))
+                return (bool(paras) and all(self.tab_source_visible(p)
+                                           and not self.blank_spans(*self.ptext(p.el)) for p in paras)
+                        and "".join(self.ptext(p.el)[0] for p in paras).strip() in (BOX, CHECKED)
+                        and sum(len(self.box_units(p)) for p in paras) == 1)
+            if any(not one_response_box(c) for c in body[1:]):
                 break
             complete += 1
         if complete >= 2:
@@ -6423,6 +6429,7 @@ class Detector:
                 if corner is not None:
                     self.claimed.update(id(node) for node in corner.el.iter())
                     self.protected_regions.add(corner.id)
+                    self.response_header_corners.add(corner.id)
                     self.notes.append("The empty corner at " + corner.id +
                                       " is fixed spacing above this table's response columns, not an answer. "
                                       "Use each row's checkbox choices; reinspect an older mapping that writes here.")
@@ -9941,6 +9948,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     original_roles = _role_reading(package, retained_areas=relation_areas)[0]
     reader = _PlaceReader(index)
     role_refusals = role_violations(reader, fields, original_roles)
+    fixed_response_headers = [{'place': place, 'start': None, 'end': None}
+                              for place in source_detector.response_header_corners]
     unresolved_brackets = [{'place': _place_id(issue['part'], issue['slot']),
                             'start': issue.get('start'), 'end': issue.get('end')}
                            for issue in source_detector.coverage_issues
@@ -10094,6 +10103,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         answer = answers.get(field["key"])
         if answer is None or answer == "" or answer == []:
             continue
+        if any(reader.touches(place, region) for place in reader.of(field) for region in fixed_response_headers):
+            fail("This mapping writes into fixed response-column header spacing, not an answer. "
+                 "Reinspect the original and review the row's checkbox choices before exporting.", "mapping_mismatch")
         if any(reader.touches(place, region) for place in reader.of(field) for region in unresolved_brackets):
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")

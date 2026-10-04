@@ -84,7 +84,8 @@ class EmptyCornerMatrix(unittest.TestCase):
                                    contract='v3', fingerprint=w.fingerprint(slot.el)))
         for fields in ([header], [*mapping['fields'], header]):
             with self.subTest(fields=len(fields)):
-                with self.assertRaises(w.V3Failure): w.fill(original, fields, {'historic_header': 'Yes'})
+                with self.assertRaisesRegex(w.V3Failure, 'fixed response-column header spacing.*Reinspect'):
+                    w.fill(original, fields, {'historic_header': 'Yes'})
                 self.assertEqual(w.fill(original, fields, {}), original)
         self.assertTrue(any('fixed spacing' in note and 'reinspect' in note for note in mapping['notes']))
 
@@ -94,11 +95,13 @@ class EmptyCornerMatrix(unittest.TestCase):
         def merged_header(doc, table): table.cell(0, 1).merge(table.cell(0, 2))
         def merged_body(doc, table): table.cell(1, 1).merge(table.cell(2, 1))
         def extra_control(doc, table): table.cell(1, 1).paragraphs[0].add_run(' ☐')
+        def extra_unprinted_control(doc, table): native_box(table.cell(1, 1).paragraphs[0], 'ff')
         def marked_corner(doc, table): table.cell(0, 0).paragraphs[0].runs[0].underline = True
         variants = [('one row', dict(labels=('Observation alpha',))),
                     ('duplicate headers', dict(headers=('Yes', 'Yes', 'Refused'))),
                     ('independent fields', dict(headers=('Name', 'Date', 'Signature'))),
-                    *[(fn.__name__, dict(mutate=fn)) for fn in (hide_header, hidden_box, merged_header, merged_body, extra_control, marked_corner)]]
+                    *[(fn.__name__, dict(mutate=fn)) for fn in (hide_header, hidden_box, merged_header, merged_body,
+                                                              extra_control, extra_unprinted_control, marked_corner)]]
         for name, kwargs in variants:
             with self.subTest(name=name):
                 original = form(**kwargs); detector = w.Detector(w.open_package(original))
