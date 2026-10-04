@@ -148,6 +148,22 @@ class ReviewedProcedureSource(SimpleTestCase):
                     self.assertEqual(r.validated(result)[key]['status'], 'conflict')
         self.check(FINDINGS, 'v3_2', [FINDINGS])
 
+    def test_distinct_objects_and_appointments_do_not_reassign_the_report(self):
+        for key, source in (('v3_4', EXTENT), ('v3_6', FINDINGS), ('v3_11', RECOMMENDATION)):
+            for tail in ('The appointment is with the clinician next week.',
+                         'The equipment belongs to the doctor.',
+                         'The bottle belongs to her mother.',
+                         'This report was reviewed by her mother.',
+                         'This equipment belongs to the doctor.',
+                         'This bottle belongs to her mother.'):
+                with self.subTest(key=key, tail=tail):
+                    self.check(source+' '+tail, key, [source], 'supported')
+
+    def test_preceding_annotation_bearer_still_governs_reviewed_source(self):
+        for key, source in (('v3_4', EXTENT), ('v3_6', FINDINGS), ('v3_11', RECOMMENDATION)):
+            with self.subTest(key=key):
+                self.check('This report describes the doctor. '+source, key, [source])
+
     def test_no_printed_context_still_requires_review_and_literal_current_source(self):
         fields = copy.deepcopy(CASE['fields'])
         for field in fields:

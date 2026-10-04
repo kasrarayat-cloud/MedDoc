@@ -6,7 +6,7 @@ another person, a quotation or a clinical qualifier into the encounter patient.
 """
 
 
-def backward_attribution(reading, selected, docs):
+def backward_attribution(reading, selected, docs, label_doc):
     """A later pointer assigning its referenced source to another bearer.
 
     The pointer's grammatical role supplies the backward edge, not the mere
@@ -17,11 +17,13 @@ def backward_attribution(reading, selected, docs):
     from . import generation as g, v3_actors as a
     import re
     chosen = {u['id'] for u in selected}
-    first = min((u['start'] for u in selected), default=None)
-    if first is None:
+    if label_doc is None:
+        return True
+    label_words = {a._lemma(t) for t in label_doc if t.pos_ in ('NOUN', 'ADJ')}
+    if not chosen:
         return False
     for unit, doc in zip(reading['units'], docs):
-        if unit['id'] in chosen or unit['start'] <= first:
+        if unit['id'] in chosen:
             continue
         if doc is None:
             return True
@@ -29,6 +31,17 @@ def backward_attribution(reading, selected, docs):
             if target.pos_ not in ('NOUN', 'PRON') or target.dep_ not in ('nsubj', 'nsubjpass'):
                 continue
             if a.names_person(target) or a.names_carer(target) or a.this_patient(target):
+                continue
+            # A definite bottle, owned equipment or timed appointment names
+            # its own object/event. The backward theme must actually name a
+            # source annotation or this exact original destination. The fixed
+            # nominal reporting head and the existing record grammar supply
+            # annotation meaning; determiners alone do not supply it.
+            theme_words = {a._lemma(t) for t in target.subtree if t.pos_ in ('NOUN', 'ADJ')}
+            annotation = bool(target.pos_ == 'NOUN'
+                and (g.V3_RECORD_REFERENCE.fullmatch(target.text) or a._lemma(target) == 'report'))
+            destination = bool(label_words and theme_words == label_words)
+            if not annotation and not destination and target.pos_ != 'PRON':
                 continue
             pointer = any('Dem' in t.morph.get('PronType') or 'Def' in t.morph.get('Definite')
                 or re.fullmatch(g.SCOPE_POINTERS, t.text, re.I) for t in target.subtree)
@@ -77,7 +90,7 @@ def complete_ids(reading, field, ordered):
     labels = v3_syntax.docs([field['label']])
     if docs is None or labels is None:
         return set()
-    if backward_attribution(reading, ordered, docs):
+    if backward_attribution(reading, ordered, docs, labels[0]):
         return set()
     # An abstract clinical annotation entered in error retracts its source.
     # A bounded numeric correction (for example the earlier pain score) is not
