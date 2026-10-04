@@ -123,7 +123,7 @@ class Transfer(V3Fixture, TestCase):
                 self.assertEqual(params,voice['request']['params'])
                 dump(folder,'fresh-transcription-submission.json',{'sha256':sha(raw),'submitted':submitted,'params':params,
                      'cached_response_sha256':sha((voice['folder']/'provider-response.json').read_bytes()),'simulated':True})
-                return (voice['raw'],Decimal('0'),dict(submitted,duration_seconds=str(voice['response']['metadata']['duration'])),
+                return (voice['raw'],Decimal('0'),dict(submitted,duration_seconds=str(voice['response']['body_json']['metadata']['duration'])),
                     {'synthetic_cached_response':True},'synthetic-cached-deepgram',f'fixture-cached-asr-{attempt-1:03}',True)
             with patch.dict(os.environ,{'DEEPGRAM_API_KEY':'synthetic-offline-transfer-not-a-key',
                     'QUILLMD_DEEPGRAM_RATE_PER_MINUTE':'0.0043','QUILLMD_DEEPGRAM_RATE_PER_SECOND':''}):
@@ -133,6 +133,7 @@ class Transfer(V3Fixture, TestCase):
                 self.assertEqual(response.status_code,302)
                 with patch('core.jobs.submit_transcription',side_effect=transcription): self.assertTrue(run_one())
             asr=Job.objects.get(kind='transcription',encounter=encounter)
+            dump(folder,'fresh-ASR-worker-state.json',{'job':list(Job.objects.filter(pk=asr.pk).values()),'receipts':list(ProviderReceipt.objects.filter(job=asr).values()),'reservations':list(Reservation.objects.filter(job=asr).values()),'usage':list(Usage.objects.filter(job=asr).values())})
             self.assertEqual(asr.state,'succeeded',asr.error)
             raw_result=private_path(asr.result_path).read_bytes();(folder/'fresh-raw-transcription-result.json').write_bytes(raw_result)
             encounter.refresh_from_db()

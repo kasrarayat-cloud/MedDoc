@@ -1,0 +1,329 @@
+{
+  "source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "14_typed_actual_route_transfer": true,
+  "gold_outcomes": {
+    "supported_correct": 35,
+    "held_correct": 40,
+    "over_held": 1
+  },
+  "desired_supported_denominator": 36,
+  "correct_hold_denominator": 40,
+  "unsafe_outputs": 0,
+  "scope": "Exact cached output/source equality preserves prior gold adjudication; no new provider sends. Current original/map admission and actual route/export exercised. Voice transfer remains incomplete after preserved harness error.",
+  "rows": [
+    {
+      "attempt": 2,
+      "case": "N01",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 7,
+        "conflict": 1,
+        "missing": 3
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 3,
+        "over_held": 1,
+        "supported_correct": 7
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+      "old_export_sha256": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 3,
+      "case": "N02",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 2,
+        "conflict": 0,
+        "missing": 1
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 1,
+        "supported_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "394ebf28b891bbdde3487f04875b9f11539e0ebf2e36f2f805c725b3b0c2454a",
+      "old_export_sha256": "394ebf28b891bbdde3487f04875b9f11539e0ebf2e36f2f805c725b3b0c2454a",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 4,
+      "case": "N03",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 2,
+        "conflict": 0,
+        "missing": 0
+      },
+      "original_gold_verdict_counts": {
+        "supported_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "34f13d96b2586a7494ef37141b663ba69aa93d015f4e182fad27cd55c6195ea3",
+      "old_export_sha256": "34f13d96b2586a7494ef37141b663ba69aa93d015f4e182fad27cd55c6195ea3",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 5,
+      "case": "N04",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 7,
+        "conflict": 2,
+        "missing": 2
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 4,
+        "supported_correct": 7
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "ba9a94e751d5602f37311edd841e0a9a831a62b5456360680ab42b97b62953e2",
+      "old_export_sha256": "ba9a94e751d5602f37311edd841e0a9a831a62b5456360680ab42b97b62953e2",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 6,
+      "case": "N05",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 7,
+        "conflict": 2,
+        "missing": 2
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 4,
+        "supported_correct": 7
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "bc967100f1cdcaec1a3f7f590bdf22f27194fe4e1da6840a74ef3d7b768832fd",
+      "old_export_sha256": "bc967100f1cdcaec1a3f7f590bdf22f27194fe4e1da6840a74ef3d7b768832fd",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 7,
+      "case": "N06",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 2,
+        "conflict": 1,
+        "missing": 8
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 9,
+        "supported_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "0c22eb73d58085d9bdc4efe37fda9871df28aa29b551891dc8202fc5e9f9ea96",
+      "old_export_sha256": "0c22eb73d58085d9bdc4efe37fda9871df28aa29b551891dc8202fc5e9f9ea96",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 8,
+      "case": "N07",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 0,
+        "conflict": 9,
+        "missing": 2
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 11
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [],
+      "current_export_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "old_export_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 9,
+      "case": "N08",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 1,
+        "conflict": 0,
+        "missing": 1
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 1,
+        "supported_correct": 1
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "eee0e36455df97ef0f1a56688ee44bdc1eb476440ddd484792e417af5c4a646e",
+      "old_export_sha256": "eee0e36455df97ef0f1a56688ee44bdc1eb476440ddd484792e417af5c4a646e",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 10,
+      "case": "N09",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 1,
+        "conflict": 0,
+        "missing": 1
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 1,
+        "supported_correct": 1
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "d9788f468ba421df479dd076ff470f3eb87febd045596449bebb1c9572197a90",
+      "old_export_sha256": "d9788f468ba421df479dd076ff470f3eb87febd045596449bebb1c9572197a90",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 11,
+      "case": "N10",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 2,
+        "conflict": 0,
+        "missing": 0
+      },
+      "original_gold_verdict_counts": {
+        "supported_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "87dce7987580f043d87ad25aa73fa994a06a8b6c6ca3f8341994573ca0db6969",
+      "old_export_sha256": "87dce7987580f043d87ad25aa73fa994a06a8b6c6ca3f8341994573ca0db6969",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 12,
+      "case": "N11",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 2,
+        "conflict": 1,
+        "missing": 0
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 1,
+        "supported_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "old_export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 13,
+      "case": "N12",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 2,
+        "conflict": 1,
+        "missing": 0
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 1,
+        "supported_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "current_export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "old_export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 14,
+      "case": "N13",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 0,
+        "conflict": 2,
+        "missing": 0
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [],
+      "current_export_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+      "old_export_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    },
+    {
+      "attempt": 15,
+      "case": "N16",
+      "mapping_admitted": true,
+      "current_first_answer_counts": {
+        "supported": 0,
+        "conflict": 2,
+        "missing": 0
+      },
+      "original_gold_verdict_counts": {
+        "held_correct": 2
+      },
+      "no_manual_answer_changes": true,
+      "readback_passed": true,
+      "changed_parts": [],
+      "current_export_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+      "old_export_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+      "export_bytes_equal_retained": true,
+      "simulated_zero_charge": true
+    }
+  ],
+  "provider_calls": 0,
+  "paid_campaign_ledger_mutations": 0
+}

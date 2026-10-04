@@ -1,0 +1,13 @@
+{
+  "corrected_helper_sha256": "5babeb26fa4e4519c84c85857c7b51f6a300c87512f64cab6da898f1f250d352",
+  "pure_test_sha256": "15e3786442656b925045e1c54d1824ac82a008dcb3f0774fe7ef28558a426106",
+  "pure_test_methods": 7,
+  "actual_exit_status": 0,
+  "elapsed_seconds": 0.198,
+  "root_helper_confirmation_sha256": "c0f6cbcf33ffa789d581fd6d98c2bb6b5f23121124e5f830a86a0e2ae56e540f",
+  "candidate_source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "candidate_source_edits": 0,
+  "actual_16_transfer_manifest_sha256": "2b98d79fd77deca57a64ba987d9e7a7b270ed95fd307aac2b32b159ca505a5bc",
+  "initial_preparation_manifest_preserved": true,
+  "source_scope": "Corrective doc/QA helper chain for retained metadata-envelope error; initial preparation/source-C historical hashes remain untouched."
+}

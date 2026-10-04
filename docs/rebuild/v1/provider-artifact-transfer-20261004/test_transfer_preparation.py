@@ -26,6 +26,21 @@ class Preparation(unittest.TestCase):
         for attempt in [1,16,18,20,0,-1]:
             with self.subTest(attempt=attempt), self.assertRaises(ValueError):load(attempt,Path('/absent'))
 
+    def test_actual_callback_duration_reads_the_sealed_http_response_body(self):
+        tree=ast.parse(Path(__file__).with_name('cached_provider_transfer.py').read_text())
+        callbacks=[node for node in ast.walk(tree) if isinstance(node,ast.FunctionDef) and node.name=='transcription']
+        self.assertEqual(len(callbacks),1)
+        returned=next(node for node in ast.walk(callbacks[0]) if isinstance(node,ast.Return))
+        units=returned.value.elts[2]
+        for attempt in (17,19):
+            with self.subTest(attempt=attempt):
+                voice=load(attempt)['voice']
+                observed=eval(compile(ast.Expression(units),'<actual-fixture-callback-units>','eval'),
+                              {'voice':voice,'submitted':{'submitted_seconds':'synthetic-control'}})
+                body=json.loads((voice['folder']/'provider-response.body').read_bytes())
+                self.assertEqual(observed['duration_seconds'],str(body['metadata']['duration']))
+                self.assertNotIn('metadata',voice['response'])
+
     def test_changed_closed_manifest_is_refused(self):
         with TemporaryDirectory(prefix='quillmd-transfer-input-control-') as temporary:
             root=Path(temporary);shutil.copytree(ROOT/'002',root/'002')

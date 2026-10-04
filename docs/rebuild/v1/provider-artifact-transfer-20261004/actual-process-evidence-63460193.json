@@ -1,0 +1,324 @@
+{
+  "typed-first-r1": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1",
+    "supervisor": {
+      "source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+      "group": "typed-first",
+      "fixed_attempts": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "catalog_before": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached1_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/catalog-before.py",
+          "quillmd_qa_sol_cached1_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/catalog-before.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.5163790009974036,
+        "timeout": false,
+        "reaped": true
+      },
+      "application": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached1_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/protected-state",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193/docs/rebuild/v1/provider-artifact-transfer-20261004/cached_provider_transfer.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "6346019377ed1a2e65763da7040c6f85da13f72c",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures",
+          "typed-first"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 137.66905166499782,
+        "timeout": false,
+        "reaped": true
+      },
+      "catalog_after": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached1_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/catalog-after.py",
+          "quillmd_qa_sol_cached1_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/catalog-after.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.51623802499671,
+        "timeout": false,
+        "reaped": true
+      },
+      "bound_seconds": 180,
+      "termination_grace_seconds": 10,
+      "provider_calls": 0,
+      "paid_campaign_ledger_mutations": 0,
+      "scope": "Prospective cached-response application transfer; no new paid acceptance"
+    },
+    "hashes": {
+      "supervisor-result.json": "0c3baefb812dd049ee1b35f3a23ada7ef7444fd13e29d82b62e79c5bcff828ab",
+      "application.stdout.log": "65a15652c32810d55bdb2cfc5be367668f6e0d4f8b6dc01b06fb565a2b5d5c67",
+      "application.stderr.log": "79864322eda89a4afa7ba7a0a8125911c186ff2c78f551eaaa87f8fb33e44591",
+      "catalog-before.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "catalog-after.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "catalog_before": [],
+    "catalog_after": []
+  },
+  "typed-second-r1": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1",
+    "supervisor": {
+      "source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+      "group": "typed-second",
+      "fixed_attempts": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "catalog_before": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/catalog-before.py",
+          "quillmd_qa_sol_cached2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/catalog-before.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.5169960289931623,
+        "timeout": false,
+        "reaped": true
+      },
+      "application": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/protected-state",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193/docs/rebuild/v1/provider-artifact-transfer-20261004/cached_provider_transfer.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "6346019377ed1a2e65763da7040c6f85da13f72c",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures",
+          "typed-second"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 79.00182631600183,
+        "timeout": false,
+        "reaped": true
+      },
+      "catalog_after": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/catalog-after.py",
+          "quillmd_qa_sol_cached2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/catalog-after.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.4667858020111453,
+        "timeout": false,
+        "reaped": true
+      },
+      "bound_seconds": 180,
+      "termination_grace_seconds": 10,
+      "provider_calls": 0,
+      "paid_campaign_ledger_mutations": 0,
+      "scope": "Prospective cached-response application transfer; no new paid acceptance"
+    },
+    "hashes": {
+      "supervisor-result.json": "39cdf5d341c613fada9ec99c8f4f4512f50fd27649317fc8af8a80eab57e7857",
+      "application.stdout.log": "75dbd9d549d837ab327bbf76cce128aaeee1c74c925f0699a72346ecc99881c6",
+      "application.stderr.log": "dc35c55fb12bef3274ad77ad8b1171699764301efbe12b7b06ea41b3d30353fd",
+      "catalog-before.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "catalog-after.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "catalog_before": [],
+    "catalog_after": []
+  },
+  "voice-r1": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1",
+    "supervisor": {
+      "source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+      "group": "voice",
+      "fixed_attempts": [
+        17,
+        19
+      ],
+      "catalog_before": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached3_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/catalog-before.py",
+          "quillmd_qa_sol_cached3_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/catalog-before.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.4661348280060338,
+        "timeout": false,
+        "reaped": true
+      },
+      "application": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached3_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/protected-state",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193/docs/rebuild/v1/provider-artifact-transfer-20261004/cached_provider_transfer.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "6346019377ed1a2e65763da7040c6f85da13f72c",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/captures",
+          "voice"
+        ],
+        "exit_status": 1,
+        "elapsed_seconds": 24.254833459999645,
+        "timeout": false,
+        "reaped": true
+      },
+      "catalog_after": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached3_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/catalog-after.py",
+          "quillmd_qa_sol_cached3_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r1/catalog-after.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.4658411249984056,
+        "timeout": false,
+        "reaped": true
+      },
+      "bound_seconds": 180,
+      "termination_grace_seconds": 10,
+      "provider_calls": 0,
+      "paid_campaign_ledger_mutations": 0,
+      "scope": "Prospective cached-response application transfer; no new paid acceptance"
+    },
+    "hashes": {
+      "supervisor-result.json": "d838f0ac08fe4290cce4e672d96c1b6ecd42e5f8df895c48102a8263736c7dd7",
+      "application.stdout.log": "6461676d262e3ceedca36e7a1851102755976993a389cb810be793e26c54d1b7",
+      "application.stderr.log": "5460322f7631d5ea3fe976a6a0a84fbf0e2c40a06cc72cb311a7f309a318acf5",
+      "catalog-before.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "catalog-after.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "catalog_before": [],
+    "catalog_after": []
+  },
+  "voice-r2": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2",
+    "supervisor": {
+      "source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+      "group": "voice",
+      "fixed_attempts": [
+        17,
+        19
+      ],
+      "catalog_before": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached3r2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/catalog-before.py",
+          "quillmd_qa_sol_cached3r2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/catalog-before.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.5168775620113593,
+        "timeout": false,
+        "reaped": true
+      },
+      "application": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached3r2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-fixed-helper/cached_provider_transfer.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "6346019377ed1a2e65763da7040c6f85da13f72c",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/captures",
+          "voice"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 50.348333481000736,
+        "timeout": false,
+        "reaped": true
+      },
+      "catalog_after": {
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/qa_test2.py",
+          "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-63460193",
+          "quillmd_qa_sol_cached3r2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/protected-state",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/catalog-after.py",
+          "quillmd_qa_sol_cached3r2_63460193",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/catalog-after.json"
+        ],
+        "exit_status": 0,
+        "elapsed_seconds": 0.5167841219954425,
+        "timeout": false,
+        "reaped": true
+      },
+      "bound_seconds": 180,
+      "termination_grace_seconds": 10,
+      "provider_calls": 0,
+      "paid_campaign_ledger_mutations": 0,
+      "scope": "Prospective cached-response application transfer; no new paid acceptance"
+    },
+    "hashes": {
+      "supervisor-result.json": "4aed338cc5d29796a81ef323fd5a004aa46097a821f50b12bbfe0adaefe7301f",
+      "application.stdout.log": "870f1ba3797aa097e670a5cefda652d03b195b7557ecfadade35325291c260e6",
+      "application.stderr.log": "4abee716f79d2beaf62ece0baa2f0634dac52ffec9d2dcfa01229667096584ed",
+      "catalog-before.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "catalog-after.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "catalog_before": [],
+    "catalog_after": []
+  }
+}
