@@ -236,6 +236,36 @@ def occurrences(stream, paragraphs):
     return sum(1 for i in range(len(stream) - len(keys) + 1) if stream[i:i + len(keys)] == keys)
 
 
+def distinct_cell_sequence(stream, nodes, model):
+    """A duplicate coded row needs its own preceding printed cell source.
+
+    Keep the stored destination unchanged. Add only the physical prefix of the
+    same already validated coded cell; the PDF must still prove its complete,
+    unique, contiguous rendering. A duplicate complete cell remains ambiguous.
+    """
+    short_occurrences = occurrences(stream, nodes)
+    if short_occurrences <= 1 or not nodes:
+        return nodes, model
+    parent = nodes[0].getparent()
+    if parent is None or parent.tag != w.q('w:tc') or any(node.getparent() is not parent for node in nodes):
+        return nodes, model
+    children = list(parent); at = children.index(nodes[0])
+    prefix = children[:at]
+    if any(node.tag not in (w.q('w:tcPr'), w.q('w:p')) for node in prefix):
+        return nodes, model
+    prefix = [p for p in prefix if p.tag == w.q('w:p') and w.paragraph_text(p)[0].strip()]
+    if not prefix or len(prefix) + len(nodes) > 100:
+        return nodes, model
+    # These paragraphs belong to the detector's complete coded-cell source,
+    # not to a neighbouring cell or a title inferred from a mutable field.
+    additions = [{'segments': rendered_columns(p, [0]),
+                  'dot_leaders': any(n.get(w.q('w:leader')) == 'dot'
+                      for n in p.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))} for p in prefix]
+    result = dict(model, sequence=additions + model['sequence'], header_index=len(prefix) + model['header_index'],
+                  short_source_occurrences=short_occurrences)
+    return prefix + nodes, result
+
+
 def rendered_characters(paragraph):
     """The characters a paragraph renders, as the witness reads them: a native checkbox is one vector
     control, a checkbox content control its state glyph; spaces are removed."""
@@ -362,7 +392,10 @@ def prepare(data, *, mapping=None, answers=None):
                         description['source'][k]['fingerprint']) for k in ('header', 'row')]
         if len(model['header']) != len(description['source']['options']) + 1 or len(model['row']) != len(model['header']):
             w.fail('A complete printed tab relation changed.', 'layout_unresolved')
-        # The witness measures only a sequence printed once; any other place printing it is ambiguous.
+        # A repeated short coded row can be identified only by its complete
+        # own-cell printed prefix. Neither source nor PDF uniqueness is waived.
+        if relation:
+            nodes, model = distinct_cell_sequence(stream, nodes, model)
         model['source_occurrences'] = occurrences(stream, nodes)
         model['neighbours'] = neighbours(nodes[-1])
         description['rendered_source'] = model
