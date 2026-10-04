@@ -185,12 +185,12 @@ MAX_DEADLINE_SECONDS = 600
 #: Which stage runner a stage uses ('model_check': sonnet5_qa.run_model_check; transcription:
 #: standing_qa_transcription.TranscriptionRun; the others: sonnet5_stages.Run).
 STAGE_KIND = {'model_check': 'model_check', 'mapping': 'mapping', 'notes_comparison': 'ordinary_notes',
-              'd30_d31_structure': 'ordinary_notes', 'transcription': 'transcription'}
+              'd30_d31_structure': 'ordinary_notes', 'transcription': 'transcription', 'ordinary_batch': 'ordinary_batch'}
 #: The pricing keys each stage's sends are priced under (every one must be declared for a declared stage).
 STAGE_PRICING = {'model_check': ('model_check',), 'mapping': ('mapping',),
                  'notes_comparison': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'd30_d31_structure': ('ordinary_notes', 'ordinary_notes_field_relations'),
-                 'transcription': ('transcription',)}
+                 'transcription': ('transcription',), 'ordinary_batch': ('ordinary_notes', 'ordinary_notes_field_relations')}
 _ALL_OFF = {'QUILLMD_WM_NARRATIVE': '0', 'QUILLMD_V3_HISTORY_CONTEXT': '0', 'QUILLMD_V3_GENERATION_BATCHES': '0',
             'QUILLMD_V3_FIELD_RELATIONS': '0', 'QUILLMD_MAPPING_ASSISTANCE': '0', 'QUILLMD_MAPPING_ASSISTANCE_LIVE': '0',
             'QUILLMD_LAYOUT_SOCKET': '', 'QUILLMD_LAYOUT_SERVICE_UID': ''}
@@ -203,6 +203,7 @@ STAGE_FLAGS = {'model_check': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'legacy'},
                            'QUILLMD_MAPPING_ASSISTANCE_LIVE': '1'},
                'notes_comparison': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'd30_d31_structure': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'ordinary_batch': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'transcription': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_DEEPGRAM_MIP_OPT_OUT': 'true',
                                  'QUILLMD_DEEPGRAM_SMART_FORMAT': 'false'}}
 #: The flags the pricing versions are computed under, per pricing key (`transcription` also under the declared
@@ -386,6 +387,12 @@ def build_transcription_forms(target, inputs):
 #: preparation, and this runner.
 WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
     'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
+    'rebuild/ops/standing_qa_batch.py', 'rebuild/ops/fixtures/ordinary-batch-101-v1.json',
+    'rebuild/ops/fixtures/ordinary-batch-101-v1.docx', 'rebuild/core/batch_jobs.py',
+    'rebuild/core/ordinary_source_scope.py', 'rebuild/core/reviewed_source.py',
+    'rebuild/core/reviewed_procedure_source.py', 'rebuild/core/transcript_context.py',
+    'rebuild/core/source_scope.py', 'rebuild/core/reviewed_speaker.py',
+    'rebuild/core/v3_actors.py', 'rebuild/core/v3_syntax.py',
     'rebuild/ops/standing_qa_signing.py',
     'rebuild/ops/standing_qa_notes_review.py', 'rebuild/ops/fixtures/frozen-notes-consent-review-v1.json',
     'rebuild/ops/standing_qa_voice_forms.py', 'rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json',
@@ -1041,11 +1048,21 @@ def _read_bounded(path, limit=8 * 1024 * 1024):
         os.close(fd)
 
 
+def batch_module():
+    try:
+        from . import standing_qa_batch
+    except ImportError:
+        import standing_qa_batch
+    return standing_qa_batch
+
+
 def send_inputs(send, inputs):
     """{'form_sha256', 'notes_sha256'? | 'audio_sha256'?} of what `send` would put in a provider request: the fixed
     model-check case, a frozen mapping form, a frozen notes case, or an allowlisted synthetic recording and the frozen
     form its transcript is generated on — never anything else. (A transcript's notes are provider output: their sha256
     is known only once the transcription send has made them, and its generation attempt records it.)"""
+    if send.path in batch_module().PATHS:
+        return batch_module().send_inputs(send, inputs)
     if send.path == 'model_check':
         return {'form_sha256': sq.FORM_SHA256, 'notes_sha256': sq.NOTES_SHA256}
     if send.path in TRANSCRIPTION_PATHS:
@@ -1066,6 +1083,8 @@ def standing_plan(stage, inputs=None):
     guess one."""
     stages = sq.stages_module()
     Send = stages.Send
+    if stage == 'ordinary_batch':
+        return batch_module().plan_sends(inputs)
     if stage == 'model_check':
         return [Send(1, MODEL_CHECK_SEND, 'generation', 'sonnet5-model-check', 'model_check', 'model_check', None,
                      'model_check')]
@@ -1114,13 +1133,14 @@ def plan_definitions(inputs):
     """Every stage's plan, as data (no declaration, credential, network or database)."""
     report = {}
     for stage in STAGE_KIND:
+        own_inputs = batch_module().frozen_inputs() if stage == 'ordinary_batch' else inputs
         try:
-            sends = standing_plan(stage, inputs)
+            sends = standing_plan(stage, own_inputs)
         except Refused as refused:
             report[stage] = {'established': False, 'statement': str(refused)}
             continue
         report[stage] = {'established': True, 'kind': STAGE_KIND[stage], 'pricing_keys': list(STAGE_PRICING[stage]),
-                         'flags': STAGE_FLAGS[stage], 'sends': [{**s.record(), 'inputs': send_inputs(s, inputs)}
+                         'flags': STAGE_FLAGS[stage], 'sends': [{**s.record(), 'inputs': send_inputs(s, own_inputs)}
                                                                 for s in sends], 'count': len(sends)}
         if stage == 'transcription':
             report[stage].update(
@@ -1138,6 +1158,8 @@ def stage_inputs(stage, declaration):
     diagnostics otherwise, and for transcription also the declared recordings."""
     if stage == 'model_check':
         return None
+    if stage == 'ordinary_batch':
+        return batch_module().frozen_inputs()
     inputs = sq.stages_module().frozen_inputs()
     if stage == 'notes_comparison' and declaration.notes_mapping_review:
         try:
@@ -1173,6 +1195,8 @@ def needs(send):
     """The id of the send that must be made in the SAME run before `send` can be — a mapping encounter needs its form's
     proposal (sonnet5_stages.Run.templates), a transcript's generation needs the encounter its transcription send made
     (standing_qa_transcription.TranscriptionRun.transcribed), both held only in the request process — or None."""
+    if send.path == 'ordinary_batch_second':
+        return batch_module().FIRST
     if send.path == 'mapping_encounter':
         return f'mapping:{send.form}'
     if send.path == 'transcription_generation':
@@ -1181,7 +1205,8 @@ def needs(send):
 
 
 #: Why a stranded send is not sent, by its path (the mapping wording is the historical rule's, unchanged).
-STRANDED_WHY = {'mapping_encounter': "needs its form's mapping send in the same run, and that send was already made; it "
+STRANDED_WHY = {'ordinary_batch_second': 'needs the first child in this same run; an earlier child is never re-sent',
+                'mapping_encounter': "needs its form's mapping send in the same run, and that send was already made; it "
                                      'is not sent',
                 'transcription_generation': "needs its recording's transcription send in the same run, and that send "
                                             'was already made; it is not sent'}
@@ -1941,6 +1966,8 @@ def price_sends(stage, sends, inputs, state_dir, declaration, limits=None):
     stages = sq.stages_module()
     limits = declaration.limits() if limits is None else limits
     expect = declaration.expect(limits)
+    if stage == 'ordinary_batch':
+        return batch_module().price_sends(sends, inputs, state_dir, declaration, limits)
     forms = stages.build_forms(Path(state_dir) / 'forms', 'mapping' if stage == 'mapping' else 'ordinary_notes', inputs) \
         if stage != 'model_check' else {}
     originals = Path(state_dir) / 'files' / 'originals'
@@ -2030,7 +2057,7 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
             campaign, secret=secret, transcription_secret=transcription_secret, database_prefix=database_prefix,
             rebuild=rebuild, environ=environ, expect=declaration.expect(limits))
     else:
-        checked = stages.stage_preconditions(declaration, kind, root, database_prefix=database_prefix, rebuild=rebuild,
+        checked = stages.stage_preconditions(declaration, 'ordinary_notes' if stage == 'ordinary_batch' else kind, root, database_prefix=database_prefix, rebuild=rebuild,
                                              environ=environ, ledger=ledger, expect=declaration.expect(limits))
     inputs = stage_inputs(stage, declaration)
     plan = standing_plan(stage, inputs)
@@ -2047,6 +2074,7 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     run = begin_run(campaign, stage, selected, inputs, cap, provenance)
     try:
         forms = (build_transcription_forms(root / 'forms' / stage, inputs) if transcribing
+                 else batch_module().build_forms(root / 'forms' / stage, inputs) if stage == 'ordinary_batch'
                  else stages.build_forms(root / 'forms' / stage, kind, inputs))
         restricted = set(run['restricted_inputs'])
         for name, data in forms.items():
@@ -2061,7 +2089,8 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
                                          deadline=limits.request_deadline_seconds)
             worker.planned = tr.planned_maxima(selected, declaration)
         else:
-            worker = stages.Run(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
+            worker_class = batch_module().BatchRun if stage == 'ordinary_batch' else stages.Run
+            worker = worker_class(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
                                 world=world, checked=checked, deadline=limits.request_deadline_seconds)
             scratch = pc.private_directory(root / 'tmp' / f'price-{stage}-{run["run_id"]}')
             worker.planned = {key: value['maximum_cost'] for key, value in price_sends(
@@ -2103,6 +2132,10 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
             worker.stopped = {'send': send.id, 'attempt': record.get('attempt'), 'findings': record.get('findings')}
             reasons.append(f'{send.id}: ' + '; '.join(f['why'] for f in record.get('findings') or []))
     base = {'settled_before_start': settled, 'stale_jobs_cancelled': stale}
+    if stage == 'ordinary_batch' and (halted or reasons or worker.stopped):
+        base['batch_abort'] = worker.abort_remaining('The supplemental run halted or failed; no child is resent.')
+        if base['batch_abort'].get('error'):
+            reasons.append('Batch cleanup failed; the retained original cleanup error needs reconciliation.')
     if halt_jobs is not None:
         base['halt_jobs'] = halt_jobs
     return decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, halted=halted)
@@ -2229,6 +2262,9 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
         for name, entry in definitions.items():
             if not entry.get('established'):
                 continue
+            if name == 'ordinary_batch' and not any(s.id == name for s in declaration.stages):
+                entry['declared'] = False
+                continue
             if name == 'transcription':
                 if declaration.transcription is None:
                     entry['declared'] = False                # (defined, not declared: nothing of it can be sent)
@@ -2254,7 +2290,7 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                         'sha256': TRANSCRIPTION_FORM_HASHES[transcription_form_id(audio_id, declaration.transcription.forms)]}
                         for audio_id in declaration.transcription.inputs]
             else:
-                sends = standing_plan(name, inputs)
+                sends = standing_plan(name, stage_inputs(name, declaration) if name == 'ordinary_batch' else inputs)
             left = remaining_sends(campaign, name, sends)
             entry['remaining'] = [send.id for send in left]
             entry['stranded'] = [send.id for send in stranded(left)]         # (never sent here: the stage cannot pass)
@@ -2666,7 +2702,8 @@ def priced_plan(stage=None, path=None):
                                 for send_id, value in planned.items()}
                 continue
             with override_settings(**expected_settings(name)):
-                priced = price_sends(name, standing_plan(name, inputs), inputs, Path(scratch) / name, declaration)
+                own_inputs = stage_inputs(name, declaration) if name == 'ordinary_batch' else inputs
+                priced = price_sends(name, standing_plan(name, own_inputs), own_inputs, Path(scratch) / name, declaration)
             report[name] = {send_id: {k: (format(v, 'f') if isinstance(v, Decimal) else v) for k, v in row.items()}
                             for send_id, row in priced.items()}
             report[name]['_calculated_worst_case_usd'] = format(sum((row['bound'] for row in priced.values()),
