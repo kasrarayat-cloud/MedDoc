@@ -180,11 +180,14 @@ class TemplateReinspection(V3Fixture, TestCase):
     def test_forged_current_v3_destination_cannot_be_confirmed_after_fresh_reinspection(self):
         old, version = self.old_form(); fresh, current = self.fresh(old, version)
         fields = copy.deepcopy(current.fields)
-        fields[0]['locator']['target']['slot'] = 'b/tbl[99]/tr[0]/tc[1]'
+        fields[0]['locator']['slot'] = 'b/tbl[99]/tr[0]/tc[1]'
         invalid = TemplateVersion.objects.create(template=fresh, number=2, fields=fields, contract=current.contract,
             import_manifest=import_binding.for_mapping(current.import_manifest, fields), created_by=self.user)
         response = self.client.post(f'/templates/{fresh.pk}/', {'action': 'v3_confirm',
             'mapping_version': invalid.pk, 'checked_every_field': 'on'})
+        self.archive('invalid-physical-destination', **{'original.docx': private_path(fresh.original_path).read_bytes(),
+            'fields.json': fields, 'response.html': response.content,
+            'result.json': {'status': response.status_code, 'confirmed': bool(TemplateVersion.objects.get(pk=invalid.pk).confirmed)}})
         self.assertEqual(response.status_code, 400)
         self.assertFalse(MappingConfirmation.objects.exists()); self.assertFalse(Job.objects.exists()); self.assertFalse(Reservation.objects.exists())
 
