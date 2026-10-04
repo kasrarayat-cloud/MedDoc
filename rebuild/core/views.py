@@ -890,6 +890,8 @@ def v3_confirm(request,t):
             return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
         if latest.assistance.get('unresolved'):raise ValidationError('Resolve every mapping-assistance area before confirming this version.')
         if not latest.fields:raise ValidationError('This mapping has no fields. Add the form\'s answer areas before confirming it.')
+        from .import_binding import verify_review_places
+        verify_review_places(latest)
         # ⚠️ A box that does not exist can never be confirmed (it would only refuse at export, after the review).
         missing=v3_mapping.missing_boxes(latest.fields,v3_outline(t))
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')

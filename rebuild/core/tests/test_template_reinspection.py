@@ -191,6 +191,35 @@ class TemplateReinspection(V3Fixture, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(MappingConfirmation.objects.exists()); self.assertFalse(Job.objects.exists()); self.assertFalse(Reservation.objects.exists())
 
+    def test_valid_manual_recovery_and_ordinary_label_corrections_can_be_reviewed(self):
+        old, version = self.old_form(); fresh, current = self.fresh(old, version)
+        allergies = self.by_label(current)['Allergies']; plan = self.by_label(current)['Plan']
+        response = self.client.post(f'/templates/{fresh.pk}/', {'action': 'v3_save', 'mapping_version': current.pk,
+            'remove_' + allergies['key']: 'on', 'label_' + plan['key']: 'Care plan'})
+        self.assertEqual(response.status_code, 302)
+        current = self.latest(fresh)
+        response = self.client.post(f'/templates/{fresh.pk}/', {'action': 'v3_add', 'mapping_version': current.pk,
+            'slot': allergies['locator']['part'] + '#' + allergies['locator']['slot'], 'kind': 'text', 'label': 'Known allergies'})
+        self.assertEqual(response.status_code, 302, response.content.decode())
+        current = self.latest(fresh); manual = self.by_label(current)['Known allergies']
+        self.assertEqual(manual['origin'], 'manual')
+        current = self.confirm(fresh, current); self.assertFalse(current.needs_confirmation)
+        self.assertEqual(self.new_encounter(current).status_code, 302)
+        self.assertEqual(current.import_manifest['reinspection']['source_version_id'], str(version.pk))
+
+    def test_known_destination_swap_and_changed_fingerprint_are_not_ordinary_corrections(self):
+        template, current = self.uploaded(data=build_legacy_table_form(), name='Synthetic current physical mapping')
+        for number, change in enumerate(('swap', 'fingerprint'), 2):
+            fields = copy.deepcopy(current.fields)
+            if change == 'swap': fields[0]['locator'] = copy.deepcopy(fields[1]['locator'])
+            else: fields[0]['locator']['fingerprint'] = '0' * 64
+            invalid = TemplateVersion.objects.create(template=template, number=number, fields=fields, contract=current.contract,
+                import_manifest=import_binding.for_mapping(current.import_manifest, fields), created_by=self.user)
+            response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm',
+                'mapping_version': invalid.pk, 'checked_every_field': 'on'})
+            self.assertEqual(response.status_code, 400, change)
+        self.assertFalse(MappingConfirmation.objects.exists()); self.assertFalse(Job.objects.exists()); self.assertFalse(Reservation.objects.exists())
+
     @override_settings(QUILLMD_WORD_ENGINE='legacy')
     def test_legacy_review_refuses_changed_physical_destination_and_missing_acknowledgement(self):
         old, version = self.uploaded(data=build_legacy_table_form(), name='Synthetic legacy binding')

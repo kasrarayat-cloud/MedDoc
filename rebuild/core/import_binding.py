@@ -121,3 +121,64 @@ def ordinary_role_fields(version):
         return set()
     held = destination_roles.v3_held(version, proposed, mapping_review=True)
     return eligible - set(held)
+
+
+def verify_review_places(version):
+    """Review uses original automatic anchors or freshly compiled manual destinations.
+
+    No answer is written and no mapping is updated. Renaming/reclassifying an ordinary
+    automatic field retains its original locator. A manual field must still compile to
+    the same physical destination under the current immutable original.
+    """
+    from .security import private_path
+    from documents.service import outline_template, locate_fields
+    from documents.word_v3 import box_key
+    verify(version, allow_unreviewed=True)
+    outline = outline_template(private_path(version.template.original_path))
+    if outline.get('sha256') != version.template.sha256:
+        raise ValidationError('Original integrity check failed.')
+    places = {row['slot']: row for row in outline['slots']}
+    initial = version.template.versions.order_by('number').first()
+    initial_fields = {field['key']: field for field in initial.fields}
+    manual, targets = [], []
+    refusal = 'An answer location no longer matches this preserved original. Remove that field and add it again from the form; nothing was confirmed.'
+    for field in version.fields:
+        locator = field.get('locator') or {}
+        target = locator.get('target') or {}
+        references = [locator, *locator.get('extra', []), *target.get('copies', []), *target.get('boxes', [])]
+        for reference in references:
+            identity = str(reference.get('part', '')) + '#' + str(reference.get('slot', ''))
+            # Table-row fields anchor the real whole table, absent from the manual
+            # outline; its original child locations establish its existence.
+            if identity not in places and not (field.get('kind') == 'table_rows'
+                    and any(place.startswith(identity + '/') for place in places)):
+                raise ValidationError(refusal)
+        prior = initial_fields.get(field['key'])
+        if field.get('origin') != 'manual':
+            if (not prior or locator != prior.get('locator')
+                    or field.get('source_questions') != prior.get('source_questions')
+                    or field.get('source_instructions') != prior.get('source_instructions')):
+                raise ValidationError(refusal)
+            continue
+        identity = locator['part'] + '#' + locator['slot']
+        request = {'slot': identity, 'kind': field['kind'], 'label': field['label'], 'context': field.get('context', '')}
+        if target.get('shape') == 'numeric_part':
+            request['numeric_part'] = target.get('number')
+        if field.get('kind') == 'checkbox':
+            boxes = target.get('boxes') or []
+            keys = places[identity].get('box_keys') or []
+            empty_cell = (len(boxes) == 1 and boxes[0].get('kind') == 'cell'
+                          and boxes[0].get('part') + '#' + boxes[0].get('slot') == identity
+                          and places[identity].get('kind') == 'tc' and not keys)
+            if len(boxes) != 1 or (not empty_cell and box_key(boxes[0]) not in keys):
+                raise ValidationError(refusal)
+            request['glyph'] = 0 if empty_cell else keys.index(box_key(boxes[0]))
+        manual.append(field); targets.append(request)
+    for start in range(0, len(targets), 200):
+        compiled = locate_fields(private_path(version.template.original_path), targets[start:start + 200])
+        if compiled.get('sha256') != version.template.sha256:
+            raise ValidationError('Original integrity check failed.')
+        for field, current in zip(manual[start:start + 200], compiled['fields']):
+            if any(field.get(key) != current.get(key) for key in
+                   ('locator', 'source_questions', 'source_instructions', 'write_protected', 'answer_policy')):
+                raise ValidationError(refusal)
