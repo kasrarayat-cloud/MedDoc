@@ -2380,6 +2380,7 @@ class Detector:
         self.rule_lines_below_label(write_requests_only=True)
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
+        self.rule_merged_checkbox_hierarchy()
         self.rule_bracketed_checkbox_hierarchy()
         self.rule_checkboxes()
         self.rule_adjacent_write_ins()
@@ -3449,7 +3450,7 @@ class Detector:
             self.add(Area(self.kind_for(label), label, slot, target, context=context,
                           complete_source=True, source_questions=[relation]))
 
-    def tab_column_properties(self, slot, *, scope_only=False):
+    def tab_column_properties(self, slot, *, scope_only=False, checkbox_indent=False):
         """Resolve additive stops and per-attribute indentation; unknown layout refuses."""
         styles = self.package.tree("word/styles.xml") if "word/styles.xml" in self.package.names else None
         props = []
@@ -3510,6 +3511,14 @@ class Detector:
                     return None
         if scope_only:
             return (), ()  # Scope text/spacers need boundary validation, not option coordinates.
+        if checkbox_indent:
+            # A box at the exact start has one first-line coordinate. No tab
+            # precedes it, so stored stops cannot move it. Competing firstLine
+            # and hanging remain unresolved.
+            if self.ptext(slot.el)[0][:1] not in (BOX, CHECKED) or (
+                    indent.get('hanging', 0) and indent.get('firstLine', 0)):
+                return None
+            return indent.get('left', 0) + indent.get('firstLine', 0) - indent.get('hanging', 0)
         # A hanging indent creates another implicit stop; do not erase it by
         # pretending that the explicit center list is the entire layout.
         if indent.get("hanging", 0) or indent.get("firstLine", 0):
@@ -4156,6 +4165,131 @@ class Detector:
                 else:
                     self.notes.append("Layout verification required for coded-column answer at " + row.id +
                                       ". Printed question: " + area.label + ". Section: " + area.context)
+
+    def rule_merged_checkbox_hierarchy(self):
+        """One column question and a two-row merged item own parent alternatives.
+
+        A colon parent's uniformly indented children are separate from the
+        unindented peer in the next row of that same printed item. Unknown
+        merge, header, indentation or scope remains held rather than flattened.
+        """
+        ref = lambda slot: {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+        for table in [s for s in self.index.slots if s.kind == 'tbl' and s.part == 'word/document.xml']:
+            rows = self.grid(table)
+            for row, cells in rows.items():
+                for cell in cells:
+                    paragraphs = self.own_paragraphs(cell)
+                    units = [self.box_units(p) for p in paragraphs]
+                    if (len(paragraphs) < 3 or any(len(u) != 1 for u in units)
+                            or any(u[0][2].strip() for u in units) or not units[0][0][1].strip().endswith(':')):
+                        continue
+                    # Ordinary unindented option lists keep their established
+                    # flat behavior; indentation is essential to this shape.
+                    positions = [self.tab_column_properties(p, checkbox_indent=True) for p in paragraphs]
+                    if all(position == positions[0] for position in positions) and positions[0] is not None:
+                        continue
+                    column = cell.info['col']
+                    heads = [c for c in cells if c.info['col'] + c.info['span'] == column
+                             and c.info['vmerge'] == 'restart']
+                    if len(heads) != 1:
+                        for p in paragraphs:
+                            self.coverage_issue(p, 'unmapped_answer',
+                                'These indented controls follow a colon parent, but their complete printed item scope is unresolved. Review the parent and child questions separately.')
+                            self.claimed.add(id(p.el))
+                        continue
+                    head = heads[0]
+                    spanned = self.merge_rows(table, head)
+                    peer = next((c for c in rows.get(row + 1, []) if c.info['col'] == column), None)
+                    tail = next((c for c in rows.get(row + 1, []) if c.info['col'] == head.info['col']), None)
+                    if peer is None or tail is None:
+                        for p in paragraphs:
+                            self.coverage_issue(p, 'unmapped_answer',
+                                'This indented parent/subtype question lacks its complete peer row; review the exact original scope.')
+                            self.claimed.add(id(p.el))
+                        continue
+                    peer_paragraphs = self.own_paragraphs(peer)
+                    peer_units = [self.box_units(p) for p in peer_paragraphs]
+                    headers = [c for r in self.header_rows(table) if r < row for c in rows[r]
+                               if c.info['col'] == column and c.info['span'] == cell.info['span']]
+                    header = headers[-1] if headers else None
+                    source_cells = [c for c in (header, head, tail, cell, peer) if c is not None]
+                    source_paragraphs = [p for c in source_cells for p in self.own_paragraphs(c)]
+                    eligible = (header is not None and spanned == [row, row + 1]
+                        and all(c.info['span'] == 1 for c in source_cells)
+                        and cell.info['vmerge'] is None and peer.info['vmerge'] is None
+                        and header.info['vmerge'] is None and tail.info['vmerge'] == 'continue'
+                        and len(self.own_paragraphs(header)) == 1 and len(self.own_paragraphs(head)) == 1
+                        and all(self.plain_spacing_paragraph(p, unused_tab_stops=True) for p in self.own_paragraphs(tail))
+                        and not self.cell_text(tail).strip()
+                        and len(peer_paragraphs) == 1 and len(peer_units[0]) == 1 and not peer_units[0][0][2].strip()
+                        and all(c.kind == 'p' for source_cell in source_cells for c in source_cell.children)
+                        and all(self.tab_source_visible(p) and not self.region_hidden(p.el) for p in source_paragraphs)
+                        and not any(node.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX, q('w:hyperlink'))
+                                    for p in source_paragraphs for node in p.el.iter()))
+                    label = self.cell_text(header).strip() if header is not None else ''
+                    item = self.cell_text(head).strip()
+                    parent_label = clean_label(units[0][0][1])
+                    peer_option = option_text(peer_units[0][0][1]) if len(peer_paragraphs) == 1 and peer_units[0] else ''
+                    child_options = [option_text(u[0][1]) for u in units[1:]]
+                    options = [parent_label, peer_option]
+                    peer_position = self.tab_column_properties(peer_paragraphs[0], checkbox_indent=True) if peer_paragraphs else None
+                    eligible = (eligible and positions[0] is not None and positions[0] == peer_position
+                        and positions[1] is not None and positions[1] > positions[0]
+                        and all(position == positions[1] for position in positions[1:])
+                        and item.endswith(':') and label and (':' in label or '?' in label)
+                        and len(label) <= MAX_MAPPING_LABEL and len(parent_label) <= MAX_MAPPING_LABEL
+                        and len(set(options)) == 2 and all(options) and len(set(child_options)) == len(child_options)
+                        and all(child_options) and not any(':' in option or '?' in option for option in [peer_option, *child_options])
+                        and not self.box_units(self.own_paragraphs(head)[0])
+                        and header is not None and not self.box_units(self.own_paragraphs(header)[0]))
+                    texts = [self.text(p.el).strip() for p in source_paragraphs]
+                    eligible = eligible and not any(self.blank_spans(*self.ptext(p.el)) for p in source_paragraphs
+                                                   if p not in self.own_paragraphs(tail))
+                    context = self.context_for(paragraphs[0], complete=True)
+                    preceding = self.previous_continuous_paragraph(table)
+                    context_sources = [preceding] if preceding is not None else []
+                    human = any(self.checkbox_source_action(LIST_MARKER.sub('', clause.strip()), governing=True)
+                        or signing_place(clause) for text in [*texts, *[u[0][1] for u in [*units, *peer_units] if u],
+                            *context.split(' > '),
+                            *(self.text(p.el).strip() for p in context_sources)]
+                        for clause in [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip())
+                    problem = 'The merged item, parent alternatives and indented child question need exact source review.'
+                    if human:
+                        self.protected_regions.update([cell.id, peer.id])
+                        eligible = False
+                        problem = 'This parent/subtype source contains a human-owned response or signing act; keep it unchanged.'
+                    if eligible:
+                        own = {id(p.el) for p in source_paragraphs}
+                        # An existing tick is a state, not an imperative such
+                        # as 'check one'. Read the complete printed label after
+                        # each proved control; retain all other source clauses.
+                        commands = [self.box_units(p)[0][1] if len(self.box_units(p)) == 1 else self.text(p.el)
+                                    for p in source_paragraphs]
+                        decisions = [self.cardinality(question, choices, local=commands, own=own, context=context)
+                                     for question, choices in ((label, options), (parent_label, child_options))]
+                        eligible = (len(context) <= MAX_MAPPING_CONTEXT
+                            and all(not decision.get('problem') and decision.get('kind') == 'choice'
+                                    for decision in decisions)
+                            and not self.scope_limit(own, subject_stems(label, context, *options)))
+                    if not eligible:
+                        for p in [*paragraphs, *peer_paragraphs]:
+                            self.coverage_issue(p, 'unmapped_answer', problem)
+                            self.claimed.add(id(p.el))
+                        continue
+                    root_boxes = [units[0][0][0], peer_units[0][0][0]]
+                    groups = [(label, options, root_boxes, None),
+                              (parent_label, child_options, [u[0][0] for u in units[1:]], root_boxes[0])]
+                    for question, choices, boxes, parent in groups:
+                        anchors = [self.index.by_id.get(box['part'] + '#' + box['slot'])
+                                   or next(p for p in [*paragraphs, *peer_paragraphs] if box in [u[0] for u in self.box_units(p)])
+                                   for box in boxes]
+                        relation = {'relation': 'merged_checkbox_hierarchy', 'sources': [ref(table), *[ref(c) for c in source_cells]],
+                            'bands': [ref(cell), ref(peer)], 'parent': parent, 'question': question,
+                            'context': context, 'options': choices, 'cardinality': 'choice'}
+                        self.add(Area('choice', question, anchors[0], {'type': 'checkboxes', 'boxes': boxes}, context=context,
+                            options=choices, complete_source=True, source_questions=[relation],
+                            extra_slots=list(dict.fromkeys(s for s in anchors[1:] if s is not anchors[0]))))
+                    self.claimed.update(id(p.el) for p in [*paragraphs, *peer_paragraphs])
 
     def checkbox_label_size(self, paragraph, position):
         """Explicit printed label size, never the checkbox glyph's font.
@@ -9375,7 +9509,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     scalar_alternatives = [area for area in source_detector.areas if any(
         relation.get('relation') == 'scalar_checkbox_alternative' for relation in area.source_questions)]
     hierarchy_choices = [area for area in source_detector.areas if any(
-        relation.get('relation') == 'bracketed_checkbox_hierarchy' for relation in area.source_questions)]
+        relation.get('relation') in ('bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy') for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
@@ -9680,7 +9814,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -9713,7 +9847,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 owns = (any(original_branch_mapping(field, area) for area in relation_areas)
                         or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas))

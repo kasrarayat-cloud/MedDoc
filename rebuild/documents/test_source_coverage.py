@@ -1802,3 +1802,177 @@ class NamedSelectionInstructions(unittest.TestCase):
         raw=data(doc);mapping=word_v3.inspect(raw)
         self.assertFalse(any(f['kind']=='multi_choice'for f in mapping['fields']))
         self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+
+class MergedCheckboxHierarchy(unittest.TestCase):
+    def form(self,family='ff',*,merged=True,indented=True,hidden=False,header='Item type: (Alpha or Beta)',
+             item='First observation:',selected=False,wide_merge=False,preamble='Clinical observations'):
+        doc=Document();doc.add_paragraph(preamble);table=doc.add_table(rows=5,cols=3)
+        for n,text in enumerate(('Observation',header,'Details')):table.cell(0,n).text=text
+        flag=OxmlElement('w:tblHeader');table.rows[0]._tr.get_or_add_trPr().append(flag)
+        def box(p,text,checked=False):
+            if family=='ff':ff_field(p,'checkbox',checked=checked)
+            elif family=='sdt':p._p.append(checkbox_control(checked=checked))
+            else:p.add_run('☒'if checked else'☐')
+            p.add_run(text)
+        for start in(1,3):
+            table.cell(start,0).text=item if start==1 else 'Second observation:'
+            table.cell(start+1,0).text=''if merged else 'Different observation:'
+            if merged:
+                first=table.cell(start,0);last=table.cell(start+1,0)
+                first.merge(last)
+                for extra in first.paragraphs[1:]:first._tc.remove(extra._p)
+            cell=table.cell(start,1);cell.text='';box(cell.paragraphs[0],' Alpha:',selected and start==1)
+            for n,text in enumerate((' Child one',' Child two',' Child three')):
+                p=cell.add_paragraph();box(p,text,selected and start==1 and n==0)
+                if indented:
+                    ind=OxmlElement('w:ind');ind.set(qn('w:left'),str(300 if n!=1 else 0))
+                    if n==1:ind.set(qn('w:firstLine'),'300')
+                    p._p.get_or_add_pPr().append(ind)
+                if hidden and n==1:p.runs[-1].font.hidden=True
+            cell=table.cell(start+1,1);cell.text='';box(cell.paragraphs[0],' Beta')
+            table.cell(start,2).text='Preserved neighboring observation'
+            table.cell(start+1,2).text='Preserved neighboring observation continuation'
+        if wide_merge:
+            # Three physical rows under this item no longer prove two peers.
+            tail=table.cell(3,0)._tc.get_or_add_tcPr();node=tail.find(qn('w:vMerge'));node.attrib.pop(qn('w:val'),None)
+        doc.sections[0].header.paragraphs[0].text='Preserved original header'
+        doc.sections[0].footer.paragraphs[0].text='Preserved original footer'
+        return data(doc)
+
+    def mapped(self,raw):
+        result=word_v3.inspect(raw)
+        fields=[f for f in result['fields']if any(r.get('relation')=='merged_checkbox_hierarchy'
+                for r in f.get('source_questions',[]))]
+        return result,fields
+
+    def first_pair(self,fields):
+        return [f for f in fields if '/tr[1]/'in f['locator']['slot']]
+
+    def test_exact_merged_item_and_indented_parent_preserve_separate_questions(self):
+        for family in('glyph','ff','sdt'):
+            raw=self.form(family);mapping,groups=self.mapped(raw);self.assertEqual(len(groups),4)
+            root,child=self.first_pair(groups)
+            self.assertEqual(root['options'],['Alpha','Beta']);self.assertEqual(child['options'],['Child one','Child two','Child three'])
+            self.assertEqual((root['kind'],child['kind']),('choice','choice'))
+            out=word_v3.fill(raw,mapping['fields'],{root['key']:'Alpha',child['key']:'Child two'})
+            before=word_v3.SlotIndex(word_v3.open_package(raw));after=word_v3.SlotIndex(word_v3.open_package(out))
+            self.assertEqual(word_v3.constrained_option_states(after,root),[True,False])
+            self.assertEqual(word_v3.constrained_option_states(after,child),[False,True,False])
+            touched={box['slot'].split('/ff[')[0].split('/sdt[')[0].removesuffix('/glyphs')for f in(root,child)for box in f['locator']['target']['boxes']}
+            self.assertTrue(all(word_v3.fingerprint(s.el)==word_v3.fingerprint(after.by_id[s.id].el)for s in before.slots
+                if s.kind=='p'and s.path not in touched))
+            with ZipFile(io.BytesIO(raw))as a,ZipFile(io.BytesIO(out))as b:
+                self.assertTrue(all(a.read(n)==b.read(n)for n in a.namelist()if n!='word/document.xml'))
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_incompatible_peer_and_child_or_unselected_parent_refuse_without_inference(self):
+        for family in('glyph','ff','sdt'):
+            raw=self.form(family);mapping,groups=self.mapped(raw);root,child=self.first_pair(groups)
+            for plan in({root['key']:'Beta',child['key']:'Child two'},{child['key']:'Child two'}):
+                with self.subTest(family=family,plan=plan),self.assertRaises(word_v3.V3Failure)as error:
+                    word_v3.fill(raw,mapping['fields'],plan)
+                self.assertEqual(error.exception.code,'conditional_answer_unselected')
+            out=word_v3.fill(raw,mapping['fields'],{root['key']:'Beta'})
+            after=word_v3.SlotIndex(word_v3.open_package(out))
+            self.assertEqual(word_v3.constrained_option_states(after,root),[False,True])
+            self.assertEqual(word_v3.constrained_option_states(after,child),[False,False,False])
+
+    def test_original_child_selection_cannot_be_silently_cleared_or_reparented(self):
+        for family in('glyph','ff','sdt'):
+            raw=self.form(family,selected=True);mapping,groups=self.mapped(raw);root,child=self.first_pair(groups)
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+            for fields,plan in((mapping['fields'],{root['key']:'Beta'}),
+                    (mapping['fields'],{root['key']:'Beta',child['key']:[]}),
+                    ([f for f in mapping['fields']if f['key']!=child['key']],{root['key']:'Beta'})):
+                with self.assertRaises(word_v3.V3Failure)as error:word_v3.fill(raw,fields,plan)
+                self.assertEqual(error.exception.code,'conditional_answer_unselected')
+            out=word_v3.fill(raw,mapping['fields'],{child['key']:'Child two'})
+            after=word_v3.SlotIndex(word_v3.open_package(out))
+            self.assertEqual(word_v3.constrained_option_states(after,root),[True,False])
+            self.assertEqual(word_v3.constrained_option_states(after,child),[False,True,False])
+
+    def test_metadata_forgeries_and_former_flat_destinations_cannot_authorize_writes(self):
+        raw=self.form();mapping,groups=self.mapped(raw);root,child=self.first_pair(groups)
+        for change in('relation','question','context','options','kind','parent','source','target','whole','duplicate'):
+            with self.subTest(change=change):
+                fields=deepcopy(mapping['fields']);f=next(f for f in fields if f['key']==child['key'])
+                if change=='relation':f.pop('source_questions')
+                elif change=='question':f['label']='Different child'
+                elif change=='context':f['context']='Different visit'
+                elif change=='options':f['options']=['Other one','Other two','Other three']
+                elif change=='kind':f['kind']='multi_choice'
+                elif change=='parent':f['source_questions'][0]['parent']=deepcopy(root['locator']['target']['boxes'][1])
+                elif change=='source':f['source_questions'][0]['sources'][0]['fingerprint']='not-this-original'
+                elif change=='target':f['locator']['target']['boxes'][0]=deepcopy(root['locator']['target']['boxes'][0])
+                elif change=='duplicate':fields.append({**deepcopy(f),'key':'duplicate'})
+                else:
+                    identity=f['locator']['part']+'#'+f['locator']['slot'];index=word_v3.SlotIndex(word_v3.open_package(raw))
+                    p=word_v3.host_paragraph(index.by_id[identity])if hasattr(word_v3,'host_paragraph')else index.by_id[identity].parent
+                    while p.kind!='tc':p=p.parent
+                    f['locator'].update(slot=p.path,fingerprint=word_v3.fingerprint(p.el),target={'type':'cell_append'})
+                    f.update(kind='text',label='Some ordinary data');f.pop('source_questions')
+                answer='Dr Synthetic Finalizer'if change=='whole'else ('Other two'if change=='options'else'Child two')
+                with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,fields,{root['key']:'Alpha',f['key']:answer})
+
+    def test_unmerged_flat_hidden_wider_or_contrary_sources_do_not_gain_hierarchy(self):
+        for kwargs in({'merged':False},{'indented':False},{'hidden':True},{'wide_merge':True},
+                {'header':'Item type: select all that apply'},{'header':'Item type: select exactly two options'}):
+            raw=self.form(**kwargs);mapping,groups=self.mapped(raw)
+            self.assertFalse(groups if not kwargs.get('wide_merge')else self.first_pair(groups))
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+        raw=self.form(merged=False);mapping,groups=self.mapped(raw)
+        beta=next(f for f in mapping['fields']if f['kind']=='checkbox'and f['label']=='Beta')
+        # Canonical HTTP checkbox parsing (retained D08 400) remains checked/empty;
+        # this low-level writer control proves no choice was manufactured.
+        self.assertEqual(beta['options'],['Beta'])
+        out=word_v3.fill(raw,mapping['fields'],{beta['key']:'checked'})
+        self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),beta),[True])
+        self.assertTrue(any(issue.get('code')=='unmapped_answer'for issue in mapping.get('coverage_issues',[])))
+
+    def test_source_authorship_signing_and_clause_frames_remain_human_owned(self):
+        for caption in('Witness attestation:','Date Alex Reed should sign:',
+                'This area is for Alex Reed to enter an answer:', 'Manager is required to write this response:',
+                'I approve this document:'):
+            for location in('header','item','preamble'):
+                with self.subTest(caption=caption,location=location):
+                    raw=self.form(**{location:caption});mapping,groups=self.mapped(raw)
+                    self.assertFalse(groups if location!='item'else self.first_pair(groups))
+                    self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+        for family in('glyph','ff','sdt'):
+            doc=Document(io.BytesIO(self.form(family)));p=doc.tables[0].cell(1,1).paragraphs[2]
+            p.runs[-1].text=' I approve this document'
+            raw=data(doc);mapping,groups=self.mapped(raw);self.assertFalse(self.first_pair(groups))
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+        for caption in('Initial observations:','Signed referral received:','Date symptoms should improve:'):
+            raw=self.form(preamble=caption);mapping,groups=self.mapped(raw);self.assertEqual(len(groups),4)
+            root,child=self.first_pair(groups);word_v3.fill(raw,mapping['fields'],{root['key']:'Alpha',child['key']:'Child two'})
+        doc=Document(io.BytesIO(self.form()));doc.paragraphs[0].text='Clinical history: I approve this document.'
+        doc.paragraphs[0].insert_paragraph_before('Historical material below')
+        doc.paragraphs[0].insert_paragraph_before('Earlier report contains a signing event')
+        # A new explicit clinical heading bounds the following table; earlier
+        # substantive history does not own a different question's response.
+        p=doc.add_paragraph('Current clinical observations',style='Heading 1');p._p.addnext(doc.tables[0]._tbl)
+        raw=data(doc);mapping,groups=self.mapped(raw);self.assertEqual(len(groups),4)
+
+    def test_existing_flat_lists_and_independent_binary_neighbors_keep_their_kind(self):
+        doc=Document(io.BytesIO(self.form(indented=False)));doc.add_paragraph('Symptoms present? ☐ Yes ☐ No')
+        raw=data(doc);mapping,groups=self.mapped(raw);self.assertFalse(groups)
+        binary=next(f for f in mapping['fields']if f.get('options')==['Yes','No'])
+        self.assertEqual(binary['kind'],'choice')
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,mapping['fields'],{binary['key']:['Yes','No']})
+        out=word_v3.fill(raw,mapping['fields'],{binary['key']:'Yes'})
+        self.assertEqual(Document(io.BytesIO(raw)).tables[0]._tbl.xml,Document(io.BytesIO(out)).tables[0]._tbl.xml)
+
+    def test_changed_original_and_inherited_indent_ambiguity_remain_refused(self):
+        raw=self.form();mapping,groups=self.mapped(raw);root,child=self.first_pair(groups)
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(self.form(item='Changed item:'),mapping['fields'],{root['key']:'Alpha'})
+        for kind in('tab','unknown','competing','caption'):
+            doc=Document(io.BytesIO(raw));p=doc.tables[0].cell(1,1).paragraphs[2]
+            if kind=='tab':
+                run=p.add_run();run.add_tab();p._p.insert(1,run._r)
+            elif kind=='caption':p.runs[-1].text=' Another question: '+p.runs[-1].text
+            else:
+                ind=p._p.get_or_add_pPr().find(qn('w:ind'))
+                ind.set(qn('w:startChars')if kind=='unknown'else qn('w:hanging'),'300')
+            changed=data(doc);_,fields=self.mapped(changed);self.assertFalse(self.first_pair(fields))
