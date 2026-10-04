@@ -1,0 +1,49 @@
+{
+  "source_commit": "23a4e6bfefe4e9b0d74dfcc7a0ccff0cac6cf3f7",
+  "source_path": "/opt/meddoc-pro/.worktrees/v1-word-guard-23a4e6bf",
+  "forward_review_guard_actual": {
+    "selector": "core.tests.test_template_reinspection.TemplateReinspection.test_new_legacy_reinspection_requires_review_before_encounter_job_or_finalize",
+    "methods": 1,
+    "passed": 1,
+    "test_seconds": 4.514,
+    "outer_seconds": 14.474719325000478,
+    "actual_exit": 0,
+    "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/template-upgrade-20261004/guard-23a4e6bf/result.json",
+    "result_sha256": "3d40c6a5d14e2f8b720ee854a018e1d77e95c8da324d620ba7772061ba8dd025",
+    "original_archived_before_assertion": true,
+    "database_catalog_before_after": "both own normal/test names directly absent",
+    "source_clean_unchanged": true,
+    "providers_and_renderers": 0
+  },
+  "finished_note_recovery_refutation": {
+    "verdict": "NOTHING FOUND",
+    "pure_controls": 30,
+    "actual_exit": 0,
+    "outer_seconds": 0.9177285480036517,
+    "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/recovery-refute-23a4e6bf/instrument-v2/outputs/result.json",
+    "result_sha256": "fd3364d6fb683358dda3483f2efc9f807c2bc39b1d81b2cd49c86c8c56756b0b",
+    "lenses": [
+      "exactUnicode/newline/tab/longnotes and oldmodel data preservation; newrealEncounter model empty defaults",
+      "source authority and pending/unknown/finalized/revision refusals before save/audit",
+      "target latestconfirmed/link/department/sourcehash/physical/generation source refusals before save/audit",
+      "notes/date/revision identity hashing; no plaintext notes or oldreviewtoken in new auditpayload",
+      "static mounteddoctorroute/helperhook/CSRF/reviewack and authorization before notes render"
+    ],
+    "limits": [
+      "Dummy database and mocked ORM/transaction/physical-verifier seams; pureorchestration countercontrols do not qualify real persistence,locks,races or provider/Word behavior",
+      "No concrete wrong output found in this finite scope, not proof of absence",
+      "Rawfirst instrument serialization failure retained separately; it attempted JSON-serialize Department model passed as auditkeyword, not stored auditdetails"
+    ],
+    "database_provider_renderer_network_calls": 0,
+    "source_clean_unchanged": true
+  },
+  "artifact_seal_sha256": "6551be6b29af6983a93c26cf3d1e12400bf1cbdf17c4d8b10baf3ad08041c535",
+  "artifact_seal": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/recovery-refute-23a4e6bf/artifact-seal.json",
+  "sealed_files": 29,
+  "not_claimed": [
+    "nativeMicrosoftWord acceptance",
+    "whole54/60or18/20qualification",
+    "privateinstallation",
+    "realpatientlaunchreadiness"
+  ]
+}
