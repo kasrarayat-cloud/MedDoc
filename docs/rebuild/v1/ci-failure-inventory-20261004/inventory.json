@@ -1874,5 +1874,32 @@
     "Original selector identities, subcase headers, source files and failure evidence remain preserved even where safety assertions were explicitly superseded.",
     "The inventory excludes browser and non-core failure jobs; those retain separate denominators/evidence.",
     "Word acceptance54/60 and18/20, actual live provider qualification and served private demonstration are separate gates."
+  ],
+  "coherent_affected_packets": [
+    {
+      "source_commit": "1684c2b8105534d66895783f78443215c33c4d59",
+      "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-coherent-gap-1684c2b8/result.json",
+      "result_sha256": "669e7faa482a9abb0cfbf059785c18d3aac3f7d0ef3525072dccd8dc21d214b2",
+      "real_exit_status": 1,
+      "actual_methods": 32,
+      "passing_methods": 30,
+      "failing_methods": 2,
+      "failure_blocks": 3,
+      "tests_seconds": "135.638",
+      "outer_seconds": "146.266",
+      "DB_absence_verified": true,
+      "original_failure_blocks_unchanged": true,
+      "outcomes": "27 retained denial methods, R104 and numeric2 pass; R105 actual finalization fails; RR1-10 two held-message assertions fail. This is not full CI."
+    },
+    {
+      "source_commit": "34e58835617dc04e757b6e1767a95b77dec08a1b",
+      "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-policy-check-34e58835/result.json",
+      "result_sha256": "d2c3f298153014f185ba741011ea16496007b775e17476e269769a1dc2bf1681",
+      "real_exit_status": 0,
+      "actual_methods": 4,
+      "passing_methods": 4,
+      "DB_absence_verified": true,
+      "outcomes": "Corrected policy class passes established finalizer positives and unknown/patient/witness/manager negatives. Runtime guard unchanged; original generic print-name failure retained."
+    }
   ]
 }

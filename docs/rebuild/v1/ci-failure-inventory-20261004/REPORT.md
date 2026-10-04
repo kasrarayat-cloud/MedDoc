@@ -14,3 +14,18 @@ Thirty-one original methods, covering 35 original blocks, still need their relev
 The checkbox recovery's later five-method pass is separate from the retained 49-method Word packet's 45 pass / 3 fail / 1 error outcome. The historical 124 served checks remain unchanged; current active-route intrusion and authorized-positive controls have separate counts. Original unsafe assertions explicitly superseded by stronger signing ownership controls remain mapped to their originals, never erased.
 
 This inventory performs no database, provider, deployment, external-message or cleanup action. Exact coherent CI, whole-document 54/60 and 18/20 acceptance, actual served private demonstration, live model/voice usefulness and external patient-data release requirements remain separate evidence.
+
+## Subsequent actual route evidence
+
+The clean integrated 1684c2b8 affected packet runs 32 methods in 135.638
+seconds, exit 1. Thirty pass: all 27 retained denial methods, R104 and both
+numeric-part workflows. Two methods still fail, with three subfailure blocks:
+the unchanged R105 automatic Plan path cannot finalize, and RR1-10 has two
+exact held-message assertions. The original expectations and failures remain
+retained. No full-green claim follows from this packet.
+
+The separate clean 34e58835 policy class runs four methods, exit 0, preserving
+established finalizer positives and unknown/patient/witness/manager negatives.
+Both synthetic test databases were destroyed and independently absent from
+the PostgreSQL catalog. Source stayed clean and unchanged; no provider call.
+The append-only packet receipts and hashes are in inventory.json.
