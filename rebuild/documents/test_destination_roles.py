@@ -970,3 +970,58 @@ class ExportedWritingCoordinates(unittest.TestCase):
                         before = w.fill(raw, fields, {field['key']: True})
                         w.writing_places(raw, fields)
                         self.assertEqual(w.fill(raw, fields, {field['key']: True}), before)
+
+
+class ByteStableNoOpBoxes(unittest.TestCase):
+    def form(self, checked=False):
+        doc = Document();doc.add_paragraph('Plan: ______')
+        footer=doc.sections[0].footer.paragraphs[0]
+        footer.add_run('Final page ');footer.add_run('☒' if checked else '☐')
+        original=data(doc)
+        # XML tree equality does not imply raw byte equality: this accepted
+        # source has a BOM and a declaration spelling the serializer changes.
+        source=zipfile.ZipFile(io.BytesIO(original));out=io.BytesIO()
+        with zipfile.ZipFile(out,'w') as rewritten:
+            for info in source.infolist():
+                raw=source.read(info.filename)
+                if info.filename=='word/footer1.xml':raw=b'\xef\xbb\xbf'+raw
+                rewritten.writestr(info,raw)
+        return out.getvalue()
+
+    def fields(self, raw):
+        fields=w.inspect(raw)['fields']
+        return fields, next(field for field in fields if field['kind']=='checkbox'), next(field for field in fields if field['label']=='Plan')
+
+    def test_an_already_correct_footer_box_keeps_every_original_package_entry(self):
+        for state in (False,True):
+            with self.subTest(state=state):
+                raw=self.form(state);fields,box,plan=self.fields(raw)
+                out=w.fill(raw,fields,{box['key']:state})
+                self.assertEqual(out,raw)
+
+    def test_a_body_answer_does_not_reserialize_an_unchanged_footer(self):
+        raw=self.form();fields,box,plan=self.fields(raw)
+        out=w.fill(raw,fields,{box['key']:False,plan['key']:'Complete synthetic plan'})
+        before=zipfile.ZipFile(io.BytesIO(raw));after=zipfile.ZipFile(io.BytesIO(out))
+        self.assertEqual(before.read('word/footer1.xml'),after.read('word/footer1.xml'))
+        self.assertIn('Complete synthetic plan',xml(out))
+        self.assertNotEqual(before.read('word/document.xml'),after.read('word/document.xml'))
+
+    def test_an_intentional_tick_and_untick_still_change_and_read_back_the_actual_box(self):
+        for original,requested in ((False,True),(True,False)):
+            with self.subTest(original=original,requested=requested):
+                raw=self.form(original);fields,box,plan=self.fields(raw)
+                out=w.fill(raw,fields,{box['key']:requested})
+                a=zipfile.ZipFile(io.BytesIO(raw));b=zipfile.ZipFile(io.BytesIO(out))
+                self.assertNotEqual(a.read('word/footer1.xml'),b.read('word/footer1.xml'))
+                self.assertEqual(a.read('word/document.xml'),b.read('word/document.xml'))
+                states=w.option_states(w.SlotIndex(w.open_package(out)),box)
+                self.assertEqual(states,[requested])
+
+    def test_later_text_containing_boxes_does_not_redirect_the_original_box_readback(self):
+        from .test_word_v3 import SourceBoundGlyphWrites
+        raw,fields=SourceBoundGlyphWrites().form()
+        out=w.fill(raw,fields,{'c':['Before','After'],'t':'Ordinary text with ☐ and ☒'})
+        self.assertIn('Ordinary text with',xml(out))
+        p=w.SlotIndex(w.open_package(out)).by_id[BODY+'b/p[0]']
+        self.assertEqual(w.text_of(p.el),'Choices? ☒ Before: Ordinary text with ☐ and ☒ ☒ After')

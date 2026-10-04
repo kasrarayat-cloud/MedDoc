@@ -8973,6 +8973,13 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 fail("This answer area cannot be filled automatically.", "unsupported_layout")
     if protected.floating_initials and (ops or glyph_writes):
         fail(FLOATING_INITIALS_REFUSAL, "unqualified_floating_initials")
+    # Read this invocation's immutable original trees before any checkbox,
+    # pinning or text edit. An already-correct box may schedule a write that
+    # changes no XML; serializing that part would still change its original
+    # declaration/BOM/empty-element syntax. Compare the complete tree, rather
+    # than inferring a no-op from a Boolean flag or from the field's metadata.
+    original_part_hashes = {part: fingerprint(package.tree(part))
+                            for part in {op[3] for op in ops} | {row[3] for row in glyph_writes.values()}}
     # Checkbox state edits preserve source offsets. Resolve them before text can
     # insert new checkbox-looking characters, then retain the actual leaf nodes.
     changed = set()
@@ -8992,7 +8999,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 or next(node.iterancestors(q("w:p")), None) is not p):
             fail("An answer changed or removed an original printed checkbox.", "mapping_mismatch")
         glyph_readback[key] = {"part": part, "path": element_identity_path(package.tree(part), node)}
-    out = package.write({part: package.tree(part) for part in changed}) if changed else data
+    updates = {part: package.tree(part) for part in changed
+               if fingerprint(package.tree(part)) != original_part_hashes[part]}
+    out = package.write(updates) if updates else data
     verify_options(out, fields, answers, glyph_readback=glyph_readback)
     if retained_layout is not None:
         for header, row, area in source_detector.layout_candidates:

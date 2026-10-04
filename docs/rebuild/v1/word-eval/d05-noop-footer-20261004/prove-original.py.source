@@ -1,0 +1,19 @@
+import sys,json,hashlib,io,zipfile
+from pathlib import Path
+from lxml import etree
+sys.path.insert(0,str(Path(sys.argv[1])/'rebuild'))
+from documents import word_v3 as w
+W=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word')
+old=W/'dev-application-7907ae5aa38c-1791089432236314904/D05'
+raw=Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D05-ab006eeb434e.docx').read_bytes()
+assert hashlib.sha256(raw).hexdigest()=='ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a'
+fields=json.loads((old/'initial-mapping.json').read_text())['fields']
+box=next(f for f in fields if f['key']=='v3_8');assert box['kind']=='checkbox'
+out=w.fill(raw,fields,{'v3_8':False})
+new=W/'d05-noop-footer-source-proof-20261004';new.mkdir(exist_ok=False)
+(new/'original.docx').write_bytes(raw);(new/'source-only-export.docx').write_bytes(out)
+a=zipfile.ZipFile(io.BytesIO(raw));b=zipfile.ZipFile(io.BytesIO(out));c=zipfile.ZipFile(old/'empty-export.docx')
+parts={name:{'original_sha256':hashlib.sha256(a.read(name)).hexdigest(),'corrected_sha256':hashlib.sha256(b.read(name)).hexdigest(),'historical_sha256':hashlib.sha256(c.read(name)).hexdigest(),'corrected_raw_equal':a.read(name)==b.read(name),'historical_raw_equal':a.read(name)==c.read(name)} for name in a.namelist()}
+result={'source_sha256':hashlib.sha256(raw).hexdigest(),'historical_export_sha256':hashlib.sha256((old/'empty-export.docx').read_bytes()).hexdigest(),'corrected_export_sha256':hashlib.sha256(out).hexdigest(),'same_full_original_bytes':out==raw,'all_original_zip_members_same':all(r['corrected_raw_equal'] for r in parts.values()),'actual_box_states':w.option_states(w.SlotIndex(w.open_package(out)),box),'fields_mapping_unchanged_sha256':hashlib.sha256((old/'initial-mapping.json').read_bytes()).hexdigest(),'source_word_sha256':hashlib.sha256((Path(sys.argv[1])/'rebuild/documents/word_v3.py').read_bytes()).hexdigest(),'parts':parts,'classification':'source-only affected repair, no provider/DB/runtime/full-gate requalification; historical fixed independent glyph reader failure unchanged'}
+(new/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({k:v for k,v in result.items() if k!='parts'},indent=2))
+assert out==raw and result['all_original_zip_members_same'] and result['actual_box_states']==[False]

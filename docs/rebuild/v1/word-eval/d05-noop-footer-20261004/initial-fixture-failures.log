@@ -1,0 +1,44 @@
+test_a_body_answer_does_not_reserialize_an_unchanged_footer (documents.test_destination_roles.ByteStableNoOpBoxes.test_a_body_answer_does_not_reserialize_an_unchanged_footer) ... FAIL
+test_an_already_correct_footer_box_keeps_every_original_package_entry (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_already_correct_footer_box_keeps_every_original_package_entry) ... 
+  test_an_already_correct_footer_box_keeps_every_original_package_entry (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_already_correct_footer_box_keeps_every_original_package_entry) (state=False) ... FAIL
+  test_an_already_correct_footer_box_keeps_every_original_package_entry (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_already_correct_footer_box_keeps_every_original_package_entry) (state=True) ... FAIL
+test_an_intentional_tick_and_untick_still_change_and_read_back_the_actual_box (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_intentional_tick_and_untick_still_change_and_read_back_the_actual_box) ... ok
+test_later_text_containing_boxes_does_not_redirect_the_original_box_readback (documents.test_destination_roles.ByteStableNoOpBoxes.test_later_text_containing_boxes_does_not_redirect_the_original_box_readback) ... ERROR
+
+======================================================================
+ERROR: test_later_text_containing_boxes_does_not_redirect_the_original_box_readback (documents.test_destination_roles.ByteStableNoOpBoxes.test_later_text_containing_boxes_does_not_redirect_the_original_box_readback)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/test_destination_roles.py", line 1024, in test_later_text_containing_boxes_does_not_redirect_the_original_box_readback
+    plan=next(field for field in fields if field['label']=='Plan')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration
+
+======================================================================
+FAIL: test_a_body_answer_does_not_reserialize_an_unchanged_footer (documents.test_destination_roles.ByteStableNoOpBoxes.test_a_body_answer_does_not_reserialize_an_unchanged_footer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/test_destination_roles.py", line 1005, in test_a_body_answer_does_not_reserialize_an_unchanged_footer
+    self.assertEqual(before.read('word/footer1.xml'),after.read('word/footer1.xml'))
+AssertionError: b'\xef\xbb\xbf<?xml version=\'1.0\' encodin[1312 chars]ftr>' != b'<?xml version=\'1.0\' encoding=\'UTF-8\' [1364 chars]ftr>'
+
+======================================================================
+FAIL: test_an_already_correct_footer_box_keeps_every_original_package_entry (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_already_correct_footer_box_keeps_every_original_package_entry) (state=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/test_destination_roles.py", line 999, in test_an_already_correct_footer_box_keeps_every_original_package_entry
+    self.assertEqual(out,raw)
+AssertionError: b'PK\[97174 chars]0J-D]r\xd3 \xd6\xa6\x01\x00\x00q\x05\x00\x00\x[8949 chars]\x00' != b'PK\[97174 chars]0J-D]O\xedKd\x9b\x01\x00\x004\x05\x00\x00\x10\[8859 chars]\x00'
+
+======================================================================
+FAIL: test_an_already_correct_footer_box_keeps_every_original_package_entry (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_already_correct_footer_box_keeps_every_original_package_entry) (state=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/test_destination_roles.py", line 999, in test_an_already_correct_footer_box_keeps_every_original_package_entry
+    self.assertEqual(out,raw)
+AssertionError: b'PK\[97176 chars]-D]\xf0\xe58\x0b\xa6\x01\x00\x00q\x05\x00\x00\[8953 chars]\x00' != b'PK\[97176 chars]-D]\xcd\xdbS\xb9\x9b\x01\x00\x004\x05\x00\x00\[8872 chars]\x00'
+
+----------------------------------------------------------------------
+Ran 4 tests in 1.410s
+
+FAILED (failures=3, errors=1)
