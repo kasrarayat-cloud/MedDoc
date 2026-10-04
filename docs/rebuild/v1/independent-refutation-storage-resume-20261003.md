@@ -178,3 +178,62 @@ receipt. This affected packet closes these route failures, not full CI or the
 whole-document 54/60 and 18/20 acceptance gates.
 
 - `root-remaining-route-c9f5ff8e/adjudication.json`: `035e7698d3c139086b6b8424af3a1747f570a36f2624886119adbcacbdfc7973`
+
+## Numeric-date correction withheld after independent failure — 2026-10-04
+
+The finished 88d5d9aa change reduces avoidable holds but releases an invalidated
+finding: `No polyps were seen. The earlier findings were wrong. Correction:
+procedure date was 09/21/2026.` The answer, review page and final decisions
+support `No polyps were seen.` despite the intervening clinical invalidation.
+The unchanged d1325ac0 baseline holds it. Both packets keep all 45 controls:
+baseline zero unsafe releases/seven false holds; proposed change one unsafe
+release/three false holds. The change remains outside integration and provider
+qualification pending repair. Separate 45-control SOAP and 21-control complete
+fixture-status packets pass; those results do not discharge this failure.
+
+Two initial root harness failures happened before a valid packet: nested quote
+syntax and an offered-unit lookup. Their original scripts and logs remain.
+The valid packet selects the exact offered unit rather than changing source
+parsing. A subjectless source without reviewed ownership proof remains a
+separate pre-existing hold; no clarification of C08 is claimed.
+
+- `root-numeric-date-correction-refutation-d1325ac0b6bd-wire-second/result.json`: `70b612a9917221e0a2baa4e840872f6d09950a6d9959575e5aff441ac55d9677`
+- `root-numeric-date-correction-refutation-88d5d9aaf370-wire-second/result.json`: `508ec8d5fcea1b2f1e55a454440bc303395353d211da996661d0b31bba5122cd`
+
+## D10 worker reuse and ownership controls — 2026-10-04
+
+Finished c95d0f0f reuses only the fresh detector result for the same original
+within one fill invocation. Independent root checks pass all 128 ordinary and
+signing controls and all 16 explicit witness-act controls, with zero unsafe
+writes or false holds. Six additional synthetic layouts produce identical
+maps, statuses and complete DOCX bytes on d1325ac0 and c95d0f0f; original
+untargeted paragraphs, headers, footers, entered values and complete long
+answers are preserved. These are scoped controls, not corpus acceptance.
+
+The first fidelity helper had a nested newline syntax error. The second
+incorrectly counted paragraphs inside writable cells as neighbors and assumed
+paragraph indices stayed fixed after legal appended answers; it failed on the
+baseline. Both instruments remain retained. The corrected checker excludes
+physical target descendants and verifies the original neighboring paragraph
+sequence per part plus complete answer readback. No application guard changed
+to make the instrument pass. The integrated repair now awaits an actual D10
+upload/review/finalization/download replay with archive-before-assertion.
+
+- `root-numeric-signing-refutation-c95d0f0f/result.json`: `75043cb642e1e0d1605a211703ad91b15a17c86f97531536d39099bb16f75ccd`
+- `root-numeric-explicit-witness-refutation-c95d0f0f/result.json`: `310271b2cb58738979f793f8a086e3e87af4d3009122d8fcaa3b86c5ba7eb317`
+- `root-word-local-reuse-fidelity-c95d0f0f-fixed-neighbors/result.json`: `9340a316c9b5bc6d4ef7f47098d46e65646d6d5ff3f46d6bb06d7261621099c3`
+- `root-word-local-reuse-fidelity-c95d0f0f-fixed-neighbors/artifact-and-instrument-record.json`: `391528042fed0a5cb9b66b7d1ab1a9a11451a9cd6addebd324b3ddd4546883c9`
+
+## Private installer failure paths repaired — 2026-10-04
+
+Five independently executed controls on 65295532 demonstrate two defects: an
+original migration exception lost its failure evidence, and an inactive
+publisher refusal left three timers paused. Finished e10ba561 retains the
+protected original exception/output/actual exit and restores prior timer states
+on partial-pause and refusal paths. The unchanged five controls pass with zero
+wrong results, using the actual failure recorder and inert service actions.
+No installed services, credentials or databases were changed. The source-bound
+catalog rehearsal and preparation remain separate from installation authority.
+
+- `root-install-adapter-refutation-65295532/result.json`: `d2be1d4c58c91bf9a4383ac903ff39b534f6d10214e8f33c9f032da9a1db090b`
+- `root-install-adapter-refutation-e10ba561/result.json`: `bc476282213a9dd6f772d7897d8341eba6cd5e2fce93eb1779ea5a6a65c1bfbb`
