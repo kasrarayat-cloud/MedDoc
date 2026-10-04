@@ -735,6 +735,37 @@ class ExportReadBackTests(unittest.TestCase):
             '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
         self.assertEqual(self.problems(st.export_read_back(original, erased, fields, saved)), [box['key']])
 
+    def test_protected_scalars_read_original_entries_and_reject_changed_or_removed_content(self):
+        original, fields, _ = self.case('N01')
+        field = next(f for f in fields if f['key'] == 'v3_1')
+        existing = self.export(original, fields, {field['key']: 'Existing human text'})
+        changed = self.export(original, fields, {field['key']: 'Incorrect protected answer'})
+        # Both exports use the same inspected physical target. Protection here
+        # is the checker input; no signing/admission guard is bypassed.
+        blank = {'status': 'left_blank', 'text': '', 'reviewed': True}
+        for kind in ('text', 'long_text', 'date', 'time'):
+            with self.subTest(kind=kind):
+                protected = {**field, 'kind': kind, 'write_protected': True}
+                answers = {field['key']: blank}
+                kept = st.export_read_back(existing, existing, [protected], answers)
+                self.assertTrue(kept['passed'], kept['problems'])
+                self.assertEqual(kept['fields'][field['key']]['read'], 'Existing human text')
+                for bad in (changed, original):
+                    failed = st.export_read_back(existing, bad, [protected], answers)
+                    self.assertFalse(failed['passed'])
+                    self.assertIn(field['key'], self.problems(failed))
+                proposed = {field['key']: {'status': 'supported', 'text': 'Incorrect protected answer',
+                                           'reviewed': True}}
+                for output in (existing, changed):
+                    failed = st.export_read_back(existing, output, [protected], proposed)
+                    self.assertFalse(failed['passed'])
+                    self.assertFalse(failed['fields'][field['key']]['set_by_export'])
+                    self.assertEqual(failed['fields'][field['key']]['expected'], 'Existing human text')
+                    self.assertIn(field['key'], self.problems(failed))
+        ordinary = st.export_read_back(original, changed, [field], {
+            field['key']: {'status': 'supported', 'text': 'Incorrect protected answer', 'reviewed': True}})
+        self.assertTrue(ordinary['passed'], ordinary['problems'])
+
     def test_a_written_text_that_is_not_the_saved_one_fails(self):
         from core import v3_mapping
         original, fields, saved = self.case('N04')

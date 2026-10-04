@@ -518,6 +518,8 @@ def export_read_back(original, exported, fields, answers):
         target = loc.get('target') or {}
         refs = [loc] + list(loc.get('extra') or []) + list(target.get('copies') or [])
         record = readings[key] = {'answered': answered, 'set_by_export': sets}
+        if f.get('write_protected') and answered:
+            problem(key, 'a human-owned destination cannot have an automatic saved answer')
         try:
             if kind in OPTION_KINDS:
                 for box in target.get('boxes') or []:
@@ -540,20 +542,21 @@ def export_read_back(original, exported, fields, answers):
                 elif shown != expected or (sets and any(state is None for state in shown)):
                     problem(key, f"the export shows the marks {shown}, not the saved answer's {expected}")
             elif kind in SCALAR_KINDS:
-                if answered:
+                if sets:
                     written.update(ident(ref) for ref in refs)
-                shown = w.constrained_scalar_value(before, after, f, answered)
-                expected = (str(saved.get('text') or '') if answered
+                shown = w.constrained_scalar_value(before, after, f, sets)
+                expected = (str(saved.get('text') or '') if sets
                             else w.constrained_scalar_value(before, before, f, False))
                 record.update(expected=expected, read=shown)
-                if answered and (shown is None or _flat(shown) != _flat(expected)):
+                if sets and (shown is None or _flat(shown) != _flat(expected)):
                     problem(key, 'the export shows ' + (repr(shown[:80]) if shown is not None else 'no readable value')
                             + ' where the saved answer is ' + repr(expected[:80]))
-                elif not answered and shown != expected:
+                elif not sets and shown != expected:
                     problem(key, f'the export shows {shown!r:.80} where the blank form shows {expected!r:.80} and '
                                  'nothing was saved')
             elif answered:
-                written.update(ident(ref) for ref in refs)
+                if sets:
+                    written.update(ident(ref) for ref in refs)
                 problem(key, f'a saved {kind} answer cannot be read back')
         except Exception as error:                          # (what cannot be read back is a failure, never a pass)
             problem(key, f'the field cannot be read back ({type(error).__name__})')
