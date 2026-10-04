@@ -1,0 +1,50 @@
+--- development_renderer_d30_archive_v1.py
++++ development_renderer_d30_manager_blank_v2.py
+@@ -18,7 +18,7 @@
+ from core import v3_mapping,import_binding
+ from documents import word_v3
+ 
+-ROOT=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word')
++ROOT=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d30-manager-blank-current-prepared-20261004')
+ CORPUS=Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus')
+ LEDGER=CORPUS/'custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json'
+ assert hashlib.sha256(LEDGER.read_bytes()).hexdigest()=='5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7'
+@@ -297,6 +297,22 @@
+    if key!=target['key']:payload['blank_'+key]='on'
+   response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
+   self.assertEqual(response.status_code,302,response.content.decode());encounter.refresh_from_db()
++  manager_fields=[f for f in version.fields if f['locator']['part']=='word/document.xml'
++      and f['locator']['slot']=='b/tbl[21]/tr[0]/tc[0]']
++  manager_records=[{'field':f,'answer':encounter.answers.get(f['key']),
++      'review_actions':{key:value for key,value in payload.items() if key.endswith('_'+f['key'])}}
++      for f in manager_fields]
++  retain('D30','explicit-manager-blank-review',{'original_manager_slot':'word/document.xml#b/tbl[21]/tr[0]/tc[0]',
++      'mapped_manager_fields':manager_fields,'persisted_reviews':manager_records,'source_sha256':template.sha256,
++      'scope':'Human clinician Leave blank — reviewed; another author area remains unchanged, no generated identity'})
++  self.assertEqual(len(manager_fields),1,manager_records)
++  manager_field=manager_fields[0];manager_answer=encounter.answers[manager_field['key']]
++  self.assertTrue(manager_field.get('write_protected'),manager_field)
++  self.assertEqual(manager_answer.get('text'),'');self.assertEqual(manager_answer.get('status'),'left_blank')
++  self.assertTrue(manager_answer.get('reviewed'));self.assertEqual(manager_answer.get('evidence'),[])
++  self.assertEqual(manager_answer.get('accepted_by'),None);self.assertEqual(manager_answer.get('edited_by'),None)
++  self.assertEqual(manager_answer.get('blank_decision',{}).get('by'),str(self.user.pk))
++  self.assertTrue(manager_answer.get('blank_history'));self.assertFalse(manager_answer.get('accepted_suggestion'))
+   response=self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'},follow=True)
+   encounter.refresh_from_db()
+   retain('D30','finalization-attempt',{'status':encounter.status,'response_status':response.status_code,'messages':[str(m) for m in response.context['messages']] if response.context else [],'reviewed_answers':encounter.answers})
+@@ -309,6 +325,15 @@
+   self.assertEqual(encounter.status,'finalized',[str(m) for m in response.context['messages']]);self.assertIsNotNone(actual)
+   old=word_v3.Detector(word_v3.open_package(data));new=word_v3.Detector(word_v3.open_package(actual))
+   part=target['locator']['part']
++  manager_identity='word/document.xml#b/tbl[21]/tr[0]/tc[0]'
++  before_manager=old.index.by_id[manager_identity];after_manager=new.index.by_id[manager_identity]
++  manager_preserved=word_v3.fingerprint(before_manager.el)==word_v3.fingerprint(after_manager.el)
++  retain('D30','manager-final-physical-preservation',{'source_sha256':template.sha256,
++      'original_slot':manager_identity,'original_fingerprint':word_v3.fingerprint(before_manager.el),
++      'export_fingerprint':word_v3.fingerprint(after_manager.el),'unchanged':manager_preserved,
++      'explicit_review':manager_records,'export_sha256':hashlib.sha256(actual).hexdigest(),
++      'scope':'Actual originally reserved manager area byte/structure retained; no finalizer identity inserted'})
++  self.assertTrue(manager_preserved)
+   self.assertEqual(word_v3.option_states(new.index,target),[False,False,False,False,True,False,True,False])
+   for slot in ('b/p[77]','b/p[79]'):
+    a=old.index.by_id[part+'#'+slot].el;b=new.index.by_id[part+'#'+slot].el

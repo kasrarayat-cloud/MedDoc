@@ -1,0 +1,55 @@
+{
+  "state": "PREPARED_NOT_EXECUTED",
+  "candidate": "PENDING coherent root commit/read-only worktree/freeze after b303 and style-cache repair",
+  "source_reference_only": "b3030c2aec1e86fb432804b224b06169a1af8d48",
+  "files": {
+    "development_renderer_d30_manager_blank_v2.py": "cab0d227abf9a37ced08b3cf206333519a076ba0ecf4c4d55fecd7257d64b995",
+    "run_d30_manager_blank_workflow.py": "ef6e30d4045a15fa69375a54d8adaf533258d86780eca130263bb07cd9d99fbe",
+    "run_dev_application_gate.py": "5a822fcfe1ed9c759f8b57d2475be69e11c5c53a2d52a3e205cb6fc0805f7032",
+    "development_renderer_numeric_archive_v2.py": "81e292d47f7e9c92aec9a6a61eef1cb62907dde77337a13234cd45d6e63ae9e5"
+  },
+  "changes": "Only task output root relocation, independent manager blank audit/source-physical assertions, inner hash and unique own DB prefix; original corrective workflow/scorer/profile/notes unchanged",
+  "historical_driver_sha256": "c9df9785a603e8c53b5a46fbccb298e1591d801c2de9ead4a16382a0733fadc6",
+  "historical_inner_sha256": "1142f9d93966e62a1db765adf14f861d8bdb513131f205eca6a0c1e1851cbbd8",
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "groundtruth_sha256": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+  "GT_denominator": 62,
+  "manual_options": "A20 p72 question/p73\u201380 source options; ownflat+partner explicit clinician correction; A21 preserved",
+  "manager_source": "word/document.xml#b/tbl[21]/tr[0]/tc[0]",
+  "manager_assertions": "Mapped protected source field, persisted textempty/statusleft_blank/reviewed/blankactor+history/zeroevidence/noacceptance/noeditedidentity; physicaloriginalcell fingerprint identical afterfinalexport",
+  "rights": "offline supported/providermodel denied fixed ledger sameSHA5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7",
+  "bounds": {
+    "child_s": 900,
+    "outer_s": 1200,
+    "sandbox_CPU_s": 12,
+    "sandbox_wall_s": 20
+  },
+  "database_prefix": "quillmd_qa_sol_word_d30m_",
+  "socket": "/tmp/quillmd-d30-gate-OWN_OUTER_PID/layout.sock (Unix only)",
+  "provider_calls": 0,
+  "new_unseen_claim": false,
+  "automatic_gate_credit": false,
+  "thresholds": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  },
+  "teardown_required": [
+    "real child returncode/bounded reap",
+    "normal/test own DB direct catalog absence",
+    "renderer PID absent/reaped",
+    "socketremoved",
+    "owned layout child/container absence",
+    "source/harness beforeafter cleanhash"
+  ],
+  "prerequisites": [
+    "coherent exact source candidate with current migration/config/financial pins",
+    "root serialized QA/render execution grant",
+    "root freeze JSON exact40SHA and original thresholds/provider0",
+    "authorized protected qa_test_with_artifacts wrapper+qualified word-runtime metadata unchanged",
+    "direct ownDBbeforeabsence and protectedcorpusrights hashes"
+  ],
+  "executed_app_original_upload_DB_renderer_provider": false
+}
