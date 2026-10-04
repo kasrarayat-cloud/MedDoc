@@ -2385,8 +2385,8 @@ class Detector:
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
-        self.guard_numeric_bands()
         self.guard_action_participants()
+        self.guard_numeric_bands()
         self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
@@ -2567,7 +2567,7 @@ class Detector:
             self.coverage_issue(slot, 'human_signing_action', reason + ' Location: ' + slot.id)
 
     def guard_action_participants(self):
-        """A native witness identity belongs to its physically continuous act.
+        """A witness identity belongs to its physically continuous source act.
 
         The complete source caption appoints a witness, and the immediately
         preceding paragraph owns a protected document act. Plain spacers and
@@ -2577,7 +2577,7 @@ class Detector:
         """
         acts = [a for a in self.areas if a.source_action]
         for area in self.areas:
-            if area.slot.kind not in ('sdt', 'ff') or area.source_action:
+            if area.slot.kind not in ('sdt', 'ff', 'p') or area.source_action:
                 continue
             if not re.fullmatch(r'(?:name of (?:the )?witness|(?:the )?witness(?: name)?)',
                                 clean_label(area.label), re.I):
@@ -2593,7 +2593,13 @@ class Detector:
                     ambiguous = any((prior := self.host_cell(a.slot)) is not None
                                     and prior.parent is cell.parent and prior.info['row'] == cell.info['row'] - 1
                                     for a in acts)
-            if not ambiguous and (before is None or not any(self.host_paragraph(a.slot) is before for a in acts)):
+            # An explicit printed act is source even when it has no mapped
+            # answer of its own. A plain identity caption has the same human
+            # ownership as its native-control representation.
+            direct_act = bool(before is not None and self.checkbox_source_action(
+                self.ptext(before.el)[0], governing=True))
+            if not ambiguous and (before is None or not direct_act
+                                  and not any(self.host_paragraph(a.slot) is before for a in acts)):
                 continue
             area.source_action = True
             area.protection = (('This witness area is beside a human document act in a table whose ownership cannot be resolved. '

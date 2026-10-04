@@ -66,7 +66,7 @@ class NumericPartWorkflow(V3Fixture, TestCase):
         response = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'}, follow=True)
         encounter.refresh_from_db()
         self.assertEqual(encounter.status, 'finalized', [str(m) for m in response.context['messages']])
-        response = self.client.get(f'/encounters/{encounter.pk}/download/')
+        response = self.client.get(f'/encounters/{encounter.pk}/export/')
         output = b''.join(response.streaming_content)
         self.assertEqual(Document(io.BytesIO(output)).paragraphs[2].text, '120/80')
         self.assertEqual(Document(io.BytesIO(output)).paragraphs[3].text, '\tSystolic\tdiastolic')

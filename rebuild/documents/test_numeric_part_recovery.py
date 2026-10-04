@@ -154,3 +154,33 @@ class NumericPartRecovery(unittest.TestCase):
                         else:
                             field = located(raw, 1, slot=slot.id)
                             self.assertIn('120/▯▯▯', w.text_of(w.open_package(w.fill(raw, [field], {field['key']: '120'})).tree('word/document.xml')))
+
+    def test_witness_identity_between_explicit_act_and_numeric_band_remains_human_owned(self):
+        act = 'I certify that I witnessed the patient sign this consent form.'
+        for shape in ('body', 'spacers', 'same_cell', 'rows'):
+            for source_act in (act, 'The signed document was received on the recorded date.', 'Clinical history: an earlier witness was recorded.'):
+                doc = Document()
+                if shape in ('same_cell', 'rows'):
+                    table = doc.add_table(rows=2 if shape == 'rows' else 1, cols=1); host = table.cell(0, 0)
+                else: host = doc
+                host.add_paragraph(source_act); host.add_paragraph('Witness name:')
+                if shape == 'rows': host = table.cell(1, 0)
+                if shape == 'spacers':
+                    for _ in range(3): host.add_paragraph()
+                host.add_paragraph('▯▯▯/▯▯▯'); host.add_paragraph('Neighbor: ______')
+                raw = saved(doc); index = w.SlotIndex(w.open_package(raw))
+                band = next(s for s in index.slots if s.kind == 'p' and w.paragraph_text(s.el)[0] == '▯▯▯/▯▯▯')
+                held = source_act == act
+                with self.subTest(shape=shape, source_act=source_act):
+                    if held:
+                        for number in (1, 2):
+                            with self.assertRaises(w.V3Failure): located(raw, number, 'Ordinary clinical value', slot=band.id)
+                        forged = {'key': 'old', 'label': 'Blood pressure', 'kind': 'text', 'locator':
+                                  {'contract': 'v3', 'part': band.part, 'slot': band.path,
+                                   'fingerprint': w.fingerprint(band.el),
+                                   'target': {'type': 'span', 'start': 0, 'end': 7, 'shape': 'segmented'}}}
+                        with self.assertRaises(w.V3Failure): w.fill(raw, [forged], {'old': '120/80'})
+                    else:
+                        fields = [located(raw, number, 'Reviewed part %d' % number, slot=band.id) for number in (1, 2)]
+                        output = w.fill(raw, fields, {fields[0]['key']: '120', fields[1]['key']: '80'})
+                        self.assertEqual(w.paragraph_text(w.SlotIndex(w.open_package(output)).by_id[band.id].el)[0], '120/80')
