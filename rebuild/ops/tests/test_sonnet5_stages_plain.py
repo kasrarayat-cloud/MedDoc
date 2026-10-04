@@ -576,10 +576,13 @@ class ExportReadBackTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import tempfile
+        from ops import standing_qa_notes_review as review
         cls.scratch = Path(tempfile.mkdtemp(prefix='stage-read-back-'))
         cls.inputs = st.frozen_inputs()
         cls.forms = st.build_forms(cls.scratch / 'forms', 'ordinary_notes', cls.inputs)
         cls.cases = {c['id']: c for c in cls.inputs['cases']['cases']}
+        cls.consent_review = review.frozen(review.MANIFEST_SHA256)
+        cls.reviewed_inputs = review.inputs_with_review(cls.inputs, cls.consent_review)
 
     @classmethod
     def tearDownClass(cls):
@@ -589,7 +592,9 @@ class ExportReadBackTests(unittest.TestCase):
         """(the form, its fields, what a clinician saved: each desired-supported field its first desired text, every
         other field left blank and reviewed)."""
         case = self.cases[case_id]
-        fields = self.inputs['cases']['forms'][case['form']]['fields']
+        # The explicit prospective exclusion preserves the frozen original
+        # and gold answers. Its human-owned Consent control is not exported.
+        fields = self.reviewed_inputs['cases']['forms'][case['form']]['fields']
         saved = {}
         for f in fields:
             ae = case['fields'][f['key']]['app_adoption_expectation']
@@ -598,6 +603,22 @@ class ExportReadBackTests(unittest.TestCase):
             else:
                 saved[f['key']] = {'status': 'left_blank', 'text': '', 'reviewed': True}
         return self.forms[case['form']], fields, saved
+
+    def ordinary_checkbox(self, checked=False):
+        """Independent ordinary control; the frozen Consent original stays human-owned."""
+        import io
+        from docx import Document
+        from documents import word_v3 as w
+        document = Document()
+        document.add_paragraph(('☒' if checked else '☐') + ' Smoker')
+        stream = io.BytesIO()
+        document.save(stream)
+        original = stream.getvalue()
+        fields = w.inspect(original)['fields']
+        box, = [f for f in fields if f['kind'] == 'checkbox']
+        self.assertFalse(box.get('write_protected'))
+        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
+        return original, fields, box, saved
 
     def export(self, original, fields, written):
         from documents import word_v3 as w
@@ -651,25 +672,18 @@ class ExportReadBackTests(unittest.TestCase):
 
     def test_a_checkbox_reviewed_and_left_blank_must_be_unticked(self):
         from core import v3_mapping
-        original, fields, saved = self.case('N06')
-        self.assertEqual(saved['v3_10']['status'], 'left_blank')
-        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), 'v3_10': True})
+        original, fields, box, saved = self.ordinary_checkbox()
+        self.assertEqual(saved[box['key']]['status'], 'left_blank')
+        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), box['key']: True})
         result = st.export_read_back(original, exported, fields, saved)
-        self.assertEqual(self.problems(result), ['v3_10'])
+        self.assertEqual(self.problems(result), [box['key']])
 
     def test_a_checkbox_the_blank_form_prints_ticked_follows_the_stated_rule(self):
-        # core.v3_mapping.fill_answers: a checkbox reviewed and left blank is exported UNTICKED even when the blank form
-        # prints it ticked; one never reviewed keeps what the form prints. (A synthetic variant of r1-11 whose consent
-        # box is printed ticked, inspected afresh.)
+        # Ordinary checkbox review unticks; an unreviewed control preserves its
+        # printed mark. The distinct protected Consent rule is tested below.
         from core import v3_mapping
-        from documents import word_v3 as w
-        original = rezip(self.forms['r1-11'], 'word/document.xml', replaced_once(
-            '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode(),
-            '<w:t>☒</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
-        fields = w.inspect(original)['fields']
-        box = next(f for f in fields if f['kind'] == 'checkbox')
+        original, fields, box, saved = self.ordinary_checkbox(checked=True)
         self.assertEqual(box.get('printed_ticked'), [0])
-        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
         unticked = self.honest(original, fields, saved)
         result = st.export_read_back(original, unticked, fields, saved)
         self.assertEqual((result['problems'], result['fields'][box['key']]['read']), ([], [False]))
@@ -679,6 +693,47 @@ class ExportReadBackTests(unittest.TestCase):
         never_reviewed = {**saved, box['key']: {'status': 'held', 'text': '', 'reviewed': False}}
         self.assertTrue(st.export_read_back(original, kept, fields, never_reviewed)['passed'])
         self.assertEqual(self.problems(st.export_read_back(original, unticked, fields, never_reviewed)), [box['key']])
+
+    def test_frozen_consent_exclusion_preserves_original_and_refuses_direct_ticks(self):
+        import hashlib
+        from core import v3_mapping
+        from documents import word_v3 as w
+        original, fields, saved = self.case('N06')
+        frozen = self.inputs['cases']['forms']['r1-11']['fields']
+        self.assertEqual(hashlib.sha256(original).hexdigest(), self.consent_review['source_sha256'])
+        consent = next(f for f in fields if f['key'] == self.consent_review['field_key'])
+        self.assertTrue(consent['write_protected'])
+        self.assertNotIn(consent['key'], v3_mapping.fill_answers(fields, saved))
+        for tick in (False, True):
+            with self.subTest(tick=tick), self.assertRaises(w.V3Failure) as caught:
+                self.export(original, frozen, {consent['key']: tick})
+            self.assertEqual(caught.exception.code, 'protected_signing_area')
+        exported = self.honest(original, fields, saved)
+        result = st.export_read_back(original, exported, fields, saved)
+        self.assertTrue(result['passed'])
+        self.assertFalse(result['fields'][consent['key']]['set_by_export'])
+
+    def test_reviewed_protected_checkbox_keeps_printed_mark_and_rejects_automatic_answer(self):
+        from documents import word_v3 as w
+        original = rezip(self.forms['r1-11'], 'word/document.xml', replaced_once(
+            '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode(),
+            '<w:t>☒</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
+        fields = w.inspect(original)['fields']
+        box = next(f for f in fields if f['kind'] == 'checkbox')
+        self.assertTrue(box['write_protected'])
+        self.assertEqual(box['label'], 'Consent obtained')
+        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
+        kept = self.honest(original, fields, saved)
+        result = st.export_read_back(original, kept, fields, saved)
+        self.assertEqual(result['problems'], [])
+        self.assertEqual(result['fields'][box['key']]['read'], [True])
+        self.assertFalse(result['fields'][box['key']]['set_by_export'])
+        wrong = {**saved, box['key']: {'status': 'supported', 'text': '☒', 'reviewed': True}}
+        self.assertEqual(self.problems(st.export_read_back(original, kept, fields, wrong)), [box['key']])
+        erased = rezip(kept, 'word/document.xml', replaced_once(
+            '<w:t>☒</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode(),
+            '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
+        self.assertEqual(self.problems(st.export_read_back(original, erased, fields, saved)), [box['key']])
 
     def test_a_written_text_that_is_not_the_saved_one_fails(self):
         from core import v3_mapping

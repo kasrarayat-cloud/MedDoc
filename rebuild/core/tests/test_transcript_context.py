@@ -384,7 +384,14 @@ class PatientDefault(SimpleTestCase):
         self.assertEqual(answers['v3_7']['status'],'supported')
         self.assertEqual(answers['v3_7']['text'],
             'Examination mild swelling over the left lateral ankle.\nNo open wound.')
-        self.assertEqual(sum(a['status']=='supported' for a in answers.values()),1)
+        # Keep the historical selector and exact raw wire. The qualified
+        # clinician reporting frame now also supports its documented Assessment
+        # after explicit source review; this does not prove ASR audio accuracy.
+        self.assertEqual({key: a['text'] for key, a in answers.items() if a['status']=='supported'}, {
+            'v3_7': 'Examination mild swelling over the left lateral ankle.\nNo open wound.',
+            'v3_8': 'The clinician explicitly documents a left ankle strain.'})
+        self.assertEqual([ev['quote'] for ev in answers['v3_8']['evidence']],
+            ['The clinician explicitly documents a left ankle strain.'])
         self.assertEqual(g.governed_decisions(notes,fields,answers),[])
         for key in retained['held_controls']:self.assertEqual(answers[key]['status'],'conflict')
 

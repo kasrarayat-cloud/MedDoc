@@ -425,6 +425,8 @@ def _answered(saved):
 def _set_by_export(field, saved):
     """Whether the export sets this field at all (the product's stated rule): an answered field, and a checkbox the
     clinician reviewed and left blank (exported unticked). Anything else keeps what the blank form prints."""
+    if field.get('write_protected'):
+        return False
     saved = saved or {}
     return _answered(saved) or (field.get('kind') == 'checkbox'
                                 and (saved.get('reviewed') is True or saved.get('status') == 'left_blank'))
@@ -438,6 +440,10 @@ def expected_option_states(field, saved, printed):
     printed option (the engine's one option reader, word_v3.option_position)."""
     from documents import word_v3 as w
     count, kind = len(printed), field['kind']
+    if field.get('write_protected'):
+        # Empty review preserves a human-owned original. A proposed automatic
+        # answer on it cannot pass the independent read-back.
+        return None if _answered(saved) else list(printed)
     if not _set_by_export(field, saved):
         return list(printed)
     if not _answered(saved):
