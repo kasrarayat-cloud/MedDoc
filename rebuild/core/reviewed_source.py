@@ -46,10 +46,18 @@ def complete_ids(reading, field, ordered):
     # patient clause/object can reanchor that scope.
     foreign_before = {}
     foreign = False
+    from .reviewed_speaker import frames
+    speakers = frames(reading, docs, proof)
+    qualified_speakers = set()
     for unit, doc in zip(units, docs):
         foreign_before[unit['id']] = foreign
         info = reading['actors'][unit['id']]
         state = reading['resolved'][unit['id']]
+        if unit['id'] in speakers and not foreign:
+            # This is a documented speaker, not a new clinical bearer. It
+            # preserves the current review scope and never resets a foreign one.
+            qualified_speakers.add(unit['id'])
+            continue
         if info.get('other_floor') or state.get('self_other'):
             foreign = True
             continue
@@ -94,11 +102,25 @@ def complete_ids(reading, field, ordered):
             and not any(g.UNSETTLED.search(s) or g.DENIAL.search(s) for s in g.safety_readings(doc.text)))
 
     result = set()
+    selected = {u['id'] for u in ordered}
     for unit in ordered:
         _, doc = by_id[unit['id']]
+        if unit['id'] in qualified_speakers and speakers[unit['id']] == label:
+            result.add(unit['id'])
+            continue
         if not owned(unit, doc):
             continue
         position = reading['position'][unit['id']]
+        previous = units[position - 1]['id'] if position else None
+        if previous in qualified_speakers and previous in selected and speakers[previous] == label:
+            # A complete adjacent entity statement belongs to the same selected
+            # report, retaining both source units. An agent, another speaker,
+            # future/hypothetical clause or a medication change gains no proof.
+            from .v3_literal_facts import _simple_fact
+            if (_simple_fact(doc, field['label']) == 'entity'
+                    and not any(t.dep_ == 'agent' for t in doc)):
+                result.add(unit['id'])
+                continue
         # One adjacent complete phrase, under the exact unique source heading.
         # A later heading, two values or a named actor cannot gain this proof.
         if heading_position is not None and position == heading_position + 1 and nominal(doc):
@@ -126,7 +148,6 @@ def complete_ids(reading, field, ordered):
         theme_words = {a._lemma(t) for t in theme.subtree if t.pos_ in ('NOUN', 'ADJ')}
         if label_words and theme_words == label_words:
             result.add(unit['id'])
-    selected = {u['id'] for u in ordered}
     if (heading_position is not None and heading_position + 1 < len(units)
             and units[heading_position + 1]['id'] in result
             and units[heading_position]['id'] in selected):

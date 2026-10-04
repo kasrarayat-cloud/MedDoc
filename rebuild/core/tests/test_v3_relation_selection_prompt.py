@@ -67,6 +67,17 @@ class SourceHeadingAndSelection(SimpleTestCase):
                 answers = r.validated(result)
                 self.assertEqual(sum(a['status'] == 'supported' for a in case['first_answers'].values()), 1)
                 for key, first in case['first_answers'].items():
+                    if case['attempt'] == '003' and key == 'v3_3':
+                        # Offline validation preserves the literal reviewed raw
+                        # ASR "strain" and its documented clinician speaker.
+                        # The audio says "sprain": this is source fidelity,
+                        # not audio accuracy or a new successful paid outcome.
+                        self.assertEqual(first['status'], 'conflict')
+                        self.assertEqual((answers[key]['status'], answers[key]['text']),
+                            ('supported', 'The clinician explicitly documents a left ankle strain.'))
+                        self.assertEqual([e['quote'] for e in answers[key]['evidence']],
+                            ['The clinician explicitly documents a left ankle strain.'])
+                        continue
                     if case['attempt'] == '005' and key in ('v3_7', 'v3_8', 'v3_10'):
                         # A new offline revalidation can recover three faithful
                         # observations. The historical first result is retained

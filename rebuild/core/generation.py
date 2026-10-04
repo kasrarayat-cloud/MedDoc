@@ -3343,7 +3343,8 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
                 if unit['id'] in reading['conditional_unsafe'] or (not ordinary['self_reference'] and unit['id'] in reading['coupled'].get(label, ())) or (label in reading['ambiguous_subjects']
                     and reading['subjects'][unit['id']] == label)}
     matches = reading['named'].get(label, ())
-    from .source_scope import receipt_date_warnings
+    from .source_scope import receipt_date_warnings, document_status_questions
+    warnings.update((unit['id'], unit) for unit in document_status_questions(reading))
     receipt_field=next((f for f in matches if f['key']==field_key),None) if field_key is not None else None
     receipt_field=receipt_field if receipt_field is not None else matches[0] if len(matches)==1 else None
     if receipt_field is not None:
@@ -3369,8 +3370,11 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
         index = bisect.bisect_right(starts, start) - 1
         if index >= 0:
             unit = reading['units'][index]
-            from .source_scope import future_event_at
+            from .source_scope import future_event_at, completed_document_status_boundary
             if kind=='lexical' and ordinary['valid'] and future_event_at(reading,unit,start,end):
+                continue
+            if (kind == 'unfinished' and ordinary['valid'] and start == unit['start'] and end == unit['end']
+                    and completed_document_status_boundary(reading, unit, list(selected.values()), receipt_field)):
                 continue
             warnings[unit['id']] = unit
     for unit in selected.values():
@@ -4152,10 +4156,12 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 'ids': set(), 'warnings': [], 'valid': False, 'self_reference': False}
         field_inherited=inherited
         if v3 and ordinary['valid']:
-            from .source_scope import future_event_at
+            from .source_scope import future_event_at, completed_document_status_boundary
             preceding=governance[11]['preceding']
-            field_inherited=any(kind!='lexical' or not any(
-                u['start']<=start<u['end'] and future_event_at(preceding,u,start,end)
+            field_inherited=any(not any(
+                kind == 'lexical' and u['start']<=start<u['end'] and future_event_at(preceding,u,start,end)
+                or kind == 'unfinished' and start == u['start'] and end == u['end']
+                and completed_document_status_boundary(preceding,u,choices,field)
                 for u in preceding['units']) for kind,start,end in preceding['inherited_causes'])
         if ordinary['warnings']: guarded = True
         history = {'ids': set(), 'warnings': []}
