@@ -24,6 +24,7 @@ from docx import Document
 
 from core import import_binding
 from core.models import Department, Encounter, Job, MappingConfirmation, Organization, Patient, Reservation, Template, TemplateVersion, User
+from core.security import private_path
 from documents import inspect_template
 from ops import integrity_contract
 
@@ -45,6 +46,8 @@ class ReinspectionFixture:
         super().setUp()
         self.directory = tempfile.TemporaryDirectory(prefix='quillmd-reinspection-db-')
         self.addCleanup(self.directory.cleanup)
+        media = override_settings(MEDIA_ROOT=Path(self.directory.name) / 'private')
+        media.enable(); self.addCleanup(media.disable)
         self.user = User.objects.create_user(username='reinspection-db', email='reinspection-db@synthetic.invalid',
                                             verified_at=timezone.now())
         self.organization = Organization.objects.create(name='Synthetic reinspection DB guard')
@@ -55,7 +58,10 @@ class ReinspectionFixture:
         table.cell(0, 0).text = 'Symptoms'
         stream = io.BytesIO(); document.save(stream)
         self.original = stream.getvalue()
-        self.path = Path(self.directory.name) / 'blank.docx'; self.path.write_bytes(self.original)
+        self.original_key = 'originals/blank.docx'
+        self.path = private_path(self.original_key)
+        self.path.parent.mkdir(mode=0o700, parents=True)
+        self.path.write_bytes(self.original)
         self.inspection = inspect_template(self.path, engine='legacy')
         self.assertEqual(self.inspection['import_manifest']['engine'], 'legacy')
         self.assertEqual(len(self.inspection['fields']), 1)
@@ -69,10 +75,11 @@ class ReinspectionFixture:
             original.chmod(0o600)
 
     def version(self, name, *, marker=False, contract=''):
-        original_path = Path(self.directory.name) / (name.replace(' ', '-') + '.docx')
+        original_key = 'originals/' + name.replace(' ', '-') + '.docx'
+        original_path = private_path(original_key)
         original_path.write_bytes(self.original)
         template = Template.objects.create(department=self.department, name='Synthetic ' + name, format='docx',
-            original_name=original_path.name, original_path=str(original_path),
+            original_name=original_path.name, original_path=original_key,
             sha256=hashlib.sha256(self.original).hexdigest(), created_by=self.user)
         manifest = copy.deepcopy(self.inspection['import_manifest'])
         if marker:
@@ -147,7 +154,7 @@ class ReinspectionDatabaseGuard(ReinspectionFixture, TestCase):
     def test_ordinary_legacy_manifest_and_historical_empty_manifest_keep_existing_behavior(self):
         for version in (self.original_version, TemplateVersion.objects.create(
                 template=Template.objects.create(department=self.department, name='Synthetic historical empty import',
-                    format='docx', original_name='blank.docx', original_path=str(self.path),
+                    format='docx', original_name='blank.docx', original_path=self.original_key,
                     sha256=hashlib.sha256(self.original).hexdigest(), created_by=self.user),
                 number=1, fields=self.inspection['fields'], created_by=self.user)):
             with self.subTest(manifest=bool(version.import_manifest)):
@@ -160,7 +167,7 @@ class ReinspectionDatabaseGuard(ReinspectionFixture, TestCase):
             template, first = self.version('malformed marker ' + str(number))
             # New template's FIRST manifest must carry the marker: 0035 rejects any subsequent provenance change.
             other = Template.objects.create(department=self.department, name='Synthetic malformed first ' + str(number),
-                format='docx', original_name='blank.docx', original_path=str(self.path), sha256=template.sha256, created_by=self.user)
+                format='docx', original_name='blank.docx', original_path=self.original_key, sha256=template.sha256, created_by=self.user)
             manifest = {**self.inspection['import_manifest'], 'reinspection': marker}
             version = TemplateVersion.objects.create(template=other, number=1, fields=first.fields,
                 import_manifest=manifest, created_by=self.user)
