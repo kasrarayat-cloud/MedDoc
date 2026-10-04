@@ -1,0 +1,73 @@
+{
+  "source_commit": "e3d7de57e1001d8143a62db98dc4218d9bdb8c5f",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-pdf-proof-reuse-20261004",
+  "source_clean": true,
+  "evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-pdf-verifier-cpu-20261004",
+  "artifact_seal_sha256": "08521b2027c8e3e8398bf0559f785067172e3a417c045ab9ce353045b32ca5bc",
+  "artifact_files": 25,
+  "artifact_bytes": 1698634,
+  "source_hashes": {
+    "layout_geometry.py": "59f7bbd1b5b5d52c584d78bfa2cbcc9b7c8f5ba481df3e2cb85f20334e1343c4",
+    "layout_pdf_worker.py": "c7521f102c23c87b7777389ecaa9ca46372145677823c2ebe22ea12d0ea99e46",
+    "sandbox.py": "30058a462b39db0a42f2cde9cebc3eca150ecaf64349dea88d7465ab69d78c38",
+    "layout_server.py": "51e8a02419b14c1bc8f9a73097f9dec86b2a4ae2a08c55fc9c6199dce5f57a07"
+  },
+  "test_sha256": "4007c4db13e5db107643c326e262fe9d58fca1aabbd50e0382e2e13a2a4675dd",
+  "actual_retained_worker": {
+    "source_commit": "e3d7de57e1001d8143a62db98dc4218d9bdb8c5f",
+    "source_hashes": {
+      "layout_geometry.py": "59f7bbd1b5b5d52c584d78bfa2cbcc9b7c8f5ba481df3e2cb85f20334e1343c4",
+      "layout_pdf_worker.py": "c7521f102c23c87b7777389ecaa9ca46372145677823c2ebe22ea12d0ea99e46",
+      "sandbox.py": "30058a462b39db0a42f2cde9cebc3eca150ecaf64349dea88d7465ab69d78c38",
+      "layout_server.py": "51e8a02419b14c1bc8f9a73097f9dec86b2a4ae2a08c55fc9c6199dce5f57a07"
+    },
+    "input_hashes": {
+      "request.json": "85312e50ea88a0a1b0e6da9b3d884a7e172368309972fa0131f54f10e57a81d6",
+      "manifest.json": "ff288db2b970cb88e8a7c5e84a828b7956699803f61d24db0427dc280b536e19",
+      "document.pdf": "31cfa5d66a004efe71b70ad07b001521e41fe316b5a005679e04bdb8a0715772",
+      "instrumented.pdf": "7096d91726355662d5236c52e8e37cb45dbc71a41f30ef4b9aa31a15a407dd4c"
+    },
+    "full_old_new_proof_json_byte_identical": true,
+    "proof_sha256": "13096b9356d28531440b4a5245a7e4aeb01de1f2d61961769713f638fc99c1cb",
+    "passed": true,
+    "pages": 40,
+    "measurements": 249,
+    "held": 6,
+    "process": {
+      "elapsed_seconds": 7.80062,
+      "request_sha256": "85312e50ea88a0a1b0e6da9b3d884a7e172368309972fa0131f54f10e57a81d6",
+      "returncode": 0,
+      "signal": null,
+      "stderr": "process-layout_pdf_worker.py-61e4404ae03b4ca6b39082fa3f76b214.stderr",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "process-layout_pdf_worker.py-61e4404ae03b4ca6b39082fa3f76b214.stdout",
+      "stdout_bytes": 85392,
+      "stdout_sha256": "8caaec76e1b69e18428a9aff6b3ab27c7cd5bd318825606976d00d3cc3afac06",
+      "system_cpu_seconds": 0.131054,
+      "timed_out": false,
+      "user_cpu_seconds": 7.653417,
+      "wall_limit_seconds": 20,
+      "worker": "layout_pdf_worker.py",
+      "worker_sha256": "c7521f102c23c87b7777389ecaa9ca46372145677823c2ebe22ea12d0ea99e46"
+    },
+    "application_limits_changed": false,
+    "database": 0,
+    "renderer": 0,
+    "provider": 0
+  },
+  "affected_methods_passed": 24,
+  "independent_controls": 42,
+  "independent_wrong": 0,
+  "independent_result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-layout-stream-e3-finished-refute-20261004/result.json",
+  "independent_result_sha256": "1913b2df8200f49f7f2095b5e8e9ae7886aab40befae2861feba01960f1349fc",
+  "children_reaped": true,
+  "original_cpu_failure_retained": true,
+  "integrated_application_replay_pending": true,
+  "whole_word_gates_met": false,
+  "native_word_verified": false,
+  "database": 0,
+  "renderer": 0,
+  "provider": 0,
+  "checkpoint_sha256": "7a0c62174bb49059040e5e4d7188a38d1e23a831d17ac7a2c499032df90e2622"
+}
