@@ -283,16 +283,23 @@ class ExactSupportedLayoutPreparation(unittest.TestCase):
                     self.adapter.validate_derivative(mutant, self.original)
 
     def test_exact_driver_copies_bind_before_qa_and_preserve_scorer_and_profile_functions(self):
-        old = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-final-plan-prepared-20261004')
+        current = ROOT / 'docs/rebuild/v1/word-eval/dev33-supported-layout-preparation-v3-20261004'
+        originals = {
+            'dev_application_gate_v2.py': ROOT / 'docs/rebuild/v1/word-eval/dev-d01-d03-7907ae5a-20261004/dev_application_gate_v2.py.source',
+            'dev_application_gate_native_v1.py': ROOT / 'docs/rebuild/v1/word-eval/native-dev-application-preparation-20261004/dev_application_gate_native_v1.py.source',
+            'fixed_render_checker.py': ROOT / 'docs/rebuild/v1/word-eval/application-adapter-20261004/fixed_render_checker.py.source',
+        }
         for name, row in self.derivative['supported_layout_driver_sources'].items():
-            path = Path(row['path']); raw = path.read_bytes()
+            # CI validates tracked literal bytes; the actual supervisor still
+            # authenticates the separately declared protected execution paths.
+            raw = (current / (name + '.source')).read_bytes()
             self.assertEqual(hashlib.sha256(raw).hexdigest(), row['sha256'])
             if name.startswith('run_'):
                 text = raw.decode()
                 self.assertLess(text.index("peer_record=peer_namespace['bind_server']"), text.index("command=['python3'"))
                 self.assertEqual(text.count("write(out/'plan.json',preparation)"), 1)
             elif name.startswith('dev_'):
-                original_ast = ast.parse((old/name).read_bytes())
+                original_ast = ast.parse(originals[name].read_bytes())
                 current_ast = ast.parse(raw)
                 original_functions = {node.name: ast.dump(node) for node in original_ast.body if isinstance(node, ast.FunctionDef)}
                 current_functions = {node.name: ast.dump(node) for node in current_ast.body if isinstance(node, ast.FunctionDef)}
@@ -302,7 +309,10 @@ class ExactSupportedLayoutPreparation(unittest.TestCase):
                 self.assertEqual(len(uid), 1)
                 self.assertEqual(ast.dump(uid[0].value), ast.dump(ast.parse("plan['layout_service_uid']", mode='eval').body))
             else:
-                self.assertEqual(raw, (old/name).read_bytes())
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), self.adapter.CHECKER_SHA)
+                original_functions = {n.name: ast.dump(n) for n in ast.parse(originals[name].read_bytes()).body if isinstance(n, ast.FunctionDef)}
+                current_functions = {n.name: ast.dump(n) for n in ast.parse(raw).body if isinstance(n, ast.FunctionDef)}
+                self.assertEqual(original_functions, current_functions)
 
 
 if __name__ == '__main__':

@@ -2080,32 +2080,32 @@
     "final_source_reuse_adjudication": null,
     "rule": "Historical archived file/package fidelity stays valid for those exact exports. Transfer to source S only after exact route/writer/dependency/config/harness comparison and affected regression evidence; changed dependencies require specific adjudication or affected refresh. No manual recovery gets automatic credit. Do not repeat archived manual drills merely to create a new report."
   },
-  "plan_version": "dev33-supported-layout-peer-v2",
+  "plan_version": "dev33-supported-layout-peer-v3",
   "original_prepared_plan": {
     "path": "docs/rebuild/v1/word-dev33-final-plan-prepared-20261004.json",
     "sha256": "e1ca082b8c7ddff09a054cf9f581ef6bbbbb4c35b693380b1bc698ef90822d39"
   },
   "supported_layout_driver_sources": {
     "run_dev_application_gate_v2.py": {
-      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/run_dev_application_gate_v2.py",
-      "sha256": "17d06e2a843374d6e12e141f24d38d409ed8b7174bc7ace4d2a8682bc8b2b8d9"
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/run_dev_application_gate_v2.py",
+      "sha256": "a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7"
     },
     "dev_application_gate_v2.py": {
-      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/dev_application_gate_v2.py",
-      "sha256": "f6888ff50a5c83059dc34a08433d99b50237350b89adea98e9360b329abca840"
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev_application_gate_v2.py",
+      "sha256": "fbf37994963d6a39ba546eb35e5bec7a3967e545a707ab253c746be9f45ab918"
     },
     "run_dev_application_gate_native_v1.py": {
-      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/run_dev_application_gate_native_v1.py",
-      "sha256": "b88f5c30276247c23a18a66accc0782fa706be73c21416fc46d22bec5d8f3169"
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/run_dev_application_gate_native_v1.py",
+      "sha256": "fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5"
     },
     "dev_application_gate_native_v1.py": {
-      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/dev_application_gate_native_v1.py",
-      "sha256": "d179b9dac6e780d4bcf5120fdb0f9ebe14695db28d0a7278780943de9e7c8f18"
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev_application_gate_native_v1.py",
+      "sha256": "3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5"
     },
     "fixed_render_checker.py": {
-      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/fixed_render_checker.py",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/fixed_render_checker.py",
       "sha256": "a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e"
     }
   },
-  "layout_peer_helper_sha256": "05c157aacd0c717ca9835bc8b8482f8c100101e7be3f6a3aa46d49cd145e8a23"
+  "layout_peer_helper_sha256": "00a5c8eb0a9bf944fe22d06ae552a9ed4a42ff73bf527287cef5f813d4b66d49"
 }

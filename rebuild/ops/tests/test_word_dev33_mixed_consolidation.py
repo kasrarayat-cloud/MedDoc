@@ -83,6 +83,14 @@ class MixedNativeV3(unittest.TestCase):
     def report(self):
         return adapter.consolidate(self.prepared, self.manifest, self.rights, self.seal, self.inventory, self.bundles)
 
+    def test_pre_reauthentication_peer_hash_is_refused(self):
+        self.prepared['layout_peer_helper_sha256'] = '05c157aacd0c717ca9835bc8b8482f8c100101e7be3f6a3aa46d49cd145e8a23'
+        self.reject()
+
+    def test_pre_reauthentication_version_is_refused(self):
+        self.prepared['plan_version'] = 'dev33-supported-layout-peer-v2'
+        self.reject()
+
     def reject(self):
         with self.assertRaises(adapter.IntegrityError):
             self.report()

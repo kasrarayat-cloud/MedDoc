@@ -1,0 +1,37 @@
+"""Exact existing render-check functions with a prospectively pinned local PDFium environment."""
+import ast
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+BASE=Path(__file__).resolve().parent
+DEPS=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/render-checker-python')
+source=Path(sys.argv[1]);original=Path(sys.argv[2]);filled=Path(sys.argv[3]);record=json.loads(Path(sys.argv[4]).read_text())
+assert hashlib.sha256(source.read_bytes()).hexdigest()=='97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a'
+os.environ['PYTHONPATH']=str(DEPS)
+nodes=[node for node in ast.parse(source.read_bytes()).body if isinstance(node,ast.FunctionDef) and node.name=='render_checks']
+assert len(nodes)==1
+namespace={'TOOLS_PY':sys.executable,'subprocess':subprocess,'json':json,'re':re,'pathlib':__import__('pathlib'),'__file__':str(source)}
+exec(compile(ast.Module(body=nodes,type_ignores=[]),str(source),'exec'),namespace)
+problems,info=namespace['render_checks'](original,filled,record['fields'],record['answers'])
+sys.path.insert(0,str(DEPS));import importlib.metadata
+import importlib.util
+spec=importlib.util.spec_from_file_location('fixed_full_answer_visibility',source.parent/'render_eval.py')
+reader=importlib.util.module_from_spec(spec);spec.loader.exec_module(reader)
+visible=re.sub(r'[\s\-\u00ad]+','',''.join(text for text,_ in reader.page_chars(str(filled)))).lower()
+full_probes={}
+for field in record['fields']:
+ answer=record['answers'].get(field['key'])
+ if isinstance(answer,str) and field['kind'] in ('text','long_text','measurement','number'):
+  full_probes[field['key']]=re.sub(r'[\s\-\u00ad]+','',answer).lower()
+full_missing=[key for key,value in full_probes.items() if value and value not in visible]
+supplemental=['Full text answer is not visible in the render: '+key for key in full_missing]
+print(json.dumps({'problems':problems,'info':info,'pypdfium2':importlib.metadata.version('pypdfium2'),
+ 'supplemental_problems':supplemental,'full_answer_visibility':{'probed':list(full_probes),'missing':full_missing},
+ 'scope':'Existing fixed render criterion unchanged; full text visibility supplements its fixed 14-character probes. Prospectively pinned PDFium4.30.0; historical tool-version equivalence is not asserted.'}))
+raise SystemExit(bool(problems or supplemental))
