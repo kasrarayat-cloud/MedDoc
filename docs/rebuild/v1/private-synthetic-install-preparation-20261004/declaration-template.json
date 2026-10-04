@@ -1,0 +1,11 @@
+{
+  "format": "quillmd-private-v1-preparation-v1",
+  "baseline": "dedac1625032e32c7a149e6771be22e26c307eb1",
+  "target": null,
+  "schema_sha256": "a8ab83af5b6f79634fb893f3e6fe14fdc64cb95fb1bf0b64c359419847f59f69",
+  "source_sha256": {},
+  "data_mode": "synthetic",
+  "payment_mode": "test",
+  "public_maintenance": true,
+  "cpt_enabled": false
+}

@@ -1,0 +1,52 @@
+{
+  "scope": "Pure source/migration/preservation preparation; no installation or live state verification.",
+  "source_base": "6d44ff862d93f1e7f2f4a0fa85c329f33190dc0d",
+  "finished_upgrade_commit": "a6f7dbea1dd67645dc3f3d1efcecfc699bb43e4e",
+  "schema_sha256": "a8ab83af5b6f79634fb893f3e6fe14fdc64cb95fb1bf0b64c359419847f59f69",
+  "tests": {
+    "module": "ops.tests.test_v1_private_install_preparation",
+    "methods": 5,
+    "seconds": 0.087,
+    "actual_exit": 0,
+    "database_used": false,
+    "provider_calls": 0,
+    "initial_passing_seconds": 0.072,
+    "passing_log_sha256": "8be744ef48b1306242abc8a699f3adef6be1d26920ad96ef28205567a164ab00",
+    "log_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/import-ci-20261004/private-preparation-unit.log"
+  },
+  "source_sha256": {
+    "rebuild/ops/v1_private_install_preparation.py": "048ea89a793977a381c265efb4b4731a942fa86cd46bd454e3d7ae7f4ecdc91b",
+    "rebuild/ops/tests/test_v1_private_install_preparation.py": "b34ee8785d018edd08a7a142c0cc85353271379e2ff6e9310a8a93b09bcf6969"
+  },
+  "fixed_gate": {
+    "overall_total": 60,
+    "overall_required": 54,
+    "holdout_total": 20,
+    "holdout_required": 18,
+    "development_count": 40,
+    "eligible_development": 33,
+    "held_development": 7,
+    "maximum_eligible_overall_including_all_twenty_holdout": 53,
+    "installation_gate_satisfiable_with_current_rights": false
+  },
+  "fixture_demo_exception": {
+    "separate_state_required": true,
+    "ai_mode": "fixture",
+    "installed_units": [],
+    "exact_revision_ci_and_source_safety_required": true,
+    "execution_authorized_by_module": false
+  },
+  "final_binding": {
+    "exact_candidate": null,
+    "source_scope_frozen": false,
+    "ci_verified": false,
+    "merged_pr_verified": false,
+    "installed_schema_checked": false,
+    "installed_mutation": false,
+    "old_drivers_modified": false
+  },
+  "retained_external_handoff_sha256": {
+    "seven-held-originals.json": "447f8f474f84d1e60fb8cc9b2ba4d92df2b09c8f64aba9384ec3d83274308ef8",
+    "acceptance-metadata.json": "b3a29aad23fdee36147495ba53569d669f8f740a6d94457590ea6809c80dbd0e"
+  }
+}

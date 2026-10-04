@@ -1,0 +1,1061 @@
+{
+  "scope": "Read-only metadata and runner assessment. No corpus candidate evaluation; holdout and qualification contents stay sealed until exact integrated freeze and rights gate.",
+  "acceptance": {
+    "overall_denominator": 60,
+    "overall_required": 54,
+    "holdout_denominator": 20,
+    "holdout_required": 18,
+    "family_required_fraction": "0.75",
+    "families": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9",
+      "F10"
+    ],
+    "no_manual_mapping_in_automatic_success": true,
+    "first_generation_quality_separate": true,
+    "native_word_acceptance_unverified": true
+  },
+  "hashes": {
+    "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/docs/rebuild/v1/word-corpus-manifest.json": "3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json": "5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7",
+    "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/docs/rebuild/v1/word-eval/score.py": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+    "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/docs/rebuild/v1/word-eval/v2/ticked.py": "e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79",
+    "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/docs/rebuild/v1/word-eval/final_eval.py": "97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a"
+  },
+  "dev": {
+    "files": 40,
+    "offline_filled_replay_permitted": 33,
+    "held": [
+      {
+        "identity": "D06",
+        "sha256": "8c13e2d1c71c3890f38d0866ddff759e99891ea2a9df6fdfeb79a627ff1fed61",
+        "reason": "Exact ledger does not support filled replay; original record retained."
+      },
+      {
+        "identity": "D19",
+        "sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d",
+        "reason": "Exact ledger does not support filled replay; original record retained."
+      },
+      {
+        "identity": "D20",
+        "sha256": "d35cb2a6f54ea38f2beff2e7a0417741d6d6745230b653ed24599d6300ede711",
+        "reason": "Exact ledger does not support filled replay; original record retained."
+      },
+      {
+        "identity": "D23",
+        "sha256": "9e0857330b9ebf641fd0518ee4e45d6dbeeb45c4d75dd26cb02ecc42b1c656dc",
+        "reason": "Exact ledger does not support filled replay; original record retained."
+      },
+      {
+        "identity": "D24",
+        "sha256": "20a7df595e0ffbc15dbf5800d15d558ee5a355fed7abb31acb44eaf0c741435c",
+        "reason": "Exact ledger does not support filled replay; original record retained."
+      },
+      {
+        "identity": "D25",
+        "sha256": "017d29aeeb6953bf3d22f337844091593dc2b1f535ab61bcdd0e0812feb1430b",
+        "reason": "Exact ledger does not support filled replay; original record retained."
+      },
+      {
+        "identity": "D32",
+        "sha256": "46a80892ef0d8fe5a3620c25e1f79ea4bea46250ed7affd8f38ed79520329b87",
+        "reason": "Exact ledger does not support filled replay; original record retained."
+      }
+    ],
+    "all_provider_uploads_denied": true
+  },
+  "memberships": {
+    "dev": [
+      {
+        "sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+        "corpus_file": "dev/originals/D01-c1852a492221.docx",
+        "families_declared": [
+          "F2",
+          "F4",
+          "F5",
+          "F8",
+          "F10"
+        ],
+        "lineage": "owner-wm-iov"
+      },
+      {
+        "sha256": "8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a",
+        "corpus_file": "dev/originals/D02-8ae1e2b0ebee.docx",
+        "families_declared": [
+          "F1",
+          "F5",
+          "F6",
+          "F10"
+        ],
+        "lineage": "owner-colonoscopy"
+      },
+      {
+        "sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+        "corpus_file": "dev/originals/D03-29dfcdd8a5da.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F8",
+          "F9"
+        ],
+        "lineage": "zenodo-4756701"
+      },
+      {
+        "sha256": "cebb55cd73453bdb6c8caf0fc040861daf9b074bf3cca278b6243e98e02da175",
+        "corpus_file": "dev/originals/D04-cebb55cd7345.docx",
+        "families_declared": [
+          "F5",
+          "F6"
+        ],
+        "lineage": "zenodo-8004749"
+      },
+      {
+        "sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a",
+        "corpus_file": "dev/originals/D05-ab006eeb434e.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5"
+        ],
+        "lineage": "NIDCR Clinical Research Tools & Templates"
+      },
+      {
+        "sha256": "8c13e2d1c71c3890f38d0866ddff759e99891ea2a9df6fdfeb79a627ff1fed61",
+        "corpus_file": "dev/originals/D06-8c13e2d1c71c.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": "NIDCR Clinical Research Tools & Templates"
+      },
+      {
+        "sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+        "corpus_file": "dev/originals/D07-f43d08e3b436.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Rehabilitation Treatment"
+      },
+      {
+        "sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+        "corpus_file": "dev/originals/D08-9eeac252e6d2.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Acute Admission/Discharge"
+      },
+      {
+        "sha256": "b04f37b4ff081529644b1d16c225bf4603c1749e392d8327ed0eb3943019822a",
+        "corpus_file": "dev/originals/D09-b04f37b4ff08.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Physical Exam"
+      },
+      {
+        "sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+        "corpus_file": "dev/originals/D10-b54cc9e77067.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Physical Exam"
+      },
+      {
+        "sha256": "500efd5985a715277144cfaa42d8dbe72ee748fa11bb43a6215ed944b0bc352d",
+        "corpus_file": "dev/originals/D11-500efd5985a7.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Laboratory Tests"
+      },
+      {
+        "sha256": "934bf431af0b1486f5f809d83a14a61c6e6721342e1e4c377153e1df640a3604",
+        "corpus_file": "dev/originals/D12-934bf431af0b.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F5",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Electrocardiogram"
+      },
+      {
+        "sha256": "75b75da8559db2a5849343d6809e3171c254a538870e0da40b0a15d367160a92",
+        "corpus_file": "dev/originals/D13-75b75da8559d.docx",
+        "families_declared": [
+          "F10",
+          "F5",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Risk Factor Questionnaire - Physical Activity and Sleep"
+      },
+      {
+        "sha256": "5089ad547ee0d0527f687bec1e8f26a35f5204e68e7c50b8bd8ae296983a2a50",
+        "corpus_file": "dev/originals/D14-5089ad547ee0.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": "NINDS CDE CRF module / Lower Extremity Orthopedic Surgical Procedures - Hip"
+      },
+      {
+        "sha256": "19efe830ee0d049cae32236fe0db8bdfa1cfe5f17ab80f5a37cd66c7593663c2",
+        "corpus_file": "dev/originals/D15-19efe830ee0d.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": "zenodo-20125281-ecraid-icf"
+      },
+      {
+        "sha256": "51c6e400e89d631bf81959418c9cc5cc9631bfb3ac741a3bdce5d8f9a1e0273f",
+        "corpus_file": "dev/originals/D16-51c6e400e89d.docx",
+        "families_declared": [
+          "F5",
+          "F6"
+        ],
+        "lineage": "zenodo-13901089"
+      },
+      {
+        "sha256": "92b3e2ed55db0bba14bc20bdb5b27ad5253337075c1b042d0362663a7a16154a",
+        "corpus_file": "dev/originals/D17-92b3e2ed55db.docx",
+        "families_declared": [
+          "F4",
+          "F5"
+        ],
+        "lineage": "laa-health-professional-evidence-letters"
+      },
+      {
+        "sha256": "73fe91e5501bad3fe7e5ad413f49934006965b8b2e1d2612f88e1daf78ac9f46",
+        "corpus_file": "dev/originals/D18-73fe91e5501b.docx",
+        "families_declared": [
+          "F4"
+        ],
+        "lineage": "laa-health-professional-evidence-letters"
+      },
+      {
+        "sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d",
+        "corpus_file": "dev/originals/D19-46f4c7cffa95.doc",
+        "families_declared": [],
+        "lineage": "hra-consent-template-and-derivatives"
+      },
+      {
+        "sha256": "d35cb2a6f54ea38f2beff2e7a0417741d6d6745230b653ed24599d6300ede711",
+        "corpus_file": "dev/originals/D20-d35cb2a6f54e.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": "zenodo-6400437-prefer-icf"
+      },
+      {
+        "sha256": "d1c0e1234baeb32039bac32c1ba1f207d044da816df91ddb5e6d81e87125fcba",
+        "corpus_file": "dev/originals/D21-d1c0e1234bae.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": "NIH IRB (OHSRP) consent template family"
+      },
+      {
+        "sha256": "e858648b9d5c52c920e64bfd8fe7cb925505ebddaefc320003f88a5d2e7ea020",
+        "corpus_file": "dev/originals/D22-e858648b9d5c.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": "NIH IRB (OHSRP) consent template family"
+      },
+      {
+        "sha256": "9e0857330b9ebf641fd0518ee4e45d6dbeeb45c4d75dd26cb02ecc42b1c656dc",
+        "corpus_file": "dev/originals/D23-9e0857330b9e.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": "VA Ann Arbor research consent template"
+      },
+      {
+        "sha256": "20a7df595e0ffbc15dbf5800d15d558ee5a355fed7abb31acb44eaf0c741435c",
+        "corpus_file": "dev/originals/D24-20a7df595e0f.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F5",
+          "F6"
+        ],
+        "lineage": "VA Portland research IRB forms"
+      },
+      {
+        "sha256": "017d29aeeb6953bf3d22f337844091593dc2b1f535ab61bcdd0e0812feb1430b",
+        "corpus_file": "dev/originals/D25-017d29aeeb69.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": "VA Portland research IRB forms"
+      },
+      {
+        "sha256": "0e247607a7388575f78b7be00bb172362830f7577178364bac2252a85a0454fb",
+        "corpus_file": "dev/originals/D26-0e247607a738.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": "zenodo-7457938-smatb-templates"
+      },
+      {
+        "sha256": "bc002ff4594eb374f1748c8e80a66dfa432bc1432d98cd4e218a06d3515d0c66",
+        "corpus_file": "dev/originals/D27-bc002ff4594e.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F5",
+          "F6",
+          "F7",
+          "F9"
+        ],
+        "lineage": "zenodo-7457938-smatb-templates"
+      },
+      {
+        "sha256": "479946b2185f8d259b3de72375aa6ba941841f67ba2d676f61d714ddb9fc9786",
+        "corpus_file": "dev/originals/D28-479946b2185f.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": "SAMHSA CMHS NOMs client-level tool"
+      },
+      {
+        "sha256": "e01fb51a1ce2c1194f307916641590e7a8bd25657c69bb0892c8a4e4078ba1d8",
+        "corpus_file": "dev/originals/D29-e01fb51a1ce2.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F5",
+          "F6"
+        ],
+        "lineage": "zenodo-3738912-tbpoc"
+      },
+      {
+        "sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+        "corpus_file": "dev/originals/D30-fdeafbee872f.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": "hmpps-mhcs-restricted-patient-forms"
+      },
+      {
+        "sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+        "corpus_file": "dev/originals/D31-f730aa53671a.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": "hmpps-mhcs-restricted-patient-forms"
+      },
+      {
+        "sha256": "46a80892ef0d8fe5a3620c25e1f79ea4bea46250ed7affd8f38ed79520329b87",
+        "corpus_file": "dev/originals/D32-46a80892ef0d.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F8"
+        ],
+        "lineage": "NCI CTEP patient drug-interaction handout"
+      },
+      {
+        "sha256": "45e292c57ec851c457297f421d3c0c844b61f7bef07aa0ed9af8f4c7b5cbac0c",
+        "corpus_file": "dev/originals/D33-45e292c57ec8.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": "NCI consent (ICD) template family (DCP variants)"
+      },
+      {
+        "sha256": "35feb7a7ab6997b9f786ced2d30dd6460bf75c731c2c86990aaf3830c61879b0",
+        "corpus_file": "dev/originals/D34-35feb7a7ab69.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": "NCI consent (ICD) template family (DCP variants)"
+      },
+      {
+        "sha256": "cf9b240f3893f97bf168c7cd3ac808bb720b3bf0f65b168c9671c6827ca1a4b7",
+        "corpus_file": "dev/originals/D35-cf9b240f3893.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F7",
+          "F9"
+        ],
+        "lineage": "NCI DCP SAE report form"
+      },
+      {
+        "sha256": "01b700ed8dd72eb46647f209f1608ceecfd7406fa34859a3b122eb497371fdf9",
+        "corpus_file": "dev/originals/D36-01b700ed8dd7.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": "NCI consent (ICD) template family (CTEP)"
+      },
+      {
+        "sha256": "01326e0d4d17d211cfda2757c34455b6bd132fb3bfc8b23f989e4a9635eef500",
+        "corpus_file": "dev/originals/D37-01326e0d4d17.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F4",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": "NCI consent (ICD) template family (CTEP)"
+      },
+      {
+        "sha256": "83769a3b2c6bc3920f4a37e7881b354e11107cdf079f1090e6865bf8cb6a1301",
+        "corpus_file": "dev/originals/D38-83769a3b2c6b.docx",
+        "families_declared": [
+          "F1",
+          "F5",
+          "F6"
+        ],
+        "lineage": "zenodo-10614582"
+      },
+      {
+        "sha256": "17e6d154693c4c7c41b31f20fd16dfb9560ff6e343cbc03af32b3b231ecc02cb",
+        "corpus_file": "dev/originals/D39-17e6d154693c.docx",
+        "families_declared": [
+          "F1",
+          "F5"
+        ],
+        "lineage": "zenodo-proforma-creator-582b52"
+      },
+      {
+        "sha256": "e24dc2605ffece80b31b1d8fb5fb35c6a1a8596fd6105c180b937648f903b6f4",
+        "corpus_file": "dev/originals/D40-e24dc2605ffe.docx",
+        "families_declared": [
+          "F1",
+          "F5"
+        ],
+        "lineage": "zenodo-proforma-creator-582b52"
+      }
+    ],
+    "holdout": [
+      {
+        "sha256": "b50388c19e609e79d13e0f25fccac2995e7286481fede1c3930d46778ebfd926",
+        "corpus_file": "holdout/originals/H01-b50388c19e60.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "687e94896e4df9f48bac6622788d79a6f376110521957b9cd38dc2175897526a",
+        "corpus_file": "holdout/originals/H02-687e94896e4d.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F4",
+          "F5"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "5adc1289b543681935fb30afd931a02d785f4a07d5c0801f98a861ee3a24808b",
+        "corpus_file": "holdout/originals/H03-5adc1289b543.doc",
+        "families_declared": [],
+        "lineage": null
+      },
+      {
+        "sha256": "3715f2f80889884afd1f014bcd369fa1c2a3a17059b3cab6a603ec559be1f308",
+        "corpus_file": "holdout/originals/H04-3715f2f80889.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "6b2cfc3a29f2683b0ed355816d1aeaa55cba8f00846864d429db2ea81312c3f3",
+        "corpus_file": "holdout/originals/H05-6b2cfc3a29f2.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F5",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "a7bf90d167b5100df402f2bec34ba1e67281ddcefb75428aba82b85db59c5874",
+        "corpus_file": "holdout/originals/H06-a7bf90d167b5.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "3d835f8834881bd352305542be889ded4d7ac500d13e97acd9714ba1e9361620",
+        "corpus_file": "holdout/originals/H07-3d835f883488.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "b87238c11dd67f69cc334a5562d26122b42e591c44a0674f0dfaf4ba0bafe113",
+        "corpus_file": "holdout/originals/H08-b87238c11dd6.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "430af1e02b915b2304c663f6c4e25c8af1f25a2ea1a02e4651f51ec7a4d4c366",
+        "corpus_file": "holdout/originals/H09-430af1e02b91.docx",
+        "families_declared": [
+          "F2",
+          "F4",
+          "F5",
+          "F6",
+          "F7",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "2bafe1a4cffeb777f8b52eda80fe940de9271bd854fde4badf44898b9324eb16",
+        "corpus_file": "holdout/originals/H10-2bafe1a4cffe.docx",
+        "families_declared": [
+          "F5",
+          "F7"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "ff923d7b8ed2cd549c6b74fc8d30dd3889d16c5dbbb464c844f69ec0e6159ba4",
+        "corpus_file": "holdout/originals/H11-ff923d7b8ed2.docx",
+        "families_declared": [
+          "F1",
+          "F5",
+          "F7"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "870414ddbfefd522c9ed96b21b6f8356dac2b4d6d7ce5951e0ddd944b8544a6b",
+        "corpus_file": "holdout/originals/H12-870414ddbfef.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F7"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "ea693106c8c48eaa167872afb4c34410c3aecc899c0ee5eba8eef458f8a82238",
+        "corpus_file": "holdout/originals/H13-ea693106c8c4.docx",
+        "families_declared": [
+          "F1",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "99b8c67312910b7ec8b27c78e0807933b332741e775ce90ba0bf0d2d439ee6c8",
+        "corpus_file": "holdout/originals/H14-99b8c6731291.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F4",
+          "F6",
+          "F7"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "d4ce44196f5a71d4b375ca3fd3c17b253d48cb4f841ca224c44c72cc4e6b9112",
+        "corpus_file": "holdout/originals/H15-d4ce44196f5a.docx",
+        "families_declared": [
+          "F1",
+          "F5",
+          "F7",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "f62811e31a3a6a8e912ce9d2673f4bf521424806d6afb62fe7ba2d7ac8dec66d",
+        "corpus_file": "holdout/originals/H16-f62811e31a3a.docx",
+        "families_declared": [
+          "F1"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "d2c0100f61b91dd8ed9572f67224efcf228aab25ff1b56a8e8d3238885967d88",
+        "corpus_file": "holdout/originals/H17-d2c0100f61b9.docx",
+        "families_declared": [
+          "F5"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "0a9169f5e9d907b722c1ff501ad807448ad2eccad4128a984bcbbb3a8af8f614",
+        "corpus_file": "holdout/originals/H18-0a9169f5e9d9.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "64e5706373fa14538f589fd1da535ff9fda261b6281f99148b3411cdc244ce1f",
+        "corpus_file": "holdout/originals/H19-64e5706373fa.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "97fcbc6e17b62a7121fb62a2279ffceb21254c98c3e05e26f12d738d7339ef19",
+        "corpus_file": "holdout/originals/H20-97fcbc6e17b6.doc",
+        "families_declared": [],
+        "lineage": null
+      }
+    ],
+    "qual": [
+      {
+        "sha256": "4efee2f2e812ef530848b437b22a42494f06c5ccd4bb7d97a82c2ae0433bb030",
+        "corpus_file": "qual/originals/Q01-4efee2f2e812.docx",
+        "families_declared": [
+          "F1",
+          "F5"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "650bc26389a22980c45cfbabeffb6b171936bc2b368c6f9401e0d5aa01683af5",
+        "corpus_file": "qual/originals/Q02-650bc26389a2.docx",
+        "families_declared": [
+          "F1",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "c93f59785eaeefb921054090bc3cfb7a643f53fd78d6af9fb810630b441ee058",
+        "corpus_file": "qual/originals/Q03-c93f59785eae.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "eaaf1373cfb5174f96fa3505117c54c9dd7b399e81044d23605e475152436dfc",
+        "corpus_file": "qual/originals/Q04-eaaf1373cfb5.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "b753b9af42e83025d91ab5bbcc1075e7f623ec7f9d5c9a0ee28c22c62c559bac",
+        "corpus_file": "qual/originals/Q05-b753b9af42e8.docx",
+        "families_declared": [
+          "F10",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "8a675ab3c96da810b40b690ce62886d0aad0b7a959cb487394c786ca5a690db9",
+        "corpus_file": "qual/originals/Q06-8a675ab3c96d.docx",
+        "families_declared": [
+          "F10",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "aff1ef980d6d81778fc295f7b7b609ecb28640558bf443ed3a40433fa1d8c16a",
+        "corpus_file": "qual/originals/Q07-aff1ef980d6d.doc",
+        "families_declared": [],
+        "lineage": null
+      },
+      {
+        "sha256": "cc13a005e65992c9bbc7e7d7f87be8c21f1ab14c6c0e8f588b19a1a7b80bf1ef",
+        "corpus_file": "qual/originals/Q08-cc13a005e659.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "4f4973ac1d070b1ce97571c356552cddf9c7665e1f4b8e8e04acfa307964873d",
+        "corpus_file": "qual/originals/Q09-4f4973ac1d07.docx",
+        "families_declared": [
+          "F10",
+          "F4",
+          "F5",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "c9baeeeeac7215088f9e64463235e3911abd561554352753b1f579a1bcef1e79",
+        "corpus_file": "qual/originals/Q10-c9baeeeeac72.docx",
+        "families_declared": [
+          "F2",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "86ca46da832972d532687d7f0012e2a703ba2a7957a5228f10da95500f01a7c1",
+        "corpus_file": "qual/originals/Q11-86ca46da8329.docx",
+        "families_declared": [
+          "F1",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "4117faa57c70b3f321a5d3dd4e9520facd7167b1da036688fddb066dc0a9484d",
+        "corpus_file": "qual/originals/Q12-4117faa57c70.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "fe2a5b533b2570e854dfeacbea7100c281d3c61220b7f8666a133e5d3924541e",
+        "corpus_file": "qual/originals/Q13-fe2a5b533b25.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6",
+          "F7",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "36427ed16c1410504d549e04c856e9dbfcaec98834634394c7c2e3e4d9487436",
+        "corpus_file": "qual/originals/Q14-36427ed16c14.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F3",
+          "F5",
+          "F6",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "1bc71920687edc59a9cf6642e4745bfe43c863271fc1a808fea3e46ad07ee259",
+        "corpus_file": "qual/originals/Q15-1bc71920687e.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "5b89848b430ac9cb8dae6c7665fcba1ed8225d1ae013ac0378c6188f15f79b9b",
+        "corpus_file": "qual/originals/Q16-5b89848b430a.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "1693090a5dbed70628fc36502ed158abfe7ec3d7d5fd7e7941ee0148e9aebee2",
+        "corpus_file": "qual/originals/Q17-1693090a5dbe.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "d261de71aaeb3e9074272524a5846bdd0d9e15ed541311b21e54e8e26541fb8a",
+        "corpus_file": "qual/originals/Q18-d261de71aaeb.docx",
+        "families_declared": [
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F7"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "140ce583ba2cc42da59b77c3baca431fd80c3d4aa759a98c9eedd04d9bbd9d3c",
+        "corpus_file": "qual/originals/Q19-140ce583ba2c.docx",
+        "families_declared": [
+          "F10",
+          "F2",
+          "F4",
+          "F5",
+          "F6",
+          "F7",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      },
+      {
+        "sha256": "9f09d1af1eec7d1f9b236e3ca4c3e3fe10c5f1758289dfd1d4d798237a234a59",
+        "corpus_file": "qual/originals/Q20-9f09d1af1eec.docx",
+        "families_declared": [
+          "F1",
+          "F10",
+          "F5",
+          "F6",
+          "F8",
+          "F9"
+        ],
+        "lineage": null
+      }
+    ]
+  },
+  "runner_limitations": {
+    "final_eval": "Engine-only, hardcoded stale candidate paths and silently converted DOC originals; never an actual app acceptance command without a new authorized adaptation. Preserve immutable source/result.",
+    "v2_1_info": "Independent choice/readback information; dev-only and direct-engine fill; cannot represent upload/review/generation/finalize app qualification.",
+    "original_workflow": "Existing retained D10/D30 full routes are exposed fixtures with partial manual recovery; never substitute for automatic60/20."
+  },
+  "required_sequence": [
+    "Freeze exact clean integrated release commit and capture every tracked Python source hash before/after; fixed original manifest/scorer/runtime hashes.",
+    "Create prospective distinct output and QA database. Start same-source layout_server on task-owned Unix socket with qualified protected QA wrapper; technical outer deadline1200 per bounded partition.",
+    "Enumerate original60 unchanged before execution. Rights-held or originalOLE2 DOC cases remain explicit blocked/refused rows in denominator; no converted substitutions or provider-original upload.",
+    "Upload eligible immutable originals via actual supported auto route. Persist complete first mapping/version/source hash/engine/coverage before score or correction.",
+    "Evaluate fixed independent GT completeness/precision/kind/options/duplicates and whole-document family/safety criteria. Partial coverage blocks automatic success; original first omission retained.",
+    "Run declared empty/ordinary/long synthetic profiles through actual encounter routes, worker and explicit clinician review. First application fixture responses retained independently of clinician corrections or GT-derived writer controls; no real provider-original calls.",
+    "Finalize/download only authorized positive cases. Verify all actual answers, protected signing areas, printed text, structure, controls, neighboring fields and other archive parts; render every actual original/export with qualified engine; no native Word claim.",
+    "Apply existing independent v2.1 ticked reader to actual service exports and frozen ground truth, supplement with full text/part/geometry fidelity. Do not rewrite its fixed classifications to pass an engine.",
+    "Record zero/pending/manual/held/unsafe outcomes per original file and preserve all family denominators; publish54/60 and18/20 as unmet when blocked or failed, never eligible-only denominators.",
+    "After exact frozen cohort results, any informed repair remains a known regression; predeclared qualification corpus independence/OLE/custody requirements remain external and original first pass never resets."
+  ],
+  "command_template": {
+    "qa_wrapper": "python3 -B /opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/integration/qa_test_with_artifacts.py <frozen-clean-integration-worktree> quillmd_qa_sol_word_frozen1004 <fresh-owned-output> manage.py shell -c \"import runpy; runpy.run_path(<fresh-prospective-route-harness>)\"",
+    "renderer": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python -I -B <frozen-worktree>/rebuild/documents/layout_server.py --socket <owned-short-unix-socket> --client-uid 1000 --evidence <fresh-owned-layout-evidence>",
+    "required_new_harness": "Prospective actual-route corpus adapter needs implementation before executable whole60/20 command exists; old final_eval must not be labelled this qualification."
+  }
+}

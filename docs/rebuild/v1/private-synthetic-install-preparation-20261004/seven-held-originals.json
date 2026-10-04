@@ -1,0 +1,137 @@
+{
+  "scope": "Existing exact-file custodian decisions only; no new source/policy fetch or authorization inference; never substitute altered originals",
+  "rights_ledger": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json",
+  "rights_ledger_sha256": "5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7",
+  "frozen_manifest": "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/docs/rebuild/v1/word-corpus-manifest.json",
+  "frozen_manifest_sha256": "3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33",
+  "records": [
+    {
+      "development_id": "D06",
+      "sha256": "8c13e2d1c71c3890f38d0866ddff759e99891ea2a9df6fdfeb79a627ff1fed61",
+      "corpus_file": "dev/originals/D06-8c13e2d1c71c.docx",
+      "source_org": "NIH / NIDCR",
+      "status": "HELD_FOR_FILLED_REPLAY_LOGO_EXCEPTION",
+      "basis": "Text grant is positive, but the exact package has the NIDCR/NIH logo. Publisher expressly excludes that logo from public-domain status and limits its use to official communication products. No exact permission for nonofficial filled derivative replay established; unmodified evidence retained.",
+      "required_exact_step": "Exact permission covering internal synthetic filled copies of this immutable original with its excluded logo retained.",
+      "provider_upload_supported": false,
+      "policy_sources": [
+        {
+          "url": "https://www.nidcr.nih.gov/about-us/web-policies",
+          "sha256": "ca453007e94e0a2199b274e96547447f994d8d036e54ad15e8c0af4e5bde4da9"
+        },
+        {
+          "url": "https://www.nidcr.nih.gov/research/conducting-nidcr-clinical-research/stages/study-conduct",
+          "sha256": "e468300a920da69f222d34ada0d450f00e60f41ac9c299a3ca7c78f71c5b1aa3"
+        }
+      ]
+    },
+    {
+      "development_id": "D19",
+      "sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d",
+      "corpus_file": "dev/originals/D19-46f4c7cffa95.doc",
+      "source_org": "REPEAT trial (Norfolk & Norwich Univ Hospitals) (Zenodo 7551598)",
+      "status": "HELD_FOR_FILLED_REPLAY_WHOLE_ORIGINAL_EMBEDDED_RIGHTS_UNASSESSED",
+      "basis": "CC BY4.0 file binding is confirmed. Outer OLE2 is preserved; the new helper mistakenly inspected an embedded DrawingML ZIP. Whole original text/assets have not been reassessed in this bounded read-only task, and no decryption/conversion is authorized. Metadata/container inspection is supported; this is not a copyright prohibition.",
+      "required_exact_step": "Whole-outer-original OLE text/assets/embedded-rights review by the custodian, with exact-file evidence; no conversion or decryption authority inferred. Runtime original .doc support also remains absent.",
+      "provider_upload_supported": false,
+      "policy_sources": [
+        {
+          "url": "https://zenodo.org/api/records/7551598",
+          "sha256": "f524613661542dc69dcc57c0c3685bf5b7c8ffede1805ae339cb39cc7efb10bf"
+        }
+      ]
+    },
+    {
+      "development_id": "D20",
+      "sha256": "d35cb2a6f54ea38f2beff2e7a0417741d6d6745230b653ed24599d6300ede711",
+      "corpus_file": "dev/originals/D20-d35cb2a6f54e.docx",
+      "source_org": "PREFER consortium (IMI) (Zenodo 6400437)",
+      "status": "HELD_FOR_FILLED_REPLAY_THIRDPARTY_ASSET_SCOPE",
+      "basis": "CC BY4.0 covers the depositor grant, but exact package includes third-party institutional logos and a stock-style flag icon asset without an identified upstream grant. Integral project branding and a broad deposit license do not prove those separate rights. No assets removed.",
+      "required_exact_step": "Exact included third-party-logo permission for this immutable package and internal synthetic filled derivative replay, or source-owner proof those logos are covered by the existing exact-file grant.",
+      "provider_upload_supported": false,
+      "policy_sources": [
+        {
+          "url": "https://zenodo.org/api/records/6400437",
+          "sha256": "ab171eda05c845b205255585a5c42e48d087960cecdd7676c951fb5fe4dfb2d5"
+        }
+      ]
+    },
+    {
+      "development_id": "D23",
+      "sha256": "9e0857330b9ebf641fd0518ee4e45d6dbeeb45c4d75dd26cb02ecc42b1c656dc",
+      "corpus_file": "dev/originals/D23-9e0857330b9e.docx",
+      "source_org": "US Department of Veterans Affairs (VA medical center research offices)",
+      "status": "HELD_EXACT_GOVERNMENT_PRODUCTION_SCOPE_UNPROVEN",
+      "basis": "Current VA copyright policy is now retrieved and is positive for government-produced works. Exact files have VA template/creator provenance and Portland links are current, but no exact preparation/assignment record resolves that policy condition for these originals. This is unproven scope, not an explicit prohibition; no .gov-only federal-authorship inference.",
+      "required_exact_step": "Exact preparation/assignment or rights-owner evidence establishing this original is a VA government-produced work covered by the retained policy, or explicit exact-file replay permission.",
+      "provider_upload_supported": false,
+      "policy_sources": [
+        {
+          "url": "https://department.va.gov/copyright-policy/",
+          "sha256": "fe713f517d2d5348ec32d8b7a8cf19d9409acd6b805e197f4e4acd540f549667"
+        }
+      ]
+    },
+    {
+      "development_id": "D24",
+      "sha256": "20a7df595e0ffbc15dbf5800d15d558ee5a355fed7abb31acb44eaf0c741435c",
+      "corpus_file": "dev/originals/D24-20a7df595e0f.docx",
+      "source_org": "US Department of Veterans Affairs (VA medical center research offices)",
+      "status": "HELD_EXACT_GOVERNMENT_PRODUCTION_SCOPE_UNPROVEN",
+      "basis": "Current VA copyright policy is now retrieved and is positive for government-produced works. Exact files have VA template/creator provenance and Portland links are current, but no exact preparation/assignment record resolves that policy condition for these originals. This is unproven scope, not an explicit prohibition; no .gov-only federal-authorship inference.",
+      "required_exact_step": "Exact preparation/assignment or rights-owner evidence establishing this original is a VA government-produced work covered by the retained policy, or explicit exact-file replay permission.",
+      "provider_upload_supported": false,
+      "policy_sources": [
+        {
+          "url": "https://department.va.gov/copyright-policy/",
+          "sha256": "fe713f517d2d5348ec32d8b7a8cf19d9409acd6b805e197f4e4acd540f549667"
+        },
+        {
+          "url": "https://www.va.gov/PORTLANDRESEARCH/hrpp/index.asp",
+          "sha256": "75c7160d7348bc4d42cfbd6804ff5144f14a5039766406937cccce450e9e7a92"
+        }
+      ]
+    },
+    {
+      "development_id": "D25",
+      "sha256": "017d29aeeb6953bf3d22f337844091593dc2b1f535ab61bcdd0e0812feb1430b",
+      "corpus_file": "dev/originals/D25-017d29aeeb69.docx",
+      "source_org": "US Department of Veterans Affairs (VA medical center research offices)",
+      "status": "HELD_EXACT_GOVERNMENT_PRODUCTION_SCOPE_UNPROVEN",
+      "basis": "Current VA copyright policy is now retrieved and is positive for government-produced works. Exact files have VA template/creator provenance and Portland links are current, but no exact preparation/assignment record resolves that policy condition for these originals. This is unproven scope, not an explicit prohibition; no .gov-only federal-authorship inference.",
+      "required_exact_step": "Exact preparation/assignment or rights-owner evidence establishing this original is a VA government-produced work covered by the retained policy, or explicit exact-file replay permission.",
+      "provider_upload_supported": false,
+      "policy_sources": [
+        {
+          "url": "https://department.va.gov/copyright-policy/",
+          "sha256": "fe713f517d2d5348ec32d8b7a8cf19d9409acd6b805e197f4e4acd540f549667"
+        },
+        {
+          "url": "https://www.va.gov/PORTLANDRESEARCH/hrpp/index.asp",
+          "sha256": "75c7160d7348bc4d42cfbd6804ff5144f14a5039766406937cccce450e9e7a92"
+        }
+      ]
+    },
+    {
+      "development_id": "D32",
+      "sha256": "46a80892ef0d8fe5a3620c25e1f79ea4bea46250ed7affd8f38ed79520329b87",
+      "corpus_file": "dev/originals/D32-46a80892ef0d.docx",
+      "source_org": "NIH / NCI - CTEP (DCTD)",
+      "status": "HELD_FOR_FILLED_REPLAY_LOGO_EXCEPTION",
+      "basis": "Exact handout includes the NCI logo. Current NCI policy permits logo use only in wholly unchanged NCI products and directs logo removal for adapted patient education publications. The frozen original is not altered to create permission. Original unchanged inspection may proceed; synthetic filled derivative replay lacks exact logo permission.",
+      "required_exact_step": "Exact permission covering internal synthetic filled copies of this immutable original with its excluded logo retained.",
+      "provider_upload_supported": false,
+      "policy_sources": [
+        {
+          "url": "https://www.cancer.gov/policies/copyright-reuse",
+          "sha256": "ec12d387f713f5fe433664eaad0c1c655059e0fcc197f8653e51317979a0bc65"
+        },
+        {
+          "url": "https://dctd.cancer.gov/research/ctep-trials/trial-development",
+          "sha256": "a252319fb07228315bb13e3c449573cfd117ea6b31143719f3a7071c2016e103"
+        }
+      ]
+    }
+  ]
+}
