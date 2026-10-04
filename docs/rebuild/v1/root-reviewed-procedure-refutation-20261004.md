@@ -1,5 +1,21 @@
 # Finished clinical source refutation: repair required
 
+## 09:07 UTC corrective result — integrated, qualification pending
+
+Original failures below remain evidence. Root replayed corrective source `d7f4ebf7759cecf3d9517d208d6c2d8d7c40e3fc` against five fixed packets. The first four passed with actual exits 0: 60 ordinary/procedure controls in 30.299 seconds; 24 backward-attribution controls in 21.465 seconds; 30 time/exclusion/authorship controls in 29.799 seconds; 12 unrelated appointment/object-owner controls in 14.421 seconds. These 126 controls had zero unsafe releases, false holds or source/page/final discrepancies.
+
+The final 12 preceding-annotation controls had actual exit 1 in 13.209 seconds: zero unsafe releases or fidelity discrepancies, three conservative holds when a previous maternal report precedes an explicitly current-patient colonoscopy. Those were already held on earlier source and remain a coverage limit. Doctor and maternal report annotations are held; explicit current-patient annotations work. All 138 wires, expectations and outputs remain retained. The earlier three adjudicated expectation corrections do not regrade the historical failed run.
+
+| Corrective result under the retained evidence root | SHA256 |
+| --- | --- |
+| `root-ordinary-procedure-d7f-independent/result.json` | `4a78c6da2a35c1b19ca52318f7e25e7b8524ceea571ee513b83eb1caa7875e97` |
+| `root-procedure-backward-attribution-d7f-independent/result.json` | `99cad9dd13e79af154196db43867039fe3779dd11168b47ceca2f79250b3e29a` |
+| `root-procedure-source-attribution-supplement-d7f-independent/result.json` | `01eb66be15961153ebdf9d9aac61b567fc053cb5e7923e9b028f19966c50b44d` |
+| `root-procedure-independent-object-d7f/result.json` | `f82a3d4661e58d86e599ce0a664ec02a3850d02b6b2f7d8e3cf3f0ba5a54de58` |
+| `root-procedure-preceding-report-d7f/result.json` | `452f5d9a9c975fd7107efcc0fb20242dc0680cd376d6ccdab6e9dfe8370054ce` |
+
+The clinical chain was integrated through `36190ae1` after refutation, with source identical to the frozen tested files. The retained 14 qualified provider-response replay projects 35/36 useful positives and 40/40 intended holds. This is offline evidence, not new paid qualification. N01 HPI and C08 remain held. Exact integrated-source qualification, financial renewal and CI remain pending; no new provider sends or installation occurred.
+
 Frozen implementation `9b5d55e050ecfe73f34b496f516061c1849128a5` is **not integrated or qualified**. Provider preparation is paused. The existing PR remains a draft.
 
 Root independently preserved60 full-wire controls through validation, page governance and finalization. Actual exit1 in34.485seconds; source unchanged; no provider or database calls. One ordinary medication positive remains unnecessarily held: `A 30-year-old woman presents with headaches. She takes ibuprofen as needed. She denies bleeding.` Three initial flags with a separately attributed family event later in the note are withdrawn instrument expectations: they do not explicitly assign the preceding values to that person. The original60-control exit1 and raw flags remain retained; this is not a regraded passing qualification. Adjudication JSON SHA256 `6609d8f49dea171ea9fa2067de8171acbbf91b87728b57d826666831aa0b22e3`.

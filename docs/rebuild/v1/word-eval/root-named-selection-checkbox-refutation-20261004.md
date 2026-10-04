@@ -1,0 +1,9 @@
+# Named selection and unchanged-checkbox preservation
+
+Root refuted frozen named-selection source `dc73c6d7f21219ff1acafd52874942c4b040f906`: 62 controls, actual exit 0 in 18.427 seconds, result SHA256 `54112a40e482d081544f861dca571082392305bdb17d6d459487789f9a2be191`. Glyph and legacy controls preserve named-question ownership; hidden/duplicate captions, wider or contrary instructions, human authorship and six mapping/source forgeries refuse. Real multi-selection preserves neighbors, instructions and untargeted parts; empty answers preserve original bytes. Integrated as `1a37e66c`.
+
+Frozen checkbox source `3a3af5f5e724a1216bcc059824c4ff5a58f0698e`: 141 controls, actual exit 0 in 56.157 seconds, result SHA256 `6eea5e8ac992ad0e48944ed08eb933d2077794fdcfdaf014c6b2649d2b84b377`. The 128 whole-DOCX controls vary absent, val-less, false and true default/explicit encodings and request both states. Same-state answers leave original bytes untouched. Real changes preserve defaults, neighboring selections, untargeted parts and ZIP comments while changing the effective state correctly. Twelve malformed/duplicate representations refuse before mutation. Retained D08 original plus its seven exact False answers exports identically to original SHA256 `9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6`. Integrated as `2a0f3533`.
+
+Evidence root: `/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/`. Initial harness wrong-neighbor selection and reused-directory failures are retained separately before qualified v2, not counted as product failures or passing runs. Source stayed unchanged; zero provider, database or renderer calls.
+
+These proofs do not pass the unchanged 54/60 overall or 18/20 holdout protocol. Coherent affected D07/D08 application replay remains required. Native Microsoft Word inspection is unverified.
