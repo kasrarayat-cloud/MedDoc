@@ -8,6 +8,8 @@ from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 import hashlib
+import json
+import os
 import tempfile
 
 from docx import Document
@@ -34,6 +36,12 @@ def _inspection():
     assert result['sha256'] == hashlib.sha256(original_bytes()).hexdigest()
     assert len(result['fields']) == 1 and result['fields'][0]['label'] == 'Symptoms'
     assert not result['import_manifest']['coverage'].get('block_generation')
+    if os.environ.get('QUILLMD_WORD_ARTIFACTS'):
+        root = Path(os.environ['QUILLMD_WORD_ARTIFACTS']) / 'synthetic-financial-original' / result['sha256']
+        root.mkdir(mode=0o700, parents=True, exist_ok=False)
+        persist(root / 'original.docx')
+        with (root / 'inspection.json').open('x') as stream:
+            json.dump(result, stream, indent=2)
     return result
 
 
