@@ -1,0 +1,301 @@
+{
+  "format": "financial-renewal-finite-verification-v1",
+  "candidate_base": "1983e7fa1ac32c8687cb30b590981b80847189ee",
+  "parts": [
+    {
+      "part": "dependency-compiler-second",
+      "tests": 40,
+      "actual_exit": 0,
+      "outer_seconds": 38.616943359003926,
+      "network_attempts": [],
+      "source_unchanged": true,
+      "supervisor_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/financial-renewal-1983e7fa/dependency-compiler-second/result.json",
+      "supervisor_sha256": "aa1804f582c6a4a9571f23881773db1033466b0c274acb6cddd72ade5b6959db",
+      "child_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/financial-renewal-1983e7fa/dependency-compiler-second/child-result.json",
+      "child_sha256": "9c5b8deec81b2eb679c4201d6135be56fa8d3b4b670ae9a95ca7dbbe29e5b944",
+      "records": [
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_current_source_resolves_only_with_explicit_local_expected_ast_mock",
+          "explicit_test_mock_positive": true,
+          "accepted_source_pins_renewed": false
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_direct_dependency_body_generation",
+          "refused": "finite pending proof preparation: core/generation.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/generation.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_direct_dependency_body_transcript_context",
+          "refused": "finite pending proof preparation: core/transcript_context.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/transcript_context.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_direct_dependency_body_v3_destination",
+          "refused": "finite pending proof preparation: core/v3_destination.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_destination.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_direct_dependency_body_v3_mapping",
+          "refused": "finite pending proof preparation: core/v3_mapping.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_mapping.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_extra_dependency_pin_cannot_replace_the_reviewed_union",
+          "refused": "finite pending proof preparation: ordinary dependency proof is incomplete",
+          "caller_bytes_unchanged": true,
+          "mutated_path": null,
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_ordinary_source_scope",
+          "refused": "finite pending proof preparation: core/ordinary_source_scope.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/ordinary_source_scope.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_reviewed_procedure_source",
+          "refused": "finite pending proof preparation: core/reviewed_procedure_source.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_procedure_source.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_reviewed_source",
+          "refused": "finite pending proof preparation: core/reviewed_source.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_source.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_reviewed_speaker",
+          "refused": "finite pending proof preparation: core/reviewed_speaker.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_speaker.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_source_scope",
+          "refused": "finite pending proof preparation: core/source_scope.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/source_scope.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_v3_actors",
+          "refused": "finite pending proof preparation: core/v3_actors.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_actors.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_v3_literal_facts",
+          "refused": "finite pending proof preparation: core/v3_literal_facts.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_literal_facts.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_body_v3_syntax",
+          "refused": "finite pending proof preparation: core/v3_syntax.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_syntax.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_ordinary_source_scope",
+          "refused": "finite pending proof preparation: core/ordinary_source_scope.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/ordinary_source_scope.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_reviewed_procedure_source",
+          "refused": "finite pending proof preparation: core/reviewed_procedure_source.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_procedure_source.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_reviewed_source",
+          "refused": "finite pending proof preparation: core/reviewed_source.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_source.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_reviewed_speaker",
+          "refused": "finite pending proof preparation: core/reviewed_speaker.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_speaker.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_source_scope",
+          "refused": "finite pending proof preparation: core/source_scope.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/source_scope.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_v3_actors",
+          "refused": "finite pending proof preparation: core/v3_actors.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_actors.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_v3_literal_facts",
+          "refused": "finite pending proof preparation: core/v3_literal_facts.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_literal_facts.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_helper_import_v3_syntax",
+          "refused": "finite pending proof preparation: core/v3_syntax.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_syntax.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_historical_ordinary_fingerprint_cannot_approve_current_source",
+          "refused": "finite pending proof preparation: complete ordinary compiler/binding/price proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": null,
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_missing_dependency_pin_cannot_narrow_the_union",
+          "refused": "finite pending proof preparation: ordinary dependency proof is incomplete",
+          "caller_bytes_unchanged": true,
+          "mutated_path": null,
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_missing_helper_refuses",
+          "refused": "finite pending proof preparation: core/reviewed_source.py is unreadable; its ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_source.py",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_missing_parser_pin_cannot_narrow_inputs",
+          "refused": "finite pending proof preparation: ordinary dependency proof is incomplete",
+          "caller_bytes_unchanged": true,
+          "mutated_path": null,
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_parser_input_requirements_production_lock",
+          "refused": "finite pending proof preparation: requirements-production.lock changed or is unreviewed; its ordinary parser input needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "requirements-production.lock",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_parser_input_requirements_production_manifest_json",
+          "refused": "finite pending proof preparation: requirements-production.manifest.json changed or is unreviewed; its ordinary parser input needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "requirements-production.manifest.json",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_parser_input_requirements_txt",
+          "refused": "finite pending proof preparation: requirements.txt changed or is unreviewed; its ordinary parser input needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "requirements.txt",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_parser_input_v3_syntax_model_json",
+          "refused": "finite pending proof preparation: core/v3_syntax_model.json changed or is unreviewed; its ordinary parser input needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/v3_syntax_model.json",
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_prepared_dependency_none_markers_still_refuse_after_caller_test_mock",
+          "refused": "finite pending proof preparation: core/generation.py changed or is unreviewed; its complete ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": null,
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_prepared_parser_none_markers_refuse_after_module_test_mock",
+          "refused": "finite pending proof preparation: core/v3_syntax_model.json changed or is unreviewed; its ordinary parser input needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": null,
+          "test_mock_only": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_reviewed_source_resolves_with_fixed_financial_fingerprints",
+          "fixed_reviewed_pin_positive": true,
+          "accepted_source_pins_mutated_by_test": false
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_same_helper_ast_ignores_only_nonsemantic_comment_formatting",
+          "explicit_test_mock_positive": true
+        },
+        {
+          "control": "ops.tests.test_ordinary_dependency_proof_preparation.OrdinaryDependencyPreparation.test_unparseable_helper_refuses",
+          "refused": "finite pending proof preparation: core/reviewed_source.py is unreadable; its ordinary proof needs review",
+          "caller_bytes_unchanged": true,
+          "mutated_path": "core/reviewed_source.py",
+          "test_mock_only": true
+        }
+      ]
+    },
+    {
+      "part": "document-second",
+      "tests": 2,
+      "actual_exit": 0,
+      "outer_seconds": 33.519939517995226,
+      "network_attempts": [],
+      "source_unchanged": true,
+      "supervisor_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/financial-renewal-1983e7fa/document-second/result.json",
+      "supervisor_sha256": "286b1505916c151c4c1890efd5ff59868c108ad994f34d8c14bd446424e5ec91",
+      "child_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/financial-renewal-1983e7fa/document-second/child-result.json",
+      "child_sha256": "4bc4dfc86ceaa91255a2c031e2daf4002fa4f967b8d3948969100668d11f3d1e",
+      "records": []
+    }
+  ],
+  "total_completed_methods": 42,
+  "original_timeout_preserved": {
+    "actual_exit": -15,
+    "timed_out": true,
+    "reaped": true,
+    "outer_seconds": 60.0300927030039,
+    "bound_seconds": 60,
+    "pid": 2240621,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "f46119309923eb0f2e45a01d7129aef48d1953ea0fb7dd68a401f65a73d062ab",
+    "provider_requests": 0,
+    "database_creation": false,
+    "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/financial-renewal-1983e7fa/finite-child.py",
+    "completed_PASS_lines": 41
+  },
+  "original_timeout_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/financial-renewal-1983e7fa/result.json",
+  "scanner_function_and_class_ASTs_unchanged": true,
+  "provider_requests": 0,
+  "database_queries": 0,
+  "accepted_pins_in_root_mutated": false,
+  "genuine_financial_source_proof": "source-and-paid-proof.json",
+  "source_files": {
+    "rebuild/ops/test_production_deploy.py": "94da29a2c844e0e9e7dbd8b6480df464b22fbdecaa1dd70b1bb73b5b2c910664",
+    "rebuild/ops/tests/test_ordinary_dependency_proof_preparation.py": "8b34868fd34d497d83c292bed7279bfb04a972b174b99040a4c00e590627564d",
+    "docs/rebuild/v1/production-cost.md": "af0ae1b0f4446d6fd9edb62858e6a514840a001bb0f0e3e498012543756e72f6",
+    "docs/rebuild/v1/financial-renewal-20261004/RENEWAL.md": "df59764da313da3ae3782f859d9784260535d55e1bd4b0a48dfa9d29e1a6ee8e",
+    "docs/rebuild/v1/financial-renewal-20261004/source-and-paid-proof.json": "bd6efaa3a77f7202dbc322b416173e17513e84463035c37eb08f9afb318708c7"
+  },
+  "full_119_packet": "NOT EXECUTED; serialized grant and exact integrated source required",
+  "required_next": "Finished-diff independent REFUTE before root integration"
+}

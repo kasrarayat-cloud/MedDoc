@@ -1,7 +1,8 @@
 """Finite source-only proof preparation, never a live financial qualification.
 
-Current source is accepted only inside an explicit test-mocked expected-AST
-namespace. No accepted scanner fingerprint is rewritten or renewed by tests.
+Mutation fixtures use an explicit test-mocked expected-AST namespace.
+A separate positive reads the reviewed fixed pins. No scanner fingerprint is
+rewritten or renewed by tests; financial qualification is retained separately.
 """
 import ast
 import hashlib
@@ -100,8 +101,14 @@ class OrdinaryDependencyPreparation(unittest.TestCase):
         RECORDS.append({'control': self.id(), 'explicit_test_mock_positive': True,
                         'accepted_source_pins_renewed': False})
 
+    def test_reviewed_source_resolves_with_fixed_financial_fingerprints(self):
+        self.assertIsInstance(self.proof['ordinary_module_proof']('reviewed financial source'), ast.Module)
+        RECORDS.append({'control': self.id(), 'fixed_reviewed_pin_positive': True,
+                        'accepted_source_pins_mutated_by_test': False})
+
     def test_prepared_dependency_none_markers_still_refuse_after_caller_test_mock(self):
         self.proof['ORDINARY_PRICED_SHA256'] = ast_sha(self.rebuild / 'core/v3_field_relations.py')
+        self.proof['ORDINARY_PRICED_DEPENDENCIES'] = dict.fromkeys(self.proof['ORDINARY_PRICED_DEPENDENCY_PATHS'])
         self.assertTrue(all(v is None for v in self.proof['ORDINARY_PRICED_DEPENDENCIES'].values()))
         self.refuse(self.id())
 
@@ -110,7 +117,10 @@ class OrdinaryDependencyPreparation(unittest.TestCase):
         self.proof['ORDINARY_PRICED_INPUTS'] = dict.fromkeys(self.proof['ORDINARY_PRICED_INPUT_PATHS'])
         self.refuse(self.id())
 
-    def test_original_accepted_ordinary_fingerprint_is_not_renewed(self):
+    def test_historical_ordinary_fingerprint_cannot_approve_current_source(self):
+        self.explicit_test_mock_expected_ast()
+        self.proof['ORDINARY_PRICED_SHA256'] = 'efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb'
+        # Historical pin is an explicit negative fixture; actual accepted pins remain untouched.
         self.assertEqual(self.proof['ORDINARY_PRICED_SHA256'],
                          'efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb')
         self.refuse(self.id())

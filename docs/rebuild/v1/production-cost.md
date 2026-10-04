@@ -109,8 +109,8 @@ about 30% more tokens than Sonnet 4.6 for the same text; if the workspace uses U
 (`inference_geo`), every token costs 1.1x (whether it does is unknown). The application's own bound
 for a form generation is (request bytes + 12,000) input tokens plus the request profile's output cap
 (`core/generation.py`, `maximum_cost`). At Sonnet 5's rates a 20,000-byte request is bounded at
-**$0.144** (8,000-token cap, ordinary notes), **$0.224** (16,000-token cap, adaptive thinking), or
-**$0.264** (20,000-token cap, blank mapping only): 32,000 x $2/M plus the stated output cap x $10/M.
+**$0.144** (8,000-token cap, generic profile: Sonnet 5 disabled thinking or Sonnet 5.5 `between_tools`), **$0.224** (16,000-token cap, adaptive thinking), or
+**$0.264** (20,000-token cap, ordinary-v4 Sonnet 5/5.5 or blank mapping): 32,000 x $2/M plus the stated output cap x $10/M.
 
 The default-off ordinary-history contract adds the measured UTF-8 byte length of its instructions,
 complete response schema and target-key payload to the input bound, priced at the same input rate.
@@ -123,9 +123,15 @@ fail the check. These are reservation bounds, not measured provider usage or liv
 profile's `max_output_tokens`, the same value `maximum_cost` (notes) or `mapping_assistance.compile_request` (mapping) prices, so the hold always covers the cap
 that is sent. The output caps a request profile can set are 6,000, 8,000, 16,000 and 20,000 tokens: 6,000 under
 the legacy profile that serves the rollback models (`claude-sonnet-4-6` and the other listed legacy
-ids, at their own rates), 8,000 under Sonnet 5 with thinking disabled and 16,000 under Sonnet 5 with
-adaptive thinking (`request_profile`); blank-form mapping has a separate 20,000-token/120-second profile. A stored profile is refused before anything is sent if its cap
-is not an int between 1 and 21,333 (`job_request_profile`). V1 uses disabled thinking/medium effort; actual sufficiency remains bounded live qualification. The adaptive profile remains available only through its own configuration and quote.
+ids, at their own rates), 8,000 under the generic profile (Sonnet 5 with thinking disabled, Sonnet 5.5
+with `between_tools`) and 16,000 under the separate Sonnet 5 adaptive-thinking profile (`request_profile`).
+Qualified ordinary-v4 Sonnet 5/5.5 uses a 20,000-token/120-second profile; the qualified private
+Sonnet 5.5 requests use `between_tools` and medium effort. Blank-form mapping also has a separate
+20,000-token/120-second profile. A stored profile is refused before anything is sent if its cap
+is not an int between 1 and 21,333 (`job_request_profile`). Actual sufficiency remains bounded by
+live qualification. The adaptive profile remains available only through its own configuration and quote.
+These available profiles do not assert the installed model: the covered Sonnet 5 production profile
+remains unactivated, and the current installed `dedac162` revision remains on Sonnet 4.6.
 
 A test parses every application Python file under `rebuild/` (tests excluded). It fails, naming the
 call, when a provider call's receiver cannot be traced to a client constructed and bound to one name
