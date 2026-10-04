@@ -1198,11 +1198,13 @@ def encounter_detail(request,pk):
             except (ValidationError,OSError,ValueError):pass
     e.patient_context_current=patient_context_current
     from . import wm_narrative
+    from .encounter_recovery import recovery_notice
     return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'hidden_accepted':hidden_accepted,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'role_suggestion_warning':destination_roles.ROLE_SUGGESTION_WARNING,
         'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
+        'recovery_notice':recovery_notice(e) if can_finalize else None,
         'export_refusal':v3_mapping.export_refusal(e.template_version.template) if is_v3 else ''})
 
 def clinician_decided(e):
