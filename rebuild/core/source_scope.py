@@ -1593,3 +1593,105 @@ def clinical_modifier_negations(reading):
         if targets or ambiguous:result[unit['id']]={'negative':frozenset(targets),'ambiguous':frozenset(ambiguous)}
     reading[key]=result
     return result
+
+
+def date_correction_governors(governance, label, evidence, ordinary_relation, field_key, answer_text):
+    """Exact date-attribute corrections apart from a complete explicit subject."""
+    from datetime import datetime
+    import re
+    from . import generation as g, v3_actors as a, v3_syntax
+    from .v3_field_relations import read as ordinary_read
+    from .v3_destination import destination_temporal_scopes
+    if len(governance) <= 11 or not evidence or not ordinary_relation or not governance[4]:return ()
+    reading=governance[11]['preceding']
+    matches=reading['named'].get(g.question_key(label),())
+    field=next((f for f in matches if f['key']==field_key),None) if field_key is not None else None
+    field=field if field is not None else matches[0] if len(matches)==1 else None
+    if (field is None or len(matches)!=1 or field.get('kind') not in ('text','long_text')
+            or field.get('write_protected') or field.get('answer_policy') or destination_temporal_scopes(field)):
+        return ()
+    selected=list(g.v3_evidence_units(reading,evidence).values())
+    ordinary=ordinary_read(reading,label,evidence,ordinary_relation,text=answer_text,field_key=field_key)
+    if (not ordinary['valid'] or len(selected)!=len(evidence)
+            or not {u['id']for u in selected} <= set(ordinary.get('syntax_ids',()))):return ()
+    docs=v3_syntax.docs([field['label']]+[u['quote']for u in selected])
+    if docs is None or any(doc is None for doc in docs):return ()
+    label_doc=docs[0]
+    label_words=[t for t in label_doc if not t.is_punct and not t.is_space]
+    label_heads=[t for t in label_words if t.dep_=='ROOT']
+    if (len(label_heads)!=1 or label_heads[0].pos_!='NOUN' or not label_words
+            or any(t.pos_ not in ('NOUN','ADJ','DET') or a._lemma(t) in ('date','time') for t in label_words)):
+        return ()
+    label_content={a._lemma(t)for t in label_words if t.pos_!='DET'}
+    for doc in docs[1:]:
+        roots=[t for t in doc if t.dep_=='ROOT']
+        if len(roots)!=1:return ()
+        root=roots[0]
+        subjects=[t for t in root.children if t.dep_ in ('nsubj','nsubjpass')]
+        if (root.pos_ not in ('VERB','AUX') or len(subjects)!=1 or subjects[0].pos_!='NOUN'
+                or a._lemma(subjects[0])!=a._lemma(label_heads[0])
+                or not any(t.tag_ in ('VBD','VBP','VBZ') for t in [root,*root.children]
+                    if t==root or t.dep_ in ('aux','auxpass'))
+                or any(t.dep_ in ('prep','advcl','ccomp','xcomp','conj') for t in root.children)
+                or any(t.pos_ in ('PRON','PROPN','NUM') or a.names_person(t) or a.names_carer(t)
+                    or t.ent_type_ in ('DATE','TIME') or a._lemma(t) in ('date','time') for t in doc)):
+            return ()
+        subject_content={a._lemma(t)for t in subjects[0].subtree if t.pos_ in ('NOUN','ADJ')}
+        if subject_content!=label_content:return ()
+        if any(g.UNSETTLED.search(s) or g.INHERITED_SCOPE.search(s) or g.SELF_CORRECTION.search(s)
+                or g.SCOPE_POINTER.search(s) for s in g.safety_readings(doc.text)):return ()
+    result=[]
+    for unit in reading['units']:
+        # The governor must contain exactly this metadata sentence. A wider
+        # window can also contain a global/clinical correction and is retained.
+        offsets=[row[0]for row in governance[4] if row[0]==unit['start']
+            and row[2]==unit['start'] and row[3]==unit['end']]
+        if not offsets or unit['id'] in {u['id']for u in selected}:continue
+        match=re.fullmatch(r'Correction:\s+(.+?)\s+was\s+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4})\.',unit['quote'],re.I)
+        if not match:continue
+        dates=set()
+        for fmt in ('%Y-%m-%d','%m/%d/%Y','%d/%m/%Y'):
+            try:dates.add(datetime.strptime(match[2],fmt).date())
+            except ValueError:pass
+        if len(dates)!=1:continue
+        parsed=v3_syntax.docs([unit['quote']]);doc=parsed[0]if parsed else None
+        if doc is None:continue
+        roots=[t for t in doc if t.dep_=='ROOT']
+        if len(roots)!=1:continue
+        root=roots[0];subjects=[t for t in root.children if t.dep_=='nsubj']
+        if (a._lemma(root)!='be' or root.tag_!='VBD' or len(subjects)!=1
+                or subjects[0].pos_!='NOUN' or a._lemma(subjects[0])!='date'):continue
+        subject=set(subjects[0].subtree)
+        if any(t.pos_ not in ('NOUN','DET') or t.dep_ not in ('nsubj','compound','det') for t in subject):continue
+        attributes=[t for t in root.children if t.dep_=='attr']
+        if len(attributes)!=1 or any(t.pos_!='NUM' for t in attributes[0].subtree if not t.is_punct):continue
+        allowed=subject|set(attributes[0].subtree)|{root}
+        corrections=[t for t in doc if t.i==0 and a._lemma(t)=='correction' and t.head==root]
+        if len(corrections)!=1:continue
+        allowed.add(corrections[0])
+        if any(t not in allowed and not t.is_punct for t in doc):continue
+        if any(t.pos_ in ('PRON','PROPN') or a.names_person(t) or a.names_carer(t) or a.this_patient(t)
+                or a._negates(t) or t.tag_=='MD' for t in doc):continue
+        if any(g.UNSETTLED.search(s) or g.INHERITED_SCOPE.search(s) or g.SELF_CORRECTION.search(s)
+                or g.SCOPE_POINTER.search(s) or g.DENIAL.search(s) for s in g.safety_readings(unit['quote'].partition(':')[2])):continue
+        result.extend(offsets)
+    return tuple(sorted(set(result)))
+
+
+def _without_date_governors(governance, ignored):
+    if not ignored:return governance
+    backward=[row for row in governance[4]if row[0]not in ignored]
+    by_line={}
+    for index,row in enumerate(backward):
+        every,meaningful=by_line.setdefault(row[1],([],[]));every.append(index)
+        if row[4]:meaningful.append(index)
+    result=list(governance)
+    result[4]=backward
+    result[5]=(governance[5][0],[i for i,row in enumerate(backward)if row[4]])
+    result[7]=(governance[7][0],by_line)
+    return tuple(result)
+
+
+def date_correction_governance(governance, label, evidence, ordinary_relation, field_key, answer_text):
+    ignored=date_correction_governors(governance,label,evidence,ordinary_relation,field_key,answer_text)
+    return _without_date_governors(governance,ignored),ignored

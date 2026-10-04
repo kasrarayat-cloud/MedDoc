@@ -1950,6 +1950,7 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
     that, for both validators and the page): each other text's occurrences are summarized once per note, and the
     result memoized (eleventh and twelfth passes: a hundred questions over one repeated line held the row lock).
     `index` None: `evidence` alone."""
+    date_scope = ()
     if len(governance) > 11 and evidence:
         scope = governance[11]
         warnings = v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, field_key, answer_text)
@@ -1991,8 +1992,11 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
                      'same': not re.search(r'[\r\n]', notes[min(unit['end'], first_end):max(unit['start'], first_start)]),
                      **({'syntax_incomplete': True} if unit.get('syntax_incomplete') else {}),
                      **({'other_person': True} if unit.get('other_person') and unit['id'] not in corrections else {}),
-                     **({'unread': True} if unit.get('unread') else {})}
+                    **({'unread': True} if unit.get('unread') else {})}
                     for unit in unique.values()]
+        from .source_scope import date_correction_governance
+        governance, date_scope = date_correction_governance(governance, label, evidence,
+            ordinary_relation, field_key, answer_text)
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
     anywhere, by_label, value_of, memo = index
@@ -2018,7 +2022,8 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
             memo[part] = occurrences_of(governance, found, len(text)) if found else None
         if memo[part] is not None:
             others.append(memo[part])
-    memo_key = (tuple((entry.get('quote'), entry.get('start')) for entry in evidence), tuple(dict.fromkeys(wanted)))
+    memo_key = (tuple((entry.get('quote'), entry.get('start')) for entry in evidence),
+                tuple(dict.fromkeys(wanted)), date_scope)
     if memo_key not in memo:
         memo[memo_key] = governed_context(governance, notes, evidence, others)
     found = memo[memo_key]
