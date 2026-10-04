@@ -588,7 +588,7 @@ def reinspect_original(request,t):
             Template.objects.select_for_update().get(pk=t.pk)
             latest=t.versions.order_by('-number').first()
             if request.POST.get('mapping_version')!=str(latest.pk):raise ValidationError('This mapping changed. Reload the form before rechecking its answer locations.')
-            original=v3_original(t)
+            original=v3_original(t).read_bytes()
             # A repeated submitted request reopens its still-current inspection instead of
             # allocating another private file. Code changes require a genuinely new inspection.
             from .import_binding import verify
@@ -597,7 +597,7 @@ def reinspect_original(request,t):
             for candidate in children:
                 try:
                     verify(candidate,allow_unreviewed=True)
-                    if v3_original(candidate.template)==original:return redirect('template_detail',pk=candidate.template_id)
+                    if v3_original(candidate.template).read_bytes()==original:return redirect('template_detail',pk=candidate.template_id)
                 except (ValidationError,OSError):continue
             relative=store_upload(SimpleUploadedFile(t.original_name,original))
             info=inspect_template(private_path(relative),engine=word_engine())
