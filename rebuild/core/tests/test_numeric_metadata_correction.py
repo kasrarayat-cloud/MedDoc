@@ -126,3 +126,34 @@ class NumericMetadataCorrection(SimpleTestCase):
     def test_explicit_patient_typed_prose_is_useful_without_transcript_context_or_labels(self):
         notes='The patient had no polyps.'
         self.check(notes,True,pick=notes,reviewed=False)
+
+    def test_backward_source_dependencies_survive_a_separate_date_correction(self):
+        for source in ('The earlier findings were wrong.', 'The earlier findings were incorrect.',
+                'This finding was wrong.', 'The earlier conclusion was wrong.',
+                'The clinician invalidated the earlier report.', 'The earlier report was invalidated.',
+                'The prior assessment was superseded.', 'The earlier report cannot be relied upon.',
+                'Do not use the earlier findings.', 'The clinician doubted the preceding findings.',
+                'The earlier findings may be wrong.', 'Were the earlier findings wrong?',
+                'The earlier findings were probably not wrong.', 'The earlier findings may not be wrong.',
+                'If the earlier findings were not wrong, review them.',
+                'The earlier report was for the wrong patient.'):
+            with self.subTest(source=source):
+                self.check('No polyps were seen. '+source+' Correction: procedure date was 09/21/2026.',False)
+
+    def test_closed_noninvalidating_status_and_other_date_targets_keep_their_polarity(self):
+        for source in ('The earlier findings were not wrong.', 'The earlier findings were correct.',
+                'The clinician did not invalidate the earlier report.',
+                'The clinician validated the earlier report.',
+                "Her father's procedure date was wrong.", "Dr Synthetic's appointment date was wrong.",
+                'The earlier procedure date was wrong.'):
+            with self.subTest(source=source):
+                self.check('No polyps were seen. '+source+' Correction: procedure date was 09/21/2026.',True)
+        for separator in (' ', '\n'):
+            with self.subTest(separator=separator):
+                self.check('No polyps were seen.'+separator+'Correction: examination date was 09/21/2026.',True)
+
+    def test_unknown_backward_reference_and_wider_quotes_are_not_assumed_independent(self):
+        for source in ('The clinician removed the earlier dressing.',
+                '"The earlier findings were wrong."', 'Was the earlier procedure date wrong?'):
+            with self.subTest(source=source):
+                self.check('No polyps were seen. '+source+' Correction: procedure date was 09/21/2026.',False)

@@ -1595,6 +1595,38 @@ def clinical_modifier_negations(reading):
     return result
 
 
+def _date_scope_backward_dependency(reading, selected):
+    from . import generation as g,v3_syntax,v3_actors as a
+    docs=v3_syntax.docs(u['quote']for u in reading['units'])
+    if docs is None:return True
+    chosen={u['id']for u in selected}
+    for unit,doc in zip(reading['units'],docs):
+        if unit['id']in chosen:continue
+        if doc is None:return True
+        for target in doc:
+            if (target.pos_ not in ('NOUN','PRON') or target.dep_ not in ('nsubj','nsubjpass','dobj','pobj')
+                    or a._lemma(target)in ('date','time') or a.names_person(target) or a.names_carer(target)):continue
+            tokens=list(target.subtree);predicate=target.head
+            if predicate.pos_=='ADP':predicate=predicate.head
+            backwards=any(a._fold(t.text)in ('earlier','prior','previous','preceding')for t in tokens)
+            definite=any(t.pos_=='DET' and ('Def'in t.morph.get('Definite')or'Dem'in t.morph.get('PronType'))for t in tokens)
+            identity=any(g.V3_IDENTITY_WORDS.fullmatch(t.text) or a._lemma(t)=='invalidate'for t in predicate.subtree)
+            if not backwards and not (definite and identity):continue
+            uncertain=('?'in doc.text or any(t.tag_=='MD' or a._fold(t.text)in a.SOLE_UNCERTAIN
+                or t.dep_ in ('mark','advcl')for t in predicate.subtree))
+            closed=bool(predicate.dep_=='ROOT' and any('Fin'in t.morph.get('VerbForm')for t in (predicate,*predicate.children))
+                and not uncertain and not any(t.dep_ in ('prep','advcl','relcl','ccomp','xcomp','conj')for t in predicate.children))
+            attributes=[t for t in predicate.children if t.dep_ in ('acomp','attr')]
+            if closed and a._lemma(predicate)=='be' and len(attributes)==1:
+                value=attributes[0]
+                if (not list(value.children) and ((not a._negates(predicate) and a._lemma(value)=='correct')
+                        or (a._negates(predicate) and g.V3_IDENTITY_WORDS.fullmatch(value.text)))):continue
+            if (closed and target.dep_=='dobj' and ((a._lemma(predicate)=='validate' and not a._negates(predicate))
+                    or (a._lemma(predicate)=='invalidate' and a._negates(predicate)))):continue
+            return True
+    return False
+
+
 def date_correction_governors(governance, label, evidence, ordinary_relation, field_key, answer_text):
     """Exact date-attribute corrections apart from a complete explicit subject."""
     from datetime import datetime
@@ -1671,10 +1703,11 @@ def date_correction_governors(governance, label, evidence, ordinary_relation, fi
         allowed.add(corrections[0])
         if any(t not in allowed and not t.is_punct for t in doc):continue
         if any(t.pos_ in ('PRON','PROPN') or a.names_person(t) or a.names_carer(t) or a.this_patient(t)
-                or a._negates(t) or t.tag_=='MD' for t in doc):continue
+                or a._negates(t) or t.tag_=='MD' for t in doc if t not in corrections):continue
         if any(g.UNSETTLED.search(s) or g.INHERITED_SCOPE.search(s) or g.SELF_CORRECTION.search(s)
                 or g.SCOPE_POINTER.search(s) or g.DENIAL.search(s) for s in g.safety_readings(unit['quote'].partition(':')[2])):continue
         result.extend(offsets)
+    if result and _date_scope_backward_dependency(reading,selected):return ()
     return tuple(sorted(set(result)))
 
 
