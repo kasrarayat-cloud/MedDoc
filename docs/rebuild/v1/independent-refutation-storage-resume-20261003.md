@@ -86,3 +86,22 @@ separate from safety. The safe repair is integrated; it does not claim the
 full reviewed voice workflow useful or this supplemental control repaired.
 
 - `root-reviewed-source-refutation-c6288482/result.json`: `fcb953ae89b06744ce50b56e7b228980a33215b1dcf5070cb34409e15c71a88c`
+
+## Whole-cell exclusions and printed title witnesses — 2026-10-04
+
+The finished a567863b chain passes21 independent controls in5.254 seconds,
+exit0:15 legacy/SDT/glyph physical inputs preserve coded neighbors, retain
+whole-cell exclusions when a second caption or marked prefix is unowned, and
+refuse forged coded targets; six PDF inputs measure the complete aligned
+unique title/header/row and hold shifted, wrapped, wrong/missing title and
+duplicated full printed sequences. Zero unsafe writes and zero false holds.
+
+The initial root nominal PDF positive was invalid: the reused negative fixture
+page was400×400, while the title baseline was y400 and its ink reached408.3574.
+It also painted a space absent from the tabbed original's character sequence.
+Those failed instruments and results remain unchanged. The corrected proof
+uses the same embedded font with a600×600 synthetic crop, literal positioned
+source characters and actual neighboring text. The clipped positive claim is
+withdrawn; no product guard was changed to make it pass.
+
+- `root-coverage-title-refutation-a567863b-valid-crop/result.json`: `b48ee710a1f0a4f8b313d5150ce4c1cb833babd68ff083c0b9313a7e2eef0f7c`
