@@ -168,3 +168,55 @@ The protected evidence is
 the earlier 35-method preparation result remains separate. These are synthetic
 metadata controls, not actual corpus/application success. No QA connection,
 renderer, provider send or candidate qualification run occurred.
+
+The per-packet envelope is now implemented in
+`rebuild/ops/fixtures/word_dev33_packet_supervisor.source`, SHA256
+`dffa1258ac65c3b378efac0e946f4ba3b28a3cee8171044de27abcba82fe180a`.
+It defaults to PREPARED. Its required independent seal adds
+`root_exclusive_db_renderer_grant: true`, this exact `supervisor_sha256`, and
+`checker_dependencies` containing the fixed retained PDFium path, version
+`4.30.0` and every non-cache dependency file's SHA256. Additional or changed
+dependency code, native libraries or metadata refuse. The seal still binds the
+same full application S, native/V3 driver paths/hashes, raw capture requirement
+and all 17 packet memberships. This metadata-only literal can be committed
+after S; it never changes the required S Git/source identity.
+
+The envelope launches only the unchanged reviewed normal driver through a
+private same-PID pipe barrier. Before releasing that driver, it verifies the
+actual PID/start time, absent owned normal/test QA databases, absent exact
+socket, empty serialized layout-container namespace and unchanged helper
+bytes. The driver retains its normal protected QA wrapper, immutable originals,
+mapping, profiles, exports and original failures. The envelope records numeric
+ancestry of its own processes, waits at most 1260 seconds for the driver and
+permits at most 20 seconds of recorded-process signal/reap escalation. It never
+signals a recycled PID or deletes a database, container, socket or evidence.
+
+After the child finishes it independently queries both database names, checks
+every recorded process identity and exact socket, checks layout containers and
+re-verifies S. It seals all raw files, adds independent teardown and outer
+start/exit receipts and retains the batch receipt hash separately. Original
+exceptions/tracebacks remain in protected artifacts, and the actual child exit
+remains recorded even on timeout or incomplete teardown. A normal driver exit
+1 with healthy teardown stays a product failure; an absent/duplicate/foreign
+output or failed teardown is incomplete, never a green result. Existing output
+directories and receipts cannot be overwritten. All 17 executions must be
+serialized and retain their independently sealed results before mixed
+consolidation; seven held DEV originals and unevaluated holdout members remain
+in the original denominators.
+
+After the exact resource grant and prospective seal, a single invocation has
+this shape (the literal is first copied byte-exact outside frozen S):
+
+```bash
+/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python -I -B /absolute/operations/word_dev33_packet_supervisor.py --execute --source /opt/meddoc-pro/.worktrees/FROZEN_S --seal /absolute/operations/prospective-final-S-seal.json --seal-sha256 INDEPENDENT_SHA256 --prepared-plan /opt/meddoc-pro/.worktrees/FROZEN_S/docs/rebuild/v1/word-dev33-final-plan-prepared-20261004.json --packet P01 --output /absolute/operations/NEW_P01_ENVELOPE
+```
+
+Twenty-eight finite mocked methods passed with actual exit 0 in 0.372786
+seconds. Source bytes remained unchanged. Raw log SHA256 is
+`1a0b14a6cd302147f8ece5ddbd5510a8dc0627edcfb14ff9ec4c64235251e3e8`;
+protected evidence is `operations/word-dev33-supervisor-final-20261004`.
+The earlier resource warning and synthetic-clock assertion failure, their
+corrections and the 26-method intermediate result remain recorded separately.
+These controls prove the prepared envelope's accounting/refusal behavior;
+they are not actual corpus, application, renderer or provider qualification.
+No DEV33 execution has started.
