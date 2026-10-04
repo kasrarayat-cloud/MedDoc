@@ -829,7 +829,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -838,7 +849,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -847,7 +869,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -856,7 +889,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -865,7 +909,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -874,7 +929,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -883,7 +949,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -892,7 +969,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -901,7 +989,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -919,7 +1018,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -928,7 +1038,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -937,7 +1058,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -946,7 +1078,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -955,7 +1098,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -964,7 +1118,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -973,7 +1138,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -982,7 +1158,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -991,7 +1178,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1000,7 +1198,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1009,7 +1218,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1018,7 +1238,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1027,7 +1258,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1036,7 +1278,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1045,7 +1298,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1054,7 +1318,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1063,7 +1338,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1072,7 +1358,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1081,7 +1378,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1090,7 +1398,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1099,7 +1418,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1108,7 +1438,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1117,7 +1458,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1126,7 +1478,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1135,7 +1498,18 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     },
     {
       "original_job": 111363522435,
@@ -1144,8 +1518,31 @@
       "original_final_exception_unavailable": true,
       "appended_recovery": {
         "status": "pending_actual_affected_or_coherent_outcome"
-      }
+      },
+      "later_affected_outcomes": [
+        {
+          "status": "affected_pass",
+          "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+          "evidence": "core1-progress-affected-01/result.json",
+          "actual_exit": 0,
+          "log_sha256": "fed73bee847dec33925c1fc5bd4ba9e8e9f529954a63263362fe45f0c27cde38",
+          "database_absence_sha256": "48d9db8b03ad5404f453aab6ca0e5ab471af8397043982850d8babc94c3db2a4",
+          "source_unchanged": true
+        }
+      ]
     }
   ],
-  "new_full_ci_required": true
+  "new_full_ci_required": true,
+  "later_core1_packet": {
+    "source_head": "da1e94a6378522981d911a93f9d066f5ee4a8499",
+    "actual_methods": 35,
+    "actual_exit": 0,
+    "test_seconds": "60.334",
+    "outer_seconds": 72.83198345100027,
+    "provider_calls": 0,
+    "test_and_normal_databases_absent": true,
+    "original_progress_failures_and_initial_recovery_status_preserved": true,
+    "word_owned_model_proposals_method_excluded": true,
+    "full_core1_ci_result_still_incomplete": true
+  }
 }
