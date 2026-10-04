@@ -1111,7 +1111,18 @@ class SalvageResolveOverlap(V3Fixture, TestCase):
         template, version = self.uploaded(data=lines('Signed (mother, DOB): ______________', 'Plan: ______'),
                                           name='Synthetic RR1-10 relabel')
         signed = self.by_label(version)['Signed (mother, DOB)']
-        self.assertEqual(signed['kind'], 'date')
+        # The original's qualified signing act now types this correctly, even
+        # when a DOB qualifier appears. Retain the attempted model relabel and
+        # independently prove that this destination cannot receive a date.
+        self.assertEqual(signed['kind'], 'signature')
+        original = private_path(template.original_path).read_bytes()
+        with self.assertRaises(word_v3.V3Failure) as refused:
+            word_v3.fill(original, version.fields, {signed['key']: '2026-09-21'})
+        self.assertEqual(refused.exception.code, 'invalid_answer')
+        relabelled = forged(original, signed['locator']['slot'], kind='date', label='DOB')
+        with self.assertRaises(word_v3.V3Failure) as refused:
+            word_v3.fill(original, [relabelled], {relabelled['key']: '2026-09-21'})
+        self.assertEqual(refused.exception.code, 'protected_signing_area')
         compiled = mapping.compile_request(version, self.config)
         payload = json.loads(compiled['request']['messages'][0]['content'])
         body = mapping.wire.fixture(payload)
@@ -1121,7 +1132,11 @@ class SalvageResolveOverlap(V3Fixture, TestCase):
         body['x'] = [ModelProposals.change(payload, signed['locator']['slot'], 'DOB', kind='date', fid=fid)]
         result = mapping.validate_proposal(version, compiled, body)
         self.assertEqual(result['review']['changes'], [])
-        self.assertIn(mapping.NOT_ORDINARY, ' '.join(r['reason'] for r in result['review']['unresolved']))
+        reasons = ' '.join(r['reason'] for r in result['review']['unresolved'])
+        self.assertIn('Signature or initials areas cannot become generated answers.', reasons)
+        self.assertIn('The existing field was preserved.', reasons)
+        self.assertEqual(next(f for f in result['fields'] if f['key'] == signed['key']), signed)
+        self.assertEqual(private_path(template.original_path).read_bytes(), original)
 
     def test_one_rule_proposal_and_resolve_read_model_overlaps(self):
         template, version = self.uploaded(data=control_line('Hospital number: ', 'Hospital number', '    Weight: ______ kg'),

@@ -332,7 +332,9 @@ class V3MappingReview(V3Fixture, TestCase):
     def test_printed_options_need_a_dropdown_place(self):
         response = self.post({"action": "v3_add", "slot": "word/document.xml#b/p[0]", "kind": "choice", "label": "Clinic"})
         self.assertEqual(response.status_code, 400)
-        self.assertIn("needs a Word dropdown", response.context["v3_error"])
+        self.assertEqual(response.context["v3_error"],
+                         "Choose a Word dropdown, a legacy dropdown, or the question or first item of a complete "
+                         "printed option list. Use text for a narrative answer.")
         self.assertEqual(self.template.versions.count(), 1)
 
     def test_a_stale_page_saves_nothing(self):
