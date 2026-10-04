@@ -1,0 +1,207 @@
+{
+  "d03_commit": "6ad23cdd68132b187e84e1205fa2d51d75dfbd4b",
+  "union_commit": "2c1d5fb54e74e3d724412ac9c7aa30abbe055934",
+  "actual_exit": 0,
+  "result": {
+    "source_before": {
+      "rebuild/documents/word_v3.py": "bf48ab905997cb27bea31d16b48513a732e6a0aa393d4804ba803e757d35875f",
+      "rebuild/documents/test_source_coverage.py": "879f0b738836db7d8c4dfa677b07b4c755e24f3fffa1557c31911b6439fd6bae"
+    },
+    "source_unchanged": true,
+    "controls": 6,
+    "wrong": 0,
+    "expected": "refused",
+    "rows": [
+      {
+        "id": "glyph-unknown",
+        "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+        "refused": true,
+        "refusal": "unresolved_source_range",
+        "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+        "correct": true
+      },
+      {
+        "id": "glyph-signing-date",
+        "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+        "refused": true,
+        "refusal": "unresolved_source_range",
+        "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+        "correct": true
+      },
+      {
+        "id": "ff-unknown",
+        "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+        "refused": true,
+        "refusal": "unresolved_source_range",
+        "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+        "correct": true
+      },
+      {
+        "id": "ff-signing-date",
+        "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+        "refused": true,
+        "refusal": "unresolved_source_range",
+        "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+        "correct": true
+      },
+      {
+        "id": "sdt-unknown",
+        "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+        "refused": true,
+        "refusal": "unresolved_source_range",
+        "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+        "correct": true
+      },
+      {
+        "id": "sdt-signing-date",
+        "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+        "refused": true,
+        "refusal": "unresolved_source_range",
+        "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+        "correct": true
+      }
+    ],
+    "elapsed_seconds": 2.140564869994705,
+    "provider_calls": 0,
+    "database_calls": 0,
+    "renderer_calls": 0
+  },
+  "files": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/attempts.json",
+      "bytes": 2215,
+      "sha256": "99a9a6cdfea248ae98c8d6e42d650fba2e9b6a8588f41192dc57fe23d3770db8"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-signing-date/answers.json",
+      "bytes": 27,
+      "sha256": "669da9d6de4f6d77799adcd41dea5f599b1b4e2c6e762ec467c0400bf94bad6a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-signing-date/fields.json",
+      "bytes": 6676,
+      "sha256": "cba573e7304f881273422d1e847da4af87f9709afa3e5edbe55d72ecc3cd50f0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-signing-date/fresh-mapping.json",
+      "bytes": 5856,
+      "sha256": "8491253b2e66557bbcc244b7d367deb4fcfecfa7b1dcf367e7e26110ff2f2d9b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-signing-date/original.docx",
+      "bytes": 38014,
+      "sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-unknown/answers.json",
+      "bytes": 18,
+      "sha256": "e33b2ce932dce7642f846f2fadf12fae5ccf83221d4df04eb1ce25d59e811e46"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-unknown/fields.json",
+      "bytes": 6676,
+      "sha256": "cba573e7304f881273422d1e847da4af87f9709afa3e5edbe55d72ecc3cd50f0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-unknown/fresh-mapping.json",
+      "bytes": 5856,
+      "sha256": "8491253b2e66557bbcc244b7d367deb4fcfecfa7b1dcf367e7e26110ff2f2d9b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/ff-unknown/original.docx",
+      "bytes": 38014,
+      "sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-signing-date/answers.json",
+      "bytes": 27,
+      "sha256": "669da9d6de4f6d77799adcd41dea5f599b1b4e2c6e762ec467c0400bf94bad6a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-signing-date/fields.json",
+      "bytes": 6658,
+      "sha256": "802f8a4296cf97d0637974c6be4958b43c7b5a588deddc8513921aea3805a395"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-signing-date/fresh-mapping.json",
+      "bytes": 5847,
+      "sha256": "7f1907f929360bfa9e57a686f61e64d0c15a1ce690f737af7d7f2dd80ed565da"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-signing-date/original.docx",
+      "bytes": 37917,
+      "sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-unknown/answers.json",
+      "bytes": 18,
+      "sha256": "e33b2ce932dce7642f846f2fadf12fae5ccf83221d4df04eb1ce25d59e811e46"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-unknown/fields.json",
+      "bytes": 6658,
+      "sha256": "802f8a4296cf97d0637974c6be4958b43c7b5a588deddc8513921aea3805a395"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-unknown/fresh-mapping.json",
+      "bytes": 5847,
+      "sha256": "7f1907f929360bfa9e57a686f61e64d0c15a1ce690f737af7d7f2dd80ed565da"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/glyph-unknown/original.docx",
+      "bytes": 37917,
+      "sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/result.json",
+      "bytes": 2766,
+      "sha256": "eb2e4deb55404f9b30544c82a6eee4dc281a3ea7ec2d00f1b53cf4bda2fc02dd"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-signing-date/answers.json",
+      "bytes": 27,
+      "sha256": "669da9d6de4f6d77799adcd41dea5f599b1b4e2c6e762ec467c0400bf94bad6a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-signing-date/fields.json",
+      "bytes": 6606,
+      "sha256": "968bdca975cce581abfb7fefdf4178a7116796467e5a09273856e3c1488a999a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-signing-date/fresh-mapping.json",
+      "bytes": 5819,
+      "sha256": "33afd661a9346ee09f768e95bd52a9aad251d511f2f1a2e01c427150fab7bfd3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-signing-date/original.docx",
+      "bytes": 37966,
+      "sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-unknown/answers.json",
+      "bytes": 18,
+      "sha256": "e33b2ce932dce7642f846f2fadf12fae5ccf83221d4df04eb1ce25d59e811e46"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-unknown/fields.json",
+      "bytes": 6606,
+      "sha256": "968bdca975cce581abfb7fefdf4178a7116796467e5a09273856e3c1488a999a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-unknown/fresh-mapping.json",
+      "bytes": 5819,
+      "sha256": "33afd661a9346ee09f768e95bd52a9aad251d511f2f1a2e01c427150fab7bfd3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004/sdt-unknown/original.docx",
+      "bytes": 37966,
+      "sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-temporal-union-six-20261004.log",
+      "bytes": 2767,
+      "sha256": "1002ae65b5b9b58bb5c9d7fcdfecefbe41f7940bb6bd657328a6880c4eb70775"
+    }
+  ],
+  "active_children": []
+}
