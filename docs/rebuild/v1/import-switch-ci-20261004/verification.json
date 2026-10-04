@@ -1,0 +1,53 @@
+{
+  "source_parent": "c8578742bba91e87b4edcc52d9eb810afc1af3e7",
+  "selector": "core.tests.test_import_workflow.AutoImportWorkflow.test_valid_ordinary_parts_route_allows_large_v3_import_without_generic_batch_flag",
+  "first": {
+    "exit_code": 1,
+    "tests": 1,
+    "failed": 1,
+    "test_seconds": 4.684,
+    "deadline_seconds": 180,
+    "failure": "800 != 100",
+    "database_destroyed_log": true,
+    "log_sha256": "a3c94e03ee997baf7b9a21ce66bab0a220a0afd12059d7bce80f77cb486b304d",
+    "provider_requests": 0
+  },
+  "repaired": {
+    "exit_code": 0,
+    "tests": 1,
+    "passed": 1,
+    "test_seconds": 4.858,
+    "deadline_seconds": 180,
+    "source_parent": "c8578742bba91e87b4edcc52d9eb810afc1af3e7",
+    "selector": "core.tests.test_import_workflow.AutoImportWorkflow.test_valid_ordinary_parts_route_allows_large_v3_import_without_generic_batch_flag",
+    "source_hashes": {
+      "rebuild/core/tests/test_import_workflow.py": "ba66b4d459ad8aea9c1767f5075390d6ad9d78ceaaee41d39112e15499110229",
+      "rebuild/core/generation.py": "1d8a2ab9ab83f3df86ca09bb46b3320da10e32398bdb0881494aa71051fd1a6d",
+      "rebuild/core/v3_mapping.py": "987a5a7100bc9f793037842e136f958ef9f87995a7768d0a0b4e9fe4bd885355",
+      "rebuild/quillmd/application_profile.py": "b051d6faadd682ab38b8f2dff9f80a59266ad32f614ed80dc232a5e8bbde6721"
+    },
+    "source_unchanged_during_packet": true,
+    "provider_requests": 0,
+    "database_destroyed": true,
+    "catalog_absence": {
+      "database": "test_quillmd_qa_sol_impswitch1004",
+      "catalog_count": 0,
+      "absent": true
+    },
+    "log_sha256": "d9d4a8d4725fc2b3c5c00a2761ac612b1e603bc2b0e7b2cb1fff22ba0e43a303",
+    "original_failure_retained": true
+  },
+  "raw_evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/import-switch-ci-20261004",
+  "evidence_sha256": {
+    "first-source.json": "84e712f44aca03e1a18f59cf5d2ea30da8abd2942fcf7c8d2661da7d03aa2723",
+    "first-result.json": "a636d86f3d18059e5050a2f06c1d43c08dcc959ad6dd4c5f4f9d0e3495b6bb12",
+    "first.log": "a3c94e03ee997baf7b9a21ce66bab0a220a0afd12059d7bce80f77cb486b304d",
+    "first-db-absence.log": "7205b647496cbabaef2b142f045ab8d670796d1c2eee69d2d1c53003d13d7c0a",
+    "repaired-source-before.json": "a672bc40ad8b1e8948c9709dba15d976ef22f9438fb87a3f05d31209483980fe",
+    "repaired-source-after.json": "6546ac942dcdc529bd13a89bd21ffdf58ddce07d7038ef85240640fafe63225f",
+    "repaired-result.json": "b26dd4430b5ad7200b8bee5d296f99d096cb9a29637fbf9b5a18eeb53370b2ae",
+    "repaired.log": "d9d4a8d4725fc2b3c5c00a2761ac612b1e603bc2b0e7b2cb1fff22ba0e43a303",
+    "repaired-db-absence.log": "7205b647496cbabaef2b142f045ab8d670796d1c2eee69d2d1c53003d13d7c0a"
+  },
+  "application_files_modified": []
+}
