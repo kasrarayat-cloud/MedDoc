@@ -105,3 +105,30 @@ source characters and actual neighboring text. The clipped positive claim is
 withdrawn; no product guard was changed to make it pass.
 
 - `root-coverage-title-refutation-a567863b-valid-crop/result.json`: `b48ee710a1f0a4f8b313d5150ce4c1cb833babd68ff083c0b9313a7e2eef0f7c`
+
+## Completed status and divided numeric destinations — 2026-10-04
+
+The finished clinical 1ce41adf diff passes 45 independent SOAP speaker/source
+controls through actual answer validation, page governance and final decisions.
+A separate 21-control document-status packet demonstrates two wrong Plan
+releases: a questioned `Consent form signed and dated: Yes?`, and a completed
+status line following `The doctor underwent colonoscopy.` Both supply `Rest.`
+without resolving the question or the preceding foreign-person scope. The
+repair is held outside integration pending a new finished diff and refutation.
+
+The finished Word 2d40c73c diff refuses all four retained original whole-band
+signing writes. Its broader 144-control packet also retains 16 possible
+witness-name writes without an explicit preceding act; those alone do not
+establish the strongest participant claim. A separate 16-control packet does:
+`I certify that I witnessed the patient sign this consent form.` followed by
+`Witness name:` and an empty divided numeric band accepts whole-band and
+individual part writes across body, spacer, same-cell and adjacent-row layouts.
+All 16 exact original and wrong export documents are retained. That verified
+physical participant gap keeps the diff outside integration. Byte fidelity
+checks passing do not discharge this ownership failure. No provider or
+database was used by either root packet.
+
+- `root-document-status-refutation-1ce41adf/result.json`: `6c3d942801fa384e56e4d85c4550713360595e01db26c4e70c9d87a48dd6add5`
+- `root-soap-speaker-refutation-1ce41adf30aa/result.json`: `1c584d086c9e00a4da1ae76cc27e126bb65c68de982f1a17710fcbcdf415f3a7`
+- `root-numeric-signing-refutation-2d40c73c/result.json`: `208782c3604b890a22b6bc85da46e803a18121fa746d7194e3e858a120d4e544`
+- `root-numeric-explicit-witness-refutation-2d40c73c/result.json`: `5632f19a466972a98e38cb64707253ec7d35eb270dc13e88b1d39ce69f1aae1b`
