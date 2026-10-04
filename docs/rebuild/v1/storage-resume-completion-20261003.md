@@ -131,3 +131,11 @@ changed. B2 policy remains expired; valid Sep27 restoration evidence is reused.
 Next work is the focused Word hierarchy repairs, mocked batch integration,
 final-source paid qualification and financial proof, coherent exact CI, then
 the gated private demonstration and served verification.
+
+## Verified integration update, 2026-10-04 10:48UTC
+
+D03 is now49/88 versus45/88, with29 missed,10 wrong and2 extras; strict false. Its hierarchy signing repair is integrated only after root reproduced nine actual unsafe exports and the finished source passed48 independent controls. D08 is actively under source/fidelity regression, with preliminary39/41 detection rather than the old29/41; that preliminary number is not an accepted application export. Native Word remains unverified.
+
+The actual101-field mocked batch rehearsal passed on7a22: two100+1 SDK bodies match the real compiler, first child adopts nothing, second finishes the union with2 supported and99 missing. Explicit acceptance/reviewed-blank, finalization, authorized faithful DOCX download and foreign-clinician404 passed; two receipts and two reservations settled. Both owned normal/test databases and all child processes are absent, and source remained unchanged. This is zero provider requests and is separate from the paid157-attempt1.717575505200USD calculated ledger. Two earlier rehearsal failures and both environment corrections remain retained.
+
+Eight remaining affected nonfinancial CI assertions passed on readonly37268192 with actual child/outer0 in21.253seconds; no DB/provider source mutation occurred. Original7907 CI failures are preserved, and exact final CI is still pending. Current root capacity has316523438080 available bytes of633927315456, with35039505 free inodes; latest actual preflight GO101910 remains unchanged. No cleanup, expansion or installed/demo mutation occurred. Prospective provider campaigns2/3 remain unstarted. The final fixed33 eligible DEV application plan preserves the60/20 denominators, seven held development originals and family/safety criteria; its mixed-engine result union is being implemented before execution.
