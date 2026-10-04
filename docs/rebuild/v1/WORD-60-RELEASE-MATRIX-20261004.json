@@ -7307,5 +7307,23 @@
     "historical_rows_preserved": true,
     "historical_performance_counts_unchanged": true,
     "runtime_execution_authorized": false
+  },
+  "appended_publisher_rights_addendum": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-release-qualification-20261004/docs/rebuild/v1/WORD-ORIGINAL-RIGHTS-ADDENDUM-20261004.json",
+    "sha256": "a8f05cd01066c8e991840850ed3d70ab45e724221e03f80996f246352267c151",
+    "status": "ADDITIVE_SCOPED_EVIDENCE_NOT_EXECUTION_LEDGER",
+    "historical_dev_053_and_holdout_v1_preserved": true,
+    "new_unconditional_DEV_rights_support": [
+      "D20",
+      "D23",
+      "D24",
+      "D25"
+    ],
+    "conditional_native_completion_engineering_gate": [
+      "D32"
+    ],
+    "current_fixed33_DEV_packet_admission_unchanged": true,
+    "current_application_runs_added": 0,
+    "provider_upload_authorized": false
   }
 }
