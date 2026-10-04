@@ -150,6 +150,30 @@ class EmptyCornerMatrix(unittest.TestCase):
         with self.assertRaises(w.V3Failure):
             w.fill(original, [field, other], {field['key']: 'NO', other['key']: 'YES'})
 
+    def test_guided_other_row_rejects_unsafe_sources_anywhere_in_qualifying_axis(self):
+        def linked_header(doc, table):
+            para = table.cell(0, 1).paragraphs[0]._p; run = para.find(qn('w:r'))
+            link = OxmlElement('w:hyperlink'); para.remove(run); link.append(run); para.append(link)
+        def native_header(doc, table):
+            para = table.cell(0, 1).paragraphs[0]._p; run = para.find(qn('w:r'))
+            sdt = OxmlElement('w:sdt'); sdt.append(OxmlElement('w:sdtPr'))
+            content = OxmlElement('w:sdtContent'); para.remove(run); content.append(run)
+            sdt.append(content); para.append(sdt)
+        def drawing_header(doc, table):
+            table.cell(0, 1).paragraphs[0].add_run()._r.append(OxmlElement('w:drawing'))
+        def linked_prior_caption(doc, table):
+            para = table.cell(1, 0).paragraphs[0]._p; run = para.find(qn('w:r'))
+            link = OxmlElement('w:hyperlink'); para.remove(run); link.append(run); para.append(link)
+        def drawing_prior_response(doc, table):
+            table.cell(1, 1).paragraphs[0].add_run()._r.append(OxmlElement('w:drawing'))
+        for mutate in (linked_header, native_header, drawing_header,
+                       linked_prior_caption, drawing_prior_response):
+            with self.subTest(mutate=mutate.__name__):
+                original = self.guided_form(mutate); mapping = w.inspect(original)
+                self.assertFalse(any(r.get('relation') == 'guided_response_row'
+                                     for f in mapping['fields'] for r in f.get('source_questions', [])))
+                self.assertEqual(w.fill(original, mapping['fields'], {}), original)
+
     def test_complete_original_axis_yields_each_row_and_never_a_header_answer(self):
         for kind in ('glyph', 'ff', 'sdt'):
             with self.subTest(kind=kind):

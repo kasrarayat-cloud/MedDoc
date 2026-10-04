@@ -6405,6 +6405,10 @@ class Detector:
                 or any(c.info['col'] != n or c.info['span'] != 1 or c.info['vmerge']
                        for n, c in enumerate(cells))):
             return None
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:hyperlink'), q('w:tbl'), q('w:br')}
+        if any(node.tag in unsafe for cell in header for node in cell.el.iter()):
+            return None
         # The original axis must continue without an intervening header,
         # divider, merge, hidden control or independent answer band.
         for previous in range(first + 1, row):
@@ -6412,6 +6416,7 @@ class Detector:
             if (len(band) != 4 or any(c.info['col'] != n or c.info['span'] != 1 or c.info['vmerge']
                                      for n, c in enumerate(band))
                     or not self.is_label_cell(band[0], complete=True)
+                    or any(node.tag in unsafe for cell in band for node in cell.el.iter())
                     or any(p.kind != 'p' or not self.tab_source_visible(p) or self.box_units(p)
                            or self.blank_spans(*self.ptext(p.el)) for p in band[0].children)):
                 return None
@@ -6422,8 +6427,6 @@ class Detector:
                         or len(self.box_units(cell.children[0])) != 1
                         or self.box_units(cell.children[0])[0][0]['kind'] != 'glyph'):
                     return None
-        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
-                  q('w:object'), q('w:hyperlink'), q('w:tbl'), q('w:br')}
         boxes = []
         for n, cell in enumerate(cells):
             if (len(cell.children) != 1 or cell.children[0].kind != 'p'
