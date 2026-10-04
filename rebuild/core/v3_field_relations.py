@@ -570,7 +570,8 @@ def own_heading_reference(reading, field, chosen, related, literal_ids):
 
 def read(reading, label, evidence, record, *, text=None, field_key=None):
     """One revalidation on generation, review, save and finalization."""
-    empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False, 'syntax_ids': set()}
+    empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False,
+             'syntax_ids': set(), 'elicited_ids': set()}
     if record is None: return empty
     units = reading['units']; refused = {**empty, 'warnings': units or [reading['source']]}
     if not enabled() or not isinstance(record, str) or len(record) > 50000: return refused
@@ -650,7 +651,13 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         # completed-review predicate in every unit; it also establishes its actor.
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
-        literal_ids = complete_ids(field, ordered, reading)
+        # The literal reader's elicited-report proof belongs to this exact
+        # field/read. Capture it before other admission routes extend syntax
+        # IDs; neither caller caches nor another field can supply this proof.
+        literal_reading = {**reading, '_literal_elicited': set()}
+        literal_ids = complete_ids(field, ordered, literal_reading)
+        elicited_ids = {uid for uid in literal_ids
+                        if (g.question_key(label), uid) in literal_reading['_literal_elicited']}
         from . import reviewed_source
         reviewed_ids = reviewed_source.complete_ids(reading, field, ordered)
         literal_ids |= reviewed_ids
@@ -719,7 +726,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and (reading['patients'].get(u['id']) or reviewed) for u in ordered)))
         return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference,
-                'syntax_ids': literal_ids, 'shared_ids': reviewed_ids, 'owned_subject_ids': scoped_owned}
+                'syntax_ids': literal_ids, 'elicited_ids': elicited_ids,
+                'shared_ids': reviewed_ids, 'owned_subject_ids': scoped_owned}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
 

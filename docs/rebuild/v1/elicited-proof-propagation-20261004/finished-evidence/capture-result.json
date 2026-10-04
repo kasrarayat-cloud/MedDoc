@@ -1,0 +1,24 @@
+{
+  "reports": [
+    {
+      "name": "baseline_C",
+      "exit_code": 0,
+      "timed_out": false,
+      "reaped": true,
+      "elapsed_seconds": 9.151222385000437
+    },
+    {
+      "name": "finished_repair",
+      "exit_code": 0,
+      "timed_out": false,
+      "reaped": true,
+      "elapsed_seconds": 9.801693927001907
+    }
+  ],
+  "offline_compiler_quote_equalities": {
+    "config": true,
+    "compiled": true,
+    "maximum_cost": true
+  },
+  "passed": true
+}

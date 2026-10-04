@@ -3348,6 +3348,7 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
     scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
     scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
     scoped['ordinary_syntax'] = ordinary.get('syntax_ids', set())
+    scoped['ordinary_elicited'] = ordinary.get('elicited_ids', set())
     complete = set()
     if label in reading['general']:
         for group in reading['groups']:
@@ -3483,7 +3484,8 @@ def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=fro
     # 2026-09-30).
     if uid in proven:
         if proven_by_relation:
-            causes.extend(v3_relation_causes(reading, unit, label, selected, field_key))
+            causes.extend(v3_relation_causes(reading, unit, label, selected, field_key,
+                                             elicited=uid in scoped.get('ordinary_elicited', ())))
         return causes
     if readable and any(not any(low <= unit['start'] + at < high for low, high in reading['conditional_spans'])
                         for at in info['bounded']):
@@ -3792,7 +3794,7 @@ def v3_opposed_candidates(reading, uid):
     return found
 
 
-def v3_relation_causes(reading, unit, label, selected, field_key=None):
+def v3_relation_causes(reading, unit, label, selected, field_key=None, *, elicited=False):
     """⚠️ HOLD-ONLY FLOORS FOR A UNIT THE ORDINARY FIELD RELATIONS PROVE (2026-09-30). The model's per-unit relations are
     the evidence that neighbouring statements are independent; these are the structural readings its 'independent'
     cannot remove. [(cause, flag)], like `v3_added_causes`; every one only ever HOLDS, and the unit they apply to is one
@@ -3866,7 +3868,8 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # The field itself: by its key when a repeated label names several ('Other' under three printed questions).
     field = next((f for f in matches if f['key'] == field_key), None) if field_key is not None else None
     field = field if field is not None else (matches[0] if len(matches) == 1 else None)
-    elicited = (label, uid) in reading.get('_literal_elicited', ())
+    # Only this field's successful ordinary read supplies the literal proof;
+    # a mutable marker on a caller reading is not an admission contract.
     # 2026-10-01: a note whose single-patient scope is POSITIVELY established (`v3_actors.sole_patient`: every nominal
     # word known to name no person, one gender, the patient presented first) has nobody else in it, so the actor run's
     # 'other' / 'ambiguous' for a pronoun after an article opener ('A 45-year-old man presents ... He ...') is not
