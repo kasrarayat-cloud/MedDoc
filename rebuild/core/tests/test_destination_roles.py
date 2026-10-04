@@ -463,9 +463,9 @@ class ModelProposals(V3Fixture, TestCase):
         # The original never changes across the 720 orders: its role report is read in the isolated parser once per
         # distinct mapping and reused (the reading itself is exercised by every other test).
         reports, real = {}, destination_roles.report
-        def report(version, fields=None):
-            key = mapping.canonical(fields if fields is not None else version.fields)
-            if key not in reports:reports[key] = real(version, fields)
+        def report(version, fields=None, *, mapping_review=False):
+            key = (mapping.canonical(fields if fields is not None else version.fields), mapping_review)
+            if key not in reports:reports[key] = real(version, fields, mapping_review=mapping_review)
             return copy.deepcopy(reports[key])
         with patch.object(destination_roles, 'report', side_effect=report):
             for order in itertools.permutations(changes):

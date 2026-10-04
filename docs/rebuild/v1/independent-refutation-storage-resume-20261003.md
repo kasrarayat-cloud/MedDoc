@@ -271,3 +271,39 @@ qualification remains required on the integrated candidate.
 - `root-inline-native-8f1-independent-regions/result.json`: `fc0fced37cd27725c6b2dccdd31a5a6044c4a77509905bd8ecb0eeae7d4e5037`
 
 - `root-word-export-continuity-7907-to-8f1/result.json`: `ef623b535360c3d0f23d78f0a81da4ad308dc5d85667df00dc47e08e7358f60b`
+
+## Protected scalar readback and unchanged Word parts — 2026-10-04
+
+The original independent scalar control on44a3a1f released a proposed automatic
+answer in a write-protected field and incorrectly passed changed export text.
+Finished986b882c refuses the same input. Five root controls pass with zero wrong
+results: protected proposed output, unchanged proposed output, original existing
+entries, changed protected text, and an ordinary same-destination positive.
+This is an independent export-checker repair, not a clinical acceptance result.
+
+Finished3e447dba keeps raw story parts when a checkbox request leaves their XML
+unchanged. The first root cross-part packet found loss of the original ZIP
+archive comment after a separate body edit. Separate46992eaa retains that
+comment. All eight original-state/requested-state/body controls now pass,
+including long body text containing checkbox glyphs, original BOM footer bytes,
+untouched header and other entries, intended tick changes and exact empty/no-op
+original output. The first failure is retained. No original source changed.
+
+## Labelled correction scope — 2026-10-04
+
+Finished700410e9 is independently exercised through complete wire validation,
+current answer reading and finalization governance. Thirty-five controls pass:
+four exact-source positives and31 negatives, with no unsafe release or false
+hold. Opposite rash findings, wrong-person claims, unbounded/global corrections,
+backward invalidation, foreign attribution, incomplete sources and missing
+patient ownership remain held. Two earlier red instrument expectations are
+withdrawn and retained: a literal 'may have' answer preserves uncertainty, and
+a separately attributed prior patient's rash does not invalidate an explicit
+current-patient assertion. No application source changed for that adjudication.
+No provider, database or renderer was used. The remaining ordinary-prose holds
+and prospective changed-source qualification are still open.
+
+- `root-protected-scalar-readback-44a3/result.json`: `f4863d810a8c8cc0094c81b4c2fa3b6e6f80d0ccd75b831ff880c2ed7cccb4bf`
+- `root-protected-scalar-readback-986b/result.json`: `5db264e6f7db7df5f5bf06f7b5808f65c9997ca07c9fefcdc3cfbeea677350cb`
+- `root-noop-46992-corrective-snapshot/result.json`: `a628cb2c3b507f2251e1f81c1e0797bad047e0391acedaf83a6529651a0694b4`
+- `root-labelled-correction-700410-adjudicated/result.json`: `b349f16e6487c858cbac1c030b0faaa25f8c0c0656b70f84692b5ac013a1e212`

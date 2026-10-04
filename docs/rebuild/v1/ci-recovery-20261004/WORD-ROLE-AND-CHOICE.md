@@ -31,3 +31,17 @@ whole-document acceptance.
 
 - Final receipt: `root-word-ci-assertions-fourth-qualified-20261004T054818Z/result.json`; SHA256 `1349aabe6c7a168f7889a9ee189165be6b874d6db1cf13b692786d18784a9a32`.
 - Final actual test log SHA256: `30d21da3eb1d0107ea1d0e3fc078f225c47effc0e4653d06426c5e6a81c149d3`.
+
+The last retained Word Core1 error is also reproduced separately: the original
+720-order RF12 test's report cache rejected the actual mapping_review keyword.
+Its cache now includes the mapping-review mode and forwards that same mode to
+the real original-bound role reader. No production guard, order or expected
+result changes. The original affected method passes all720 orders with actual
+exit0, no timeout, provider call or changed source diff; own normal/test
+databases are confirmed absent. The first reproduced TypeError is retained.
+
+- Reproduced original: `root-word-core1-rf12-20261004T062206Z/result.json`.
+- Corrected actual receipt: `root-word-core1-rf12-20261004T062327Z/result.json`.
+- Corrected test log SHA256: `906b44373edfe686dff24c17ab6f65a135622d7b563a1d4228976c9b47c80459`.
+
+This closes the affected selector, not the full required CI gate.
