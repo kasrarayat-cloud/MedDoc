@@ -30,11 +30,17 @@ class PrivateDependencyBundleTests(unittest.TestCase):
             with zipfile.ZipFile(path, 'w') as archive:
                 archive.writestr('example-1.0.dist-info/METADATA', 'Name: example\nVersion: 1.0\nLicense-Expression: MIT\n')
                 archive.writestr('example-1.0.dist-info/licenses/LICENSE', 'retained synthetic license fixture')
+                archive.writestr('example/_vendor/another-2.0.dist-info/METADATA', 'Name: another\nVersion: 2.0\n')
             metadata = bundle.wheel_metadata(path, {'name': 'example', 'version': '1.0'})
             self.assertEqual(metadata['license_expression'], 'MIT')
             self.assertEqual(metadata['license_files'], {'example-1.0.dist-info/licenses/LICENSE':
                 bundle.sha(b'retained synthetic license fixture')})
             with self.assertRaises(ValueError): bundle.wheel_metadata(path, {'name': 'another', 'version': '1.0'})
+
+    def test_retry_identity_cannot_replace_an_existing_or_unrelated_packet(self):
+        for run_id in ('../foreign', '/tmp/foreign', '', 'a' * 80, None):
+            with self.subTest(run_id=run_id), self.assertRaises(ValueError):
+                bundle.prepare(Path('/not-an-authorized-worktree'), 'a' * 40, run_id)
 
     def test_size_counts_own_bytes_and_rejects_external_links_without_traversing_them(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as external:

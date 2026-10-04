@@ -110,7 +110,8 @@ def offline_lock(raw):
 
 def wheel_metadata(path, artifact):
     with zipfile.ZipFile(path) as archive:
-        entries = [name for name in archive.namelist() if name.endswith('.dist-info/METADATA')]
+        entries = [name for name in archive.namelist()
+                   if name.endswith('.dist-info/METADATA') and len(Path(name).parts) == 2]
         require(len(entries) == 1, 'Single wheel metadata required.')
         raw = archive.read(entries[0]); metadata = email.message_from_bytes(raw)
         require(lock.canonical(metadata['Name']) == lock.canonical(artifact['name'])
@@ -124,7 +125,9 @@ def wheel_metadata(path, artifact):
                 if '/licenses/' in name or name.rsplit('/', 1)[-1].upper().startswith(('LICENSE', 'COPYING'))}}
 
 
-def prepare(source, expected):
+def prepare(source, expected, run_id):
+    require(isinstance(run_id, str) and re.fullmatch('[a-z0-9][a-z0-9-]{1,55}', run_id), 'Distinct bounded run identity required.')
+    directory = OUTPUT.parent / (OUTPUT.name + '-' + run_id)
     require(source == source.resolve() and source.is_relative_to(ROOT / '.worktrees')
             and re.fullmatch('[a-f0-9]{40}', expected), 'Exact isolated source identity required.')
     require(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, timeout=20).decode().strip() == expected
@@ -141,14 +144,15 @@ def prepare(source, expected):
         path = CACHE / artifact['filename']; info = path.lstat()
         require(not path.is_symlink() and stat.S_ISREG(info.st_mode) and info.st_nlink == 1
                 and info.st_uid == os.getuid(), 'Retained reviewed wheel has unsafe metadata.')
-    require(not OUTPUT.exists() and OUTPUT.resolve() == OUTPUT, 'Never overwrite a previous owned dependency packet.')
-    require(os.statvfs(OUTPUT.parent).f_bavail * os.statvfs(OUTPUT.parent).f_frsize > 8 * 1024 ** 3,
+    require(not directory.exists() and directory.resolve() == directory, 'Never overwrite a previous owned dependency packet.')
+    require(os.statvfs(directory.parent).f_bavail * os.statvfs(directory.parent).f_frsize > 8 * 1024 ** 3,
             'Preserve at least 8 GiB headroom for bounded preparation.')
-    OUTPUT.mkdir(mode=0o700)
+    directory.mkdir(mode=0o700)
     for name in ('wheelhouse', 'home', 'tmp'):
-        (OUTPUT / name).mkdir(mode=0o700)
+        (directory / name).mkdir(mode=0o700)
     started = time.monotonic(); deadline = started + DEADLINE_SECONDS
-    record = {'source_commit': expected, 'source_sha256': {name: sha(raw) for name, raw in sources.items()},
+    record = {'source_commit': expected, 'run_id': run_id, 'root': str(directory),
+        'source_sha256': {name: sha(raw) for name, raw in sources.items()},
         'reviewed_cache': str(CACHE), 'packages': summary['packages'], 'complete': False,
         'max_owned_bytes': MAX_BYTES, 'deadline_seconds': DEADLINE_SECONDS,
         'network_requests': 0, 'installed_mutation_performed': False, 'provider_calls': 0, 'steps': []}
@@ -157,27 +161,27 @@ def prepare(source, expected):
         for artifact in manifest['artifacts']:
             raw = (CACHE / artifact['filename']).read_bytes()
             require(len(raw) == artifact['bytes'] and sha(raw) == artifact['sha256'], 'Retained wheel changed before copy.')
-            write(OUTPUT / 'wheelhouse' / artifact['filename'], raw)
-            artifacts.append({**artifact, **wheel_metadata(OUTPUT / 'wheelhouse' / artifact['filename'], artifact)})
-            require(time.monotonic() < deadline and size(OUTPUT) <= MAX_BYTES, 'Bounded wheel copy exceeded.')
+            write(directory / 'wheelhouse' / artifact['filename'], raw)
+            artifacts.append({**artifact, **wheel_metadata(directory / 'wheelhouse' / artifact['filename'], artifact)})
+            require(time.monotonic() < deadline and size(directory) <= MAX_BYTES, 'Bounded wheel copy exceeded.')
         for name, raw in sources.items():
-            write(OUTPUT / name, raw)
-        write(OUTPUT / 'offline.lock', offline_lock(sources['requirements-production.lock']))
-        lock.verify(OUTPUT, OUTPUT / 'wheelhouse')
-        write(OUTPUT / 'wheel-manifest.json', {'reviewed_artifacts': artifacts,
+            write(directory / name, raw)
+        write(directory / 'offline.lock', offline_lock(sources['requirements-production.lock']))
+        lock.verify(directory, directory / 'wheelhouse')
+        write(directory / 'wheel-manifest.json', {'reviewed_artifacts': artifacts,
             'license_limit': 'Observed wheel metadata and retained license-file hashes; no new legal approval is inferred.'})
-        python = OUTPUT / 'verified-venv/bin/python'
+        python = directory / 'verified-venv/bin/python'
         record['steps'].append(bounded(['/usr/bin/python3', '-B', '-m', 'venv', '--copies',
-            str(OUTPUT / 'verified-venv')], 'create-owned-venv', OUTPUT, deadline=deadline))
+            str(directory / 'verified-venv')], 'create-owned-venv', directory, deadline=deadline))
         network_guard = ('import socket\n'
             'def refuse(*args,**kwargs): raise RuntimeError("Offline dependency verification forbids network")\n'
             'socket.socket.connect=refuse\n')
         installer = network_guard + ('from pip._internal.cli.main import main\nraise SystemExit(main('
             + repr(['install', '--no-index', '--only-binary=:all:', '--require-hashes', '--find-links',
-                    str(OUTPUT / 'wheelhouse'), '-r', str(OUTPUT / 'offline.lock')]) + '))\n')
-        record['steps'].append(bounded([str(python), '-B', '-c', installer], 'offline-install', OUTPUT, deadline=deadline))
+                    str(directory / 'wheelhouse'), '-r', str(directory / 'offline.lock')]) + '))\n')
+        record['steps'].append(bounded([str(python), '-B', '-c', installer], 'offline-install', directory, deadline=deadline))
         checker = network_guard + 'from pip._internal.cli.main import main\nraise SystemExit(main(["check"]))\n'
-        record['steps'].append(bounded([str(python), '-B', '-c', checker], 'pip-check', OUTPUT, deadline=deadline))
+        record['steps'].append(bounded([str(python), '-B', '-c', checker], 'pip-check', directory, deadline=deadline))
         native = network_guard + (
             'import importlib.metadata as m,json,sys\nimport numpy,spacy,cymem,murmurhash,preshed,blis,thinc,srsly,wrapt\n'
             'assert spacy.__version__=="3.8.16"\nnlp=spacy.load("en_core_web_sm")\n'
@@ -185,18 +189,18 @@ def prepare(source, expected):
             'assert doc.has_annotation("DEP") and len(doc)>5\n'
             'print(json.dumps({"python":sys.version.split()[0],"spacy":spacy.__version__,"model":nlp.meta["version"],'
             '"native_imports":True,"synthetic_parser_tokens":len(doc),"pip":m.version("pip")}))\n')
-        record['steps'].append(bounded([str(python), '-B', '-c', native], 'native-model', OUTPUT, deadline=deadline))
+        record['steps'].append(bounded([str(python), '-B', '-c', native], 'native-model', directory, deadline=deadline))
         require({name: (app / name).read_bytes() for name in names} == sources, 'Dependency source changed during preparation.')
-        lock.verify(app, CACHE); lock.verify(OUTPUT, OUTPUT / 'wheelhouse')
-        record.update(complete=True, elapsed_seconds=time.monotonic() - started, owned_bytes=size(OUTPUT))
-        write(OUTPUT / 'result.json', record)
+        lock.verify(app, CACHE); lock.verify(directory, directory / 'wheelhouse')
+        record.update(complete=True, elapsed_seconds=time.monotonic() - started, owned_bytes=size(directory))
+        write(directory / 'result.json', record)
         return record
     except BaseException as error:
         import traceback
-        write(OUTPUT / 'original-failure.txt', traceback.format_exc().encode())
+        write(directory / 'original-failure.txt', traceback.format_exc().encode())
         record.update(complete=False, failure_kind=type(error).__name__, elapsed_seconds=time.monotonic() - started,
-                      owned_bytes=size(OUTPUT))
-        write(OUTPUT / 'result.json', record)
+                      owned_bytes=size(directory))
+        write(directory / 'result.json', record)
         raise RuntimeError('Owned dependency preparation failed; preserve and inspect its protected original evidence.') from None
 
 
@@ -204,14 +208,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path)
     parser.add_argument('--expected-commit')
+    parser.add_argument('--run-id')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     if not args.execute:
         print(json.dumps({'prepared_only': True, 'installed_mutation_performed': False,
             'network_requests': 0, 'max_owned_bytes': MAX_BYTES, 'deadline_seconds': DEADLINE_SECONDS}))
         return
-    require(args.source is not None and args.expected_commit is not None, 'Confirmed source required.')
-    print(json.dumps(prepare(args.source, args.expected_commit), sort_keys=True))
+    require(args.source is not None and args.expected_commit is not None and args.run_id is not None, 'Confirmed source/run required.')
+    print(json.dumps(prepare(args.source, args.expected_commit, args.run_id), sort_keys=True))
 
 
 if __name__ == '__main__':
