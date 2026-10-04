@@ -2468,6 +2468,11 @@ class Detector:
             # engine label is derived from that original control, not a review.
             elif area.slot.kind in ('sdt', 'ff'):
                 sources.append(area.label)
+            if any(relation.get('relation') == 'nested_cell_options' for relation in area.source_questions):
+                # A proved own caption can carry a printed list marker. Read
+                # its action/clinical grammar after that marker, while keeping
+                # the full original caption and fingerprints in the mapping.
+                sources = [LIST_MARKER.sub('', str(source or '').strip()) for source in sources]
             # A printed reservation of an author's comments belongs to that
             # author regardless of the destination's representation. Reading
             # this relationship only for one-cell boxes released identical
@@ -2991,7 +2996,7 @@ class Detector:
                         and not any(area.slot is before or before in area.extra_slots for area in self.areas)
                         and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
                                     for n in before.el.iter())):
-                    roles.append(self.checkbox_source_action(prior, governing=True))
+                    roles.append(self.checkbox_source_action(LIST_MARKER.sub('', prior.strip()), governing=True))
         if any(roles):
             definite = 'human_signing_action' in roles
             code = 'human_signing_action' if definite else 'ambiguous_source_action'
@@ -4188,6 +4193,83 @@ class Detector:
             out.append(cur)
         return out
 
+    def nested_cell_partition(self, table):
+        """Prove independent question cells, never a shared row/column option grid.
+
+        Each physical cell must begin with its own complete printed caption.
+        A header-only cell, a nested grid, hidden source or competing first
+        paragraph prevents this proof; no neighbouring caption is borrowed.
+        """
+        questions = {}
+        cells = [slot for slot in self.index.slots if slot.kind == 'tc' and slot.parent is table]
+        if not cells:
+            return None
+        for cell in cells:
+            if any(slot.kind == 'tbl' for slot in cell.children) or self.region_hidden(cell.el):
+                return None
+            paragraphs = self.own_paragraphs(cell)
+            first = next((slot for slot in paragraphs if self.text(slot.el).strip()), None)
+            if first is None:
+                return None
+            caption = self.text(first.el).strip()
+            _, _, source_problem = self.question_box_paragraph(first.el)
+            if (source_problem or not self.tab_source_visible(first)
+                    or not caption.endswith((':', '?')) or self.box_units(first)
+                    or self.blank_spans(*self.ptext(first.el))
+                    or len(caption) > MAX_MAPPING_LABEL
+                    or any(not self.plain_spacing_paragraph(slot) for slot in paragraphs[:paragraphs.index(first)])):
+                return None
+            questions[cell.id] = first
+        return questions
+
+    def nested_cell_checkbox_source(self, group, table, cell, questions, outer):
+        """One independently captioned cell owns exactly its complete option group."""
+        if len(group['units']) < 2:
+            # A lone alternative beside a scalar question may accompany an
+            # independent date/text destination. Do not claim that caption as
+            # the checkbox's whole question; leave its box explicitly held.
+            return None
+        question = questions[cell.id]
+        paragraphs = self.own_paragraphs(cell)
+        boxes = [slot for slot in paragraphs if self.box_units(slot)]
+        if ({slot.id for slot in boxes} != {slot.id for slot in group['paras']}
+                or any(self.owning_cell(slot) is not cell for slot in group['paras'])
+                or any(len(self.box_units(slot)) != 1 for slot in boxes)):
+            return None
+        if any(slot is not question and slot not in boxes and (
+                self.text(slot.el).strip() or not self.plain_spacing_paragraph(slot)) for slot in paragraphs):
+            return None
+        if any(self.blank_spans(*self.ptext(slot.el)) or not self.tab_source_visible(slot) for slot in boxes):
+            return None
+        before = [slot for slot in outer.children if slot.seq < table.seq]
+        if any(slot.kind != 'p' for slot in before):
+            return None
+        sources = [slot for slot in before if self.text(slot.el).strip()]
+        if any(not self.plain_spacing_paragraph(slot) for slot in before if slot not in sources):
+            return None
+        inherited, problem = self.question_box_context(outer.parent, require_visible=True)
+        label = self.text(question.el).strip()
+        context = ' > '.join(x for x in (inherited, *(self.text(slot.el).strip() for slot in sources)) if x)
+        if (problem or len(context) > MAX_MAPPING_CONTEXT
+                or any(not self.tab_source_visible(slot) for slot in sources)):
+            return None
+        # The exact caption and inherited source appoint an author or an act;
+        # incidental words in an ordinary clinical caption do not do so.
+        def action(value):
+            caption = LIST_MARKER.sub('', str(value or '').strip())
+            return bool(self.checkbox_source_action(caption, governing=True) or signing_place(caption))
+        if action(label) or any(action(value) for value in [context, *(self.text(slot.el).strip() for slot in sources)]):
+            self.protected_regions.add(cell.id if action(label) else table.id)
+            return None
+        relation = {'relation': 'nested_cell_options', 'sources': [
+            {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+            for slot in [outer, table, question, *sources]]}
+        return {'label': label, 'context': context, 'cardinality': label,
+                'question_slot': question, 'relation': relation,
+                'write_context': ' > '.join(x for x in (context, label) if x),
+                'source_slots': sources + [question] + [slot for slot in paragraphs if not self.text(slot.el).strip()],
+                'option_paras': boxes, 'local_cell_owner': True}
+
     def nested_checkbox_source(self, group):
         """One complete nested option grid belongs to its printed source question.
 
@@ -4203,6 +4285,11 @@ class Detector:
             return None
         if outer.part != "word/document.xml" or len(self.grid(outer.parent).get(outer.info["row"], [])) != 1:
             return None
+        partition = self.nested_cell_partition(table)
+        if partition:
+            local = self.nested_cell_checkbox_source(group, table, cell, partition, outer)
+            if local:
+                return local
         before = [slot for slot in outer.children if slot.seq < table.seq]
         paragraphs = [slot for slot in before if slot.kind == "p" and self.text(slot.el).strip()]
         if not paragraphs:
@@ -4270,7 +4357,12 @@ class Detector:
         if problem:
             return {"problem": "Nested option grid at " + table.id + ": " + problem
                     + " Printed source: " + source + " Options: " + self.text(table.el, own=False),
-                    "coverage_slot": table.id}
+                    "coverage_slot": table.id,
+                    # Only a proven independent-cell partition permits a
+                    # precise option-paragraph exclusion. The unsupported
+                    # group's own physical boxes remain untouched; ordinary
+                    # answers in other paragraphs/cells are not excluded.
+                    "coverage_slots": [slot.id for slot in group['paras']] if partition else [table.id]}
         return {"label": label, "context": context, "cardinality": raw_question,
                 "write_context": write_context,
                 "source_slots": paragraphs + [slot for slot in before if slot.kind == "p"
@@ -4871,7 +4963,8 @@ class Detector:
             nested = self.nested_checkbox_source(g) if not question else None
             if nested and nested.get("problem"):
                 self.notes.append(nested["problem"])
-                self.coverage_issue(self.index.by_id[nested['coverage_slot']], 'nested_options', nested['problem'])
+                for identity in nested.get('coverage_slots', [nested['coverage_slot']]):
+                    self.coverage_issue(self.index.by_id[identity], 'nested_options', nested['problem'])
                 for paragraph in g["paras"]:
                     self.claimed.add(id(paragraph.el))
                 continue
@@ -4930,7 +5023,8 @@ class Detector:
                 cell = self.host_cell(pslot)
                 cells = []
                 if cell is not None and self.owning_cell(pslot) is cell:
-                    cells = [cell, *self.question_cells(cell.parent, cell.info["row"], cell.info["col"])]
+                    cells = ([cell] if nested and nested.get('local_cell_owner') else
+                             [cell, *self.question_cells(cell.parent, cell.info["row"], cell.info["col"])])
                 # (its column header is one of its question cells, read with the rest of its own source)
                 source, shared = self.own_source_texts(g["paras"] + ([used_para] if used_para is not None else []), cells)
                 local = ([nested["cardinality"]] if nested else []) + local + source
@@ -4938,8 +5032,7 @@ class Detector:
                 own = {id(x.el) for x in [*g["paras"], *local_slots, *([used_para] if used_para is not None else []),
                                           *(nested["source_slots"] if nested else [])]}
                 if cell is not None:
-                    own.update(self.own_paragraph_ids([cell, *self.question_cells(cell.parent, cell.info["row"],
-                                                                                    cell.info["col"])]))
+                    own.update(self.own_paragraph_ids(cells))
                 decision = self.cardinality(question, options, local=local, between=between, own=own,
                                             hint=self.text(g["paras"][0].el), where=" at " + pslot.id,
                                             context=self.context_for(anchor))
@@ -4997,6 +5090,9 @@ class Detector:
                     self.notes.append(decision["note"])
             if nested:
                 area.context, area.complete_source = nested["context"], True
+                if nested.get('local_cell_owner'):
+                    area.label_slot = nested['question_slot']
+                    area.source_questions = [nested['relation']]
                 for source_slot in nested["source_slots"]:
                     self.claimed.add(id(source_slot.el))
                 for option_para in nested["option_paras"]:
@@ -8685,6 +8781,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
     requested_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'parenthetical_write_request' for relation in area.source_questions)]
+    nested_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'nested_cell_options' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
@@ -8705,6 +8803,19 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        for area in nested_choices:
+            # This proven cell contains one caption, its complete options and
+            # plain spacers. Its caption is source, never a second scalar answer.
+            region = {'place': area.label_slot.parent.id, 'start': None, 'end': None}
+            if not any(reader.touches(place, region) for place in reader.of(field)):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or field.get('kind') != area.kind
+                    or field.get('label') != area.label or field.get('context') != area.context
+                    or field.get('options') != area.options
+                    or field.get('source_questions') != area.source_questions):
+                fail('This nested choice no longer matches its complete original question cell. '
+                     'Review the exact question and options again.', 'mapping_mismatch')
         for area in requested_answers:
             regions = [{'place': slot.id, 'start': None, 'end': None} for slot in [area.slot, *area.extra_slots]]
             if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
@@ -8837,7 +8948,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") == "native_checkbox_history" and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -8869,7 +8980,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                             and current.options == field.get('options'))
             else:
                 owns = any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas)
