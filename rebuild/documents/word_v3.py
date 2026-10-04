@@ -831,6 +831,32 @@ def ff_info(data) -> dict:
 
 UNDERSCORES = re.compile(r"_{3,}(?:[ \t]*_{2,})*|_{2}(?:[ \t]+_{1,2}){1,}")   # ___ , or character positions __ __ __
 DIGIT_RUN = re.compile(r"\u25af+(?:\s*[/.:\-]\s*\u25af+)*")                     # digit-entry boxes (symbol font) as one blank
+NUMERIC_PARTS = re.compile(r"[ \t]*\u25af+(?:[ \t]*[/.:\-][ \t]*\u25af+)+[ \t]*")
+
+
+def numeric_part_ranges(text):
+    """A complete empty numeric band; separators identify parts, never their clinical labels."""
+    if not NUMERIC_PARTS.fullmatch(text):
+        return []
+    parts = [(match.start(), match.end()) for match in re.finditer(r'\u25af+', text)]
+    return parts if len(parts) <= 100 else []
+
+
+def numeric_part_value(source, current, number):
+    """Read one reviewed part independently of simultaneous edits to the other parts."""
+    parts = numeric_part_ranges(source)
+    if type(number) is not int or not 1 <= number <= len(parts):
+        return None
+    pattern, end = [], 0
+    for start, stop in parts:
+        pattern.extend((re.escape(source[end:start]), '([0-9]{1,%d}|%s)' % (stop - start, re.escape(source[start:stop]))))
+        end = stop
+    pattern.append(re.escape(source[end:]))
+    match = re.fullmatch(''.join(pattern), current)
+    if not match:
+        return None
+    value = match.group(number)
+    return '' if value == source[slice(*parts[number - 1])] else value
 SEGMENTED = re.compile(r"\|(?:[ _]*_[ _]*\|)+(?:\s*[/.:\-]?\s*\|(?:[ _]*_[ _]*\|)+)*")   # digit boxes |__|__| / |__|__|
 DOTS = re.compile(r"(?:\.{5,}|…{2,}|(?:\. ){4,}\.?)")    # a dotted leader: ....... or …… or . . . . .
 BRACKET_ANY = re.compile(r"\[([^\[\]\n]{2,120})\]")
@@ -2360,6 +2386,7 @@ class Detector:
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
         self.guard_action_participants()
+        self.guard_numeric_bands()
         self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
@@ -2475,8 +2502,72 @@ class Detector:
                       if area.target.get('type') == 'span' else {})
             self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
 
+    def previous_continuous_paragraph(self, host):
+        """Nearest substantive source across plain spacers or adjacent one-column rows only."""
+        node = host.el.getprevious()
+        while node is not None and node.tag == q('w:p'):
+            candidate = self.index.by_el.get(id(node))
+            if candidate is None or candidate.parent is not host.parent or candidate.part != host.part:
+                return None
+            if self.ptext(node)[0].strip():
+                return candidate
+            if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                    or any(self.question_box_paragraph(node)[::2])):
+                return None
+            node = node.getprevious()
+        # One-column, unmerged adjacent rows are a continuous printed
+        # document-act block. A different column, nested table, heading,
+        # intervening row or unresolved merge cannot appoint a witness.
+        cell = self.host_cell(host)
+        if (cell is None or host.parent is not cell or self.grid_cols(cell.parent) != 1
+                or node is not None and node is not cell.el.find(q('w:tcPr'))):
+            return None
+        rows = self.grid(cell.parent); number = cell.info['row']
+        current, previous = rows.get(number, []), rows.get(number - 1, [])
+        if (number < 1 or len(current) != 1 or current[0] is not cell or len(previous) != 1
+                or any(c.info['col'] != 0 or c.info['span'] != 1
+                       or c.el.find('./' + q('w:tcPr') + '/' + q('w:vMerge')) is not None
+                       or any(child.kind != 'p' for child in c.children)
+                       for c in current + previous)):
+            return None
+        paragraphs = [child for child in previous[0].children if child.kind == 'p']
+        for candidate in reversed(paragraphs):
+            if self.ptext(candidate.el)[0].strip():
+                return candidate
+            if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                    or any(self.question_box_paragraph(candidate.el)[::2])):
+                return None
+        return None
+
+    def guard_numeric_bands(self):
+        """A separate empty band inherits its continuous source act, never a reviewed label.
+
+        Claiming an after-label caption cannot release the writing band below
+        it. A substantive clinical caption, marked spacer or container boundary
+        ends that physical relationship. No caption-to-number label is guessed.
+        """
+        for slot in self.index.slots:
+            if not self.manual_numeric_parts(slot):
+                continue
+            before = self.previous_continuous_paragraph(slot)
+            if before is None:
+                continue
+            caption = self.ptext(before.el)[0].strip()
+            action = self.checkbox_source_action(caption, governing=True)
+            inherited = any(a.protection and a.source_action and self.host_paragraph(a.slot) is before
+                            for a in self.areas)
+            if not (signing_place(caption) or action or inherited or self.question_box_authorship(caption)):
+                continue
+            reason = ('This empty numeric band belongs to the preceding signing or document act. '
+                      'It remains unchanged and is completed through the explicit human workflow.')
+            self.protected_regions.add(slot.id)
+            for area in self.areas:
+                if self.host_paragraph(area.slot) is slot:
+                    area.protection = reason; area.source_action = True
+            self.coverage_issue(slot, 'human_signing_action', reason + ' Location: ' + slot.id)
+
     def guard_action_participants(self):
-        """A native witness identity belongs to its physically continuous act.
+        """A witness identity belongs to its physically continuous source act.
 
         The complete source caption appoints a witness, and the immediately
         preceding paragraph owns a protected document act. Plain spacers and
@@ -2485,49 +2576,14 @@ class Detector:
         receipt has no such signing authority. Reviewed labels supply neither.
         """
         acts = [a for a in self.areas if a.source_action]
-        def previous_paragraph(host):
-            node = host.el.getprevious()
-            while node is not None and node.tag == q('w:p'):
-                candidate = self.index.by_el.get(id(node))
-                if candidate is None or candidate.parent is not host.parent or candidate.part != host.part:
-                    return None
-                if self.ptext(node)[0].strip():
-                    return candidate
-                if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
-                        or any(self.question_box_paragraph(node)[::2])):
-                    return None
-                node = node.getprevious()
-            # One-column, unmerged adjacent rows are a continuous printed
-            # document-act block. A different column, nested table, heading,
-            # intervening row or unresolved merge cannot appoint a witness.
-            cell = self.host_cell(host)
-            if (cell is None or host.parent is not cell or self.grid_cols(cell.parent) != 1
-                    or node is not None and node is not cell.el.find(q('w:tcPr'))):
-                return None
-            rows = self.grid(cell.parent); number = cell.info['row']
-            current, previous = rows.get(number, []), rows.get(number - 1, [])
-            if (number < 1 or len(current) != 1 or current[0] is not cell or len(previous) != 1
-                    or any(c.info['col'] != 0 or c.info['span'] != 1
-                           or c.el.find('./' + q('w:tcPr') + '/' + q('w:vMerge')) is not None
-                           or any(child.kind != 'p' for child in c.children)
-                           for c in current + previous)):
-                return None
-            paragraphs = [child for child in previous[0].children if child.kind == 'p']
-            for candidate in reversed(paragraphs):
-                if self.ptext(candidate.el)[0].strip():
-                    return candidate
-                if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
-                        or any(self.question_box_paragraph(candidate.el)[::2])):
-                    return None
-            return None
         for area in self.areas:
-            if area.slot.kind not in ('sdt', 'ff') or area.source_action:
+            if area.slot.kind not in ('sdt', 'ff', 'p') or area.source_action:
                 continue
             if not re.fullmatch(r'(?:name of (?:the )?witness|(?:the )?witness(?: name)?)',
                                 clean_label(area.label), re.I):
                 continue
             host = self.host_paragraph(area.slot)
-            before = previous_paragraph(host) if host is not None else None
+            before = self.previous_continuous_paragraph(host) if host is not None else None
             ambiguous = False
             if before is None and host is not None:
                 cell = self.host_cell(host)
@@ -2537,7 +2593,13 @@ class Detector:
                     ambiguous = any((prior := self.host_cell(a.slot)) is not None
                                     and prior.parent is cell.parent and prior.info['row'] == cell.info['row'] - 1
                                     for a in acts)
-            if not ambiguous and (before is None or not any(self.host_paragraph(a.slot) is before for a in acts)):
+            # An explicit printed act is source even when it has no mapped
+            # answer of its own. A plain identity caption has the same human
+            # ownership as its native-control representation.
+            direct_act = bool(before is not None and self.checkbox_source_action(
+                self.ptext(before.el)[0], governing=True))
+            if not ambiguous and (before is None or not direct_act
+                                  and not any(self.host_paragraph(a.slot) is before for a in acts)):
                 continue
             area.source_action = True
             area.protection = (('This witness area is beside a human document act in a table whose ownership cannot be resolved. '
@@ -6154,6 +6216,28 @@ class Detector:
                    r"[^:;?!\r\n]+?\s*[:.]?\s*$")
         return re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I)
 
+    def manual_numeric_parts(self, chosen):
+        """Visible, empty, plain numeric parts available for explicit human mapping only."""
+        if chosen.kind != 'p' or not self.tab_source_visible(chosen):
+            return []
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'), q('w:object'),
+                  q('w:hyperlink'), q('w:sectPr'), q('w:br'), q('w:vanish'), q('w:numPr')}
+        if any(node.tag in unsafe for node in chosen.el.iter()):
+            return []
+        return numeric_part_ranges(self.ptext(chosen.el)[0])
+
+    def manual_numeric_part(self, chosen, number, kind):
+        parts = self.manual_numeric_parts(chosen)
+        if kind != 'text' or type(number) is not int or not 1 <= number <= len(parts):
+            return None
+        start, end = parts[number - 1]
+        relation = {'relation': 'manual_numeric_part', 'number': number, 'parts': len(parts),
+                    'source': {'part': chosen.part, 'slot': chosen.path, 'fingerprint': fingerprint(chosen.el)}}
+        return Area('text', 'Numeric part %d' % number, chosen,
+                    {'type': 'span', 'start': start, 'end': end, 'shape': 'numeric_part', 'number': number},
+                    context=self.context_for(chosen, complete=True), complete_source=True,
+                    source_questions=[relation], capacity=end - start)
+
     def manual_paragraph_options(self, chosen, kind):
         """A clinician explicitly appoints a complete printed list as options.
 
@@ -8691,6 +8775,33 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relations = field.get("source_questions", [])
         if not isinstance(relations, list):
             fail("The related question mapping is invalid.", "invalid_mapping")
+        numeric = [relation for relation in relations if isinstance(relation, dict)
+                   and relation.get('relation') == 'manual_numeric_part']
+        parts = source_detector.manual_numeric_parts(anchors[0])
+        if parts and any(reader.touches(place, {'place': anchors[0].id, 'start': start, 'end': stop})
+                         for place in reader.of(field) for start, stop in parts):
+            automatic = any(area.slot.id == anchors[0].id and area.target == target
+                            for area in source_detector.areas)
+            if not automatic and not numeric:
+                fail('A divided numeric band needs its exact source-bound part review. Review its numbered part '
+                     'again; the separator and other parts remain unchanged.', 'mapping_mismatch')
+        if numeric or target.get('shape') == 'numeric_part':
+            current = (source_detector.manual_numeric_part(anchors[0], numeric[0].get('number'), field.get('kind'))
+                       if len(numeric) == 1 and len(relations) == 1 else None)
+            if (current is None or current.target != target or current.source_questions != relations
+                    or loc.get('extra') or field.get('max_chars') != current.capacity):
+                fail('This numeric part no longer matches its complete original band. Remove the field and review '
+                     'the exact part again.', 'mapping_mismatch')
+            if not isinstance(answer, str) or not re.fullmatch(r'[0-9]{1,%d}' % current.capacity, answer):
+                fail('Numeric part %d takes at most %d digits, with no separator or other text. Nothing was shortened.'
+                     % (numeric[0]['number'], current.capacity), 'invalid_answer')
+            region = {'place': anchors[0].id, 'start': target['start'], 'end': target['end']}
+            if any(reader.touches(place, region) or place[0] == anchors[0].id
+                   and (other.get('locator', {}).get('target', {}).get('shape') != 'numeric_part'
+                        or other.get('source_questions') == relations)
+                   for other in fields if other is not field for place in reader.of(other)):
+                fail('This numeric part overlaps another mapped writer. Remove the whole-band or repeated field '
+                     'and review each part once.', 'mapping_mismatch')
         for relation in relations:
             if not isinstance(relation, dict):
                 fail("The related question mapping is invalid.", "invalid_mapping")
@@ -8707,6 +8818,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 refs = [relation.get('source'), relation.get('owner')]
             elif relation.get('relation') == 'parenthetical_write_request':
                 refs = [relation.get('source')]
+            elif relation.get('relation') == 'manual_numeric_part':
+                refs = [relation.get('source')]
             else:
                 fail("The related question mapping is invalid.", "invalid_mapping")
             for ref in refs:
@@ -8716,7 +8829,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if relations:
             manual_ruled = any(relation.get('relation') == 'manual_ruled_paragraph_answer' for relation in relations)
             manual_list = any(relation.get('relation') == 'manual_paragraph_options' for relation in relations)
-            if manual_ruled:
+            if numeric:
+                owns = True  # the complete band, exact part and capacity were recompiled above
+            elif manual_ruled:
                 current = source_detector.manual_ruled_paragraphs(source_detector.index.by_id[anchors[0].id], field.get('kind'))
                 expected_extra = ([{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)}
                                    for s in current.extra_slots] if current else [])
@@ -9203,6 +9318,8 @@ def constrained_scalar_value(original, final, field, written):
         value = "\n".join(text_of(p) for p in paragraphs)
     elif kind == "span":
         source, current = paragraph_text(before.el)[0], paragraph_text(after.el)[0]
+        if target.get('shape') == 'numeric_part':
+            return numeric_part_value(source, current, target.get('number'))
         start, end = target.get("start"), target.get("end")
         if type(start) is not int or type(end) is not int or not 0 <= start <= end <= len(source):
             return None
@@ -9485,6 +9602,10 @@ def outline(data: bytes) -> dict:
             row["box_keys"] = [box_key(ref) if ref is not None else None for ref in refs]
         if refs is None:
             row["unnumbered_boxes"] = True
+        parts = detector.manual_numeric_parts(s)
+        if parts:
+            row['numeric_parts'] = [{'number': n, 'digits': stop - start}
+                                    for n, (start, stop) in enumerate(parts, 1)]
         rows.append(row)
     return {"contract": CONTRACT, "slots": rows}
 
@@ -9511,7 +9632,14 @@ def locate(data: bytes, targets: list) -> list:
             fail("The chosen place is not in this form.", "invalid_mapping")
         options = [option_text(str(o))[:200] for o in (t.get("options") or []) if option_text(str(o))]
         target = None
-        if slot.kind == "glyphs" or slot.kind == "p" and kind == "checkbox":
+        numeric_part = t.get('numeric_part')
+        if numeric_part is not None:
+            group = detector.manual_numeric_part(slot, numeric_part, kind)
+            if group is None:
+                fail('Choose Text and a numbered part of a complete empty numeric band. Filled, hidden, linked or '
+                     'mixed content cannot be divided this way.', 'invalid_mapping')
+            target = group.target
+        elif slot.kind == "glyphs" or slot.kind == "p" and kind == "checkbox":
             # ⚠️ THE CLINICIAN'S BOX, NOT THE FIRST ONE ('Smoker? ☐ Yes ☐ No' mapped as box 2 ticked Yes), counted among
             # EVERY box the preview shows - a checkbox control included - and written as whatever kind of box it is.
             refs = place_box_refs(detector.index, slot)
@@ -9594,7 +9722,7 @@ def locate(data: bytes, targets: list) -> list:
         context = supplied_context or detector.context_for(slot, complete=True)
         if len(context) > MAX_MAPPING_CONTEXT:
             fail("The complete source section exceeds %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
-        if target['type'] in ('paragraph_options', 'ruled_paragraphs'):
+        if target['type'] in ('paragraph_options', 'ruled_paragraphs') or target.get('shape') == 'numeric_part':
             area = group
             area.label = label
             if supplied_context:
@@ -9604,7 +9732,8 @@ def locate(data: bytes, targets: list) -> list:
                         options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
         if slot.kind == "ff" and target["type"] == "ff_text":
             area.protection = ff_text_protection(slot.el)
-        area.capacity = detector.capacity_for(area)
+        if target.get('shape') != 'numeric_part':
+            area.capacity = detector.capacity_for(area)
         field = area_to_field(n, area)
         field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]
         field["origin"] = "manual"

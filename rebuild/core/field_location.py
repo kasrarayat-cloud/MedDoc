@@ -50,6 +50,8 @@ def describe_v3(locator, box_keys=None):
     kind = target.get('type', '')
     if kind == 'span':
         what = 'after the printed label' if target.get('shape') == 'after_label' else 'on the printed blank'
+        if target.get('shape') == 'numeric_part':
+            what = 'numeric part %s' % target.get('number', '?')
     else:
         what = V3_TARGETS.get(kind, 'answer area')
     boxes = target.get('boxes') or []
