@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import stat
 import sys
 import tarfile
 import time
@@ -144,11 +145,24 @@ def archive_identity(demo, expected):
             if not member.isfile():
                 continue
             actual = demo / 'src' / path
+            info = actual.lstat()
             auth.require(member.name not in seen and not any(item.is_symlink() for item in (actual, *actual.parents))
-                and actual.is_file() and actual.stat().st_nlink == 1, 'source_file_changed_or_linked')
+                and stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.getuid()
+                and stat.S_IMODE(info.st_mode) in (0o600, 0o700), 'source_file_changed_or_linked')
             seen[member.name] = digest(archive.extractfile(member).read())
             auth.require(digest(actual.read_bytes()) == seen[member.name], 'served_source_bytes_changed')
     auth.require(seen == prepared['runtime_source_sha256'], 'complete_archive_inventory_differs')
+    actual_files = set()
+    root = demo / 'src/rebuild'
+    for directory, names, files in os.walk(root, followlinks=False):
+        # The existing seed/browser writes only this top-level private state.
+        # Every other extracted runtime file must belong to the archive.
+        if Path(directory) == root:
+            names[:] = [name for name in names if name != '.runtime']
+        auth.require(all(not (Path(directory) / name).is_symlink() for name in names), 'untracked_source_directory_linked')
+        for name in files:
+            actual_files.add(str((Path(directory) / name).relative_to(demo / 'src')))
+    auth.require(actual_files == set(seen), 'untracked_runtime_source_refused')
     return prepared
 
 

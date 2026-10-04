@@ -1,6 +1,5 @@
 """Source-only fault controls for the future served reader; no DB/provider/service."""
 import contextlib
-from copy import deepcopy
 from io import BytesIO, StringIO
 import json
 from pathlib import Path
@@ -117,6 +116,7 @@ class PersistedFixtureProbeTests(unittest.TestCase):
         target = 'a' * 40; demo = directory / ('demo-' + target[:8]); demo.mkdir(mode=0o700)
         (demo / 'src').mkdir(mode=0o700); source = demo / 'src/rebuild'; source.mkdir(mode=0o700)
         (source / 'one.py').write_bytes(b'print("synthetic immutable source")\n')
+        (source / 'one.py').chmod(0o600)
         stream = BytesIO()
         with tarfile.open(fileobj=stream, mode='w', format=tarfile.PAX_FORMAT,
                           pax_headers={'comment': target}) as archive:
@@ -136,6 +136,15 @@ class PersistedFixtureProbeTests(unittest.TestCase):
             target, demo, source, prepared = self.archive(directory)
             with patch.object(probe.auth, 'TASK', directory):
                 self.assertEqual(probe.archive_identity(demo, target), prepared)
+                (source / 'foreign.py').write_bytes(b'untracked source')
+                with self.assertRaisesRegex(RuntimeError, 'untracked_runtime_source_refused'):
+                    probe.archive_identity(demo, target)
+                (source / 'foreign.py').unlink()
+                changed = dict(prepared, runtime_source_sha256={})
+                (demo / 'prepared.json').write_text(json.dumps(changed))
+                with self.assertRaisesRegex(RuntimeError, 'complete_archive_inventory_differs'):
+                    probe.archive_identity(demo, target)
+                (demo / 'prepared.json').write_text(json.dumps(prepared))
                 (source / 'one.py').write_bytes(b'stale source')
                 with self.assertRaisesRegex(RuntimeError, 'served_source_bytes_changed'):
                     probe.archive_identity(demo, target)
