@@ -588,8 +588,10 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             return refused
         if 'patient_default_context' in value:
             from . import transcript_context
-            if not transcript_context.verified(reading['source']['quote'],value['patient_default_context']):return refused
+            proof=transcript_context.verified(reading['source']['quote'],value['patient_default_context'])
+            if not proof:return refused
             reading=transcript_context.apply(reading,value['patient_default_context'])
+            reading={**reading,'_transcript_review_proof':proof}
         catalogue = reading.get('catalogue', reading['fields'])
         field = next((f for f in catalogue if f['key'] == value['key']), None)
         if (value['contract'] not in READABLE or value['model'] not in g.NATIVE_MODELS or not enabled(value['model'])
@@ -638,6 +640,9 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
         literal_ids = complete_ids(field, ordered, reading)
+        from . import reviewed_source
+        reviewed_ids = reviewed_source.complete_ids(reading, field, ordered)
+        literal_ids |= reviewed_ids
         from .source_scope import resumed_current
         literal_ids |= {u['id'] for u in ordered if any(resumed_current(reading,u,other) for other in units)}
         def evidenced(u):
@@ -697,11 +702,13 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         named_nominal=bool(reviewed and any(u['id'] in reading.get('nominal_patient',())
             and u['quote'].casefold().startswith(prefix) for u in ordered))
         headed = own_heading_reference(reading,field,chosen,related,literal_ids)
-        self_reference = bool(headed or (chosen and related and len(group) == 1
+        self_reference = bool(headed or reviewed_source.self_reference(reading, field, chosen, reviewed_ids)
+            or (chosen and related and len(group) == 1
             and (related == chosen or (reviewed and related <= chosen) or named_nominal)
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and (reading['patients'].get(u['id']) or reviewed) for u in ordered)))
-        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference, 'syntax_ids': literal_ids}
+        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference,
+                'syntax_ids': literal_ids, 'shared_ids': reviewed_ids}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
 
