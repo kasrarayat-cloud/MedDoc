@@ -7560,7 +7560,7 @@ def _writing_line(text) -> bool:
     return len(visible) >= 3 and re.fullmatch(r"[_.\u2026\u2025\u00b7\-\u2013\u2014]+", visible) is not None
 
 
-def _role_reading(package):
+def _role_reading(package, *, retained_areas=None):
     """(roles, the engine's own option groups as box keys - the boxes one engine choice area answers together)."""
     detector = Detector(package)
     detected, _ = detector.detect()
@@ -7689,6 +7689,11 @@ def _role_reading(package):
     choices = [sorted(box_key(box) for box in field["locator"]["target"].get("boxes", []))
                for field in engine if field["kind"] in ("choice", "multi_choice", "checkbox")
                and field["locator"]["target"].get("type") == "checkboxes"]
+    if retained_areas is not None:
+        # Only this fresh ordinary detector's retained areas, before any write.
+        # The shared-merged withdrawals above remain role boundaries, but were
+        # never eligible relation owners in the separate ordinary detection.
+        retained_areas.extend(detected)
     return roles, [group for group in choices if group]
 
 
@@ -8647,7 +8652,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     legacy_protected = {identity: reason for identity, reason in legacy_protected.items() if reason}
     # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read before anything is written and never from the mapping: a stored or
     # forged field on a signing, protected or policy place is refused by its span, not by its paragraph.
-    original_roles = destination_roles_of(package)
+    relation_areas = []
+    original_roles = _role_reading(package, retained_areas=relation_areas)[0]
     reader = _PlaceReader(index)
     role_refusals = role_violations(reader, fields, original_roles)
     unresolved_brackets = [{'place': _place_id(issue['part'], issue['slot']),
@@ -8661,7 +8667,6 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relation.get('relation') == 'parenthetical_write_request' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
-    relation_areas = None
 
     def resolve(part, path, fp):
         slot = index.by_id.get("%s#%s" % (part, path))
@@ -8843,8 +8848,6 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 owns = bool(current and current.target == target and current.source_questions == relations
                             and current.options == field.get('options'))
             else:
-                if relation_areas is None:
-                    relation_areas = Detector(package).detect()[0]
                 owns = any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
                            and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])

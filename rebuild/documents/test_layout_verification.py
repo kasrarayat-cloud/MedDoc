@@ -24,6 +24,48 @@ from .service import DocumentError
 from .test_question_boxes import data
 
 
+class LayoutWorkerEvidence(unittest.TestCase):
+    def run_worker(self, program):
+        from . import layout_server
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        root = Path(temp.name); worker = root / 'worker.py'
+        worker.write_text(program); (root / 'request.json').write_text('{"synthetic":true}')
+        with patch.object(layout_server, 'ROOT', root):
+            try:
+                result, refusal = layout_server.worker(root, 'worker.py'), None
+            except layout_server.WorkerFailure as exc:
+                result, refusal = None, exc
+        evidence = json.loads(next(root.glob('process-*.json')).read_text())
+        return root, result, refusal, evidence
+
+    def test_success_and_signal_preserve_raw_child_evidence_and_actual_exit(self):
+        for stopped in (False, True):
+            with self.subTest(stopped=stopped):
+                program = 'import os,signal,sys\nprint(\'{"synthetic":true}\',flush=True)\n' \
+                          'print("Synthetic sensitive diagnostic",file=sys.stderr,flush=True)\n'
+                if stopped: program += 'os.kill(os.getpid(),signal.SIGKILL)\n'
+                root, result, refusal, record = self.run_worker(program)
+                self.assertEqual(record['returncode'], -9 if stopped else 0)
+                self.assertEqual(record['signal'], 9 if stopped else None)
+                self.assertFalse(record['timed_out']); self.assertEqual(record['wall_limit_seconds'], 20)
+                for channel in ('stdout', 'stderr'):
+                    raw = (root / record[channel]).read_bytes()
+                    self.assertEqual(record[channel + '_sha256'], hashlib.sha256(raw).hexdigest())
+                    self.assertEqual(record[channel + '_bytes'], len(raw))
+                self.assertIn('Synthetic sensitive diagnostic', (root / record['stderr']).read_text())
+                if stopped:
+                    self.assertEqual(refusal.code, 'processing_limit')
+                    self.assertNotIn('sensitive', str(refusal)); self.assertIsNone(result)
+                else:
+                    self.assertIsNone(refusal); self.assertEqual(result, {'synthetic': True})
+
+    def test_invalid_child_json_is_retained_and_never_becomes_success(self):
+        root, result, refusal, record = self.run_worker('print("Synthetic malformed result")\n')
+        self.assertEqual(record['returncode'], 0); self.assertIsNone(result)
+        self.assertEqual(refusal.code, 'worker_failed')
+        self.assertEqual((root / record['stdout']).read_text(), 'Synthetic malformed result\n')
+
+
 def tab_form(**kwargs):
     from .test_question_boxes import TabColumnOwnership
     return TabColumnOwnership().form(**kwargs)
@@ -241,6 +283,29 @@ class LayoutTransport(unittest.TestCase):
                     with patch('django.conf.settings', SimpleNamespace(QUILLMD_LAYOUT_SOCKET=path,
                             QUILLMD_LAYOUT_SERVICE_UID=os.getuid())):
                         with self.assertRaises(DocumentError): verify_document(b'original')
+                finally: thread.join(5)
+                self.assertFalse(thread.is_alive())
+
+    def test_processing_limit_retains_the_admission_refusal_code_without_exposing_child_text(self):
+        from .layout_transport import LAYOUT_PROCESSING_LIMIT
+        with tempfile.TemporaryDirectory() as temp:
+            path = str(Path(temp) / 'service.sock')
+            with socket.socket(socket.AF_UNIX) as server:
+                server.bind(path); server.listen(1)
+                def answer():
+                    connection, _ = server.accept()
+                    with connection:
+                        receive(connection)
+                        send(connection, {'verified': False, 'failure_code': 'processing_limit',
+                                          'stderr': 'Synthetic sensitive diagnostic'})
+                thread = threading.Thread(target=answer); thread.start()
+                try:
+                    with patch('django.conf.settings', SimpleNamespace(QUILLMD_LAYOUT_SOCKET=path,
+                            QUILLMD_LAYOUT_SERVICE_UID=os.getuid())):
+                        with self.assertRaises(DocumentError) as caught: verify_document(b'original')
+                    self.assertEqual(caught.exception.code, 'layout_unavailable')
+                    self.assertEqual(str(caught.exception), LAYOUT_PROCESSING_LIMIT)
+                    self.assertNotIn('sensitive', str(caught.exception))
                 finally: thread.join(5)
                 self.assertFalse(thread.is_alive())
 

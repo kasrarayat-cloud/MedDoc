@@ -24,6 +24,36 @@ def saved(doc):
 
 
 class DestinationRegressions(unittest.TestCase):
+    def test_repeated_exports_and_different_originals_never_reuse_another_source_owner(self):
+        doc = Document(); table = doc.add_table(rows=1, cols=1)
+        table.cell(0, 0).text = 'Other (specify)'
+        ordinary = saved(doc); fields = word_v3.inspect(ordinary)['fields']
+        field = next(f for f in fields if f['locator']['target']['type'] == 'cell_append')
+        answer = '\n'.join('Synthetic complete line %d.' % n for n in range(40))
+        first = word_v3.fill(ordinary, fields, {field['key']: answer})
+        before = word_v3.SlotIndex(word_v3.open_package(ordinary))
+        for caption in ('Witness signature (specify)', 'Manager approval (specify)',
+                        'Patient signature (specify)'):
+            other = Document(); other.add_table(rows=1, cols=1).cell(0, 0).text = caption
+            changed = saved(other)
+            # Even an old ordinary map with its anchor rebound cannot appoint
+            # the finalizer on this different original's physical signer.
+            forged = deepcopy(field)
+            index = word_v3.SlotIndex(word_v3.open_package(changed))
+            anchor = index.by_id[forged['locator']['part'] + '#' + forged['locator']['slot']]
+            forged['locator']['fingerprint'] = word_v3.fingerprint(anchor.el)
+            with self.subTest(caption=caption), self.assertRaises(word_v3.V3Failure):
+                word_v3.fill(changed, [forged], {forged['key']: 'Dr Synthetic Finalizer'})
+            with self.assertRaises(word_v3.V3Failure):
+                word_v3.fill(changed, fields, {field['key']: answer})
+            self.assertEqual(word_v3.fill(ordinary, fields, {field['key']: answer}), first)
+        after = word_v3.SlotIndex(word_v3.open_package(first))
+        old = before.by_id[field['locator']['part'] + '#' + field['locator']['slot']]
+        new = after.by_id[old.id]
+        self.assertEqual(word_v3.fingerprint(old.children[0].el), word_v3.fingerprint(new.children[0].el))
+        self.assertEqual('\n'.join(word_v3.paragraph_text(p)[0] for p in list(new.el)[len(list(old.el)):]), answer)
+        self.assertEqual(word_v3.fill(ordinary, fields, {}), ordinary)
+
     def assert_held(self, raw):
         info = word_v3.inspect(raw)
         ordinary = next(f for f in info['fields'] if f['label'] == 'Clinical reason')

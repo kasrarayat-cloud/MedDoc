@@ -10,6 +10,8 @@ import importlib.metadata
 import json
 import os
 from pathlib import Path
+import resource
+import signal
 import socket
 import struct
 import subprocess
@@ -24,17 +26,53 @@ IMAGE = 'sha256:4bd4489d15b7326143e5575c789d93f675f77d85dc857900dd28ae1591d55a4b
 ROOT = Path(__file__).resolve().parent
 
 
+class WorkerFailure(ValueError):
+    """A fixed public category; raw child evidence stays inside its private workspace."""
+    def __init__(self, code):
+        self.code = code
+        super().__init__('Isolated worker refused')
+
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
 def worker(workspace, name):
-    result = subprocess.run([sys.executable, '-I', '-B', str(ROOT / name), str(workspace)],
-        cwd=workspace, env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'TZ': 'UTC'},
-        capture_output=True, timeout=20, start_new_session=True)
-    if result.returncode or len(result.stdout) > 3 * 1024 * 1024: raise ValueError('Isolated worker failed')
-    value = json.loads(result.stdout)
-    if 'error' in value: raise ValueError('Isolated worker refused')
+    import time
+    identity = 'process-' + name + '-' + uuid.uuid4().hex
+    output, errors = workspace / (identity + '.stdout'), workspace / (identity + '.stderr')
+    started = time.monotonic(); before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    timed_out = False
+    with output.open('xb') as out, errors.open('xb') as err:
+        child = subprocess.Popen([sys.executable, '-I', '-B', str(ROOT / name), str(workspace)],
+            cwd=workspace, env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'TZ': 'UTC'},
+            stdout=out, stderr=err, start_new_session=True)
+        try:
+            child.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            try: os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError: pass
+            child.wait(timeout=5)
+    after = resource.getrusage(resource.RUSAGE_CHILDREN)
+    (workspace / (identity + '.json')).write_bytes(canonical({
+        'worker': name, 'worker_sha256': digest((ROOT / name).read_bytes()),
+        'request_sha256': digest((workspace / 'request.json').read_bytes()),
+        'returncode': child.returncode, 'signal': -child.returncode if child.returncode < 0 else None,
+        'timed_out': timed_out, 'wall_limit_seconds': 20,
+        'elapsed_seconds': round(time.monotonic() - started, 6),
+        'user_cpu_seconds': round(after.ru_utime - before.ru_utime, 6),
+        'system_cpu_seconds': round(after.ru_stime - before.ru_stime, 6),
+        'stdout': output.name, 'stdout_bytes': output.stat().st_size,
+        'stdout_sha256': digest(output.read_bytes()), 'stderr': errors.name,
+        'stderr_bytes': errors.stat().st_size, 'stderr_sha256': digest(errors.read_bytes())}))
+    if timed_out or child.returncode in (-signal.SIGKILL, -signal.SIGXCPU):
+        raise WorkerFailure('processing_limit')
+    if child.returncode or output.stat().st_size > 3 * 1024 * 1024:
+        raise WorkerFailure('worker_failed')
+    try: value = json.loads(output.read_bytes())
+    except (ValueError, UnicodeError): raise WorkerFailure('worker_failed') from None
+    if not isinstance(value, dict) or 'error' in value: raise WorkerFailure('worker_refused')
     return value
 
 
@@ -171,7 +209,9 @@ def qualify(request, evidence_root):
         (workspace / 'receipt.json').write_bytes(canonical(receipt))
         return response
     except Exception as exc:
-        (workspace / 'refusal.json').write_bytes(canonical({'verified': False, 'failure_class': type(exc).__name__}))
+        refusal = {'verified': False, 'failure_class': type(exc).__name__}
+        if isinstance(exc, WorkerFailure): refusal['failure_code'] = exc.code
+        (workspace / 'refusal.json').write_bytes(canonical(refusal))
         raise
 
 
@@ -189,8 +229,10 @@ def serve(endpoint, client_uid, evidence_root):
                     _, uid, _ = struct.unpack('3i', stream.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                     if uid != client_uid: continue
                     try: send(stream, qualify(receive(stream), evidence_root))
-                    except Exception:
-                        try: send(stream, {'verified': False})
+                    except Exception as exc:
+                        refusal = {'verified': False}
+                        if isinstance(exc, WorkerFailure): refusal['failure_code'] = exc.code
+                        try: send(stream, refusal)
                         except OSError: pass
         finally:
             endpoint.unlink(missing_ok=True)
