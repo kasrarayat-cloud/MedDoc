@@ -2,7 +2,7 @@
 
 The current candidate is `fcd68c9b43b0d65b0411d031b16ea66e2b2b104d`. This matrix records all original members, exact rights scope and retained measurements. It makes no acceptance or new independence claim.
 
-The newer retained application campaign on `6346019377ed1a2e65763da7040c6f85da13f72c` attempted all 33 eligible development originals in 17 packets. All 17 application children exited 0, all 17 outer drivers exited 1, and source/teardown receipts passed. D09 and D13 report automatic success within their retained partial summaries; those flags do not erase failed outer runs. The current candidate has no fresh application qualification.
+The newer retained application campaign on `6346019377ed1a2e65763da7040c6f85da13f72c` attempted all 33 eligible development originals in 17 packets. All 17 application children exited 0, all 17 outer drivers exited 1, and source/teardown receipts passed. D09 and D13 completed strict mapping and all three fixed profiles within their retained partial summaries. Their packet drivers deliberately return 1 when any other original in the same packet fails. This conjunctive exit is a failed packet protocol, not evidence that the two successful original cases failed integrity. The result is 2/33 completed automatic cases and 0/17 all-pass packets on that source; overall release qualification remains unmet. The current candidate has no fresh application qualification.
 
 Seven development originals remain held for filled-copy replay. The twenty original holdout files lack a current exact filled-copy decision ledger. Their retained September 27 engine proxy was 0/20 automatic success and 18/20 export checks; all twenty are exposed. H03 and H20 are immutable unsupported `.doc` originals. Historical engine export checks do not establish current application or native Word acceptance.
 
@@ -80,3 +80,5 @@ Exact smallest remaining rights actions:
 - Holdout H01–H20: adjudicate exact-hash offline filled-copy decisions from retained evidence; the earlier non-adjudicated triage is not permission.
 
 Separate D10/D30 manual recoveries and native D01/D02 profiles retain their own correction/export evidence and receive no automatic credit. No provider, database, renderer, installed service or patient record was accessed to build this matrix.
+
+The unchanged normal driver's final condition requires application exit 0, verified database absence, every requested original present, and `all(value.get('automatic_success') for value in results.values())`. Therefore an outer exit 1 by itself does not distinguish a technical or integrity failure from another original's retained correctness failure. The original exit, every per-case status and every teardown receipt remain recorded separately. The JSON matrix retains its initial conservative labels and this appended clarification; it never credits a failed overall release.

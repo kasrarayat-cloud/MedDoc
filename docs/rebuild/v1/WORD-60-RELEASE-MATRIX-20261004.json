@@ -7208,5 +7208,87 @@
   },
   "provider_calls": 0,
   "database_calls": 0,
-  "renderer_calls": 0
+  "renderer_calls": 0,
+  "appended_protocol_exit_clarification": {
+    "prior_matrix_sha256": "ea599fc7ef68fee3cd1f2a3976253a9f8a45e9b22457d63b360475f4a0a4ac78",
+    "driver_condition": "Exit 0 requires every original in that packet automatic_success, application exit 0, database absence and complete membership.",
+    "observed_outer_exit_one_is_not_itself_integrity_failure": true,
+    "observed_completed_automatic_originals_on_634": 2,
+    "observed_completed_automatic_identities": [
+      "D09",
+      "D13"
+    ],
+    "observed_all_pass_packets_on_634": 0,
+    "release_gate_pass": false,
+    "verified_driver_sources": {
+      "v3": {
+        "path": "/opt/meddoc-pro/.worktrees/v1-word-release-qualification-20261004/docs/rebuild/v1/word-eval/dev33-supported-layout-preparation-v3-20261004/run_dev_application_gate_v2.py.source",
+        "sha256": "a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7"
+      },
+      "native": {
+        "path": "/opt/meddoc-pro/.worktrees/v1-word-release-qualification-20261004/docs/rebuild/v1/word-eval/dev33-supported-layout-preparation-v3-20261004/run_dev_application_gate_native_v1.py.source",
+        "sha256": "fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5"
+      }
+    }
+  },
+  "source_applicability": {
+    "measured_source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+    "current_source": "fcd68c9b43b0d65b0411d031b16ea66e2b2b104d",
+    "tracked_rebuild_changed_paths": [
+      "rebuild/browser-tests.mjs",
+      "rebuild/core/generation.py",
+      "rebuild/core/migrations/0038_reinspection_confirmation_guard.py",
+      "rebuild/core/tests/test_doctor_pilot_self_service.py",
+      "rebuild/core/tests/test_elicited_assertion_quality.py",
+      "rebuild/core/tests/test_elicited_passive_reference.py",
+      "rebuild/core/tests/test_elicited_proof_transport.py",
+      "rebuild/core/tests/test_elicited_source_reference.py",
+      "rebuild/core/tests/test_encounter_snapshot.py",
+      "rebuild/core/tests/test_internal_access_review.py",
+      "rebuild/core/tests/test_isolation_matrix.py",
+      "rebuild/core/tests/test_mapping_review_clarity.py",
+      "rebuild/core/tests/test_provider_dedup_refutation.py",
+      "rebuild/core/tests/test_reconciliation_evidence_kind.py",
+      "rebuild/core/tests/test_refutation.py",
+      "rebuild/core/tests/test_reinspection_database_guard.py",
+      "rebuild/core/tests/test_review_guards.py",
+      "rebuild/core/tests/test_ruled_paragraph_recovery.py",
+      "rebuild/core/tests/test_security.py",
+      "rebuild/core/tests/test_transcript_privacy.py",
+      "rebuild/core/tests/test_v1_real_mode_payments.py",
+      "rebuild/core/tests/test_wm_conflict_messages.py",
+      "rebuild/core/v3_field_relations.py",
+      "rebuild/documents/layout_geometry.py",
+      "rebuild/documents/layout_source.py",
+      "rebuild/documents/test_empty_corner_matrix.py",
+      "rebuild/documents/test_layout_source_nodes.py",
+      "rebuild/documents/test_layout_stream_reuse.py",
+      "rebuild/documents/test_named_single_scope.py",
+      "rebuild/documents/test_paired_colon_gaps.py",
+      "rebuild/documents/test_question_boxes.py",
+      "rebuild/documents/word_v3.py",
+      "rebuild/ops/capture_v1_install_schema.py",
+      "rebuild/ops/fixtures/elicited-qualification-v1.json",
+      "rebuild/ops/fixtures/financial_source_transfer.source",
+      "rebuild/ops/fixtures/word_holdout20_preparation.source",
+      "rebuild/ops/standing_qa.py",
+      "rebuild/ops/standing_qa_elicited.py",
+      "rebuild/ops/test_production_deploy.py",
+      "rebuild/ops/tests/test_browser_served_profile_render.py",
+      "rebuild/ops/tests/test_financial_source_transfer.py",
+      "rebuild/ops/tests/test_reinspection_migration_source.py",
+      "rebuild/ops/tests/test_standing_qa_elicited.py",
+      "rebuild/ops/tests/test_word_holdout20_preparation.py",
+      "rebuild/ops/v1_private_install_preparation.py"
+    ],
+    "source_identities_differ": true,
+    "current_qualification_transfer_inferred": false,
+    "word_critical_changes": [
+      "rebuild/documents/word_v3.py",
+      "rebuild/documents/layout_source.py",
+      "rebuild/documents/layout_geometry.py",
+      "rebuild/core/generation.py",
+      "rebuild/core/v3_field_relations.py"
+    ]
+  }
 }
