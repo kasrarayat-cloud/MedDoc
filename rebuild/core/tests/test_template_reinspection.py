@@ -8,11 +8,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.db import DatabaseError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core import import_binding
-from core.jobs import enqueue
+from core import v3_mapping
 from core.models import AuditEvent, Department, Encounter, Job, MappingConfirmation, Membership, Reservation, Template, TemplateVersion, User
 from core.security import private_path
 from .test_word_v3_workflow import V3Fixture, build_legacy_table_form, part_text
@@ -120,11 +121,29 @@ class TemplateReinspection(V3Fixture, TestCase):
         fresh, current = self.fresh(old, version)
         self.assertEqual(current.contract, ''); self.assertTrue(current.needs_confirmation)
         self.assertEqual(self.new_encounter(current).status_code, 200)
-        encounter = Encounter.objects.create(department=self.department, patient=self.patient, template_version=current,
-            notes='Plan: Rest', created_by=self.user, service_date=timezone.localdate())
-        with self.assertRaises(ValidationError): enqueue(encounter, self.user)
-        self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
-        encounter.refresh_from_db(); self.assertNotEqual(encounter.status, 'finalized')
+        # Forward0038 now refuses this insert itself. The old application-level
+        # fixture cannot create an unreviewed linked draft on the current schema.
+        with self.assertRaises(DatabaseError), transaction.atomic():
+            Encounter.objects.create(department=self.department, patient=self.patient, template_version=current,
+                notes='Plan: Rest', created_by=self.user, service_date=timezone.localdate())
+        self.assertFalse(Encounter.objects.exists())
+        with self.assertRaisesMessage(ValidationError, 'Review every answer location'):
+            v3_mapping.admission_refusals(current)
+        # A saved ordinary legacy draft remains bound to its original version;
+        # changing its foreign key cannot bypass the new exact-version review.
+        self.assertEqual(self.new_encounter(version, notes='Plan: Rest').status_code, 302)
+        encounter = Encounter.objects.get(template_version=version)
+        before = (encounter.template_version_id, encounter.notes, copy.deepcopy(encounter.answers), encounter.revision)
+        with self.assertRaises(DatabaseError), transaction.atomic():
+            Encounter.objects.filter(pk=encounter.pk).update(template_version=current)
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.template_version_id, encounter.notes, encounter.answers, encounter.revision), before)
+        self.assertEqual(encounter.status, 'draft'); self.assertFalse(encounter.export_path)
+        self.archive('forward-0038-refusal', **{'original.docx': private_path(old.original_path).read_bytes(),
+            'state.json': {'old_version': str(version.pk), 'new_version': str(current.pk),
+                'stored_version': str(encounter.template_version_id), 'notes': encounter.notes,
+                'answers': encounter.answers, 'status': encounter.status, 'jobs': Job.objects.count(),
+                'reservations': Reservation.objects.count()}})
         self.assertFalse(Job.objects.exists()); self.assertFalse(Reservation.objects.exists())
         response = self.client.post(f'/templates/{fresh.pk}/', {'action': 'confirm_reinspection',
             'mapping_version': current.pk, 'checked_every_field': 'on'})
