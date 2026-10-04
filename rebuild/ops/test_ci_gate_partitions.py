@@ -49,7 +49,11 @@ class CIGatePartitions(unittest.TestCase):
             'documents.test_source_policy', 'documents.test_layout_verification', 'documents.test_layout_containment', 'documents.test_guidance_preservation', 'documents.test_checkbox_history', 'documents.test_structural_columns',
             'documents.test_destination_roles', 'documents.test_import_selection', 'documents.test_source_coverage',
             'documents.test_destination_regressions', 'documents.test_paragraph_option_recovery',
-            'documents.test_ruled_paragraph_recovery', 'documents.test_numeric_part_recovery'])
+            'documents.test_ruled_paragraph_recovery', 'documents.test_numeric_part_recovery',
+            'documents.test_temporal_format_pairs', 'documents.test_paired_colon_gaps',
+            'documents.test_layout_source_nodes', 'documents.test_named_single_scope',
+            'documents.test_layout_stream_reuse', 'documents.test_empty_corner_matrix',
+            'documents.test_underlined_subheadings', 'documents.test_source_style_cache'])
         self.assertEqual(support[0][-1], '-v')
         self.assertEqual(support[1], ['-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_*.py', '-v'])
 
@@ -112,5 +116,7 @@ class CIGatePartitions(unittest.TestCase):
                 self.assertEqual(check.returncode == 0, result == 'success')
         self.assertIn('fail-fast: false', workflow)
         self.assertIn('lane: [core-1, core-2, support]', workflow)
-        # 30 since 2026-10-01: the count-balanced core-1 lane measured 18m20s and then 20m18s (cancelled at 20).
-        self.assertIn('timeout-minutes: 30', workflow.split('\n  python:\n', 1)[0])
+        # The full core-1 workload still had at least 372 selected methods unfinished
+        # at the former 30-minute bound; retain the recorded bounded 60-minute job.
+        python_checks = workflow.split('\n  python-checks:\n', 1)[1].split('\n  python:\n', 1)[0]
+        self.assertIn('timeout-minutes: 60', python_checks)
