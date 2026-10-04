@@ -157,3 +157,22 @@ price guard, rate, source, expected answer or acceptance threshold. The third
 declaration remains byte-identical; no fourth declaration is necessary. A new
 actual rehearsal requires root review, a newly frozen source and a fresh output
 directory. The original failed run is never rerun in place.
+
+The second exact-source rehearsal on
+`1bf44a11c8c45076a7302c9e653ec272ed830b1b` passed the price binding and retained
+actual upload, unchanged 101-field mapping, normal confirmation and encounter
+creation. It failed at the actual encounter-page GET because the isolated
+source had no collected staticfiles manifest entry for `app.css`. The normal
+standing inner process already applies `STORAGES=sonnet5_qa.STATIC_STORAGES`
+before its app walk. The corrected rehearsal now applies that same existing
+test-storage override only around its single method; installed and production
+storage settings remain unchanged. This test setting does not verify served
+built assets or browser styling.
+
+The second application child exited 1 in 17.070727 seconds, with one test error
+in 7.791 seconds; the outer exited 1 in 19.482610 seconds. Both direct catalogue
+checks exited 0; normal/test databases were absent afterward, source unchanged
+and all child processes finished. No generation job or SDK request was reached.
+The original second output remains in
+`operations/ordinary-batch-mocked-1bf44a11-20261004T100608Z/`, application log
+SHA256 `f7d16aadb24cd7020d8c5a950108efb0ee1ef6d7364bbb8865522d7c54d354b9`.

@@ -97,6 +97,7 @@ flags = {'AI_MODE': 'live', 'AI_PROVIDER': 'anthropic', 'AI_MODEL': 'claude-sonn
 
 @override_settings(**flags)
 class ActualBatchRehearsal(TestCase):
+    @override_settings(STORAGES=stages.sq.STATIC_STORAGES)
     @patch.dict(os.environ, stages.sq.PRICE_SETTINGS)
     def test_actual_upload_two_sdk_children_complete_union_review_and_export(self):
         from core.models import Department, Membership, Organization, ProviderReceipt, Reservation, Usage, User
