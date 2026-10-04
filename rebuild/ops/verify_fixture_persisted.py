@@ -35,6 +35,11 @@ def digest(raw):
     return sha256(raw).hexdigest()
 
 
+def validate_health(health, release, surface):
+    auth.require(health == {'status': 'ok', 'data_mode': 'synthetic-only',
+                           'surface': surface, 'release': release}, 'served_health_identity_differs')
+
+
 def read_artifact(path, expected, maximum=15 * 1024 * 1024):
     """Read one original/result/export; never follow an arbitrary private link."""
     auth.require(re.fullmatch('[a-f0-9]{64}', expected or ''), 'missing_artifact_hash')
@@ -215,6 +220,7 @@ def main():
     from core.soap_document import original_bytes
     auth.require(settings.SYNTHETIC_ONLY and settings.AI_MODE == 'fixture' and settings.RELEASE_SHA == args.expected_commit
         and settings.V3_FIELD_RELATIONS is True and settings.AI_MODEL == preparation.MODEL
+        and settings.QUILLMD_WORD_ENGINE == 'auto'
         and settings.DATABASES['default']['NAME'] == database
         and settings.DATABASES['default']['HOST'] == '127.0.0.1'
         and str(settings.DATABASES['default']['PORT']) == '55731', 'launcher_profile_differs')
@@ -225,7 +231,10 @@ def main():
     auth.require(not out.exists(), 'retained_run_identity_not_reusable'); out.mkdir(mode=0o700)
     served = auth.Served(); started = time.monotonic()
     result = {'commit': args.expected_commit, 'database': database, 'processes': processes,
-        'complete': False, 'clinical_mutations': 0, 'provider_requests': 0, 'examples': {}}
+        'complete': False, 'clinical_mutations': 0, 'provider_requests': 0, 'examples': {},
+        'application_configuration': {'ai_mode': settings.AI_MODE, 'model': settings.AI_MODEL,
+            'word_engine': settings.QUILLMD_WORD_ENGINE, 'field_relations': settings.V3_FIELD_RELATIONS,
+            'live_model_qualification': False}, 'served_health': {}}
     try:
         accounts = json.loads(auth.protected_file(source / '.runtime/private-access.json'))
         auth.require(all(accounts[name]['email'].endswith('@synthetic.quillmd.invalid')
@@ -249,8 +258,8 @@ def main():
             otp=str(totp(bytes.fromhex(accounts['admin']['totp_key_hex']), step=30, t0=0, digits=6)).zfill(6))
         for surface, port in (('doctor', 9160), ('admin', 9161)):
             health = json.loads(served.expect(served.client(), port, '/health/', 200, label=surface + '_health'))
-            auth.require(health == {'status': 'ok', 'data_mode': 'synthetic', 'surface': surface,
-                                   'release': args.expected_commit}, 'served_health_identity_differs')
+            validate_health(health, args.expected_commit, surface)
+            result['served_health'][surface] = health
         financial_pages = [served.expect(admin_client, 9161, '/console/', 200, label='financial_admin_positive'),
             served.expect(admin_client, 9161, '/console/services/', 200, label='configured_services_positive')]
         served.expect(doctor_client, 9160, '/console/', 404, label='doctor_console_denied')

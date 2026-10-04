@@ -168,6 +168,18 @@ class PersistedFixtureProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'authenticator_clock_or_counter_requires_review'):
             probe.fresh_mfa_delay(110, 3005)
 
+    def test_actual_synthetic_health_labels_match_both_mounted_surfaces(self):
+        for surface in ('doctor', 'admin'):
+            health = {'status': 'ok', 'data_mode': 'synthetic-only', 'surface': surface, 'release': 'a' * 40}
+            self.assertIsNone(probe.validate_health(health, 'a' * 40, surface))
+
+    def test_old_label_real_mode_stale_release_foreign_host_and_extra_identity_are_refused(self):
+        valid = {'status': 'ok', 'data_mode': 'synthetic-only', 'surface': 'doctor', 'release': 'a' * 40}
+        for change in ({'data_mode': 'synthetic'}, {'data_mode': 'real'}, {'data_mode': 'live'},
+                       {'release': 'b' * 40}, {'surface': 'admin'}, {'extra': 'not the bound health contract'}):
+            with self.subTest(change=change), self.assertRaisesRegex(RuntimeError, 'served_health_identity_differs'):
+                probe.validate_health({**valid, **change}, 'a' * 40, 'doctor')
+
 
 def sys_module():
     import sys
