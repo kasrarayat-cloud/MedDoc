@@ -139,3 +139,40 @@ D03 is now49/88 versus45/88, with29 missed,10 wrong and2 extras; strict false. I
 The actual101-field mocked batch rehearsal passed on7a22: two100+1 SDK bodies match the real compiler, first child adopts nothing, second finishes the union with2 supported and99 missing. Explicit acceptance/reviewed-blank, finalization, authorized faithful DOCX download and foreign-clinician404 passed; two receipts and two reservations settled. Both owned normal/test databases and all child processes are absent, and source remained unchanged. This is zero provider requests and is separate from the paid157-attempt1.717575505200USD calculated ledger. Two earlier rehearsal failures and both environment corrections remain retained.
 
 Eight remaining affected nonfinancial CI assertions passed on readonly37268192 with actual child/outer0 in21.253seconds; no DB/provider source mutation occurred. Original7907 CI failures are preserved, and exact final CI is still pending. Current root capacity has316523438080 available bytes of633927315456, with35039505 free inodes; latest actual preflight GO101910 remains unchanged. No cleanup, expansion or installed/demo mutation occurred. Prospective provider campaigns2/3 remain unstarted. The final fixed33 eligible DEV application plan preserves the60/20 denominators, seven held development originals and family/safety criteria; its mixed-engine result union is being implemented before execution.
+
+
+## Frozen application qualification — 2026-10-04 11:55 UTC
+
+Functional candidate `481b65adb8ffa97053b694f0de3ba4dbaac72d0a` contains the
+independently refuted D10 automatic ruled destination repair. Root16 controls
+passed with zero wrong results; the exact original whole-document gate is not
+claimed. Its clean worktree,567 tracked Python files, all tracked rebuild Git
+blobs,17 fixed Word packets, unchanged helpers/thresholds and50 retained PDFium
+dependency files were prospectively sealed before execution. SealSHA256:
+`5f1333d66c945d1305c315d1aa972dfa5c946da23511b2f4f1fd01bbdf3505e4`.
+
+Ops is actually executing the unchanged33 permitted development originals,
+serially. P01 retains the D01 native reader error plus its structural split
+trace; P02 retains D03 49/88,D04 16/27,D05 6/6 plus2 extras, all strictfalse.
+Every completed packet so far proves owned DB/PID/socket/renderer teardown and
+unchanged source. No first failure is overwritten or counted as success.
+The full54/60 and18/20 gates remain unmet, with seven rights-held originals
+still in the original denominators.
+
+Genuine campaign3 completed three paid sends on04fb (one model check plus
+100+1-field ordinary batch). Two useful source-supported answers were adopted
+after the complete union and99 missing answers explicitly reviewed blank;
+independent full ZIP/XML readback and genuine offline compiler/financial
+witnesses passed. Calculated provider cost$0.149056 and QA customer debits
+$0.223584 are not authentic invoice reconciliation. Limited replay on481b
+proves this exact101-field mapping/request/price/export content unchanged; it
+does not relabel the paid revision or qualify other Word originals.
+
+New campaign2 uses actual Sonnet5.5 on481b and has completed the model check
+and12 plain prose comparisons, with zero open/unknown outcomes as of the
+recorded status (13 attempts,$0.058892). Its final two plain cases are active;
+qualified comparisons and reviewed voice remain pending. All historical160
+attempts and$1.866631505200 calculated exposure remain unchanged. Installed
+dedac and demo789 remain unchanged;7907 CI failed and is not a citation for
+this candidate. Accepted financial proof fingerprints have not yet been
+renewed. Root and specialists continue actual implementation/qualification.
