@@ -1691,6 +1691,7 @@ class Detector:
         self._pure = {}
         self._form_wide = None
         self._form_wide_nodes = []        # keeps the guidance paragraphs alive: their ids key the scope reading
+        self._named_guidance = None       # immutable original's captions, physical owners and named instructions
         self._coded_problem = ""
         self._compute_headings()
 
@@ -4495,7 +4496,8 @@ class Detector:
                                     else "") for i, x in enumerate(sentences)]
                     flagged = []
                     for sentence, role in entries:
-                        limit = limit_language(sentence)
+                        counted_sentence = self.count_guidance_sentence(sentence)
+                        limit = limit_language(counted_sentence)
                         if limit or floating and floating_selection(sentence):
                             flagged.append((sentence, role, limit))
                     if not flagged:
@@ -4512,9 +4514,191 @@ class Detector:
                             owner = self.label_owner(p, sentence)
                         elif role == "lead" and not WIDER_REACH.search(text_of(p, own=True)):
                             owner = self.boxes_below(p)
+                        document = self.document_count_owner(p, sentence)
+                        if document is not None:
+                            owner = document
+                        bounded = self.cell_instruction_owner(p)
+                        if bounded is not None:
+                            owner = bounded.el
+                        named = self.named_guidance_owner(p)
+                        if named is not None:
+                            owner = named.el
                         found.append((id(p), owner, sentence, where, limit_targets(sentence) if limit else "*"))
             self._form_wide = found
         return self._form_wide
+
+    @staticmethod
+    def count_guidance_sentence(sentence):
+        """Distinguish printed predicate numbers and coordinated amounts.
+
+        Only the analysis text changes. The complete original sentence remains
+        in the mapping and source evidence; a real selection/count command
+        still reaches the established cardinality guard.
+        """
+        markers = list(re.finditer(r'\(([1-9][0-9]?)\)', sentence))
+        if (len(markers) >= 2 and [int(m[1]) for m in markers] == list(range(1, len(markers) + 1))
+                and re.search(r'\bwhen\s*$', sentence[:markers[0].start()], re.I)):
+            pieces = [sentence[m.end():markers[n + 1].start() if n + 1 < len(markers) else len(sentence)]
+                      for n, m in enumerate(markers)]
+            if all(re.match(r'\s*(?:it\s+)?(?:is|are|was|were)\b', piece, re.I) for piece in pieces):
+                sentence = re.sub(r'\(([1-9][0-9]?)\)', '', sentence)
+        # An amount inherits the unit after its last coordinate: "6 and 12
+        # months". Reuse exactly the existing measured-unit grammar.
+        for match in reversed(list(re.finditer(r'\b([0-9]{1,2})\s+(?:and|or)\s+([0-9]{1,2})(?=\s+\S)', sentence))):
+            if re.match(_NOT_A_MEASURE, sentence[match.end(2):], re.I) is None:
+                sentence = sentence[:match.start(1)] + ' ' + sentence[match.end(1):]
+        return sentence
+
+    def document_count_owner(self, paragraph, sentence):
+        """A declared current template's count concerns whole copies.
+
+        Require its complete declared name to occur in a visible original
+        header title and the entire copies-per-item command. An answer/box
+        count or an extra command never gains this source relationship.
+        """
+        text = paragraph_text(paragraph)[0].strip()
+        declared = re.match(r'^Instructions:\s*(?:The\s+)?([^.;:!?\r\n]+?)\s+is\s+a\s+template\.', text, re.I)
+        if not declared:
+            return None
+        slot = next((s for s in self.index.slots if s.el is paragraph and s.kind == 'p'), None)
+        if (slot is None or slot.part != 'word/document.xml' or slot.parent is not None
+                or not self.tab_source_visible(slot) or self.blank_spans(*self.ptext(paragraph))
+                or any(n.tag in (FLDCHAR, q('w:sdt'), q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in paragraph.iter())):
+            return None
+        name = re.sub(r'\s+', ' ', declared[1]).strip()
+        headers = [s for s in self.index.slots if s.kind == 'p' and s.part.startswith('word/header')
+                   and self.is_heading(s.el) and self.tab_source_visible(s)]
+        if not any(re.match(re.escape(name) + r'(?:\s|$)', self.ptext(s.el)[0].strip(), re.I) for s in headers):
+            return None
+        frame = re.fullmatch(r'After\s+[^,;.!?\r\n]+,\s*fill\s+out\s+all\s+' + re.escape(name)
+                             + r's\s+for\s+[^;.!?\r\n]+?\s+[–—-]\s+one\s+for\s+each\s+[^;.!?\r\n]+\.?', sentence, re.I)
+        if frame and not re.search(r'\b' + _TICK_VERB + r'\b|\b(?:only|max|minimum|maximum|limit)\b', sentence, re.I):
+            return self.package.tree('word/document.xml')
+        return None
+
+    def cell_instruction_owner(self, paragraph):
+        """An explicit instruction in one visible captioned cell stays local.
+
+        A second caption, nested table, hidden source or stated wider reach
+        leaves its scope unresolved. The actual question still reads this
+        instruction through its own cell; no count wording is discarded.
+        """
+        slot = next((s for s in self.index.slots if s.el is paragraph and s.kind == 'p'), None)
+        if slot is None or not re.match(r'^instruction\s*:', self.ptext(paragraph)[0].strip(), re.I):
+            return None
+        cell = self.host_cell(slot)
+        if (cell is None or cell.part != 'word/document.xml'
+                or cell.el.find('.//' + q('w:tbl')) is not None
+                or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX, q('w:framePr')) for n in cell.el.iter())):
+            return None
+        paragraphs = [s for s in cell.children if s.kind == 'p']
+        if len(paragraphs) != len(cell.children) or any(not self.tab_source_visible(s) for s in paragraphs):
+            return None
+        texts = [self.ptext(s.el)[0].strip() for s in paragraphs]
+        captions = [s for s, text in zip(paragraphs, texts) if text.endswith((':', '?'))
+                    and not re.match(r'^instruction\s*:', text, re.I) and BOX not in text and CHECKED not in text
+                    and not self.blank_spans(*self.ptext(s.el))]
+        if (len(captions) != 1 or paragraphs.index(captions[0]) >= paragraphs.index(slot)
+                or any(WIDER_REACH.search(text) for text in texts)):
+            return None
+        return cell
+
+    @staticmethod
+    def named_caption(text):
+        # The whole printed caption, with only numbering, terminal colon,
+        # case and whitespace normalized. No subject/noun-stem association.
+        text = unicodedata.normalize('NFKC', text)
+        return re.sub(r'\s+', ' ', LIST_MARKER.sub('', text.strip())).rstrip(':').strip().casefold()
+
+    def named_guidance_index(self):
+        if self._named_guidance is None:
+            owners, instructions = {}, {}
+            for slot in [s for s in self.index.slots if s.kind == 'p']:
+                text = self.ptext(slot.el)[0]
+                frame = re.fullmatch(r'([^\r\n]+?)\s+[–—-]\s+(.+)', text.strip(), re.S)
+                if frame and BOX not in text and CHECKED not in text:
+                    instructions.setdefault(self.named_caption(frame[1]), []).append((slot, frame[2]))
+                    continue
+                prefix = re.split('[' + BOX + CHECKED + ']', text, maxsplit=1)[0].strip()
+                boxed = ((BOX in text or CHECKED in text) and self.question_boxes(slot.el, text)
+                         and self.box_run(slot.el) >= 2)
+                below = (not boxed and prefix.endswith((':', '?')) and
+                         (self.boxes_below(slot.el) is not None or
+                          (following := self.next_printed(slot.el)) is not None and self.starts_with_box(following)))
+                if prefix and (boxed or below):
+                    owners.setdefault(self.named_caption(prefix), []).append(slot)
+            self._named_guidance = owners, instructions
+        return self._named_guidance
+
+    def named_instruction_visible(self, slot):
+        return (slot.part == 'word/document.xml' and slot.parent is None and self.tab_source_visible(slot)
+                and not self.blank_spans(*self.ptext(slot.el))
+                and not any(n.tag in (FLDCHAR, q('w:sdt'), q('w:drawing'), q('w:pict'),
+                                     q('w:object'), TXBX, q('w:framePr')) for n in slot.el.iter()))
+
+    def named_guidance_owner(self, paragraph):
+        owners, instructions = self.named_guidance_index()
+        for caption, entries in instructions.items():
+            if not any(slot.el is paragraph for slot, _ in entries):
+                continue
+            candidates = owners.get(caption, [])
+            if (len(candidates) == 1 and all(self.named_instruction_visible(slot) and not WIDER_REACH.search(text)
+                    for slot, text in entries)
+                    and self.tab_source_visible(candidates[0])):
+                return candidates[0]
+        return None
+
+    def named_selection_source(self, question, own, options):
+        owners, instructions = self.named_guidance_index()
+        caption = self.named_caption(question);entries = instructions.get(caption, [])
+        if not entries:
+            return None
+        candidates = owners.get(caption, [])
+        problem = 'The named selection instruction does not have one complete visible original question owner; review its exact caption and instructions.'
+        if (len(candidates) != 1 or id(candidates[0].el) not in own
+                or not self.tab_source_visible(candidates[0])
+                or any(not self.named_instruction_visible(slot) for slot, _ in entries)):
+            return {'problem': problem, 'source_slots': candidates + [slot for slot, _ in entries]}
+        clauses = [clause.strip() for _, text in entries for clause in
+                   [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip()]
+        if any(self.checkbox_source_action(clause, governing=True) for clause in clauses):
+            return {'problem': 'This exact named instruction appoints a human signing or author action; ordinary clinical answers cannot perform it.', 'human': True, 'source_slots': candidates + [slot for slot, _ in entries]}
+        if any(WIDER_REACH.search(text) for _, text in entries):
+            return {'problem': 'The named instruction states a wider or referenced scope; its reach remains unresolved.',
+                    'source_slots': candidates + [slot for slot, _ in entries]}
+        many, unresolved, commands = False, False, []
+        for _, text in entries:
+            for sentence in [x.strip(' .;!?:\r\n') for x in re.split(r'(?<=[.;!?])\s*|[\r\n]+', text) if x.strip()]:
+                conditional = re.fullmatch(r'(?:if|when)\s+[^;!?\r\n]+,\s*(.+)', sentence, re.I)
+                command = conditional[1] if conditional else sentence
+                command = re.sub(r'^please\s+', '', command, flags=re.I)
+                select = re.fullmatch(r'(?:' + _TICK_VERB + r')\s+(.+)', command, re.I)
+                permission = bool(HISTORY_MANY.fullmatch(command))
+                if select:
+                    argument = select[1]
+                    permission |= bool(re.fullmatch(r'all\s+(?:relevant|applicable|appropriate)\s+[\w-]+', argument, re.I)
+                                       or re.fullmatch(r'more\s+than\s+one\s+[\w-]+\s+if\s+relevant', argument, re.I)
+                                       or conditional and re.fullmatch(r'both(?:\s+[\w-]+)?', argument, re.I))
+                    alternative = re.fullmatch(r'a\s+([\w-]+)\s+or\s+([\w-]+)(?:\s+[^;:!?\r\n]+)?', argument, re.I)
+                    permission |= bool(alternative and alternative[2].casefold() == alternative[1].casefold() + 's')
+                    if permission and (COUNT_BOUND.search(command) or limit_language(command, local=True)
+                                       or re.search(r'\b' + _TICK_VERB + r'\b', argument, re.I)):
+                        unresolved = True
+                    conditional_single = bool(conditional and (re.fullmatch(r'that\s+one\s+[^;:!?\r\n]+', argument, re.I)
+                                               or option_text(argument).strip('‘’"').casefold() in [o.casefold() for o in options]))
+                    if not permission and not conditional_single and not HISTORY_ONE.fullmatch(command):
+                        unresolved = True
+                elif limit_language(sentence):
+                    unresolved = True
+                if permission:
+                    many = True;commands.append('Select all that apply')
+                elif HISTORY_ONE.fullmatch(command):
+                    commands.append('Select one')
+        if not many:
+            return None
+        if unresolved:
+            return {'problem': 'The complete named selection instruction includes an unsupported or competing selection command; review every original clause.', 'source_slots': candidates + [slot for slot, _ in entries]}
+        return {'commands': commands, 'owner': candidates[0], 'entries': entries}
 
     def boxed_guidance(self, p, printed):
         """(sentence, owned by the paragraph's own question) for every sentence of a paragraph that prints boxes
@@ -5074,6 +5258,7 @@ class Detector:
                 if s is not None and s is not anchor and s not in extra:
                     extra.append(s)
             decision = {"kind": "checkbox", "note": ""}
+            named = None
             if len(units) > 1:
                 # The question's own source: its label, the lines of its boxes and what is printed after them, the
                 # other paragraphs of its own cells, the header of its column, a nested grid's parent question and its
@@ -5093,14 +5278,25 @@ class Detector:
                                           *(nested["source_slots"] if nested else [])]}
                 if cell is not None:
                     own.update(self.own_paragraph_ids(cells))
-                decision = self.cardinality(question, options, local=local, between=between, own=own,
+                named = self.named_selection_source(question, own, options)
+                if named and not named.get('problem'):
+                    local += named['commands']
+                    own.update(id(slot.el) for slot, _ in named['entries'])
+                decision = named if named and named.get('problem') else self.cardinality(question, options, local=local, between=between, own=own,
                                             hint=self.text(g["paras"][0].el), where=" at " + pslot.id,
                                             context=self.context_for(anchor))
             if decision.get("problem"):
                 # Never narrowed to one choice, never widened past a limit: the source is left for manual mapping.
                 self.notes.append(decision["problem"])
-                for affected in g['paras']:
-                    self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
+                scoped_sources = []
+                if named:
+                    scoped_sources = (named['source_slots'] if 'source_slots' in named else
+                                      [named['owner'], *[slot for slot, _ in named['entries']]])
+                for affected in dict.fromkeys([*g['paras'], *scoped_sources]):
+                    self.coverage_issue(affected, 'named_selection_source' if named else 'unmapped_answer', self.notes[-1])
+                    if named and named.get('human'):
+                        self.protected_regions.add(affected.id)
+                        self.box_action_reasons[affected.id] = self.notes[-1]
                 for p in g["paras"]:
                     self.claimed.add(id(p.el))
                 if used_para is not None:
@@ -5157,6 +5353,18 @@ class Detector:
                     self.claimed.add(id(source_slot.el))
                 for option_para in nested["option_paras"]:
                     self.nested_write_in(option_para, nested["write_context"])
+            if named:
+                area.context = ' > '.join([area.context, *[text for _, text in named['entries']]]).strip(' >')
+                if len(area.context) > MAX_MAPPING_CONTEXT:
+                    for affected in g['paras']:
+                        self.coverage_issue(affected, 'named_selection_source', 'The complete named instruction context exceeds mapping limits; nothing was shortened.')
+                    continue
+                area.complete_source = True
+                area.source_questions.append({'relation': 'named_selection_instruction', 'question': area.label,
+                    'context': area.context, 'options': list(area.options), 'cardinality': area.kind,
+                    'instructions': [text for _, text in named['entries']],
+                    'sources': [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+                                for p in dict.fromkeys([named['owner'], *g['paras'], *[slot for slot, _ in named['entries']]])]})
             branches = [branch for unit in units for branch in [self.option_branch_source(unit)]
                         if branch and branch['qualified']]
             if branches:
@@ -8864,10 +9072,10 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     reader = _PlaceReader(index)
     role_refusals = role_violations(reader, fields, original_roles)
     unresolved_brackets = [{'place': _place_id(issue['part'], issue['slot']),
-                            'start': issue['start'], 'end': issue['end']}
+                            'start': issue.get('start'), 'end': issue.get('end')}
                            for issue in source_detector.coverage_issues
                            if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
-                                                'unmapped_bracketed_source')]
+                                                'unmapped_bracketed_source', 'named_selection_source')]
     adjacent_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
     requested_answers = [area for area in source_detector.areas if any(
@@ -8876,6 +9084,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relation.get('relation') == 'nested_cell_options' for relation in area.source_questions)]
     branch_choices = [area for area in source_detector.areas if any(
         relation.get('relation') == 'option_branch_instruction' for relation in area.source_questions)]
+    named_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'named_selection_instruction' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
@@ -8918,6 +9128,21 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        for area in named_choices:
+            relation = next(r for r in area.source_questions if r.get('relation') == 'named_selection_instruction')
+            regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None} for ref in relation['sources']]
+            if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
+                continue
+            if any(loc.get('part') == adjacent.slot.part and loc.get('slot') == adjacent.slot.path
+                   and target == adjacent.target and field.get('kind') == adjacent.kind
+                   and field.get('label') == adjacent.label and field.get('context') == adjacent.context
+                   and field.get('source_questions') == adjacent.source_questions for adjacent in adjacent_answers):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path or target != area.target
+                    or field.get('kind') != area.kind or field.get('label') != area.label
+                    or field.get('context') != area.context or field.get('options') != area.options
+                    or field.get('source_questions') != area.source_questions):
+                fail('This named instruction no longer owns the complete original question and options. Review its exact mapping again.', 'mapping_mismatch')
         for area in branch_choices:
             branch_relation = next(r for r in area.source_questions if r.get('relation') == 'option_branch_instruction')
             regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None}
@@ -9088,7 +9313,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -9121,7 +9346,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 owns = (any(original_branch_mapping(field, area) for area in relation_areas)
                         or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas))

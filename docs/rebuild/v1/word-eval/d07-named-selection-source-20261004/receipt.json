@@ -1,0 +1,583 @@
+{
+  "source_word_sha256": "3b6dda80ba184eb94d458815b1cc3115c4a0825e659b35d93061728e36fc790b",
+  "source_test_sha256": "9f6681a2f901e2a4a0648cdbedabcb65ccba7ff4e91d0c22842a5a08c11babfb",
+  "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+  "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+  "mapping_summary": {
+    "n": 28,
+    "ok": 21,
+    "missed": 7,
+    "wrong": 0,
+    "extras": 4,
+    "strict": false
+  },
+  "six_group_export_sha256": "fc6cc92e7d2e2bfe629fcb119e56b438fcb9cf1ae0426bbab434cd51db8381e0",
+  "other_export_sha256": "c760e629df97746c7f39138e88ab8270f7f9072baad8c88f8b9ec09b5ad5123b",
+  "source_bound_groups": [
+    {
+      "label": "2. How researcher determined intervention was delivered:",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[1]/ff[0]",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[1]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[2]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[3]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[4]/ff[0]"
+            }
+          ]
+        },
+        "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016",
+        "extra": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[2]/ff[0]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[3]/ff[0]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[4]/ff[0]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          }
+        ]
+      },
+      "states": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "expected": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "correct": true
+    },
+    {
+      "label": "Recipient(s)",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[2]"
+            }
+          ]
+        },
+        "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87",
+        "extra": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[1]",
+            "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[2]",
+            "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87"
+          }
+        ]
+      },
+      "states": [
+        true,
+        true,
+        false
+      ],
+      "expected": [
+        true,
+        true,
+        false
+      ],
+      "correct": true
+    },
+    {
+      "label": "Format",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[2]"
+            }
+          ]
+        },
+        "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87",
+        "extra": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[1]",
+            "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[2]",
+            "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87"
+          }
+        ]
+      },
+      "states": [
+        true,
+        true,
+        false
+      ],
+      "expected": [
+        true,
+        true,
+        false
+      ],
+      "correct": true
+    },
+    {
+      "label": "Modality",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[3]"
+            }
+          ]
+        },
+        "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87",
+        "extra": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[1]",
+            "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[2]",
+            "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[3]",
+            "fingerprint": "49f94aa68442eaf50015fb3d5b949c00f6d0f0be28e3241e5d99e60b3055eb87"
+          }
+        ]
+      },
+      "states": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "expected": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "correct": true
+    },
+    {
+      "label": "In-person location",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[3]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[2]"
+            }
+          ]
+        },
+        "fingerprint": "b8973a017a4ecb20db8cb846bdbf822b04474fe34a627cf23ffce4de0a3b8467",
+        "extra": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[1]",
+            "fingerprint": "b98ccaf54506287c08bc1383cf02718688e831ea6ba7c941adfcca93f7f411f8"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[2]",
+            "fingerprint": "b98ccaf54506287c08bc1383cf02718688e831ea6ba7c941adfcca93f7f411f8"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[3]",
+            "fingerprint": "d965a29c63b2514ba03c98d361e414d65720a512271e25e88a078592aa25ea7e"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[0]",
+            "fingerprint": "9187ffef641b9bc3a7e9ff210b10a5416c3b6461f9e760a185b6f26db3fa1224"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[1]",
+            "fingerprint": "9187ffef641b9bc3a7e9ff210b10a5416c3b6461f9e760a185b6f26db3fa1224"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[2]",
+            "fingerprint": "9187ffef641b9bc3a7e9ff210b10a5416c3b6461f9e760a185b6f26db3fa1224"
+          }
+        ]
+      },
+      "states": [
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "expected": [
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "correct": true
+    },
+    {
+      "label": "Reason not delivered",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[2]/ff[0]"
+            }
+          ]
+        },
+        "fingerprint": "5536007ef0a0c0974ef979e02b3ed82a84bb003ea9493bb8cb14828e91159c38",
+        "extra": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[1]",
+            "fingerprint": "5536007ef0a0c0974ef979e02b3ed82a84bb003ea9493bb8cb14828e91159c38"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[2]",
+            "fingerprint": "5536007ef0a0c0974ef979e02b3ed82a84bb003ea9493bb8cb14828e91159c38"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[0]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[1]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[2]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[2]/ff[0]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          }
+        ]
+      },
+      "states": [
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "expected": [
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "correct": true
+    }
+  ],
+  "untouched_choices": [
+    {
+      "label": "Provider type",
+      "same": true
+    }
+  ],
+  "original_instructions": [
+    {
+      "id": "word/document.xml#b/p[22]",
+      "same_xml": true
+    },
+    {
+      "id": "word/document.xml#b/p[28]",
+      "same_xml": true
+    },
+    {
+      "id": "word/document.xml#b/p[29]",
+      "same_xml": true
+    },
+    {
+      "id": "word/document.xml#b/p[30]",
+      "same_xml": true
+    },
+    {
+      "id": "word/document.xml#b/p[31]",
+      "same_xml": true
+    },
+    {
+      "id": "word/document.xml#b/p[32]",
+      "same_xml": true
+    }
+  ],
+  "untargeted_parts_raw_unchanged": true,
+  "other_complete_readback": true,
+  "no_answer_bytes_unchanged": true,
+  "manual_mapping_corrections": 0,
+  "full_application_route": false,
+  "provider_calls": 0,
+  "db_calls": 0,
+  "render_calls": 0,
+  "focused_methods": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 21.509157977998257,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "3b6dda80ba184eb94d458815b1cc3115c4a0825e659b35d93061728e36fc790b",
+      "rebuild/documents/test_source_coverage.py": "9f6681a2f901e2a4a0648cdbedabcb65ccba7ff4e91d0c22842a5a08c11babfb"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 62,
+    "refused": 20,
+    "exports": 42,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "prior_affected_methods": {
+    "tests": 67,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 144.63119011500385,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "ce4ed69c09eb69309380fb9b32f83d245eff91ac4b0827b2d656f3a5567058a2",
+      "rebuild/documents/test_source_coverage.py": "a641394f624e2f0aab5bf85ee400981db24043b571388c6768a128a47fa6143f"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 397,
+    "refused": 178,
+    "exports": 219,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "prior_affected_limitation": "67 methods passed before the final wider/reference/positioned-scope correction; final9 methods and final cardinality packet verify the corrected source separately.",
+  "baseline_positive_failure": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-valid-baseline-corrected-20261004.log",
+    "methods": 1,
+    "sub_failures": 10,
+    "actual_exit": 1
+  },
+  "instrument_errors_retained": [
+    "first positive selector incorrectly expected unnormalized 1. Modality:",
+    "first isolated baseline missing imported documents.mapping_limits",
+    "first affected runner named absent TerminalOtherWriteIns class"
+  ],
+  "intermediate_actual_hold": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-first-physical-hold-20261004",
+    "score": "15/28 correct13miss0wrong4extras strictfalse",
+    "cause": "Unowned date-cell/count-definition/whole-template-copy/measurement guidance blocked six exact named multi permissions."
+  },
+  "new_diff_failure": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-wider-scope-original-20261004",
+    "wrong_export": "wrong-export.docx",
+    "cause": "Named owner incorrectly swallowed a stated wider scope; neighboring two-selection export was permitted.",
+    "fixed_control": "Final named caption/wider/positioned test and fresh complete scope proof."
+  },
+  "remaining_ids": [
+    "A13",
+    "A15",
+    "A17",
+    "A26",
+    "A27",
+    "A28"
+  ],
+  "gate_denominators": {
+    "overall": 60,
+    "required": 54,
+    "holdout": 20,
+    "required_holdout": 18,
+    "whole_document_gate_pass": false
+  },
+  "ready_for_independent_refutation": true,
+  "final_cardinality_methods": {
+    "tests": 28,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 45.98602090799977,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "3b6dda80ba184eb94d458815b1cc3115c4a0825e659b35d93061728e36fc790b",
+      "rebuild/documents/test_source_coverage.py": "9f6681a2f901e2a4a0648cdbedabcb65ccba7ff4e91d0c22842a5a08c11babfb"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 115,
+    "refused": 58,
+    "exports": 57,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  }
+}

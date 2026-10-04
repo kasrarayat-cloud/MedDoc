@@ -1258,3 +1258,162 @@ class PrintedOptionBranchInstructions(unittest.TestCase):
             candidate.pop('write_protected',None);candidate.pop('destination_roles',None)
             with self.assertRaises(word_v3.V3Failure):word_v3.fill(human,[candidate],{candidate['key']:candidate['options'][0]})
             self.assertEqual(word_v3.fill(raw,fields,{}),raw)
+
+
+
+class NamedSelectionInstructions(unittest.TestCase):
+    def form(self, instruction='Modality – Select all relevant options.', *, native=False,
+             question='1. Modality:', duplicate=False, hidden=False, extra_instruction=''):
+        doc=Document();table=doc.add_table(rows=1,cols=2)
+        for n,caption in enumerate((question,'2. Independent observations (choose one):')):
+            cell=table.cell(0,n);cell.text=caption
+            for k,option in enumerate(('Home','Work','Remote')if n==0 else('Present','Absent')):
+                p=cell.add_paragraph()
+                if native:ff_field(p,'checkbox',name=f'named{n}{k}',checked=n==1 and k==1)
+                else:p.add_run('☒'if n==1 and k==1 else'☐')
+                p.add_run(' '+option)
+        if duplicate:
+            cell=doc.add_table(rows=1,cols=1).cell(0,0);cell.text=question
+            cell.add_paragraph('☐ Home ☐ Work')
+        doc.add_paragraph('Specific instructions')
+        p=doc.add_paragraph(instruction)
+        if hidden:p.runs[0].font.hidden=True
+        if extra_instruction:doc.add_paragraph(extra_instruction)
+        doc.sections[0].header.paragraphs[0].text='Preserved header'
+        doc.sections[0].footer.paragraphs[0].text='Preserved footer'
+        return data(doc)
+
+    def choice(self, fields):return next(f for f in fields if f['label']=='Modality')
+
+    def test_complete_named_permissions_bind_the_whole_unique_question(self):
+        for native in(False,True):
+            for instruction in('Modality – Select all relevant options.',
+                    'Modality – If the location changed, select all relevant locations.',
+                    'Modality – Select more than one source if relevant.',
+                    'Modality – If home or work applies, select that one location. If both apply, select both.',
+                    'Modality – If known, select a location or locations. When unclear, select Remote.'):
+                with self.subTest(native=native,instruction=instruction):
+                    raw=self.form(instruction,native=native);mapping=word_v3.inspect(raw);field=self.choice(mapping['fields'])
+                    self.assertEqual(field['kind'],'multi_choice')
+                    self.assertTrue(any(r.get('relation')=='named_selection_instruction'for r in field.get('source_questions',[])))
+                    out=word_v3.fill(raw,mapping['fields'],{field['key']:['Home','Work']})
+                    self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),field),[True,True,False])
+                    self.assertEqual(Document(io.BytesIO(out)).tables[0].cell(0,1)._tc.xml,Document(io.BytesIO(raw)).tables[0].cell(0,1)._tc.xml)
+                    self.assertEqual(Document(io.BytesIO(out)).paragraphs[-1].text,instruction)
+                    self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_more_than_one_in_a_condition_is_not_a_multiple_selection_command(self):
+        for instruction in('Modality – If more than one provider was involved, select the code for the most-involved provider.',
+                'Modality – Select Home if received. Select Work when not received. Select Remote when unclear.'):
+            raw=self.form(instruction);fields=word_v3.inspect(raw)['fields'];field=self.choice(fields)
+            self.assertEqual(field['kind'],'choice')
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,fields,{field['key']:['Home','Work']})
+
+    def test_duplicate_hidden_extended_or_competing_scope_is_not_guessed(self):
+        for config in({'duplicate':True},{'hidden':True},
+                       {'instruction':'Modality details – Select all relevant options.'},
+                       {'extra_instruction':'Modality – Select one.'},
+                       {'instruction':'Modality – Select a location or locations but only one answer is permitted.'},
+                       {'instruction':'Modality – Select a location or locations that may not be combined.'}):
+            raw=self.form(**config);mapping=word_v3.inspect(raw)
+            own=[f for f in mapping['fields']if f['label']=='Modality']
+            self.assertFalse(any(f['kind']=='multi_choice'for f in own))
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_complete_instruction_and_metadata_cannot_be_forged_or_removed(self):
+        raw=self.form();mapping=word_v3.inspect(raw);field=self.choice(mapping['fields'])
+        for change in('relation','source','kind','context','options','target','caption'):
+            forged=deepcopy(field)
+            if change=='relation':forged.pop('source_questions',None)
+            elif change=='source':forged['source_questions'][-1]['sources'][-1]['fingerprint']='0'*64
+            elif change=='kind':forged['kind']='choice'
+            elif change=='context':forged['context']='Unrelated'
+            elif change=='options':forged['options'].reverse()
+            elif change=='target':forged['locator']['target']['boxes'].reverse()
+            else:forged['label']='Unrelated question'
+            answer='Home'if change=='kind'else['Home','Work']
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:answer})
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(self.form('Modality – Select one.'),[field],{field['key']:['Home','Work']})
+
+    def test_named_human_act_does_not_appoint_the_clinician(self):
+        for instruction in('Modality – Select all relevant options. I approve this document.',
+                'Modality – Select all relevant options;I approve this document.',
+                'Modality – Select all relevant options.\nI approve this document.',
+                'Modality – If complete, the witness should write the following:',
+                'Modality – This area is for Alex Reed to enter the answer:'):
+            raw=self.form(instruction);mapping=word_v3.inspect(raw)
+            self.assertFalse([f for f in mapping['fields']if f['label']=='Modality'and not f.get('write_protected')])
+            baseline=self.form();forged=deepcopy(self.choice(word_v3.inspect(baseline)['fields']))
+            index=word_v3.SlotIndex(word_v3.open_package(raw));slot=index.by_id[forged['locator']['part']+'#'+forged['locator']['slot']]
+            forged['locator']['fingerprint']=word_v3.fingerprint(slot.el);forged.pop('source_questions',None)
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:['Home','Work']})
+            caption=index.by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]']
+            end=len(word_v3.paragraph_text(caption.el)[0])
+            forged_caption={'key':'physical-caption','kind':'text','label':'Clinical observations',
+                'locator':{'contract':'v3','part':caption.part,'slot':caption.path,
+                    'fingerprint':word_v3.fingerprint(caption.el),'target':{'type':'span','start':end,'end':end,'shape':'after_label'}}}
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged_caption],{'physical-caption':'Dr Synthetic Finalizer'})
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_counted_predicates_and_measured_coordinates_do_not_count_answers(self):
+        for sentence in ('A state is defined when (1) it is present, and (2) is persistent.',
+                         'Self-Report of Dose at 6 and 12 Months After Treatment.'):
+            doc=Document(io.BytesIO(self.form()));doc.add_paragraph(sentence);raw=data(doc)
+            field=self.choice(word_v3.inspect(raw)['fields']);self.assertEqual(field['kind'],'multi_choice')
+            out=word_v3.fill(raw,[field],{field['key']:['Home','Work']})
+            self.assertEqual(Document(io.BytesIO(out)).paragraphs[-1].text,sentence)
+        for sentence in ('A state is defined when (1) choose one, and (2) select Home.',
+                         'A state is defined when (1) it is present, and (3) is persistent.',
+                         'Report 6 and 12 responses.', 'Select 6 and 12 options.'):
+            doc=Document(io.BytesIO(self.form()));doc.add_paragraph(sentence);raw=data(doc)
+            mapping=word_v3.inspect(raw);self.assertFalse(any(f['label']=='Modality'and f['kind']=='multi_choice'for f in mapping['fields']))
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_explicit_cell_instruction_has_one_visible_physical_owner(self):
+        for config in ('local','two captions','hidden','wider reach','unlabelled'):
+            doc=Document(io.BytesIO(self.form()));cell=doc.add_table(rows=1,cols=1).cell(0,0)
+            cell.text='End date:';cell.add_paragraph('☐ Or Unknown')
+            if config=='two captions':cell.add_paragraph('Another question:')
+            text='Instruction: Same as start date if only one encounter/visit'
+            if config=='wider reach':text='Instruction: Choose one for every question'
+            if config=='unlabelled':text='Same as start date if only one encounter/visit'
+            para=cell.add_paragraph(text)
+            if config=='hidden':para.runs[0].font.hidden=True
+            raw=data(doc);mapping=word_v3.inspect(raw)
+            own=[f for f in mapping['fields']if f['label']=='Modality']
+            if config=='local':
+                self.assertEqual(own[0]['kind'],'multi_choice')
+                out=word_v3.fill(raw,[own[0]],{own[0]['key']:['Home','Work']})
+                self.assertEqual(Document(io.BytesIO(out)).tables[-1]._tbl.xml,Document(io.BytesIO(raw)).tables[-1]._tbl.xml)
+            else:self.assertFalse(any(f['kind']=='multi_choice'for f in own))
+
+    def test_declared_current_template_copy_count_does_not_count_choices(self):
+        for config in ('whole copies','wrong header','extra selection','wrong declared name'):
+            doc=Document(io.BytesIO(self.form()));header=doc.sections[0].header.paragraphs[0]
+            header.text='Synthetic Template Instructions';header.style='Heading 1'
+            declaration='Synthetic Template'if config!='wrong declared name'else'Other Template'
+            text='Instructions: The '+declaration+' is a template. After a participant finishes, fill out all Synthetic Templates for that participant – one for each intervention.'
+            if config=='wrong header':header.text='Another document'
+            if config=='extra selection':text=text[:-1]+' and select only one.'
+            doc.add_paragraph(text);raw=data(doc);mapping=word_v3.inspect(raw)
+            own=[f for f in mapping['fields']if f['label']=='Modality']
+            if config=='whole copies':
+                self.assertEqual(own[0]['kind'],'multi_choice')
+                out=word_v3.fill(raw,[own[0]],{own[0]['key']:['Home','Work']})
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[-1].text,text)
+            else:self.assertFalse(any(f['kind']=='multi_choice'for f in own))
+
+    def test_named_caption_cannot_hide_a_wider_or_positioned_selection_rule(self):
+        for instruction in ('Modality – Select one for every question.',
+                            'Modality – Select one for the question below.'):
+            doc=Document(io.BytesIO(self.form(instruction)))
+            doc.tables[0].cell(0,1).paragraphs[0].text='2. Independent observations (tick all that apply):'
+            raw=data(doc);mapping=word_v3.inspect(raw)
+            self.assertFalse(any(f['kind']=='multi_choice'for f in mapping['fields']))
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+        doc=Document(io.BytesIO(self.form('Modality – Select one.')))
+        p=doc.paragraphs[-1]._p;p.get_or_add_pPr().append(OxmlElement('w:framePr'))
+        doc.tables[0].cell(0,1).paragraphs[0].text='2. Independent observations (tick all that apply):'
+        raw=data(doc);mapping=word_v3.inspect(raw)
+        self.assertFalse(any(f['kind']=='multi_choice'for f in mapping['fields']))
+        self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
