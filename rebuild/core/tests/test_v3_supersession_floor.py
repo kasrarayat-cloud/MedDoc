@@ -379,7 +379,7 @@ class RoundTwoRepairs(Worst):
         self.assert_cases_held(tuple((WARFARIN, tail) for tail in (
             # M1: names_carer, names_person, AGENT_NOUNS, the -ian ending
             'The nurse switched to apixaban.', 'The registrar switched to apixaban.',
-            'The consultant switched to apixaban.', 'The team switched to apixaban.', 'Her husband switched to apixaban.',
+            'The consultant switched to apixaban.', 'The team switched to apixaban.',
             'The ward switched to apixaban.', 'The MDT switched to apixaban.', 'The practice switched to apixaban.',
             'The anticoagulation service switched to apixaban.', 'The hospital switched to apixaban.',
             'The obstetrician switched to apixaban.', 'The geriatrician switched to apixaban.',
@@ -389,6 +389,27 @@ class RoundTwoRepairs(Worst):
             'They were withheld before surgery.')) + (
             # M4: a drug the tagger reads as a verb in apposition
             ('The patient takes one drug, namely metformin.', 'Metformin was withheld today.'),))
+
+
+    def test_foreign_switch_and_patient_change_have_distinct_medication_ownership(self):
+        # The four retained CI failures expected a foreign husband's own switch
+        # to end the patient's explicit warfarin. Whole-source actor proof
+        # separates those owners; the old failed blocks remain evidence.
+        for foreign in ('Her husband switched to apixaban.',
+                'Her husband was switched to apixaban.',
+                'Her husband switched from warfarin to apixaban.',
+                'Her husband was switched from warfarin to apixaban.'):
+            for notes in (WARFARIN + ' ' + foreign, foreign + ' ' + WARFARIN):
+                with self.subTest(foreign=foreign, notes=notes):
+                    self.assert_adopted(notes, ('Medications', 'Plan'), 'Medications', WARFARIN)
+                    self.assert_held(notes, ('Medications', 'Plan'), 'Medications', foreign)
+        # Explicit patient, ambiguous personal-pronoun and clinician-agent
+        # changes still end the patient's answer even if marked independent.
+        self.assert_cases_held(tuple((WARFARIN, change) for change in (
+            'The patient switched to apixaban.', 'The patient was switched to apixaban.',
+            'She was switched to apixaban.', 'They were switched to apixaban.',
+            'The doctor switched to apixaban.', 'Switched to apixaban.',
+            'Warfarin was replaced by apixaban.', 'Warfarin was stopped.')))
 
 
 class ConjoinedCessation(Worst):
