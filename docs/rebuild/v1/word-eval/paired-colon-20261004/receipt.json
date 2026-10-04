@@ -1,0 +1,228 @@
+{
+  "source_commit": "f76e14fbb9752270d4a662770143e21d52fe8a84",
+  "preceding_source_commit": "3287f3151dfe72805d5c88cea11e57debb106fa7",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-c634-paired-colon-20261004",
+  "source_clean": true,
+  "source_sha256": {
+    "rebuild/documents/word_v3.py": "2268559bbdfacb07f37b207e4b1d3822a2643857ad28866b2375f834621f1a5e",
+    "rebuild/documents/test_paired_colon_gaps.py": "628a869270eee0a8271f3d082e23d474d7efd706c0eace75e18446c09e92870d",
+    "rebuild/documents/test_question_boxes.py": "038bfa09e1cd55dbd8a9004e20ec8196fc0fab56167ed19d632270ef48a4a4b1"
+  },
+  "evidence_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/c634-structural-lens-20261004",
+  "artifact_seal_sha256": "4cce8dec9b0e1c5a0598ca29d64560a9862239a2bbb2391209d341818e829a4c",
+  "artifact_count": 69,
+  "artifact_bytes": 2012027,
+  "original_C_CI_log_sha256": "b66569cc01886a7f750c7ac27022c7ee4412b06796d709ff557c0e15bcc02cef",
+  "actual_runs": {
+    "original-ci-two-methods": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_question_boxes.IndependentNestedQuestionCells.test_held_scalar_alternatives_have_precise_coverage_and_do_not_remove_dates",
+        "documents.test_destination_regressions.DestinationRegressions.test_authorship_receipts_and_clinical_recording_remain_ordinary",
+        "-v"
+      ],
+      "actual_exit": 1,
+      "elapsed_s": 2.576491007988807,
+      "timeout": false,
+      "pid": 2757664,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "ci-correction-three-methods": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_question_boxes.IndependentNestedQuestionCells.test_proved_scalar_alternatives_preserve_dates_and_complete_original_controls",
+        "documents.test_question_boxes.IndependentNestedQuestionCells.test_unproved_scalar_alternatives_keep_source_coverage_and_conflicts_refuse",
+        "documents.test_destination_regressions.DestinationRegressions.test_authorship_receipts_and_clinical_recording_remain_ordinary",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 5.895261586003471,
+      "timeout": false,
+      "pid": 2788098,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "operator-recording-controls": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_paired_colon_gaps.OperatorRecording",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 4.933276551993913,
+      "timeout": false,
+      "pid": 2800961,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "paired-colon-focused-v1": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_paired_colon_gaps",
+        "-v"
+      ],
+      "actual_exit": 1,
+      "elapsed_s": 7.043161977999262,
+      "timeout": false,
+      "pid": 2820915,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "paired-readback-v1-launch": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/c634-structural-lens-20261004/capture_paired_readback_v1.py"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 4.129501220988459,
+      "timeout": false,
+      "pid": 2845917,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "paired-colon-focused-v2": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_paired_colon_gaps",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 15.030152272986015,
+      "timeout": false,
+      "pid": 2860153,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "paired-and-existing-affected-v3": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_paired_colon_gaps",
+        "documents.test_destination_regressions.DestinationRegressions",
+        "documents.test_question_boxes.IndependentNestedQuestionCells",
+        "documents.test_source_coverage.TerminalChoiceWriteIns",
+        "documents.test_source_coverage.ScalarCheckboxAlternatives",
+        "documents.test_destination_roles.FramesAndNeighbours",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 151.3417355720012,
+      "timeout": false,
+      "pid": 2868020,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "d07-paired-f76-frozen-proof-launch": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/c634-structural-lens-20261004/paired_d07_f76_frozen_proof.py"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 12.01161635000608,
+      "timeout": false,
+      "pid": 2879481,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    }
+  },
+  "original_D07_proof": {
+    "source_commit": "f76e14fbb9752270d4a662770143e21d52fe8a84",
+    "source_dirty": false,
+    "word_sha256": "2268559bbdfacb07f37b207e4b1d3822a2643857ad28866b2375f834621f1a5e",
+    "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+    "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+    "new_export_sha256": "db887774b5054ee449fcc5a0045f9151a4a08be076dde920fa0dd49ed6dd41a2",
+    "historical_export_sha256": "50481de9c79a5c5e2b424aa26c835d8fc4d2a2c47a6297459decadfc47bc3b10",
+    "actual_physical_text": "5. Number of completed sessions: 12        6. Average duration of sessions: 45    minutes",
+    "direct_readback": [
+      "12",
+      "45"
+    ],
+    "effective_values_readback": [
+      "12",
+      "45"
+    ],
+    "untargeted_original_paragraphs_preserved": 111,
+    "all_untargeted_zip_parts_preserved": true,
+    "automatic_source_only": {
+      "n": 28,
+      "ok": 24,
+      "missed": 4,
+      "wrong": 0,
+      "extras": 4,
+      "strict": false
+    },
+    "remaining_misses": [
+      "A10",
+      "A26",
+      "A27",
+      "A28"
+    ],
+    "automatic_whole_document_qualification": false,
+    "manual_corrections": 0,
+    "provider": 0,
+    "database": 0,
+    "renderer": 0
+  },
+  "first_failed_paired_packet": {
+    "assertion_failures": 6,
+    "lookup_errors": 3,
+    "qualified_real_body_readback_failures": 2,
+    "invalid_two_cell_helper_assertions": 4,
+    "invalid_two_cell_helper_lookups": 3,
+    "original_local_first_exports_not_archived": true,
+    "separate_pre_repair_two_answer_exports_archived": "paired-readback-v1"
+  },
+  "independent_finished_diff_refutation": "required; awaiting root",
+  "actual_application_workflow": "not rerun on finished source",
+  "whole_word_gates": {
+    "overall": "54/60 unchanged; unmet",
+    "holdout": "18/20 unchanged; unmet"
+  },
+  "native_word": false,
+  "provider_attempts_added": 0,
+  "database_runs_added": 0,
+  "renderer_runs_added": 0,
+  "disk": {
+    "total_bytes": 633927315456,
+    "available_bytes": 307948040192
+  },
+  "cleanup_recovered_bytes": 0,
+  "next": "Root independently refutes finished source. Merge verified union; actual D07 and coherent whole gate remain separate. Current C17 corpus is unchanged."
+}
