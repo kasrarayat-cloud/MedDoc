@@ -27,6 +27,26 @@ def literal(name, variable):
 
 
 class ReinspectionMigrationSource(unittest.TestCase):
+    def test_new_capture_is_explicit_twenty_member_source_while_old_installer_remains_held(self):
+        repository = ROOT.parent
+        raw = (repository / capture_v1_install_schema.SCHEMA).read_bytes()
+        schema = json.loads(raw)
+        old = json.loads((repository / 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract.json').read_bytes())
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), capture_v1_install_schema.SCHEMA_SHA256)
+        self.assertEqual(capture_v1_install_schema.LEAF, NAME)
+        self.assertEqual(capture_v1_install_schema.FORWARD_MIGRATIONS, 20)
+        self.assertEqual(capture_v1_install_schema.DATABASE, 'quillmd_qa_sol_installcontract38_1004')
+        self.assertEqual(schema['candidate_core_migration'], NAME)
+        self.assertEqual(schema['baseline_prefix_sha256'], old['baseline_prefix_sha256'])
+        self.assertEqual(schema['baseline_core_columns'], old['baseline_core_columns'])
+        self.assertEqual(schema['candidate_core_columns'], old['candidate_core_columns'])
+        self.assertEqual({name: value for name, value in schema['forward_migration_sha256'].items() if name != NAME},
+                         old['forward_migration_sha256'])
+        self.assertEqual(schema['forward_migration_sha256'][NAME],
+                         hashlib.sha256((ROOT / 'core/migrations' / (NAME + '.py')).read_bytes()).hexdigest())
+        self.assertEqual(preparation.LEAF, '0037_transcript_redaction_boundary')
+        self.assertEqual(preparation.SCHEMA_SHA256, 'a8ab83af5b6f79634fb893f3e6fe14fdc64cb95fb1bf0b64c359419847f59f69')
+
     def test_catalog_capture_refuses_a_newer_foreign_or_ambiguous_leaf_before_migration(self):
         for nodes in ([('core', NAME)], [('core', NAME), ('core', preparation.LEAF)],
                       [], [('auth', '0001_initial')]):
