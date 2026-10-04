@@ -335,3 +335,32 @@ September23, so today's offsite attempt refused. The old accepted alert has no
 inbox/delivery/outside-host proof. Valid September27 restore evidence is reused.
 Root ext4 has633927315456 total bytes and311204896768 available at14:35 UTC
 (49% used). No filesystem change or deliberate cleanup occurred.
+
+At15:38 UTC the mounted recovery fixture correction is integrated: two affected
+methods pass on07079 (actual0,17.406seconds; bounded outer27.543seconds), while
+the other four original successful methods have unchanged ASTs. Actual confirmed
+TOTP authorizes the admin console but recovery on its host returns404; managers,
+employees and foreign departments are denied. Old/new detail captures preserve
+exact notes and display the explicit new source-review requirement. The original
+five-pass/one-instrument-error packet remains intact.
+
+Actual0038 capture on21415f6e completes the exact twenty-migration contract.
+Independent full-catalog comparison preserves all historical catalog structure,
+111 triggers and all28 function identities/attributes; only the expected
+encounter-confirmation predicate changes. Forty-two affected portable installer
+tests and thirteen independent root pure controls pass. These pure controls do
+not claim installation or CI; normal missing-source/Word/citation gates remain.
+
+Root independently reproduced the retained D11 duplicate raw-writer overwrite
+on exacteae56b63: export619e927936c5cc58549df476df82f511503d5831215cecee61f6a9bf1c114bb8
+is byte-identical to the specialist's wrong output. Application reachability is
+unproven. Finished corrective601a's root pass has eight controls passing and one
+demonstrated named-human assignment bypass; source remains unintegrated. Both
+wrong exports, actual exits and source freezes are retained in protected runtime
+evidence. No API, database or renderer calls occurred in these raw checks.
+
+Fresh preflight20261004T153107Z isGO with unchanged thresholds, no fixes and
+310057422848 available root bytes. Recovery checkpoint20261004T152947Z has SHA256
+128122c71d89984323d881d9b44b41101ad1b62146662d9d316960e00a813222 and snapshots
+all five clean writer heads. Campaign4 remains closed at195 cumulative attempts
+and$2.147100264000 calculated exposure; no invoice reconciliation or new sends.
