@@ -1,0 +1,26 @@
+{
+  "source": "19d1e2695d2da270ff911f9f445a574e1eea489e",
+  "layout_sha256": "832fce0d7b1e7b863dacb01fabb1b8c2a7972c891ca297e14951b4f576337443",
+  "original_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+  "before_export_sha256": "80c34a5f60600365055e79ad898e8f0dd1508e4fb9d388d1077e84e71e44bfec",
+  "original": {
+    "tables": 1,
+    "rows": [
+      28
+    ],
+    "original_row15_in_table0_available": true
+  },
+  "before_export": {
+    "tables": 2,
+    "rows": [
+      14,
+      14
+    ],
+    "original_row15_in_table0_available": false
+  },
+  "layout_summary": {
+    "tables": 1,
+    "heading_rows": 2
+  },
+  "scope": "Blank accepted original through actual old layout branch. Retained actual native application export failure remains separate. No DB/render/provider."
+}

@@ -1,0 +1,106 @@
+{
+  "root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d01-original-table-repair-20261004",
+  "files": [
+    {
+      "path": "affected-actual-exit.json",
+      "bytes": 86,
+      "sha256": "136c0653f3dec284da35007c97dae98146b75d33f6a339db5704115bf2654026"
+    },
+    {
+      "path": "affected-actual.log",
+      "bytes": 5349,
+      "sha256": "b9bee61a7e59809decc8e81ee985497dcfe55e411c8d1fa97e6df931f0786943"
+    },
+    {
+      "path": "affected-result.json",
+      "bytes": 135,
+      "sha256": "639540c5024cc8c3ee50b557c46a823a881eb50b9d82946d07ec039a852de1f9"
+    },
+    {
+      "path": "before-layout-export.docx",
+      "bytes": 49854,
+      "sha256": "80c34a5f60600365055e79ad898e8f0dd1508e4fb9d388d1077e84e71e44bfec"
+    },
+    {
+      "path": "before-result.json",
+      "bytes": 804,
+      "sha256": "d589d279e2884e132bafd5c9b1369f81d7118859f4e653b3498998f674df6112"
+    },
+    {
+      "path": "blank/export.docx",
+      "bytes": 49656,
+      "sha256": "f6ebd8b9f92fc4a67b1025da3704b7b47ce25053cdefc333bc9d3237f912cfe6"
+    },
+    {
+      "path": "blank/result.json",
+      "bytes": 731,
+      "sha256": "b71b5737e7fbf3d69ac86cdb6f9054c31d2590523044cc635d967f08d6976966"
+    },
+    {
+      "path": "blank/source.docx",
+      "bytes": 52884,
+      "sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b"
+    },
+    {
+      "path": "layout-before.py",
+      "bytes": 8829,
+      "sha256": "832fce0d7b1e7b863dacb01fabb1b8c2a7972c891ca297e14951b4f576337443"
+    },
+    {
+      "path": "layout-seam-actual-exit.json",
+      "bytes": 87,
+      "sha256": "4c5cfb6a54a8558ae810804f0eec5bc9d33f7b5502819af05e935ee1d8b42d4b"
+    },
+    {
+      "path": "layout-seam-actual.log",
+      "bytes": 163,
+      "sha256": "f66b3f2817c4eec7dafc3aae084c13b8e9f1be7f7766f05f4758fdba2bde1b9b"
+    },
+    {
+      "path": "layout-seam-result.json",
+      "bytes": 2148,
+      "sha256": "b2870dab889bd73870c0e1f26f86cda6029f6158c66a009a56e88397760fe71b"
+    },
+    {
+      "path": "original.docx",
+      "bytes": 52884,
+      "sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b"
+    },
+    {
+      "path": "prove_original_layout.py",
+      "bytes": 5277,
+      "sha256": "026a0257fd1b36a359a7afe2a08abc1401a9ea91c30aee9e25893c17157474cb"
+    },
+    {
+      "path": "run_affected.py",
+      "bytes": 1085,
+      "sha256": "d75efb1dd5a2dabda192bfedfa4b08ea5303449894351ed7a42730f118a4679a"
+    },
+    {
+      "path": "source-before-tests.json",
+      "bytes": 459,
+      "sha256": "78a90fd915a08b485260b292c346910ba025f252aa37d392b2e6d7f2c898256b"
+    },
+    {
+      "path": "synthetic-58-answer-layout-input/export.docx",
+      "bytes": 50867,
+      "sha256": "fed6f7beae04818bf8703aff250a0ca4532e0eb8ebb3f854683ccca3acd210e3"
+    },
+    {
+      "path": "synthetic-58-answer-layout-input/result.json",
+      "bytes": 759,
+      "sha256": "4433e17c798e1dfe59b1649ce2c368900140f7d7acb8c3fba1a073735978caf9"
+    },
+    {
+      "path": "synthetic-58-answer-layout-input/source.docx",
+      "bytes": 50798,
+      "sha256": "a4fea9d2f8069578ea4d806f570140b9ad7f60ddf5511c979ca37a0b0be8daaa"
+    },
+    {
+      "path": "test-layout-before.py",
+      "bytes": 14055,
+      "sha256": "b315479459d7662a070b42ea41094e6178c912027ef09f96add09e0340993d04"
+    }
+  ],
+  "scope": "Retained previous outputs and new source-shaped exact layout-seam inputs. No raw original altered."
+}
