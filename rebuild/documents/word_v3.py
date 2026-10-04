@@ -1778,6 +1778,73 @@ class Detector:
                 return False
         return True
 
+    def response_matrix_header_corner(self, tbl_slot, r):
+        """Fixed header spacing even when response controls cannot be qualified.
+
+        This proves where the header is, not whether any response may be written.
+        A physical response axis over captioned checkbox bands keeps its empty
+        corner fixed when merges, visibility or extra controls require review.
+        A drawn blank or another genuine answer in the corner is never excluded.
+        """
+        key = ("response-header-corner", id(tbl_slot), r)
+        if key in self._grid:
+            return self._grid[key]
+        self._grid[key] = None
+        rows = self.grid(tbl_slot)
+        if not rows or r != min(rows):
+            return None
+        cells = sorted(rows[r], key=lambda cell: cell.info["col"])
+        width = self.grid_cols(tbl_slot)
+        if len(cells) < 2 or width < 3:
+            return None
+        corner = cells[0]
+        if (corner.info["col"] != 0 or corner.info["span"] != 1 or corner.info["vmerge"]
+                or not self.is_empty_cell(corner) or not self.cell_is_plain(corner) or not corner.children
+                or any(p.kind != "p" or not self.plain_spacing_paragraph(p)
+                       or not self.tab_source_visible(p) for p in corner.children)):
+            return None
+        column, labels = 1, []
+        for cell in cells[1:]:
+            if cell.info["col"] != column or not cell.children:
+                return None
+            for para in cell.children:
+                if para.kind != "p" or self.box_units(para) or self.blank_spans(*self.ptext(para.el)):
+                    return None
+                text = self.ptext(para.el)[0].strip()
+                if not response_word(text):
+                    return None
+                labels.append(text)
+            column += cell.info["span"]
+        if column != width or len(labels) < 2:
+            return None
+        complete = 0
+        for row in sorted(rr for rr in rows if rr > r):
+            body = sorted(rows[row], key=lambda cell: cell.info["col"])
+            if row != r + complete + 1 or not body:
+                break
+            label = body[0]
+            if (label.info["col"] != 0 or label.info["span"] != 1 or label.info["vmerge"]
+                    or not self.is_label_cell(label, complete=True) or not label.children
+                    or any(p.kind != "p" or self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                           for p in label.children)):
+                break
+            column, boxed = 1, True
+            for cell in body[1:]:
+                source = self.merge_head(tbl_slot, cell)
+                paras = list(self.own_paragraphs(source))
+                text = "".join(self.ptext(p.el)[0] for p in paras)
+                if (cell.info["col"] != column or not paras or re.sub(r"[\s☐☒]", "", text)
+                        or not (BOX in text or CHECKED in text)):
+                    boxed = False
+                    break
+                column += cell.info["span"]
+            if not boxed or column != width:
+                break
+            complete += 1
+        if complete >= 2:
+            self._grid[key] = corner
+        return self._grid[key]
+
     def response_matrix_corner(self, tbl_slot, r):
         """A fixed empty corner above one complete, aligned response axis.
 
@@ -6425,7 +6492,7 @@ class Detector:
         for tslot in [s for s in self.index.slots if s.kind == "tbl"]:
             rows = self.grid(tslot)
             for r in rows:
-                corner = self.response_matrix_corner(tslot, r)
+                corner = self.response_matrix_header_corner(tslot, r)
                 if corner is not None:
                     self.claimed.update(id(node) for node in corner.el.iter())
                     self.protected_regions.add(corner.id)
@@ -6433,6 +6500,12 @@ class Detector:
                     self.notes.append("The empty corner at " + corner.id +
                                       " is fixed spacing above this table's response columns, not an answer. "
                                       "Use each row's checkbox choices; reinspect an older mapping that writes here.")
+                    if self.response_matrix_corner(tslot, r) is None:
+                        detail = ("The response matrix at " + tslot.id +
+                                  " has a fixed header but its complete one-box-per-response layout is unresolved. "
+                                  "Review the original controls, visibility and merges; no answer belongs in the empty header corner.")
+                        self.notes.append(detail)
+                        self.coverage_issue(tslot, 'unmapped_response_matrix', detail)
             if self.presentation_heading_table(tslot):
                 self.claimed.update(id(node) for node in tslot.el.iter())
                 continue

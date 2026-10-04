@@ -133,5 +133,43 @@ class EmptyCornerMatrix(unittest.TestCase):
         self.assertTrue(any(issue['code'] == 'unmapped_answer' for issue in mapping['coverage_issues']))
         self.assertEqual(w.fill(original, mapping['fields'], {}), original)
 
+    def test_unqualified_response_bands_cannot_fallback_to_a_header_answer(self):
+        def duplicate_native(doc, table):
+            for row in (1, 2, 3):
+                for col in (1, 2, 3): native_box(table.cell(row, col).paragraphs[0], 'ff')
+        def hidden_controls(doc, table):
+            for row in (1, 2, 3):
+                for col in (1, 2, 3): table.cell(row, col).paragraphs[0].runs[0].font.hidden = True
+        def merged_controls(doc, table):
+            table.cell(1, 1).merge(table.cell(2, 1))
+        def merged_headers(doc, table): table.cell(0, 1).merge(table.cell(0, 2))
+        def hidden_headers(doc, table): table.cell(0, 1).paragraphs[0].runs[0].font.hidden = True
+        def competing_headers(doc, table): table.cell(0, 2).text = 'Yes'
+        for mutate in (duplicate_native, hidden_controls, merged_controls, merged_headers, hidden_headers, competing_headers):
+            with self.subTest(mutate=mutate.__name__):
+                original = form(mutate=mutate); mapping = w.inspect(original)
+                self.assertFalse(any(field['locator']['slot'] == 'b/tbl[0]/tr[0]/tc[0]' for field in mapping['fields']))
+                detector = w.Detector(w.open_package(original))
+                table = detector.index.by_id['word/document.xml#b/tbl[0]']
+                self.assertIsNone(detector.response_matrix_corner(table, 0))
+                self.assertIsNotNone(detector.response_matrix_header_corner(table, 0))
+                self.assertTrue(any(issue['code'] == 'unmapped_response_matrix' for issue in mapping['coverage_issues']))
+                corner = detector.index.by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]']
+                forged = dict(key='old_header', kind='text', label='Observation alpha', context='',
+                              locator=dict(part=corner.part, slot=corner.path, target=dict(type='cell'),
+                                           contract='v3', fingerprint=w.fingerprint(corner.el)))
+                with self.assertRaisesRegex(w.V3Failure, 'fixed response-column header spacing.*Reinspect'):
+                    w.fill(original, [forged], {'old_header': 'Yes'})
+                self.assertEqual(w.fill(original, mapping['fields'], {}), original)
+
+    def test_drawn_or_explicit_answer_corner_is_not_quarantined_as_spacing(self):
+        def drawn(doc, table): table.cell(0, 0).text = '___________'
+        def explicit(doc, table): table.cell(0, 0).text = 'Reference: ___________'
+        def underlined(doc, table): table.cell(0, 0).paragraphs[0].runs[0].underline = True
+        for mutate in (drawn, explicit, underlined):
+            with self.subTest(mutate=mutate.__name__):
+                original = form(mutate=mutate); detector = w.Detector(w.open_package(original))
+                self.assertIsNone(detector.response_matrix_header_corner(detector.index.by_id['word/document.xml#b/tbl[0]'], 0))
+
 
 if __name__ == '__main__': unittest.main()
