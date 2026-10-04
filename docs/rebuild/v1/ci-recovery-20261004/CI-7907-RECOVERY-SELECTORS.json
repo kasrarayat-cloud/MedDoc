@@ -1,0 +1,1151 @@
+{
+  "candidate": "7907ae5aa38c2a6c9e27eab1b09a758df315125b",
+  "ci_run": 37177643457,
+  "attempt": 1,
+  "original_ci_result": "failure",
+  "citation_emitted": false,
+  "private_demo_eligible": false,
+  "raw_original_evidence": {
+    "core2-failure-blocks.json": "8f7dfeb6bcaa3644694462571c8afff46046c4508437e40e592969c272e5d832",
+    "support-failure-blocks.json": "3c4db430ec10827a1576e3c575e4f584e0bacb117b1364670145deaa2b920897",
+    "core1-progress-refusals-corrected.json": "a14942ae7d8848b0ced7f7dc49816cea1b755dc6a57ac00c2274b4eb8f0f90b5"
+  },
+  "source_fixture_packet": {
+    "actual_methods": 53,
+    "actual_exit": 0,
+    "test_seconds": "77.674",
+    "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+    "database_absence_verified": true
+  },
+  "records": [
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary.CancellationRace.test_a_cancel_in_progress_is_never_picked_up_by_the_worker",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary.CancellationRace.test_worker_pickup_wins_over_a_concurrent_cancel",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary.QueuedRequestCancellation.test_cancel_queued_releases_funds_records_no_usage_and_allows_a_new_request",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary.QueuedRequestCancellation.test_only_the_requester_or_a_clinician_may_cancel",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary_regressions.ChargedDeclinesAreDisclosedAndFailuresCanBeRetried.test_a_charged_decline_discloses_the_next_generation_as_additional",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary_regressions.ChargedDeclinesAreDisclosedAndFailuresCanBeRetried.test_a_request_can_be_retried_after_an_absorbed_platform_failure",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary_regressions.ChargedDeclinesAreDisclosedAndFailuresCanBeRetried.test_the_cancel_button_is_offered_only_to_members_the_server_allows",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary_regressions.ChargedDeclinesAreDisclosedAndFailuresCanBeRetried.test_the_doctor_reads_classifications_in_words",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_boundary_regressions.UnusableOutputIsAPlatformFailureWhateverTheUserDid.test_usable_output_with_access_revoked_mid_run_stays_charged",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_lifecycle.StripeLifecycle.test_new_provider_call_records_http_request_and_message_ids_separately",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_policy.AbsorbedPlatformFailure.test_fixture_job_failure_is_unchanged_and_records_no_platform_cost",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_policy.ConfiguredEstimateDiscount.test_discount_rate_reduces_the_configured_estimate_and_is_recorded_for_audit",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_billing_policy.RefutationRegressions.test_resolving_a_stale_fixture_job_records_no_platform_cost",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_configuration_status.ConfigurationStatusNamesTheModel.test_the_browser_mirror_carries_every_language_model_line",
+      "original_subblocks": 6,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_destination_roles.SalvageResolveOverlap.test_rr1_10_another_persons_signature_line_is_never_relabelled_by_a_model",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "word",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "e9bc70d3768bdf63599632b2125ec308fd6d0d20",
+        "unchanged_before_after_diff_sha256": "3576ba7fa709852472e0dc825f9553127efea03e29e837cc37751430bccec247",
+        "evidence": "root-word-ci-assertions-fourth-qualified-20261004T054818Z/result.json",
+        "log_sha256": "30d21da3eb1d0107ea1d0e3fc078f225c47effc0e4653d06426c5e6a81c149d3"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_input_workflow.InputWorkflow.test_duplicate_generation_reuses_one_job_and_reservation",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_input_workflow.InputWorkflow.test_explicit_reviewed_append_preserves_raw_and_queues_corrected_source_once",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_input_workflow.InputWorkflow.test_new_document_can_start_with_voice_without_placeholder_notes",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_redaction_late.JournalFaultDuringTheProviderCall.test_R3RT2_an_unreadable_journal_never_discards_a_provider_result",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_refutation.AuthorizationAndPayerRefutation.test_live_timeout_classification_uses_queued_mode_not_current_mode",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_refutation.AuthorizationAndPayerRefutation.test_queued_configuration_is_passed_unchanged_after_runtime_settings_change",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_repeat_request_disclosure.RepeatedGenerationDisclosure.test_enqueue_reports_whether_it_reused_a_job",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_repeat_request_disclosure.RepeatedGenerationDisclosure.test_generation_does_not_bump_revision_so_the_key_stays_held",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_repeat_request_disclosure.RepeatedGenerationDisclosure.test_repeat_generate_is_not_announced_as_queued",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_repeat_request_disclosure.RepeatedGenerationDisclosure.test_repeat_generate_reuses_the_job_and_charges_nothing_extra",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_retention_flow_locks.JobMoneyLockOrder.test_queue_cancel_resolve_settle_and_absorb",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_retention_flow_locks.QueueRequestsRefuseADatabaseFailureCleanly.test_a_generation_aborted_by_the_database_is_a_handled_refusal",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_security.IsolationAndJobs.test_generation_repeat_does_not_duplicate_usage",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_security.IsolationAndJobs.test_revoked_queued_job_never_calls_provider",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_security.IsolationAndJobs.test_user_disabled_during_provider_call_prevents_adoption",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_absorb_records_the_receipts_cost_whatever_the_form_carried",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_release_records_the_receipts_cost_as_the_platforms",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_a_connection_terminated_during_settlement_is_held_for_reconciliation",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_an_error_after_the_settlement_committed_is_absorbed_never_charged",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_an_unreachable_database_after_the_termination_waits_for_the_stale_sweep",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_generation_held_for_reconciliation_at_every_stage",
+      "original_subblocks": 4,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_connection_lost_outside_a_transaction_is_repaired_before_the_handler_reads",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_handler_whose_first_statement_loses_the_connection_holds_the_job",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_reversal_the_database_refuses_keeps_the_job_held_with_its_request_key",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.ModeSwitch.test_a_queued_fixture_job_is_not_used_after_the_switch_to_live",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.ModeSwitch.test_a_queued_live_job_is_not_sent_after_the_switch_to_fixture",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.ModeSwitch.test_a_quote_from_either_mode_is_refused_after_the_switch_and_the_page_re_quotes",
+      "original_subblocks": 2,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.ModeSwitch.test_outside_live_mode_running_live_jobs_alone_make_the_row_a_warning",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.ModeSwitch.test_the_console_counts_the_live_jobs_still_queued",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_page_loaded_under_sonnet_5_cannot_queue_it_after_the_rollback",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_quote_signed_before_profiles_existed_is_checked_the_same_way",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_stale_price_is_refused_in_fixture_mode_too",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_any_price_change_refuses_a_directly_enqueued_quote_before_any_hold",
+      "original_subblocks": 5,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_settlement.Sonnet5ReceiptUnits.test_every_stop_is_recorded_with_its_refusal_category",
+      "original_subblocks": 4,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_sonnet5_settlement.Sonnet5ReceiptUnits.test_metered_us_inference_settles_at_1_1_and_audits_clean",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "eafe067e2484ab2e734562f00dace0fcd7818a8b",
+        "evidence": "source-bound-fixture-01/result.json",
+        "log_sha256": "a9f5775c8f18fc73df3fa7ca3f6e76374778355a03eff4658867db5a9fb2ba72"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_transcript_context.PatientDefault.test_original_v4_voice_response_gains_one_useful_answer_without_changing_raw_output",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "clinical",
+      "appended_recovery": {
+        "status": "pending_finished_owner_or_coherent_packet"
+      }
+    },
+    {
+      "original_job": 111363522461,
+      "selector": "core.tests.test_word_v3_workflow.V3MappingReview.test_printed_options_need_a_dropdown_place",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "word",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "source_head": "e9bc70d3768bdf63599632b2125ec308fd6d0d20",
+        "unchanged_before_after_diff_sha256": "3576ba7fa709852472e0dc825f9553127efea03e29e837cc37751430bccec247",
+        "evidence": "root-word-ci-assertions-fourth-qualified-20261004T054818Z/result.json",
+        "log_sha256": "30d21da3eb1d0107ea1d0e3fc078f225c47effc0e4653d06426c5e6a81c149d3"
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "test_cost_scanner_contract.AdditionalCostContracts.test_current_general_and_mapping_contracts_resolve",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "held_until_finished_source_and_independent_price_proof",
+        "source_fingerprints_changed": false
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "test_cost_scanner_contract.BatchCostContract.test_batch_compiler_send_and_complete_price_have_reviewed_identities",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "held_until_finished_source_and_independent_price_proof",
+        "source_fingerprints_changed": false
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "test_cost_scanner_contract.OrdinaryCostContract.test_imported_compiler_and_single_and_batch_sends_share_the_reviewed_price",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "held_until_finished_source_and_independent_price_proof",
+        "source_fingerprints_changed": false
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "test_production_deploy.ProductionCostDocumentTests.test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "held_until_finished_source_and_independent_price_proof",
+        "source_fingerprints_changed": false
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "test_production_deploy.ProductionCostDocumentTests.test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "held_until_finished_source_and_independent_price_proof",
+        "source_fingerprints_changed": false
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "test_production_restore_check.RestoreCheckTests.test_each_redaction_guard_cannot_be_missing_disabled_or_replaced",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "evidence": "ops-repaired-three-7907/result.json",
+        "log_sha256": "4689abbae06ea7a5cc16d375d0b4f06c778a367547cef22bd60fe996bf29ae57"
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "tests.test_sonnet5_stages_plain.ExportReadBackTests.test_a_checkbox_reviewed_and_left_blank_must_be_unticked",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "clinical",
+      "appended_recovery": {
+        "status": "pending_finished_owner_or_coherent_packet"
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "tests.test_sonnet5_stages_plain.ExportReadBackTests.test_a_checkbox_the_blank_form_prints_ticked_follows_the_stated_rule",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "clinical",
+      "appended_recovery": {
+        "status": "pending_finished_owner_or_coherent_packet"
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "tests.test_sonnet5_stages_plain.ExportReadBackTests.test_a_choice_mark_that_is_not_the_saved_answer_fails",
+      "original_subblocks": 2,
+      "original_result": "failure_or_error",
+      "owner": "clinical",
+      "appended_recovery": {
+        "status": "pending_finished_owner_or_coherent_packet"
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "tests.test_sonnet5_stages_plain.ExportReadBackTests.test_a_written_text_that_is_not_the_saved_one_fails",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "clinical",
+      "appended_recovery": {
+        "status": "pending_finished_owner_or_coherent_packet"
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "tests.test_sonnet5_stages_plain.ExportReadBackTests.test_an_honest_export_of_every_frozen_case_reads_back_as_saved",
+      "original_subblocks": 5,
+      "original_result": "failure_or_error",
+      "owner": "clinical",
+      "appended_recovery": {
+        "status": "pending_finished_owner_or_coherent_packet"
+      }
+    },
+    {
+      "original_job": 111363523005,
+      "selector": "tests.test_v1_private_install_adapter.PrivateV1InstallAdapterTests.test_prepared_declaration_refuses_before_any_installed_or_external_access",
+      "original_subblocks": 1,
+      "original_result": "failure_or_error",
+      "owner": "operations",
+      "appended_recovery": {
+        "status": "affected_pass",
+        "evidence": "ops-repaired-three-7907/result.json",
+        "log_sha256": "4689abbae06ea7a5cc16d375d0b4f06c778a367547cef22bd60fe996bf29ae57"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary.DuplicateProcessingNeverDuplicatesCharges.test_two_enqueues_for_the_same_revision_return_one_job_and_reserve_once",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary.SuccessfulGenerationStaysBillable.test_absorbing_a_declined_generation_is_refused_by_the_writer_and_flagged_by_the_audit",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary.SuccessfulGenerationStaysBillable.test_editing_then_discarding_the_output_leaves_usage_and_ledger_untouched",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary.SuccessfulGenerationStaysBillable.test_finalized_while_running_is_billable_not_absorbed",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary.SuccessfulGenerationStaysBillable.test_membership_revoked_at_adoption_is_billable_not_absorbed",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary.SuccessfulGenerationStaysBillable.test_source_revision_changed_while_running_is_billable_not_absorbed",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary_regressions.AuditCoversCancelledJobs.test_a_cancelled_job_with_usage_or_held_funds_fails_the_audit",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary_regressions.NothingBillableMeansNothingHeld.test_fixture_decline_reports_recorded_usage_not_a_charge",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary_regressions.OutputIsDeliveredOnlyForChargedRequests.test_succeeded_and_declined_outputs_remain_downloadable",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_destination_roles.ModelProposals.test_rf12_the_outcome_is_the_same_for_every_order_of_the_changes",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_doctor_pilot_self_service.PilotProviderResults.test_a_provider_result_is_delivered_only_inside_its_department",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_a_type_error_from_the_openai_send_itself_stays_an_unknown_outcome",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_with_the_credential_the_request_leaves_once_and_is_settled",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_legacy_form_without_any_credential_is_not_processed_and_releases_the_hold",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_sonnet55_profile.Sonnet55Outcomes.test_a_leading_thinking_block_adopts_the_same_answers",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_sonnet55_profile.Sonnet55Outcomes.test_a_queued_job_keeps_its_profile_and_price",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_sonnet5_profile.Sonnet5Outcomes.test_a_queued_job_keeps_the_profile_it_was_priced_with",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_sonnet5_profile.Sonnet5Outcomes.test_a_sonnet_5_job_quoted_before_profiles_existed_is_refused_and_released",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_sonnet5_profile.Sonnet5Outcomes.test_a_thinking_block_before_the_text_adopts_identical_answers",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_worker_financial_reliability.InterruptedWorkerEvidence.test_interruption_after_receipt_keeps_provider_evidence_and_hold",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_worker_financial_reliability.InterruptedWorkerEvidence.test_interruption_after_settlement_does_not_charge_or_release_again",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_worker_financial_reliability.InterruptedWorkerEvidence.test_interruption_before_response_keeps_hold_without_automatic_retry",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary_regressions.CancellationNeverDeadlocks.test_a_slow_adoption_is_never_the_deadlock_victim",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary_regressions.CancellationNeverDeadlocks.test_cancel_and_a_request_on_another_encounter_of_the_same_wallet_both_complete",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_billing_boundary_regressions.CancellationNeverDeadlocks.test_cancel_during_adoption_answers_409_and_the_generation_stands",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_doctor_status_ledger.StatusFollowsTheLedger.test_a_settled_job_held_for_review_says_it_was_charged_and_a_reversed_one_says_it_was_not",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_redaction_late.LateResultAfterRedaction.test_L1_race_a_redaction_journaled_while_the_late_result_is_written",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_redaction_late.LateResultAfterRedaction.test_a_late_provider_result_for_a_redacted_document_keeps_its_accounting_and_no_content",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_retention_flow_locks.InvitationAcceptanceAgainstTheSamePayersRequests.test_a_generation_and_the_acceptance_holding_the_account_serialize",
+      "original_progress_outcome": "FAIL",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_settlement_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_settlement_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_settlement_outcome_unknown.FixtureFailures.test_a_validation_failure_is_still_named_as_one",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_settlement_single_worker.SecondWorkerDuringALiveProviderCall.test_a_resolution_after_settlement_is_never_overwritten_as_succeeded",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_settlement_single_worker.SecondWorkerDuringALiveProviderCall.test_case_a_a_sweep_during_the_call_holds_the_late_receipt_and_never_succeeds",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_settlement_single_worker.SecondWorkerDuringALiveProviderCall.test_case_b_a_release_no_cost_during_the_call_is_reopened_not_left_false",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    },
+    {
+      "original_job": 111363522435,
+      "selector": "core.tests.test_settlement_single_worker.SecondWorkerDuringALiveProviderCall.test_case_b_with_a_second_request_on_the_freed_key_charges_it_once_as_its_own",
+      "original_progress_outcome": "ERROR",
+      "original_final_exception_unavailable": true,
+      "appended_recovery": {
+        "status": "pending_actual_affected_or_coherent_outcome"
+      }
+    }
+  ],
+  "new_full_ci_required": true
+}
