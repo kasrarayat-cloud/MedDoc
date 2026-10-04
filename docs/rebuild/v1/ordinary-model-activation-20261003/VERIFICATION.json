@@ -1,0 +1,26 @@
+{
+  "tested_revision": "b3b105b2",
+  "methods": 7,
+  "passed": 7,
+  "seconds": 6.562,
+  "process_exit_status": 0,
+  "database_destroyed": true,
+  "provider_calls": 0,
+  "source_unchanged_during_packet": true,
+  "raw_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/profile-default-regression.log",
+  "raw_log_sha256": "bf9119665141013a1e539d69c3d7b9fa92b7c5e5372c7d7998b0232948d7b9af",
+  "snapshot_sha256": "67cca798bed18940f9ee4b0eb065c2da1808c8fd4fef7f4ba778a2d1e15874b5",
+  "claims": [
+    "unchanged historical Sonnet5 value blocks and rollback fingerprint",
+    "real renderer explicit relations=0 selects generic 5.5 8k profile",
+    "actual synthetic unset switch SOAP HTTP job selects ordinary-v4 20k profile",
+    "original/model/mapping/import evidence captured before assertion",
+    "same-revision enqueue reuses the existing job; provider constructor not called"
+  ],
+  "limits": [
+    "offline synthetic configuration and queued job reachability only",
+    "no executed live worker/provider qualification",
+    "not installed; installed dedac162 observed model remains 4.6",
+    "CI/source/migration/Word preservation gates still apply to any private installation"
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "http_status": 302,
+  "redirect": "/encounters/24c0c913-3cfd-4080-bdee-a57823e48f9f/",
+  "original_sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+  "mapping": [
+    {
+      "key": "v3_1",
+      "kind": "text",
+      "label": "Subjective",
+      "context": "SOAP note > Subjective",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "contract": "v3",
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_2",
+      "kind": "text",
+      "label": "Objective",
+      "context": "SOAP note > Objective",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "contract": "v3",
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_3",
+      "kind": "text",
+      "label": "Assessment",
+      "context": "SOAP note > Assessment",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "contract": "v3",
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_4",
+      "kind": "long_text",
+      "label": "Plan",
+      "context": "SOAP note > Plan",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "contract": "v3",
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    }
+  ],
+  "import_manifest": {
+    "engine": "v3",
+    "coverage": {
+      "legacy_unmapped": [],
+      "review_required": true,
+      "block_generation": false,
+      "legacy_omissions": [],
+      "requested_engine": "v3",
+      "automatic_complete": false,
+      "v3_uncovered_legacy_places": []
+    },
+    "strategy": "physical-coverage-v1",
+    "v3_refusal": "",
+    "source_sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+    "engine_version": "word-v3-ec3-v1",
+    "legacy_refusal": "",
+    "mapping_sha256": "df56139ae96a56ed59b926952a4430409421b9fc780a54d1f5a8bf598fcc5282",
+    "engine_code_sha256": "580380a732367de0144a9f8fa4c297fc027df99a9910f42b5d2c208b0bc1176d",
+    "initial_mapping_sha256": "df56139ae96a56ed59b926952a4430409421b9fc780a54d1f5a8bf598fcc5282"
+  },
+  "jobs": [
+    {
+      "kind": "generation",
+      "state": "queued",
+      "config": {
+        "mode": "live",
+        "model": "claude-sonnet-5-5",
+        "provider": "anthropic",
+        "input_rate": "2",
+        "cached_rate": "0.20",
+        "output_rate": "10",
+        "discount_rate": "0",
+        "prompt_version": "extractive-v7-question-context",
+        "voice_max_cost": "0.20",
+        "pricing_version": "configured-v1:240ad0521f69c2b673e505f081f15b269d21073a9802055daed7167c9b20e0f1",
+        "request_profile": {
+          "effort": "medium",
+          "profile": "claude-sonnet-5-5-ordinary-v1",
+          "thinking": {
+            "type": "between_tools"
+          },
+          "timeout_seconds": 120,
+          "max_output_tokens": 20000
+        },
+        "voice_rate_minute": "",
+        "voice_rate_second": "",
+        "v3_evidence_contract": "natural-v1",
+        "ordinary_field_contract": "ordinary-field-relations-v4"
+      },
+      "error": ""
+    }
+  ]
+}
