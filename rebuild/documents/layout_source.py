@@ -27,26 +27,35 @@ def digest(value):
     return hashlib.sha256(value).hexdigest()
 
 
+def source_elements(root):
+    """Element nodes after checking the complete parsed XML document."""
+    first = root
+    while first.getprevious() is not None:
+        first = first.getprevious()
+    while first is not None:
+        # iter() alone excludes a root's prolog and epilog siblings.
+        for node in first.iter():
+            if isinstance(node.tag, str):
+                yield node
+            elif not isinstance(node, w.etree._Comment):
+                w.fail("XML processing instructions and unknown node types cannot use layout verification.",
+                       "layout_unsafe_source")
+        first = first.getnext()
+
+
 def safety(package):
     """Rendering has a narrower active-resource boundary than ordinary inspection."""
     fonts = set()
     for name in package.names:
         if name.endswith(".rels"):
-            for rel in package.tree(name):
+            for rel in source_elements(package.tree(name)):
                 kind = (rel.get("Type") or "").lower()
                 if kind.endswith("/attachedtemplate"):
                     w.fail("Attached templates cannot be used for layout verification.", "layout_unsafe_source")
                 if (rel.get("TargetMode") or "").lower() == "external" and not kind.endswith("/hyperlink"):
                     w.fail("Linked resources cannot be used for layout verification.", "layout_unsafe_source")
         if name.endswith(".xml"):
-            for node in package.tree(name).iter():
-                # lxml retains comments with callable tags. They are not
-                # font/resource elements; keep the source annotation unchanged.
-                if not isinstance(node.tag, str):
-                    if isinstance(node, w.etree._Comment):
-                        continue
-                    w.fail("XML processing instructions and unknown node types cannot use layout verification.",
-                           "layout_unsafe_source")
+            for node in source_elements(package.tree(name)):
                 if node.tag == w.q("w:instrText") and re.search(
                         r"\b(?:INCLUDETEXT|INCLUDEPICTURE|DDE|DDEAUTO|LINK|DATABASE)\b", node.text or "", re.I):
                     w.fail("An updating resource field cannot be rendered safely.", "layout_unsafe_source")

@@ -35,7 +35,7 @@ def snapshot(original):
     return {'source': original.data, 'zip_bytes': original.zip.fp.getvalue(),
             'names': list(original.names),
             'part_bytes': {n: original.zip.read(n) for n in original.names},
-            'trees': {n: w.etree.tostring(original.tree(n)) for n in original.names
+            'trees': {n: w.etree.tostring(original.tree(n).getroottree()) for n in original.names
                       if n.endswith(('.xml', '.rels'))}}
 
 
@@ -106,6 +106,35 @@ class LayoutSourceNodes(unittest.TestCase):
                 self.assertTrue(any(isinstance(n, w.etree._ProcessingInstruction)
                                     for n in current.tree('word/document.xml').iter()))
                 self.check(current, rejected=True)
+
+    def test_complete_XML_document_checks_PI_and_preserves_comments_at_all_positions(self):
+        for part in ('word/document.xml', 'word/theme/theme1.xml', 'word/_rels/document.xml.rels'):
+            for position in ('prolog', 'body', 'epilog'):
+                for annotation, rejected in ((BENIGN, False), ('<?xml-stylesheet href="https://invalid.test/style"?>', True)):
+                    with self.subTest(part=part, position=position, rejected=rejected):
+                        current = package(annotations='')
+                        root = current.tree(part)
+                        node = w.etree.fromstring(f'<wrapper>{annotation}</wrapper>'.encode())[0]
+                        if position == 'prolog':
+                            root.addprevious(node)
+                        elif position == 'epilog':
+                            root.addnext(node)
+                        else:
+                            root.append(node)
+                        self.check(current, rejected=rejected)
+
+    def test_multiple_siblings_cannot_hide_PI_behind_retained_comments(self):
+        for pi_before in (True, False):
+            current = package(annotations='')
+            root = current.tree('word/document.xml')
+            root.addprevious(w.etree.Comment('first retained comment'))
+            root.addnext(w.etree.Comment('last retained comment'))
+            pi = w.etree.ProcessingInstruction('xml-stylesheet', 'href="https://invalid.test/style"')
+            if pi_before:
+                root.getprevious().addprevious(pi)
+            else:
+                root.getnext().addnext(pi)
+            self.check(current, rejected=True)
 
     def test_other_non_string_XML_nodes_do_not_get_comment_exemption(self):
         raw = (f'<!DOCTYPE document [<!ENTITY source "unresolved">]><w:document xmlns:w="{W}">'
