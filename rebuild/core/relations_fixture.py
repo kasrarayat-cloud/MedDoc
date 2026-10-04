@@ -16,6 +16,7 @@ def body(notes, catalogue, asked, context_labels, *, requested_ids=None, units=N
     selected = {pick.key: pick.quotes for pick in g.fixture(notes, asked, context_labels=context_labels).fields}
     with_options = any(r.options(f) for f in requested)
     rows = []
+    reading = None
     for field in requested:
         key = field['key']; label = g.question_key(field['label'])
         chosen = [u['id'] for u in units if u['quote'] in selected[key]]
@@ -25,6 +26,17 @@ def body(notes, catalogue, asked, context_labels, *, requested_ids=None, units=N
             relation = ('answer' if unit['id'] in chosen else 'independent'
                         if own and own[1] and own[0] != label and len(owners.get(own[0], ())) == 1
                         else 'unresolved')
+            if relation == 'unresolved' and chosen and unit['quote'].count(':') == 1:
+                # A reviewed-out human destination is absent from the mapping.
+                # Its complete document-status metadata can still be unrelated
+                # to an exact own-labelled ordinary answer. Use the same closed
+                # source proof as governance; never infer a signer or patient.
+                from .source_scope import completed_document_status_boundary
+                if reading is None:
+                    reading = g.governance_for(notes, catalogue, context_labels, v3_units=units)[11]['preceding']
+                selected_units = [u for u in units if u['id'] in chosen]
+                if completed_document_status_boundary(reading, unit, selected_units, field):
+                    relation = 'independent'
             partition[relation].append(unit['id'])
         row = {'key': key, 'unit_ids': chosen, 'conflict': False, 'context': partition}
         if with_options:
