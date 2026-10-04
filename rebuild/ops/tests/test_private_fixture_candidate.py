@@ -173,6 +173,11 @@ class PrivateFixtureCandidateTests(unittest.TestCase):
              patch.object(f.subprocess, 'check_output', side_effect=git), \
              patch.object(f, 'regular_bytes', side_effect=AssertionError('No file read')), self.assertRaises(ValueError):
             f.main()
+        with patch('sys.argv', ['factory', '--source', '/opt/meddoc-pro/.worktrees/../outside',
+                               '--inventory', '--commit', TARGET]), \
+             patch.object(f.subprocess, 'check_output', side_effect=AssertionError('Must refuse before Git')), \
+             self.assertRaises(ValueError):
+            f.main()
         evidence = copy.deepcopy(self.evidence); evidence['ci'][0]['head_sha'] = 'b' * 40
         with patch('sys.argv', ['factory', '--source', source, '--declaration', '/test/declaration.json',
                                '--evidence', '/test/evidence.json']), \

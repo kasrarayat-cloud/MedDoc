@@ -170,7 +170,8 @@ def main():
         preparation.citation(target, evidence.get('ci'))
     def git(*command):
         return subprocess.check_output(['git', *command], cwd=args.source, timeout=60)
-    preparation.require(args.source.is_absolute() and not args.source.is_symlink()
+    preparation.require(args.source.is_absolute() and args.source == args.source.resolve()
+                        and not args.source.is_symlink()
                         and args.source.is_relative_to(Path('/opt/meddoc-pro/.worktrees')),
                         'Isolated source worktree required.')
     preparation.require(git('rev-parse', 'HEAD').decode().strip() == target

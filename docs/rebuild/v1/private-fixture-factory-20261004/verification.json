@@ -19,8 +19,8 @@
     "scope": "Pure bundle and mocked local-Git gate controls, with actual pinned nonsecret retained helper bytes; no factory CLI host operation."
   },
   "source_sha256": {
-    "rebuild/ops/private_fixture_candidate.py": "ab7c37ebd1b963789d64f5c8df1e74792dc16251f9d76926e70f1e8b76af7093",
-    "rebuild/ops/tests/test_private_fixture_candidate.py": "1bbc9176bee27d5f172b3bfa5021ed1a9013a37caa2ae83402ca0ded59951ca7"
+    "rebuild/ops/private_fixture_candidate.py": "0ef290fe31761ec409edbaac63253a660659315062845d935af883b4fb67a842",
+    "rebuild/ops/tests/test_private_fixture_candidate.py": "1e57288701020a5f8b9a706bab2811aeb6a1f21d377b92811c1d666c522dcaf3"
   },
   "model_status": "claude-sonnet-5-5 fixture configuration only; no returned-model/provider qualification claim.",
   "exact_candidate": null,
@@ -37,5 +37,14 @@
     9130,
     9131
   ],
-  "demo_rollback": "Keep old789 archive, DB, state, helper bytes and recorded process identity; switch only after new candidate ready; stop new using its identity-bound helper if needed; no DB drop or source/schema restoration."
+  "demo_rollback": "Keep old789 archive, DB, state, helper bytes and recorded process identity; switch only after new candidate ready; stop new using its identity-bound helper if needed; no DB drop or source/schema restoration.",
+  "canonical_source_refinement": {
+    "scope": "Refuse parent traversal or symlink-alias source path before Git; same7 methods plus extra negative subcase.",
+    "tests": 7,
+    "seconds": 0.161,
+    "exit_code": 0,
+    "provider_calls": 0,
+    "database_used": false,
+    "log_sha256": "ddde593482be454fc1fd46f4468be4c8acc8569c3cf5d54da7c4d4fdbdd20b1f"
+  }
 }
