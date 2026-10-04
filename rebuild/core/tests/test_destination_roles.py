@@ -1397,6 +1397,11 @@ class RepairV3Usefulness(Walk, V3Fixture, TestCase):
                 self.finalized(e)
                 self.assertEqual(e.status, 'finalized')
 
+    @override_settings(AI_PROVIDER='anthropic', AI_MODEL=generation.SONNET_5_5,
+        AI_INPUT_RATE='2', AI_OUTPUT_RATE='10', AI_CACHED_RATE='0.20',
+        AI_THINKING='between_tools', AI_EFFORT='medium', AI_INFERENCE_GEO='',
+        V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_SWITCH=None,
+        V3_HISTORY_CONTEXT=False, V3_GENERATION_BATCHES=False)
     def test_r1_05_ambiguous_signed_form_stays_human_after_remove_add(self):
         """Retained L1:R1-05 source requires an exact unchanged exclusion; mapping clicks cannot authorize it."""
         template, version = self.uploaded(data=lines('Consent form signed and dated: ______________', 'Plan: ______________'),
@@ -1417,6 +1422,15 @@ class RepairV3Usefulness(Walk, V3Fixture, TestCase):
         self.assertEqual(response.status_code, 302)
         reviewed = self.confirm(template)
         e = self.generated(reviewed, 'Consent form signed and dated: Yes\nPlan: Rest.')
+        plan = self.by_label(reviewed)['Plan']['key']
+        self.assertEqual((e.answers[plan]['status'], e.answers[plan]['text']), ('supported', 'Rest.'))
+        self.assertEqual(e.answers[plan]['evidence'], [{'quote': 'Plan: Rest.', 'start': 35, 'end': 46}])
+        self.assertTrue(e.answers[plan]['ordinary_relation'])
+        config = Job.objects.get(encounter=e).config
+        self.assertEqual(config['mode'], 'fixture')
+        self.assertEqual(config['model'], generation.SONNET_5_5)
+        self.assertEqual(config['request_profile']['profile'], 'claude-sonnet-5-5-ordinary-v1')
+        self.assertEqual(config['ordinary_field_contract'], 'ordinary-field-relations-v4')
         self.assertEqual(self.rows_post(e, reviewed, {}).status_code, 302)
         self.finalized(e); self.assertEqual(e.status, 'finalized')
         self.assertIn('Consent form signed and dated: ______________', part_text(private_path(e.export_path).read_bytes()))
