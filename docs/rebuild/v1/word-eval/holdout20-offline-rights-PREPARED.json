@@ -1,0 +1,171 @@
+{
+  "state": "PREPARED_MISSING_PERMISSION_DECISIONS",
+  "version": "original-holdout20-offline-rights-v1",
+  "manifest_sha256": "3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33",
+  "scope": "offline-synthetic-filled-copy-of-immutable-original",
+  "provider_upload_authorized": false,
+  "adjudicated_by": null,
+  "adjudicated_at": null,
+  "records": [
+    {
+      "holdout_id": "H01",
+      "original_sha256": "b50388c19e609e79d13e0f25fccac2995e7286481fede1c3930d46778ebfd926",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H02",
+      "original_sha256": "687e94896e4df9f48bac6622788d79a6f376110521957b9cd38dc2175897526a",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H03",
+      "original_sha256": "5adc1289b543681935fb30afd931a02d785f4a07d5c0801f98a861ee3a24808b",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H04",
+      "original_sha256": "3715f2f80889884afd1f014bcd369fa1c2a3a17059b3cab6a603ec559be1f308",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H05",
+      "original_sha256": "6b2cfc3a29f2683b0ed355816d1aeaa55cba8f00846864d429db2ea81312c3f3",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H06",
+      "original_sha256": "a7bf90d167b5100df402f2bec34ba1e67281ddcefb75428aba82b85db59c5874",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H07",
+      "original_sha256": "3d835f8834881bd352305542be889ded4d7ac500d13e97acd9714ba1e9361620",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H08",
+      "original_sha256": "b87238c11dd67f69cc334a5562d26122b42e591c44a0674f0dfaf4ba0bafe113",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H09",
+      "original_sha256": "430af1e02b915b2304c663f6c4e25c8af1f25a2ea1a02e4651f51ec7a4d4c366",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H10",
+      "original_sha256": "2bafe1a4cffeb777f8b52eda80fe940de9271bd854fde4badf44898b9324eb16",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H11",
+      "original_sha256": "ff923d7b8ed2cd549c6b74fc8d30dd3889d16c5dbbb464c844f69ec0e6159ba4",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H12",
+      "original_sha256": "870414ddbfefd522c9ed96b21b6f8356dac2b4d6d7ce5951e0ddd944b8544a6b",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H13",
+      "original_sha256": "ea693106c8c48eaa167872afb4c34410c3aecc899c0ee5eba8eef458f8a82238",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H14",
+      "original_sha256": "99b8c67312910b7ec8b27c78e0807933b332741e775ce90ba0bf0d2d439ee6c8",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H15",
+      "original_sha256": "d4ce44196f5a71d4b375ca3fd3c17b253d48cb4f841ca224c44c72cc4e6b9112",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H16",
+      "original_sha256": "f62811e31a3a6a8e912ce9d2673f4bf521424806d6afb62fe7ba2d7ac8dec66d",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H17",
+      "original_sha256": "d2c0100f61b91dd8ed9572f67224efcf228aab25ff1b56a8e8d3238885967d88",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H18",
+      "original_sha256": "0a9169f5e9d907b722c1ff501ad807448ad2eccad4128a984bcbbb3a8af8f614",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H19",
+      "original_sha256": "64e5706373fa14538f589fd1da535ff9fda261b6281f99148b3411cdc244ce1f",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    },
+    {
+      "holdout_id": "H20",
+      "original_sha256": "97fcbc6e17b62a7121fb62a2279ffceb21254c98c3e05e26f12d738d7339ef19",
+      "decision": null,
+      "offline_filled_copy_replay_supported": null,
+      "decision_basis": null,
+      "evidence": []
+    }
+  ]
+}
