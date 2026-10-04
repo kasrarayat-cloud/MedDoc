@@ -890,13 +890,13 @@ def v3_confirm(request,t):
             return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
         if latest.assistance.get('unresolved'):raise ValidationError('Resolve every mapping-assistance area before confirming this version.')
         if not latest.fields:raise ValidationError('This mapping has no fields. Add the form\'s answer areas before confirming it.')
-        from .import_binding import verify_review_places
-        verify_review_places(latest)
         # ⚠️ A box that does not exist can never be confirmed (it would only refuse at export, after the review).
         missing=v3_mapping.missing_boxes(latest.fields,v3_outline(t))
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
         off_box=v3_mapping.checkboxes_off_box(latest.fields)
         if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
+        from .import_binding import verify_review_places
+        verify_review_places(latest)
         # ⚠️ READ FROM THE ORIGINAL, NEVER FROM THIS MAPPING: a field on a signing, initials, consent or protected place
         # (or without the place's printed authorship/review requirement) can never be answered there, whoever put it
         # there - a removed engine field re-added by hand, a model proposal, or a version stored before this check.

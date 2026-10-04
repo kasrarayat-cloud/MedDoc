@@ -1,6 +1,7 @@
 """Existing imports recover through a fresh, linked inspection, never a changed provenance stamp."""
 import copy
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -219,6 +220,21 @@ class TemplateReinspection(V3Fixture, TestCase):
                 'mapping_version': invalid.pk, 'checked_every_field': 'on'})
             self.assertEqual(response.status_code, 400, change)
         self.assertFalse(MappingConfirmation.objects.exists()); self.assertFalse(Job.objects.exists()); self.assertFalse(Reservation.objects.exists())
+
+    def test_original_legacy_field_checkbox_and_dropdown_anchors_remain_reviewable(self):
+        from docx import Document
+        from documents.test_word_v3 import ff_field
+        document = Document(); document.add_paragraph('Synthetic clinical form')
+        paragraph = document.add_paragraph('Activity: ')
+        ff_field(paragraph, 'FORMDROPDOWN', options=('Rest', 'Exercise'), name='Activity')
+        paragraph = document.add_paragraph('Fever: ')
+        ff_field(paragraph, 'FORMCHECKBOX', checked=False, name='Fever')
+        stream = io.BytesIO(); document.save(stream)
+        template, current = self.uploaded(data=stream.getvalue(), name='Synthetic legacy field locations')
+        self.assertEqual({field['kind'] for field in current.fields}, {'choice', 'checkbox'})
+        current = self.confirm(template, current)
+        self.assertFalse(current.needs_confirmation)
+        self.assertEqual(self.new_encounter(current).status_code, 302)
 
     @override_settings(QUILLMD_WORD_ENGINE='legacy')
     def test_legacy_review_refuses_changed_physical_destination_and_missing_acknowledgement(self):
