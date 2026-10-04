@@ -62,6 +62,14 @@ def verify_bound(plan):
     require(not endpoint.is_symlink(), 'Recorded socket changed to a symlink.')
     meta = endpoint.lstat()
     require(stat.S_ISSOCK(meta.st_mode) and meta.st_uid == record['uid'], 'Recorded renderer socket owner/type changed.')
+    # A live recorded process and same-UID socket metadata do not prove that
+    # this endpoint still belongs to it: another process can replace the path.
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+        stream.settimeout(5)
+        stream.connect(str(endpoint))
+        observed = struct.unpack('3i', stream.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        validate_peer(record, observed, meta.st_uid)
+    validate_recorded(record, process_identity(record['pid']))
 
 
 def verify_inner(plan, settings):

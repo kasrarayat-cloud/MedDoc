@@ -1,11 +1,15 @@
-"""Pure matching/wrong peer controls; no actual socket or QA connection."""
+"""Matching/wrong local peer controls; no renderer, document or QA connection."""
 import ast
 import copy
 import hashlib
 import json
+import multiprocessing
+import os
 from pathlib import Path
+import socket
 import stat
 import struct
+import tempfile
 import types
 import unittest
 from unittest.mock import MagicMock, Mock, patch
@@ -98,14 +102,38 @@ class ExpectedRendererPeer(unittest.TestCase):
         with self.assertRaises(struct.error):
             self.binding()
 
-    def bound(self):
-        with patch.object(peer, 'process_identity', return_value=self.record), \
+    def bound(self, identities=None, settings=None):
+        with patch.object(peer, 'process_identity', side_effect=identities or [self.record, self.record]), \
              patch.object(peer.Path, 'is_symlink', return_value=False), \
-             patch.object(peer.Path, 'lstat', return_value=self.meta):
-            peer.verify_bound(self.plan)
+             patch.object(peer.Path, 'lstat', return_value=self.meta), \
+             patch.object(peer.socket, 'socket', return_value=self.stream):
+            return peer.verify_inner(self.plan, settings) if settings is not None else peer.verify_bound(self.plan)
 
     def test_same_recorded_process_and_exact_inner_settings_pass(self):
         self.bound()
+        self.stream.settimeout.assert_called_once_with(5)
+        self.stream.connect.assert_called_once_with(str(self.endpoint))
+        self.stream.getsockopt.assert_called_once_with(peer.socket.SOL_SOCKET, peer.socket.SO_PEERCRED, 12)
+
+    def test_same_uid_replacement_peer_is_denied_while_recorded_process_is_alive(self):
+        self.stream.getsockopt.return_value = struct.pack('3i', self.record['pid']+1, 1000, 1000)
+        with self.assertRaisesRegex(ValueError, 'not the recorded renderer'):
+            self.bound()
+
+    def test_start_time_change_during_reauthentication_is_denied(self):
+        with self.assertRaisesRegex(ValueError, 'PID/owner changed'):
+            self.bound(identities=[self.record, {**self.record, 'start_ticks': 23}])
+
+    def test_inner_settings_cannot_hide_same_uid_replacement_peer(self):
+        settings = types.SimpleNamespace(QUILLMD_LAYOUT_SOCKET=str(self.endpoint), QUILLMD_LAYOUT_SERVICE_UID='1000')
+        self.stream.getsockopt.return_value = struct.pack('3i', self.record['pid']+1, 1000, 1000)
+        with self.assertRaisesRegex(ValueError, 'not the recorded renderer'):
+            self.bound(settings=settings)
+
+    def test_malformed_credentials_during_reauthentication_refuse(self):
+        self.stream.getsockopt.return_value = b'bad'
+        with self.assertRaises(struct.error):
+            self.bound()
 
     def test_empty_inner_uid_original_failure_remains_denied(self):
         self.plan['layout_service_uid'] = ''
@@ -150,6 +178,84 @@ class ExpectedRendererPeer(unittest.TestCase):
         settings = types.SimpleNamespace(QUILLMD_LAYOUT_SOCKET='/tmp/foreign.sock', QUILLMD_LAYOUT_SERVICE_UID='1000')
         with patch.object(peer, 'verify_bound'), self.assertRaisesRegex(ValueError, 'Applied inner QA UID/socket differs'):
             peer.verify_inner(self.plan, settings)
+
+
+def local_peer(endpoint, ready):
+    """A bounded test-only listener; consumes no bytes or document frames."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.settimeout(10)
+        listener.bind(endpoint)
+        listener.listen()
+        ready.send(True)
+        ready.close()
+        for _ in range(8):
+            try:
+                stream, _ = listener.accept()
+            except socket.timeout:
+                return
+            stream.close()
+
+
+class ActualLocalPeer(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='qml-peer-')
+        self.endpoint = Path(self.temp.name) / 'sock'
+        self.children = []
+        self.addCleanup(self.clean)
+
+    def clean(self):
+        for child in self.children:
+            if child.is_alive():
+                child.terminate()
+            child.join(2)
+            if child.is_alive():
+                child.kill()
+                child.join(2)
+            self.assertFalse(child.is_alive())
+        self.temp.cleanup()
+
+    def start(self):
+        context = multiprocessing.get_context('fork')
+        parent, child_pipe = context.Pipe(duplex=False)
+        child = context.Process(target=local_peer, args=(str(self.endpoint), child_pipe))
+        self.children.append(child)
+        child.start()
+        child_pipe.close()
+        try:
+            self.assertTrue(parent.poll(5), 'Bounded local peer start did not complete.')
+            self.assertTrue(parent.recv())
+        finally:
+            parent.close()
+        return types.SimpleNamespace(pid=child.pid, poll=lambda: child.exitcode), child
+
+    def plan(self, server):
+        identity = peer.bind_server(server, self.endpoint)
+        self.assertEqual(identity['uid'], os.getuid())
+        return {'layout_server_identity': identity, 'layout_service_uid': str(identity['uid']),
+                'layout_socket': str(self.endpoint)}
+
+    def test_real_recorded_peer_passes_bound_and_inner_checks_without_document_bytes(self):
+        server, child = self.start()
+        plan = self.plan(server)
+        peer.verify_bound(plan)
+        settings = types.SimpleNamespace(QUILLMD_LAYOUT_SOCKET=str(self.endpoint), QUILLMD_LAYOUT_SERVICE_UID=plan['layout_service_uid'])
+        actual = peer.verify_inner(plan, settings)
+        self.assertEqual(actual['server_identity']['pid'], child.pid)
+        self.assertEqual(actual['provider_calls'], 0)
+
+    def test_real_same_uid_path_replacement_refuses_while_original_stays_alive(self):
+        server, original = self.start()
+        plan = self.plan(server)
+        self.endpoint.unlink()  # Only this test's owned temporary socket.
+        _, replacement = self.start()
+        self.assertNotEqual(original.pid, replacement.pid)
+        self.assertTrue(original.is_alive())
+        with self.assertRaisesRegex(ValueError, 'not the recorded renderer'):
+            peer.verify_bound(plan)
+        settings = types.SimpleNamespace(QUILLMD_LAYOUT_SOCKET=str(self.endpoint), QUILLMD_LAYOUT_SERVICE_UID=plan['layout_service_uid'])
+        with self.assertRaisesRegex(ValueError, 'not the recorded renderer'):
+            peer.verify_inner(plan, settings)
+        self.assertTrue(original.is_alive())
 
 
 class ExactSupportedLayoutPreparation(unittest.TestCase):
