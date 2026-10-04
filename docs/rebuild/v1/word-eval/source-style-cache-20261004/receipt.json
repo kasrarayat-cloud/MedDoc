@@ -1,0 +1,167 @@
+{
+  "base": "b3030c2aec1e86fb432804b224b06169a1af8d48",
+  "word_sha_before": "e9a7c5184ca341963196bbb325e25287af46cf5bba538a38a57c0d8da84c7868",
+  "word_sha_after": "5321bb3934c5f9fac37ee2b75b223c57c38bc5ed701b0785d9dfc7c22c266624",
+  "new_test_sha256": "621a856c37ab38e3d34c7d184ef6a0147cfdeb934dc777e1525e52deb065b826",
+  "runtime": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/d10-style-cache-b3030c2a",
+  "runtime_only_source_change": "rebuild/documents/word_v3.py",
+  "cache_scope": "One Detector and its immutable original Package; no process-global/cross-document/shared cache.",
+  "D10_direct_engine": [
+    {
+      "label": "short",
+      "request_sha256": "7121838b66b71ff2fa2566fc11f01d40d70c7962320b30fcaed30861cc3ca2fe",
+      "original_sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+      "baseline_cpu_seconds": 14.000240684,
+      "changed_cpu_seconds": 7.01034004,
+      "cpu_reduction_percent": 49.927003412079344,
+      "json_sha256": "2345376aa3682e087ba4558eeafda75f839a993b774e287e623bfe757a94ef16",
+      "docx_sha256": "0cb825236a6211b392ed68676c70b554c3a109b34aba2ee07539a12f710b4717",
+      "exact_e15_bytes": {
+        "json": true,
+        "document.docx": true,
+        "instrumented.docx": true
+      }
+    },
+    {
+      "label": "long",
+      "request_sha256": "3f7f236fcd3bbe35bf5c6b7ee569df54649fbfbde65d2e5804c6cb0a797a5309",
+      "original_sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+      "baseline_cpu_seconds": 12.784172101,
+      "changed_cpu_seconds": 6.892200430999999,
+      "cpu_reduction_percent": 46.08801902423638,
+      "json_sha256": "c9e1566cbde1c154d9a184def187eb1fddb42db3db2073a3089c6c30e836f039",
+      "docx_sha256": "2329d575d3e2bd2e5b0c12a96ec0c05ecbe7ac04a3f462c17e5aec68304a4c1c",
+      "exact_e15_bytes": {
+        "json": true,
+        "document.docx": true,
+        "instrumented.docx": true
+      }
+    }
+  ],
+  "D16": {
+    "mapping_equal": true,
+    "export_equal": true,
+    "refusals_equal": true,
+    "mapping_sha": "76ead96a67dd751bdd62231cf8c971533bf9d160da30e7fe22e3f5cd162d0efa",
+    "export_sha": "e5bcb259ee5d400fcf31ae2390565b120f45083aaa9b25a0c0df01358f1fa205",
+    "refusals": [
+      {
+        "slot": "word/document.xml#b/p[24]",
+        "code": "invalid_mapping",
+        "reason": "This place is a fixed underlined group heading, not an answer. Reinspect the original and choose one of its separate answer lines. Nothing was added."
+      },
+      {
+        "slot": "word/document.xml#b/p[28]",
+        "code": "invalid_mapping",
+        "reason": "This place is a fixed underlined group heading, not an answer. Reinspect the original and choose one of its separate answer lines. Nothing was added."
+      },
+      {
+        "slot": "word/document.xml#b/p[47]",
+        "code": "invalid_mapping",
+        "reason": "This place is a fixed underlined group heading, not an answer. Reinspect the original and choose one of its separate answer lines. Nothing was added."
+      }
+    ]
+  },
+  "focused_tests": {
+    "selectors": [
+      "documents.test_source_style_cache",
+      "documents.test_underlined_subheadings",
+      "documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles",
+      "documents.test_question_boxes.TabColumnOwnership.test_hidden_or_unknown_source_visibility_never_supplies_columns",
+      "documents.test_question_boxes.TabColumnOwnership.test_visibility_defaults_and_explicit_off_have_bounded_meaning",
+      "documents.test_question_boxes.TabColumnOwnership.test_inherited_stops_clear_override_and_same_indent_are_resolved"
+    ],
+    "methods": 22,
+    "failures": 0,
+    "errors": 0,
+    "passed": true,
+    "seconds": 16.957940894993953,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "5321bb3934c5f9fac37ee2b75b223c57c38bc5ed701b0785d9dfc7c22c266624",
+      "rebuild/documents/test_source_style_cache.py": "621a856c37ab38e3d34c7d184ef6a0147cfdeb934dc777e1525e52deb065b826",
+      "rebuild/documents/test_underlined_subheadings.py": "be45fd68d56468445daffe59356c224797af754f04998767df316e27b6fa9a6b",
+      "rebuild/documents/test_question_boxes.py": "038bfa09e1cd55dbd8a9004e20ec8196fc0fab56167ed19d632270ef48a4a4b1"
+    },
+    "source_unchanged": true,
+    "database_provider_renderer_network_calls": 0
+  },
+  "bounded_processes": {
+    "baseline": {
+      "phase": "baseline",
+      "pid": 3270905,
+      "actual_exit": 0,
+      "wall": 28.394354373012902,
+      "timed_out": false,
+      "reaped": true,
+      "deadline": 60,
+      "kill_grace": 10
+    },
+    "after": {
+      "phase": "after",
+      "pid": 3285776,
+      "actual_exit": 0,
+      "wall": 15.423899323999649,
+      "timed_out": false,
+      "reaped": true,
+      "deadline": 60,
+      "kill_grace": 10
+    },
+    "affected1": {
+      "phase": "affected1",
+      "pid": 3281950,
+      "actual_exit": 1,
+      "wall": 16.628648099998827,
+      "timed_out": false,
+      "reaped": true,
+      "deadline": 60,
+      "kill_grace": 10
+    },
+    "affected2": {
+      "phase": "affected2",
+      "pid": 3285439,
+      "actual_exit": 0,
+      "wall": 0.9188606450043153,
+      "timed_out": false,
+      "reaped": true,
+      "deadline": 60,
+      "kill_grace": 10
+    },
+    "affected-final": {
+      "phase": "affected-final",
+      "pid": 3290715,
+      "actual_exit": 0,
+      "wall": 17.132157202009694,
+      "timed_out": false,
+      "reaped": true,
+      "deadline": 60,
+      "kill_grace": 10
+    }
+  },
+  "preserved_test_expectation_correction": {
+    "first_result_sha256": "233ab4055c2646b74a2146028270b79e56785b0039f59858a92635f73f3d8d39",
+    "original_log_sha256": "de5c39ecc7dd3126d8e52cae4ce28e56567bdf900f62ea23a19b5af869080828",
+    "baseline_and_changed_proof_sha256": "4223a1f53625e81354e031dd7790dc9a651a0c82ee5946dfbe8d23f94476d86d",
+    "description": "New test incorrectly expected implicit missing default ID to return no layout properties. Both exact b303 and changed code return empty stops; both visibility readers refuse. Corrected test expectation only."
+  },
+  "source_diff_inventory_sha256": "fa7c1b290ab2e42c8b759ef2ed7f08f80bdb388790a712f472fcfba5b0806ec3",
+  "module_ast_before": "9ec575f3f0f90bdf36dd4d9ec7f8048113b1861c72259421252ec22f6f2d4658",
+  "module_ast_after": "b7c85b874f707f83687761a3c35591a56c7ce8513428678a5b9455ca483362bc",
+  "originals_and_source_unchanged_during_checks": true,
+  "provider_renderer_database_network_calls": 0,
+  "accepted_pins_changes": 0,
+  "cpu_limit_seconds": 12,
+  "worker_wall_limit_seconds": 20,
+  "threshold_changes": 0,
+  "application_qualification": false,
+  "independent_finished_diff_refutation": "pending integration owner",
+  "artifact_hashes": {
+    "baseline/result.json": "ba793725b0e6ae9914801b9ba03d4ad00682982eaeea6d96bd98eec99897226f",
+    "after/result.json": "9d366115802cc47bddf2970bc168251d46d7493388506bdeb67569a1bb488982",
+    "affected-final-result.json": "05486f68e273c5da4955d536639c8ce7b09c1a58143c045474141ca934fb5db0",
+    "source-diff-inventory.json": "fa7c1b290ab2e42c8b759ef2ed7f08f80bdb388790a712f472fcfba5b0806ec3",
+    "compare_engine.py": "f79112eccc89310030faa16861dc43828c57169d18284f736b5ea47f9c2a18bd",
+    "affected_final_tests.py": "c80e1e578da929adec3785d82cb26e706ef9a6a680a52805799da931d9721b85",
+    "run_bounded.py": "1b79e3a4cc5ae07a293128ddcd07ca25d4d1f3ae259e74cfe554d614fb278ef1",
+    "run_affected_final_bounded.py": "758b9fb641f04da2c1202cccde7c6e08d47dc351d80b41710260e7a71d463184"
+  }
+}
