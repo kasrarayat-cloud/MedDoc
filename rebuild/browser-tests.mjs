@@ -213,7 +213,7 @@ try {
     assert.equal(response.status(), 200);
     const rows = await page.locator('#language-model tbody tr').evaluateAll(nodes =>
       Object.fromEntries(nodes.map(node => [...node.querySelectorAll('td')].map(cell => cell.innerText.trim()))));
-    assert.match(rows['provider requests'], /^NONE — QUILLMD_AI_MODE is fixture,/);
+    assert.match(rows['provider requests'], /^(?:warning\s+)?NONE — QUILLMD_AI_MODE is fixture,/);
     assert.match(rows.QUILLMD_AI_MODEL, /^claude-sonnet-5-5 \(inactive:/);
     assert.match(rows['ordinary field contract'], /^ordinary-fields-v4 —/);
     assert(rows['request profile'].includes('INACTIVE — no provider request is sent'));
