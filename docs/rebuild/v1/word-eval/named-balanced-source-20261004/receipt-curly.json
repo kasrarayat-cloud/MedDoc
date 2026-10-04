@@ -1,0 +1,35 @@
+{
+  "source_commit": "87918644514bd2b394e5bc5a63236dd3b066e6d3",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-named-curly-source-20261004",
+  "source_clean": true,
+  "word_sha256": "7b59d644addbefc8d753a86bd73cd3a1eeb44a1d978e364aa47cb7f3e9c690f5",
+  "test_sha256": "7892ca459bfbb88baca3ed17cb4bfe897b3161c81d450a1941a844886d712f85",
+  "evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-curly-correction-20261004",
+  "artifact_seal_sha256": "efa65cf0b2c130ebe23c54c0e1ffb4b4725ffad1a10a7865bf9ef11f841455b7",
+  "artifact_files": 19,
+  "artifact_bytes": 137836,
+  "preceding_held_source": "ae2a04dbd5e6c15ef7f94938fa17e16e503bf207",
+  "exact_wrong_input_sha256": "2169212fde26ac2e2381869785083fe80c791973d25235201beb278aee14c9f0",
+  "affected_methods_passed": 4,
+  "actual_exit": 0,
+  "before_and_after_exact_original_exits": [
+    0,
+    0
+  ],
+  "children_reaped": true,
+  "independent_root_controls": 11,
+  "independent_root_wrong": 0,
+  "independent_result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-word-879-finished-refutation-20261004/result.json",
+  "independent_result_sha256": "223bfc517c78545101e42ba071f0a9c4b3f71f9c9cb18b8ebff94205996d0e37",
+  "database": 0,
+  "renderer": 0,
+  "provider": 0,
+  "whole_word_gates_met": false,
+  "native_word_verified": false,
+  "next": [
+    "D10 retained-PDF CPU optimization",
+    "current-candidate explicit D30 manager blank workflow on root lease",
+    "finite actual common-layout omission repair"
+  ],
+  "checkpoint_sha256": "3fc9835bfb02a91094ebd1011cc37ca30f8b2a0c48d4b7ae2ab0de9e17eec287"
+}
