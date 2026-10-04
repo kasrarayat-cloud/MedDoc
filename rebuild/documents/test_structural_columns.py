@@ -163,6 +163,29 @@ class CodedColumnSequences(unittest.TestCase):
                 self.assertEqual(carotid['header_index'], 1)
                 self.assertEqual([s['slot'].rsplit('/', 1)[1] for s in carotid['source']], ['p[5]', 'p[6]', 'p[7]'])
 
+    def test_repeated_row_uses_its_own_complete_printed_cell_prefix_without_changing_mapping(self):
+        cells = (['12b. Liver', '', '\tNo\tYes', 'Palpable\t1 ☐\t2 ☐', ''],
+                 ['12c. Spleen', '', '\tNo\tYes', 'Palpable\t1 ☐\t2 ☐', ''])
+        raw = data(coded_form(*cells)); fields, proposal = self.proposal(raw)
+        self.assertEqual(len(fields), 2)
+        for field, candidate, title in zip(fields, proposal['manifest']['candidates'], ('12b. Liver', '12c. Spleen')):
+            source = field['locator']['target']['column_sequence']
+            self.assertEqual(source['header_index'], 0)
+            self.assertEqual(len(source['source']), 2)  # Historical stored destinations remain unchanged.
+            model = candidate['rendered_source']; self.assertEqual(model['header_index'], 1)
+            self.assertEqual(model['source_occurrences'], 1)
+            self.assertEqual(''.join(item['text'] for segment in model['sequence'][0]['segments'] for item in segment), title)
+        prepared, actual, _ = layout_source.prepare(raw, mapping=proposal['fields'], answers={fields[0]['key']: 'Yes'})
+        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(actual)), fields[0]), [False, True])
+        self.assertTrue(all(candidate['rendered_source']['source_occurrences'] == 1 for candidate in prepared['manifest']['candidates']))
+
+    def test_duplicate_complete_cells_keep_ambiguous_printed_ownership(self):
+        cell = ['12b. Liver', '', '\tNo\tYes', 'Palpable\t1 ☐\t2 ☐', '']
+        fields, proposal = self.proposal(data(coded_form(cell, cell)))
+        self.assertEqual(len(fields), 2)
+        self.assertTrue(all(candidate['rendered_source']['source_occurrences'] == 2 for candidate in proposal['manifest']['candidates']))
+        self.assertEqual([field['locator']['target']['column_sequence']['header_index'] for field in fields], [0, 0])
+
     def test_response_codes_never_become_options_and_boxes_follow_their_header(self):
         cell = ['3.\tNeck', '\tYes\tNo', 'Supple\t1 ☐\t2 ☐', '', '\tNo\tYes', 'Masses\t2 ☐\t1 ☐', '',
                 'Jugular venous\tAbsent\tPresent', 'Distension\t1 ☐\t2 ☐', '']
@@ -436,7 +459,8 @@ class WitnessOwnsItsRendering(unittest.TestCase):
         result = containment(self.rendered(), candidates)
         self.assertEqual([(m['candidate'], m['header']['y']) for m in result['measurements']], [])
         self.assertEqual(len(result['held']), 4)
-        self.assertEqual([c['rendered_source']['source_occurrences'] for c in candidates], [2, 2, 2, 2])
+        self.assertEqual([c['rendered_source']['short_source_occurrences'] for c in candidates], [2, 2, 2, 2])
+        self.assertEqual([c['rendered_source']['source_occurrences'] for c in candidates], [1, 1, 1, 1])
         # Both rows answered 'Normal' (the common case): the export is refused, never verified from Spleen's lines.
         fields = [f for f in proposal['fields'] if f.get('layout_candidate') and f['label'] == 'Palpation']
         prepared, _, _ = layout_source.prepare(raw, mapping=proposal['fields'],
@@ -732,13 +756,14 @@ class NeverPrintedCharacters(PaintedFixture):
     """F1: two places that print the same thing count as two, whatever the source holds that never prints."""
 
     def form(self, spleen_header='\tNormal\tAbnormal', *, hidden=False, liver_header='\tNormal\tAbnormal', caps=False,
-             styled=False):
+             styled=False, same_title=False):
         from docx.oxml import OxmlElement
         from docx.enum.style import WD_STYLE_TYPE
         liver = ['12b.\tLiver', (liver_header, (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (4320, 5760)),
                  ('Tenderness\t1 ☐\t2 ☐', (4320, 5760))]
         spleen = ['12c.\tSpleen', (spleen_header, (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (2880, 4320)),
                   ('Tenderness\t1 ☐\t2 ☐', (2880, 4320))]
+        if same_title: spleen[0] = liver[0]
         doc = stopped_form([[liver, ['If abnormal,', 'describe below']], [spleen, ['']]], (6480, 2880))
         header = doc.tables[0].cell(1, 0).paragraphs[1]
         if hidden:
@@ -752,12 +777,12 @@ class NeverPrintedCharacters(PaintedFixture):
         return data(doc)
 
     def test_characters_that_never_print_do_not_make_a_repeated_place_unique(self):
-        for name, raw in (('soft hyphen', self.form('\tNor­mal\tAbnormal')),
-                          ('zero width space', self.form('\tNor​mal\tAbnormal')),
-                          ('word joiner', self.form('\tNor⁠mal\tAbnormal')),
-                          ('hidden run', self.form(hidden=True)),
-                          ('hidden by style', self.form(styled=True)),
-                          ('capitals by formatting', self.form('\tnormal\tabnormal', liver_header='\tNORMAL\tABNORMAL', caps=True))):
+        for name, raw in (('soft hyphen', self.form('\tNor­mal\tAbnormal', same_title=True)),
+                          ('zero width space', self.form('\tNor​mal\tAbnormal', same_title=True)),
+                          ('word joiner', self.form('\tNor⁠mal\tAbnormal', same_title=True)),
+                          ('hidden run', self.form(hidden=True, same_title=True)),
+                          ('hidden by style', self.form(styled=True, same_title=True)),
+                          ('capitals by formatting', self.form('\tnormal\tabnormal', liver_header='\tNORMAL\tABNORMAL', caps=True, same_title=True))):
             with self.subTest(name):
                 proposal, _, _ = layout_source.prepare(raw)
                 candidates = proposal['manifest']['candidates']
@@ -1195,6 +1220,13 @@ class WitnessGuards(PaintedFixture):
                          control='glyph')
         header = doc.sections[0].header
         header.paragraphs[0].text = '\tNormal\tAbnormal'; header.add_paragraph('Percussion\t1 ☐\t2 ☐')
+        proposal, _, _ = layout_source.prepare(data(doc))
+        counts = {c['source']['label']: c['rendered_source'].get('short_source_occurrences', c['rendered_source']['source_occurrences']) for c in proposal['manifest']['candidates']}
+        self.assertEqual(counts, {'Percussion': 2, 'Auscultation': 1})
+        # The header cannot supply the full own-cell title/header/row witness.
+        self.assertEqual({c['source']['label']: c['rendered_source']['source_occurrences'] for c in proposal['manifest']['candidates']},
+                         {'Percussion': 1, 'Auscultation': 1})
+        header.paragraphs[0].text = '10. Lungs'; header.paragraphs[1].text = '\tNormal\tAbnormal'; header.add_paragraph('Percussion\t1 ☐\t2 ☐')
         proposal, _, _ = layout_source.prepare(data(doc))
         counts = {c['source']['label']: c['rendered_source']['source_occurrences'] for c in proposal['manifest']['candidates']}
         self.assertEqual(counts, {'Percussion': 2, 'Auscultation': 1})
