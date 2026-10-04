@@ -1,5 +1,6 @@
 """Offline locator, ownership and actual bounded-child controls; zero host/DB/provider actions."""
 import io
+import errno
 import json
 from pathlib import Path
 import subprocess
@@ -57,7 +58,7 @@ class PrivateDependencyBundleTests(unittest.TestCase):
             original = Path.stat
             def stat(path, *args, **kwargs):
                 if path.name == 'temporary':
-                    raise FileNotFoundError('owned transient was removed')
+                    raise FileNotFoundError(errno.ENOENT, 'owned transient was removed', str(path))
                 return original(path, *args, **kwargs)
             with patch.object(Path, 'stat', stat): self.assertEqual(bundle.size(root), 5)
 
