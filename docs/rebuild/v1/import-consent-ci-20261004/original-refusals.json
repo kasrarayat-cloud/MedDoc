@@ -1,0 +1,97 @@
+{
+  "source": "6d44ff862d93f1e7f2f4a0fa85c329f33190dc0d",
+  "scope": "unchanged original authenticated confirmation requests; no provider or fixture recovery",
+  "actual_exit": 1,
+  "actual_methods": 2,
+  "failure_blocks": 4,
+  "test_seconds": "16.467",
+  "test_database_destroyed": true,
+  "capture_sha256": "3e3a4f6cb8c91d8829b61dc371e83eb02dec7f911996a1a1f8751dcb67e14258",
+  "raw_log_sha256": "c4257454d555b67d67b9056de267c1e2b4996ab91804a19f2a30ab8727807c83",
+  "results": [
+    {
+      "template_name": "r1-note1",
+      "http_status": 400,
+      "source_sha256": "253f21d063b608bb4bfaecef08c03579fa9a13214a4b64136b5ca8ab1e0d23b4",
+      "mapped_fields": 11,
+      "automatic_complete": false,
+      "block_generation": true,
+      "selected_issues": [
+        {
+          "id": "3bbc44b305dfd485e87588ef13ec20aa2966307a06f5e46bbe1ea72abf730f58",
+          "code": "human_signing_action",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[8]/tc[1]",
+          "detail": "This printed document action is human-owned. Complete it through the established signing workflow. Location: word/document.xml#b/tbl[0]/tr[8]/tc[1]"
+        }
+      ],
+      "jobs": 0,
+      "reservations": 0,
+      "usage": 0,
+      "confirmed": false
+    },
+    {
+      "template_name": "r1-note2",
+      "http_status": 400,
+      "source_sha256": "b3dcdbd8fb642cfc7af317fb9fe3a313b0deaa25f7621a390cc35ddff8e627ac",
+      "mapped_fields": 11,
+      "automatic_complete": false,
+      "block_generation": true,
+      "selected_issues": [
+        {
+          "id": "3bbc44b305dfd485e87588ef13ec20aa2966307a06f5e46bbe1ea72abf730f58",
+          "code": "human_signing_action",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[8]/tc[1]",
+          "detail": "This printed document action is human-owned. Complete it through the established signing workflow. Location: word/document.xml#b/tbl[0]/tr[8]/tc[1]"
+        }
+      ],
+      "jobs": 0,
+      "reservations": 0,
+      "usage": 0,
+      "confirmed": false
+    },
+    {
+      "template_name": "r1-note4",
+      "http_status": 400,
+      "source_sha256": "5f649f9467475a5fbcd761486b039b36d11ef733c8dbc53bf55aca7e48e54008",
+      "mapped_fields": 11,
+      "automatic_complete": false,
+      "block_generation": true,
+      "selected_issues": [
+        {
+          "id": "3bbc44b305dfd485e87588ef13ec20aa2966307a06f5e46bbe1ea72abf730f58",
+          "code": "human_signing_action",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[8]/tc[1]",
+          "detail": "This printed document action is human-owned. Complete it through the established signing workflow. Location: word/document.xml#b/tbl[0]/tr[8]/tc[1]"
+        }
+      ],
+      "jobs": 0,
+      "reservations": 0,
+      "usage": 0,
+      "confirmed": false
+    },
+    {
+      "template_name": "frozen N01 form",
+      "http_status": 400,
+      "source_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "mapped_fields": 11,
+      "automatic_complete": false,
+      "block_generation": true,
+      "selected_issues": [
+        {
+          "id": "8bc98dd6dd88823b77b44207e9c63e850742390ac50cad702d71b8185e9a4da8",
+          "code": "human_signing_action",
+          "part": "word/document.xml",
+          "slot": "b/tbl[9]/tr[0]/tc[0]/p[0]",
+          "detail": "This printed document action is human-owned. Complete it through the established signing workflow. Location: word/document.xml#b/tbl[9]/tr[0]/tc[0]/p[0]"
+        }
+      ],
+      "jobs": 0,
+      "reservations": 0,
+      "usage": 0,
+      "confirmed": false
+    }
+  ]
+}

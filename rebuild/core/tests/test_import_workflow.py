@@ -19,6 +19,7 @@ from core.models import Encounter, Template, TemplateVersion, Job, Reservation
 from core.security import private_path
 from .test_word_v3_workflow import V3Fixture, part_text
 from .test_workflow import TEST_SETTINGS
+from .consent_coverage_fixture import assert_unreviewed_consent_refused, review_protected_consent
 
 
 def raw(document):
@@ -336,6 +337,14 @@ class AutoImportWorkflow(V3Fixture,TestCase):
     AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-5-5',AI_INPUT_RATE='2',AI_OUTPUT_RATE='10',
     AI_CACHED_RATE='0.20',AI_THINKING='between_tools',AI_EFFORT='medium',AI_INFERENCE_GEO=''))
 class OrdinaryDefaultImport(V3Fixture,TestCase):
+    def test_frozen_original_consent_still_refuses_unreviewed_confirmation_and_coverage(self):
+        from ops import sonnet5_stages as stages
+        frozen=stages.frozen_inputs()
+        case=next(c for c in frozen['cases']['cases'] if c['id']=='N01')
+        built=stages.build_forms(Path(self.directory.name)/'frozen_forms','ordinary_notes',frozen)
+        template,version=self.uploaded(data=built[case['form']],name='frozen N01 unreviewed')
+        assert_unreviewed_consent_refused(self,template,version,'b/tbl[9]/tr[0]/tc[0]/p[0]')
+
     def test_real_new_upload_and_quote_compile_the_frozen_note_on_the_v4_default_route(self):
         from core import generation as g,v3_field_relations as r
         from ops import sonnet5_stages as stages
@@ -356,6 +365,8 @@ class OrdinaryDefaultImport(V3Fixture,TestCase):
             if name.startswith('supplemental'):
                 self.assertTrue(version.import_manifest['coverage']['new_import_v3_preference']['exact_ordinary_parity'])
                 self.assertEqual([f['label'] for f in version.fields],list(labels))
+            else:
+                version=review_protected_consent(self,template,version,'b/tbl[9]/tr[0]/tc[0]/p[0]')
             self.confirm(template,version)
             self.assertEqual(self.new_encounter(version,case['notes']).status_code,302)
             encounter=Encounter.objects.get(template_version=version)
@@ -375,6 +386,7 @@ class OrdinaryDefaultImport(V3Fixture,TestCase):
                 dispatch.assert_called_once()
             records.append({'scope':'authenticated upload/confirm/encounter/quote and exact request compilation; no provider',
                 'form':name,'source_sha256':template.sha256,'mapping':version.fields,'manifest':version.import_manifest,
+                'coverage_review':version.corrections.get('coverage_review',[]),
                 'notes_case':'N01','notes_sha256':hashlib.sha256(case['notes'].encode()).hexdigest(),
                 'freeze_manifest_sha256':frozen['freeze']['manifest_sha256'],'request':wire,'config':config})
         state=Path(os.environ.get('QUILLMD_STATE_DIR','/unavailable'))

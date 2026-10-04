@@ -17,6 +17,7 @@ from documents import word_v3 as w
 from .test_v3_ordinary_notes import LIVE, field, run, unit_response
 from .test_v3_ordinary_input import ordinary_input_form
 from .test_word_v3_workflow import V3Fixture, part_text
+from .consent_coverage_fixture import assert_unreviewed_consent_refused, review_protected_consent
 
 
 def cases():
@@ -228,12 +229,20 @@ class HistoryContextWorkflow(V3Fixture, TestCase):
         deny = patch('socket.socket.connect', side_effect=AssertionError('Network denied'))
         deny.start(); self.addCleanup(deny.stop)
 
+    def test_original_consent_destination_still_requires_explicit_partial_coverage_review(self):
+        case = cases()[0]
+        path = Path(self.directory.name) / (case['name'] + '.docx')
+        template, version = self.uploaded(data=ordinary_input_form(path, [f['label'] for f in case['fields']]),
+                                          name=case['name'])
+        assert_unreviewed_consent_refused(self, template, version, 'b/tbl[0]/tr[8]/tc[1]')
+
     def test_three_original_notes_worker_review_no_history_edit_finalize_download(self):
         for case in cases():
             with self.subTest(case=case['name']):
                 path = Path(self.directory.name) / (case['name'] + '.docx')
                 source = ordinary_input_form(path, [f['label'] for f in case['fields']])
                 template, version = self.uploaded(data=source, name=case['name'])
+                version = review_protected_consent(self, template, version, 'b/tbl[0]/tr[8]/tc[1]')
                 self.confirm(template, version)
                 self.new_encounter(version, notes=case['notes'])
                 encounter = Encounter.objects.latest('created_at')
@@ -254,6 +263,8 @@ class HistoryContextWorkflow(V3Fixture, TestCase):
                 job.refresh_from_db(); self.assertEqual(job.state, 'succeeded', job.error)
                 self.assertEqual(job.config['history_context_contract'], h.CONTRACT)
                 encounter.refresh_from_db(); original = copy.deepcopy(encounter.answers)
+                consent = next(f for f in version.fields if f['label'] == 'Consent obtained')
+                self.assertFalse(original[consent['key']]['text'])
                 page = self.client.get(f'/encounters/{encounter.pk}/')
                 rows = {row['label']: row for row in page.context['answer_rows']}
                 payload = {'revision': encounter.revision}
@@ -291,6 +302,11 @@ class HistoryContextWorkflow(V3Fixture, TestCase):
                 self.assertEqual(hashlib.sha256(exported).hexdigest(), encounter.export_sha256)
                 self.assertEqual(private_path(template.original_path).read_bytes(), source)
                 slots = w.SlotIndex(w.open_package(exported))
+                consent_slot = consent['locator']['part'] + '#' + consent['locator']['slot']
+                source_slots = w.SlotIndex(w.open_package(source))
+                from lxml import etree
+                self.assertEqual(etree.tostring(slots.by_id[consent_slot].el),
+                                 etree.tostring(source_slots.by_id[consent_slot].el))
                 for target in case['targets']:
                     for quote in target['original_selection']: self.assertIn(quote, part_text(exported))
                     f = next(f for f in version.fields if f['label'] == target['field'])
@@ -303,6 +319,8 @@ class HistoryContextWorkflow(V3Fixture, TestCase):
                     (folder / 'draft.html').write_bytes(page.content)
                     (folder / 'result.json').write_text(json.dumps({'notes': case['notes'], 'simulated_provider': True,
                         'automatic': original, 'assisted_labels': assisted, 'final': encounter.answers,
+                        'coverage_review': version.corrections['coverage_review'],
+                        'automatic_complete': version.import_manifest['coverage']['automatic_complete'],
                         'export_sha256': encounter.export_sha256}, indent=2))
 
     def test_forced_supported_context_cases_stay_held_on_page_unchanged_save_and_finalize(self):

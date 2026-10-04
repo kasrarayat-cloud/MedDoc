@@ -1,0 +1,86 @@
+{
+  "source_base": "6d44ff862d93f1e7f2f4a0fa85c329f33190dc0d",
+  "scope": "test-only explicit partial-coverage recovery; no automatic consent answer or provider qualification",
+  "unique_controls": 4,
+  "unique_controls_passed": 4,
+  "runs": [
+    {
+      "run": "recovery",
+      "actual_exit": 1,
+      "methods": 4,
+      "methods_passed": 2,
+      "test_seconds": "58.482",
+      "database_destroyed": true,
+      "log_sha256": "e5c384493d6c4780bd78bee56bc058d1a62c9abae5820ac27cf7c0d42fbe6feb",
+      "actual_capture_sha256": "b3ebf225279c340b8c31c88afd59382c7895df4d8a9ce975c2ba335c5dc2a891"
+    },
+    {
+      "run": "ordinary-recovery",
+      "actual_exit": 0,
+      "methods": 2,
+      "methods_passed": 2,
+      "test_seconds": "15.441",
+      "database_destroyed": true,
+      "log_sha256": "a352c6062365df9864bd0107a98158a77c5e7ef05854e31f1bd7089cb8aebf50",
+      "actual_capture_sha256": "131787814a52659c1d98ee172b6b385c471c1f2d50a11837d46a1ad1cb3c6c88"
+    }
+  ],
+  "first_recovery_error": "Two new helper assertions confused the issue paragraph with its checkbox /glyphs locator; retained before repair",
+  "historical_cases": {
+    "r1-note1": {
+      "original_sha256": "a3cc2ba87e9cb3ca3b1d77dea1b6f54e5687a61b549148ce4357ed2fae9e9ef6",
+      "export_sha256": "cc284a145bc38a366cee102bc94e667f225b3f12c1960e78a411b6d9f172d200",
+      "automatic_complete": false,
+      "assisted_labels": [
+        "Past medical history",
+        "Medications"
+      ],
+      "coverage_review": [
+        {
+          "id": "3bbc44b305dfd485e87588ef13ec20aa2966307a06f5e46bbe1ea72abf730f58",
+          "disposition": "leave_unchanged",
+          "reviewed_by": "0ab4225f-1c82-4ac0-9b4a-4b618224f0e9",
+          "source_sha256": "a3cc2ba87e9cb3ca3b1d77dea1b6f54e5687a61b549148ce4357ed2fae9e9ef6"
+        }
+      ]
+    },
+    "r1-note2": {
+      "original_sha256": "fbe46a11209947ac5d6cd99f72a5a16a0b52e0cf9cc55af31957a18f1c870fd6",
+      "export_sha256": "68ef914213b278bc12e095badcd7a9825dba3443eb45e95df1fe304068bb4fb6",
+      "automatic_complete": false,
+      "assisted_labels": [
+        "History of present illness",
+        "Past medical history"
+      ],
+      "coverage_review": [
+        {
+          "id": "3bbc44b305dfd485e87588ef13ec20aa2966307a06f5e46bbe1ea72abf730f58",
+          "disposition": "leave_unchanged",
+          "reviewed_by": "0ab4225f-1c82-4ac0-9b4a-4b618224f0e9",
+          "source_sha256": "fbe46a11209947ac5d6cd99f72a5a16a0b52e0cf9cc55af31957a18f1c870fd6"
+        }
+      ]
+    },
+    "r1-note4": {
+      "original_sha256": "ba983b62fade42d4028c0ad31144e8ec2f015289dfc99fa32580d5ddefa6f206",
+      "export_sha256": "4d6c3a37636a043b2ca5a4a0f533627698f7336f8d5835aad971cc17dbadc651",
+      "automatic_complete": false,
+      "assisted_labels": [
+        "Medications",
+        "Allergies",
+        "Smoker"
+      ],
+      "coverage_review": [
+        {
+          "id": "3bbc44b305dfd485e87588ef13ec20aa2966307a06f5e46bbe1ea72abf730f58",
+          "disposition": "leave_unchanged",
+          "reviewed_by": "0ab4225f-1c82-4ac0-9b4a-4b618224f0e9",
+          "source_sha256": "ba983b62fade42d4028c0ad31144e8ec2f015289dfc99fa32580d5ddefa6f206"
+        }
+      ]
+    }
+  },
+  "providers_contacted": 0,
+  "installed_mutations": 0,
+  "initial_refusals_preserved": true
+}
