@@ -7,20 +7,33 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
+from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 from core import generation as g, v3_field_relations as relations
-from core.tests.test_v3_supersession_floor import SONNET_55_DEFAULT
 from ops import provider_campaign as pc, standing_qa as st, standing_qa_elicited as elicited
 
 
 CANONICAL = Path(__file__).parents[3] / 'docs/foundation/mutations/20261004-quillmd-v1-standing-api-testing-5.md'
+# Standalone ops discovery has settings but no Django application registry. Keep
+# this process-only fixture independent of core workflow tests and their models.
+SONNET_55_DEFAULT = dict(AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL=g.SONNET_5_5,
+                        AI_INPUT_RATE='2', AI_OUTPUT_RATE='10', AI_CACHED_RATE='0.20',
+                        AI_EFFORT='medium', AI_INFERENCE_GEO='', V3_FIELD_RELATIONS=False,
+                        V3_HISTORY_CONTEXT=False, V3_GENERATION_BATCHES=False)
 
 
 @override_settings(**dict(SONNET_55_DEFAULT, AI_THINKING='between_tools', V3_FIELD_RELATIONS_SWITCH=False,
                          SYNTHETIC_ONLY=True, QUILLMD_DATA_MODE='synthetic',
                          **st.expected_settings(elicited.STAGE)))
 class ElicitedProcessPricing(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Materialize settings before SimpleTestCase applies the class override;
+        # standalone unittest has not configured them through manage.py.
+        settings.AI_MODE
+        super().setUpClass()
+
     def setUp(self):
         self.declaration = st.declared_standing(CANONICAL, uses=('live',), out=io.StringIO())
         # Retain deterministic blank forms for inspection; no credential, database or provider is used.
