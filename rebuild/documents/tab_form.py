@@ -234,18 +234,22 @@ def fill_tabs(path, output, parts, fields, answers, also_changed=()):
                 changed.add(anchor['part'])
             paired[(anchor['part'], anchor['paragraph'])].append((anchor['run'], answer))
     # Word flows short paired answers in the original inline arrangement. Long
-    # or multiline pairs separate at the original separator (not an appendix),
-    # keeping the next question independent of the preceding answer's expansion.
+    # or multiline pairs continue within an answered run. The original ordinary
+    # separator tab and its run belong to the printed questions and stay intact.
+    # A missing first answer keeps its blank run; the second answer can start
+    # below its own label without changing that neighboring blank destination.
     for (part, paragraph_index), group in paired.items():
         if len(group) < 2 or not any(len(value) > 40 or '\n' in value or '\r' in value or '\t' in value for _, value in group):
             continue
         paragraph = paragraphs[part][paragraph_index]
         runs = paragraph.findall(qn('w:r'))
-        for (first, _), (second, _) in zip(group, group[1:]):
-            for run in runs[first + 1:second]:
-                tab = run.find(qn('w:tab'))
-                if tab is not None:
-                    run.replace(tab, OxmlElement('w:br'))
+        for (first, first_answer), (second, second_answer) in zip(group, group[1:]):
+            if first_answer:
+                runs[first].append(OxmlElement('w:br'))
+            elif second_answer:
+                run = runs[second]
+                index = 1 if len(run) and run[0].tag == qn('w:rPr') else 0
+                run.insert(index, OxmlElement('w:br'))
         _flowing(paragraph)
         changed.add(part)
     # python-docx saving normalizes unrelated package parts. Copy the retained
