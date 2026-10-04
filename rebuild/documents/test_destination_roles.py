@@ -1025,3 +1025,30 @@ class ByteStableNoOpBoxes(unittest.TestCase):
         self.assertIn('Ordinary text with',xml(out))
         p=w.SlotIndex(w.open_package(out)).by_id[BODY+'b/p[0]']
         self.assertEqual(w.text_of(p.el),'Choices? ☒ Before: Ordinary text with ☐ and ☒ ☒ After')
+
+
+class OriginalArchiveComments(unittest.TestCase):
+    def original(self, comment):
+        raw=ByteStableNoOpBoxes().form()
+        stream=io.BytesIO(raw)
+        with zipfile.ZipFile(stream,'a') as archive:archive.comment=comment
+        return stream.getvalue()
+
+    def test_changed_body_preserves_original_archive_comment_and_untouched_footer(self):
+        for comment in (b'',b'Synthetic archive comment',b'Binary\x00comment\nretained'):
+            with self.subTest(comment=comment):
+                raw=self.original(comment);fields,box,plan=ByteStableNoOpBoxes().fields(raw)
+                out=w.fill(raw,fields,{plan['key']:'Complete synthetic plan',box['key']:False})
+                old=zipfile.ZipFile(io.BytesIO(raw));new=zipfile.ZipFile(io.BytesIO(out))
+                self.assertEqual(new.comment,comment)
+                self.assertEqual(new.read('word/footer1.xml'),old.read('word/footer1.xml'))
+                self.assertIn('Complete synthetic plan',xml(out))
+
+    def test_changed_footer_preserves_archive_comment_and_untouched_body(self):
+        raw=self.original(b'Footer tick with retained archive comment')
+        fields,box,plan=ByteStableNoOpBoxes().fields(raw)
+        out=w.fill(raw,fields,{box['key']:True})
+        old=zipfile.ZipFile(io.BytesIO(raw));new=zipfile.ZipFile(io.BytesIO(out))
+        self.assertEqual(new.comment,old.comment)
+        self.assertEqual(new.read('word/document.xml'),old.read('word/document.xml'))
+        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),box),[True])

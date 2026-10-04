@@ -278,6 +278,7 @@ class Package:
         compression, same metadata)."""
         out = io.BytesIO()
         with zipfile.ZipFile(out, "w") as target:
+            target.comment = self.zip.comment
             for info in self.infos:
                 if info.filename in changed:
                     xml = etree.tostring(changed[info.filename], xml_declaration=True, encoding="UTF-8", standalone=True)
