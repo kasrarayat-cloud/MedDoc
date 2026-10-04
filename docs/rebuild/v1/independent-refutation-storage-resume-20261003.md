@@ -50,3 +50,22 @@ This is supplemental safety evidence, not automatic whole-corpus acceptance.
 
 - `root-other-refutation-eaf62259/result.json`: `6508a4d7684f8f55aee3872df5272f5fabb1144fe1472d6b0d118cb9ebb16f3c`
 - `root-other-refutation-4571a49f/result.json`: `2c89319b91924d48d63169bda39c0413f935134174efaefe6c9559a37c0faa3e`
+
+## Reviewed nominal/observation ownership — 2026-10-04
+
+The finishedd3ce0959 diff was not integrated after an independent37-input actual
+answer/page/finalization packet found six demonstrated wrong releases: five
+`No polyps were seen` answers survived report/observation/finding/results/record
+source invalidation, and `The doctor underwent colonoscopy. Procedure. Diagnostic
+colonoscopy.` supplied the patient's procedure. All six ordinary positive
+controls remained useful. Exact inputs, complete signed output and source hashes
+remain in `root-reviewed-source-refutation-d3ce0959`. The diff stays held pending
+a structural repair and a new finished-source refutation.
+
+The first instrument also flagged a faithful `No polyps were reportedly seen.`
+answer. That claim is withdrawn: its uncertainty and complete source quote were
+retained. It is an expectation error, not an application counterexample. Both
+the original raw37-input result and separate adjudication remain immutable.
+
+- `root-reviewed-source-refutation-d3ce0959/result.json`: `e90abf9abc816d23f1829a0caf02ee4c494532293a6286dd74bc23bae8fffcc4`
+- `root-reviewed-source-refutation-d3ce0959/adjudication.json`: `caef003f6a4bf94a662dd4b3527c4bdeeb7286ea210542a8e003b7c1f31fc97d`
