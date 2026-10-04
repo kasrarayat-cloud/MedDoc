@@ -376,9 +376,36 @@ class PrivateV1InstallAdapterTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('v1_install_cli_contract', ROOT / 'scripts/activate-v1-private-install.py')
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         prepared = json.dumps({'format': 'quillmd-v1-private-install-declaration-v1', 'status': 'prepared', 'baseline': p.BASELINE}).encode()
-        with patch.object(module, 'git', side_effect=['a'*40, '']), patch.object(module, 'source_file', return_value=prepared):
+        # The normal door is intentionally host-scoped. Supply its canonical
+        # retained-worktree identity even on GitHub's /home/runner source copy;
+        # the source reader remains mocked, and no installed state is accessed.
+        retained = module.ROOT / '.worktrees/prepared-cli-contract'
+        with patch.object(module, 'SOURCE', retained), \
+                patch.object(module, 'git', side_effect=['a'*40, '']) as git, \
+                patch.object(module, 'source_file', return_value=prepared) as source, \
+                patch.object(module, 'catalog_file') as catalog_reader, \
+                patch.object(module, 'live_source') as installed_reader:
             with self.assertRaisesRegex(ValueError, 'prepared, not frozen'):
                 module.validate_source('a'*40, 'docs/foundation/mutations/prepared.json')
+            self.assertEqual(git.call_count, 2)
+            source.assert_called_once_with('docs/foundation/mutations/prepared.json', 'a'*40)
+            catalog_reader.assert_not_called(); installed_reader.assert_not_called()
+
+    def test_ci_or_unretained_source_and_short_revision_refuse_before_any_source_or_installed_reader(self):
+        spec = importlib.util.spec_from_file_location('v1_install_unretained_source', ROOT / 'scripts/activate-v1-private-install.py')
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        cases = [(Path('/home/runner/work/MedDoc/MedDoc'), 'a'*40),
+                 (module.ROOT / 'rebuild', 'a'*40),
+                 (module.ROOT / '.worktrees/prepared-cli-contract', 'a'*8)]
+        for source_path, target in cases:
+            with self.subTest(source=str(source_path), target=target), \
+                    patch.object(module, 'SOURCE', source_path), patch.object(module, 'git') as git, \
+                    patch.object(module, 'source_file') as source, patch.object(module, 'catalog_file') as catalog_reader, \
+                    patch.object(module, 'live_source') as installed_reader, \
+                    self.assertRaisesRegex(ValueError, 'full revision and its retained target worktree'):
+                module.validate_source(target, 'docs/foundation/mutations/prepared.json')
+            git.assert_not_called(); source.assert_not_called()
+            catalog_reader.assert_not_called(); installed_reader.assert_not_called()
 
     def test_catalog_receipt_is_hash_named_private_evidence_and_cannot_read_an_arbitrary_secret_path(self):
         spec = importlib.util.spec_from_file_location('v1_install_catalog_receipt', ROOT / 'scripts/activate-v1-private-install.py')
