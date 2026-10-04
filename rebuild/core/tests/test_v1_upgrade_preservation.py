@@ -169,8 +169,9 @@ class InstalledBaselineUpgradePreservation(TransactionTestCase):
         targets = executor.loader.graph.leaf_nodes()
         plan = executor.migration_plan(targets)
         forward = [(m.app_label, m.name) for m, backwards in plan if not backwards and m.app_label == 'core']
-        self.assertEqual(len(forward), 19)
+        self.assertEqual(len(forward), 20)
         self.assertIn(('core', '0029_merge_batch_disposition'), forward)
+        self.assertIn(('core', '0038_reinspection_confirmation_guard'), forward)
         source = Path(__file__).resolve().parents[1] / 'migrations'
         hashes = {name: hashlib.sha256((source / (name + '.py')).read_bytes()).hexdigest()
                   for _, name in forward}

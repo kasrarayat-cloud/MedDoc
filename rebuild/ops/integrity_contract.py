@@ -69,9 +69,9 @@ FUNCTION_SHA256 = {
     'quillmd_batch_guard': '46ea1e09a3598d289b5df9b114a4a4b8e74a314591a9abb6253510da78960c4f',
     'quillmd_batch_job_guard': '7c5d4fd727d326316f13c2d6b6b562fffe1144ff5cac18a016a0777d3d3608f5',
     'quillmd_batch_part_guard': '96683f9a1eec23b40f2f13b52198870c7405b1434c14daea6fb25b8a743536fb',
-    # 0031: the 0003 body plus the confirmation gate (an unconfirmed contract v3 mapping starts no document) and the
-    # hold (a document on one is never finalized).
-    'quillmd_encounter_guard': '580e426b543a237ad47fd28b427b522eae312320259793b7f3052101d33c55ae',
+    # 0038: the unchanged 0031 encounter body with its exact-version confirmation predicate also covering
+    # immutable reinspection markers, including malformed marker values. Trigger membership is unchanged.
+    'quillmd_encounter_guard': '3d174c3dcd7986a7bac9443f1e6a07a83123ad655544606ea41b409b83642d74',
     # 0032: the 0025 body plus one path, a hold or release replayed from the journal whose replay marker names this
     # exact row (its journaled custodian, or the replaying one only when that account is absent; a release only when
     # the two markers' signed entries name two custodians). Every other hold or release keeps 0025's rules.
