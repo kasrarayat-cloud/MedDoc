@@ -954,3 +954,134 @@ class SourceCoverage(unittest.TestCase):
             self.assertEqual(refusal.exception.code,'unqualified_layout')
             different=Document();different.add_paragraph('Plan: ______')
             self.assertIsNone(word_v3.inspect(data(different))['layout_quarantine'])
+
+
+class TerminalChoiceWriteIns(unittest.TestCase):
+    def form(self, *, control='glyph', checked=False, caption='Other, specify:', nested=False, question='Current symptoms (choose one):'):
+        from .test_word_v3 import checkbox_control
+        doc=Document()
+        if nested:
+            outer=doc.add_table(rows=1,cols=1).cell(0,0);outer.text='Clinical history'
+            table=outer.add_table(rows=1,cols=2);owner=table.cell(0,0);owner.text=question
+            neighbor=table.cell(0,1);neighbor.text='Past symptoms (choose one):'
+            neighbor.add_paragraph('☐ Yes');neighbor.add_paragraph('☐ No')
+            paragraphs=[owner.add_paragraph(),owner.add_paragraph()]
+        else:
+            doc.add_paragraph(question);paragraphs=[doc.add_paragraph(),doc.add_paragraph()]
+        for index,p in enumerate(paragraphs):
+            value=index==1 and checked
+            if control=='ff':ff_field(p,'checkbox',checked=value,name='terminal'+str(index))
+            elif control=='sdt':p._p.append(checkbox_control(checked=value))
+            else:p.add_run('☒' if value else '☐')
+            p.add_run(' '+('Yes' if index==0 else caption))
+        doc.add_paragraph('Unrelated notes: ______')
+        return data(doc)
+
+    def mapped(self, raw):
+        result=word_v3.inspect(raw)
+        blanks=[f for f in result['fields']if f.get('source_questions')and f['source_questions'][0]['relation']=='adjacent_checkbox_answer'
+                and f['locator']['target'].get('shape')=='after_label']
+        self.assertEqual(len(blanks),1,'A terminal source-labelled Other answer was omitted')
+        blank=blanks[0];owner=next(f for f in result['fields']if f['locator']['target']==blank['source_questions'][0]['owner_target'])
+        return result,blank,owner
+
+    def test_terminal_caption_keeps_control_and_complete_long_answer_separate(self):
+        for control,nested in (('glyph',False),('sdt',False),('ff',False),('ff',True)):
+            with self.subTest(control=control,nested=nested):
+                raw=self.form(control=control,nested=nested);result,blank,owner=self.mapped(raw)
+                self.assertEqual(owner['options'],['Yes','Other, specify'])
+                self.assertEqual(blank['label'],'Other, specify:')
+                self.assertEqual(word_v3.fill(raw,result['fields'],{}),raw)
+                answer='Synthetic retained detail.\n'+'Complete long detail; '*70
+                out=word_v3.fill(raw,result['fields'],{owner['key']:'Other, specify',blank['key']:answer})
+                before=word_v3.SlotIndex(word_v3.open_package(raw));after=word_v3.SlotIndex(word_v3.open_package(out))
+                self.assertEqual(word_v3.constrained_scalar_value(before,after,blank,True),answer.strip())
+                # Readback normalizes surrounding whitespace; the physical
+                # destination must nevertheless retain the entire supplied text.
+                identity=blank['locator']['part']+'#'+blank['locator']['slot']
+                self.assertTrue(word_v3.paragraph_text(after.by_id[identity].el)[0].endswith(answer))
+                self.assertEqual(word_v3.constrained_option_states(after,owner),[False,True])
+                self.assertEqual(Document(io.BytesIO(out)).paragraphs[-1].text,'Unrelated notes: ______')
+                with ZipFile(io.BytesIO(raw))as old,ZipFile(io.BytesIO(out))as new:
+                    self.assertTrue(all(old.read(n)==new.read(n)for n in old.namelist()if n!='word/document.xml'))
+
+    def test_selected_original_is_usable_but_no_tick_or_resolution_is_invented(self):
+        for checked in (False,True):
+            raw=self.form(control='ff',checked=checked,caption='Other known:');result,blank,owner=self.mapped(raw)
+            if not checked:
+                with self.assertRaises(word_v3.V3Failure)as error:word_v3.fill(raw,result['fields'],{blank['key']:'Synthetic cause'})
+                self.assertEqual(error.exception.code,'conditional_answer_unselected')
+            else:
+                out=word_v3.fill(raw,result['fields'],{blank['key']:'Synthetic cause'})
+                self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),owner),[False,True])
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,result['fields'],{owner['key']:'Yes',blank['key']:'Synthetic cause'})
+
+    def test_stale_removed_copied_changed_or_unowned_terminal_mapping_is_refused(self):
+        raw=self.form();result,blank,owner=self.mapped(raw)
+        for change in ('relation','renamed','copied','widened','no_owner','wrong_owner'):
+            with self.subTest(change=change):
+                fields=deepcopy(result['fields']);field=next(f for f in fields if f['key']==blank['key'])
+                if change=='relation':field.pop('source_questions')
+                elif change=='renamed':field['label']='Some other answer'
+                elif change=='copied':field['locator']['target']['copies']=[deepcopy(field['locator'])]
+                elif change=='widened':field['locator']['target']['start']=0
+                elif change=='wrong_owner':field['source_questions'][0]['owner_label']='Other question'
+                else:fields.remove(next(f for f in fields if f['key']==owner['key']))
+                with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,fields,{owner['key']:'Other, specify',blank['key']:'Synthetic detail'})
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(self.form(caption='Other known:'),result['fields'],{owner['key']:'Other, specify',blank['key']:'Synthetic detail'})
+
+    def test_glyph_readback_is_source_owned_and_keeps_answer_glyphs_literal(self):
+        raw=self.form();result,blank,owner=self.mapped(raw)
+        answer='Clinical detail contains a literal ☐ and ☒; neither is an option.'
+        out=word_v3.fill(raw,result['fields'],{owner['key']:'Other, specify',blank['key']:answer})
+        before=word_v3.SlotIndex(word_v3.open_package(raw));after=word_v3.SlotIndex(word_v3.open_package(out))
+        self.assertEqual(word_v3.constrained_scalar_value(before,after,blank,True),answer)
+        self.assertEqual(word_v3.effective_values(raw,result['fields'],{owner['key']:'Other, specify',blank['key']:answer})[blank['key']],answer)
+        for change in ('caption','source','owner','boxes','fingerprint'):
+            with self.subTest(change=change):
+                forged=deepcopy(blank)
+                if change=='caption':forged['label']='Some other clinical answer'
+                elif change=='source':forged['source_questions'][0]['source_text']='Some other printed source'
+                elif change=='owner':forged['source_questions'][0]['owner_label']='Some other question'
+                elif change=='boxes':forged['source_questions'][0]['owner_target']['boxes'][-1]['glyph']=999
+                else:forged['locator']['fingerprint']='not-this-original'
+                self.assertIsNone(word_v3.constrained_scalar_value(before,after,forged,True))
+        identity=blank['locator']['part']+'#'+blank['locator']['slot']
+        for change in ('caption','unknown_box'):
+            changed=word_v3.SlotIndex(word_v3.open_package(out))
+            paragraph=changed.by_id[identity].el
+            for node in paragraph.iter(word_v3.q('w:t')):
+                if change=='caption' and node.text and 'Other, specify:' in node.text:
+                    node.text=node.text.replace('Other, specify:','Another caption:')
+                elif change=='unknown_box' and node.text=='☒':node.text='X'
+            self.assertIsNone(word_v3.constrained_scalar_value(before,changed,blank,True))
+        different=word_v3.SlotIndex(word_v3.open_package(self.form(caption='Other known:')))
+        self.assertIsNone(word_v3.constrained_scalar_value(different,after,blank,True))
+
+    def test_nested_write_in_does_not_authorize_caption_cell_or_signing_neighbor(self):
+        raw=self.form(control='ff',nested=True);result,blank,owner=self.mapped(raw)
+        identity=blank['locator']['part']+'#'+blank['locator']['slot']
+        index=word_v3.SlotIndex(word_v3.open_package(raw));cell=index.by_id[identity].parent
+        for target in ({'type':'cell_append'},{'type':'cell_replace','all':True}):
+            forged=deepcopy(blank);forged['label']='Ordinary narrative';forged.pop('source_questions')
+            forged['locator'].update(slot=cell.path,fingerprint=word_v3.fingerprint(cell.el),target=target)
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[*result['fields'],{**forged,'key':'forged'}],{'forged':'Dr Synthetic Finalizer'})
+        doc=Document(io.BytesIO(raw));doc.add_paragraph('I certify that I witnessed the patient sign this form.')
+        doc.add_paragraph('Witness name: ______');protected=data(doc)
+        mapped,blank,owner=self.mapped(protected)
+        out=word_v3.fill(protected,mapped['fields'],{owner['key']:'Other, specify',blank['key']:'Synthetic detail'})
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[-2].text,doc.paragraphs[-2].text)
+        self.assertEqual(Document(io.BytesIO(out)).paragraphs[-1].text,'Witness name: ______')
+        signature=next(f for f in mapped['fields']if f['label'].startswith('Witness name'))
+        signature=deepcopy(signature);signature.update(kind='text',label='Ordinary narrative');signature.pop('write_protected',None);signature.pop('destination_roles',None)
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(protected,[signature],{signature['key']:'Dr Synthetic Finalizer'})
+
+    def test_unresolved_tail_and_human_source_do_not_gain_a_writer(self):
+        for caption,question in (('Other details: More instructions','Current symptoms:'),('Other','Current symptoms:'),
+                ('Other: _____ Location: _____','Current symptoms:'),('Other (I certify this document):','Current symptoms:'),
+                ('Other, specify:','Witness attestation:'),('Other, specify:','1. I approve this document:'),
+                ('Other, specify:','This section is for Alex Reed to write comments:')):
+            with self.subTest(caption=caption,question=question):
+                raw=self.form(caption=caption,question=question);result=word_v3.inspect(raw)
+                self.assertFalse([f for f in result['fields']if f.get('source_questions')and f['source_questions'][0]['relation']=='adjacent_checkbox_answer'])
+                self.assertEqual(word_v3.fill(raw,result['fields'],{}),raw)

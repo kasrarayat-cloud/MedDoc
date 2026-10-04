@@ -3007,6 +3007,20 @@ class Detector:
             self.coverage_issue(slot, code, reason + ' Location: ' + slot.id)
             return None
         spans = self.blank_spans(text, pieces)
+        if not spans and slot.part == 'word/document.xml' and self.tab_source_visible(slot):
+            # A terminal colon appoints an answer after this option's complete
+            # printed label. Keep this finite Other frame separate from a
+            # sentence, another question or an arbitrary qualifier/predicate.
+            tail = text[positions[-1] + 1:]
+            terminal = re.fullmatch(r"\s*(Other(?:\s+[\w'-]+|,\s*(?:please\s+)?specify|"
+                                   r'\s+\((?:please\s+)?specify\))?)\s*:\s*', tail, re.I)
+            if (terminal and len(tail.strip()) <= MAX_MAPPING_LABEL
+                    and not hyperlink_write(pieces, len(text), len(text))
+                    and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                                for n in slot.el.iter())):
+                return {'start': len(text), 'end': len(text), 'shape': 'after_label',
+                        'label': tail.strip(), 'option': option_text(terminal[1]),
+                        'condition': 'printed_option', 'box': len(positions) - 1, 'terminal_label': True}
         if (slot.part != 'word/document.xml' or len(spans) != 1 or not self.tab_source_visible(slot)
                 or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in slot.el.iter())):
             return None
@@ -3358,9 +3372,14 @@ class Detector:
             context = ' > '.join(x for x in (owner.context, owner.label,
                 ('Only when the printed option ' + owner.options[position] + ' is selected')
                     if plan['condition'] == 'printed_option' else 'Separate labelled answer: ' + label) if x)
-            if (len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT
-                    or self.question_box_signing(label) or self.question_box_signing(context)
-                    or self.question_box_signing(owner.label + ':')):
+            if plan.get('terminal_label'):
+                printed = [label, owner.label, *owner.context.split(' > ')]
+                human_source = any(self.checkbox_source_action(LIST_MARKER.sub('', value.strip()), governing=True)
+                                   or signing_place(value) for value in printed)
+            else:
+                human_source = (self.question_box_signing(label) or self.question_box_signing(context)
+                                or self.question_box_signing(owner.label + ':'))
+            if len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT or human_source:
                 continue
             source = {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
             owner_ref = {'part': owner.slot.part, 'slot': owner.slot.path, 'fingerprint': fingerprint(owner.slot.el)}
@@ -8809,6 +8828,14 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             region = {'place': area.label_slot.parent.id, 'start': None, 'end': None}
             if not any(reader.touches(place, region) for place in reader.of(field)):
                 continue
+            # The same original-source compiler can qualify one separate
+            # conditional write-in beside these options. Its exact relationship
+            # is checked below; it never grants a generic writer inside the cell.
+            if any(loc.get('part') == adjacent.slot.part and loc.get('slot') == adjacent.slot.path
+                   and target == adjacent.target and field.get('kind') == adjacent.kind
+                   and field.get('label') == adjacent.label and field.get('context') == adjacent.context
+                   and field.get('source_questions') == adjacent.source_questions for adjacent in adjacent_answers):
+                continue
             if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
                     or target != area.target or field.get('kind') != area.kind
                     or field.get('label') != area.label or field.get('context') != area.context
@@ -8828,7 +8855,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 fail('The complete printed write request and answer area changed. Review its exact mapping again.',
                      'mapping_mismatch')
         for area in adjacent_answers:
-            region = {'place': area.slot.id, 'start': area.target['start'], 'end': area.target['end']}
+            region = {'place': area.slot.id, 'start': area.target['start'],
+                      'end': area.target['start'] + 1 if area.target.get('shape') == 'after_label' else area.target['end']}
             if not any(reader.touches(place, region) for place in reader.of(field)):
                 continue
             if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
@@ -9386,6 +9414,47 @@ def constrained_option_states(index, field):
     return option_states(index, field)
 
 
+def _adjacent_glyph_prefix(original, before, field, source, current, start):
+    """Read only source-owned checkbox state changes before a conditional value.
+
+    A freshly compiled relationship from this immutable original must match the
+    complete scalar mapping. Other printed characters and unrelated boxes still
+    identify the span exactly. This is invocation-local readback, never authority
+    for a writer or a cache shared between documents.
+    """
+    loc = field.get('locator') or {}
+    relations = field.get('source_questions') or []
+    if (loc.get('target', {}).get('shape') != 'after_label' or len(relations) != 1
+            or relations[0].get('relation') != 'adjacent_checkbox_answer'
+            or fingerprint(before.el) != loc.get('fingerprint') or len(current) < start):
+        return False
+    detector = Detector(original.package, layout_proposal=True)
+    detector.detect()
+    matches = [area for area in detector.areas
+               if area.slot.id == before.id and not area.protection
+               and area.target == loc.get('target') and area.kind == field.get('kind')
+               and area.label == field.get('label') and area.context == field.get('context')
+               and area.source_questions == relations]
+    if len(matches) != 1:
+        return False
+    relation = matches[0].source_questions[0]
+    glyphs = glyph_boxes(before.el)
+    normalized = list(current[:start]); owned = False
+    for ref in relation['owner_target'].get('boxes', []):
+        if ref.get('part') != before.part or ref.get('slot') != before.path + '/glyphs':
+            continue
+        ordinal = ref.get('glyph')
+        if type(ordinal) is not int or not 0 <= ordinal < len(glyphs):
+            return False
+        piece, offset, char = glyphs[ordinal]
+        position = piece.start + offset
+        if not 0 <= position < start or current[position] not in (BOX, CHECKED):
+            return False
+        normalized[position] = char
+        owned = True
+    return owned and ''.join(normalized) == source[:start]
+
+
 def constrained_scalar_value(original, final, field, written):
     """Visible value in a bounded scalar destination, or None when it is ambiguous.
 
@@ -9469,7 +9538,9 @@ def constrained_scalar_value(original, final, field, written):
         if target.get("shape") == "after_label":
             end = start
         prefix, suffix = source[:start], source[end:]
-        if ("\x00" in source or "\x00" in current or not current.startswith(prefix) or
+        prefix_matches = current.startswith(prefix) or _adjacent_glyph_prefix(
+            original, before, field, source, current, start)
+        if ("\x00" in source or "\x00" in current or not prefix_matches or
                 not current.endswith(suffix) or len(current) < len(prefix) + len(suffix)):
             return None
         value = current[len(prefix):len(current) - len(suffix) if suffix else len(current)]
