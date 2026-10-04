@@ -7718,7 +7718,7 @@ class Detector:
             if (not printed.strip().endswith(':') or not DATE_LABEL.search(printed)
                     or not TIME_LABEL.search(printed) or self.blank_spans(printed, pieces)
                     or self.box_units(caption) or wraps_structure(caption.el) or len(printed.strip()) > MAX_MAPPING_LABEL
-                    or self.column_header(cell.parent, col, row, complete=True) != printed.strip()):
+                    or self.column_header(cell.parent, col, row, complete=True) != self.cell_text(header)):
                 continue
             if not re.fullmatch(r'[^:;.!?\r\n]+:', printed.strip()):
                 # Several clauses/captions in this one cell do not appoint one
