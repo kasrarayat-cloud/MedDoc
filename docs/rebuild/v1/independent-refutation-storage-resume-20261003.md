@@ -69,3 +69,20 @@ the original raw37-input result and separate adjudication remain immutable.
 
 - `root-reviewed-source-refutation-d3ce0959/result.json`: `e90abf9abc816d23f1829a0caf02ee4c494532293a6286dd74bc23bae8fffcc4`
 - `root-reviewed-source-refutation-d3ce0959/adjudication.json`: `caef003f6a4bf94a662dd4b3527c4bdeeb7286ea210542a8e003b7c1f31fc97d`
+
+## Entered-in-error and human scope correction — 2026-10-04
+
+The finished c6288482 repair was independently checked through actual answer
+validation, page governance and final decisions on43 inputs. All six retained
+d3 wrong releases are now held; no unsafe release was demonstrated. All six
+original positives still pass, as do complete reportedly uncertainty, explicit
+NOT-entered-in-error and an explicit patient reanchor. Source bytes and mapping
+bytes stayed unchanged; no provider or database was involved.
+
+One supplemental positive remains unnecessarily held: `No polyps were seen.
+Correction: procedure date was 09/21/2026.` The polyp answer is conflicted by the
+separate numeric correction. It is retained as an open usefulness failure,
+separate from safety. The safe repair is integrated; it does not claim the
+full reviewed voice workflow useful or this supplemental control repaired.
+
+- `root-reviewed-source-refutation-c6288482/result.json`: `fcb953ae89b06744ce50b56e7b228980a33215b1dcf5070cb34409e15c71a88c`
