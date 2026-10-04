@@ -1,0 +1,38 @@
+{
+  "base": "876285516c1aae1607e5355640720bb902d8f367",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-quality-87628551",
+  "concrete_inputs": [
+    "That report was false.",
+    "That statement was incorrect.",
+    "That statement was not clear."
+  ],
+  "root_original_controls": 33,
+  "root_original_wrong": 3,
+  "original_preserved": true,
+  "affected_methods": 20,
+  "actual_child_exit": 0,
+  "test_seconds": 32.157,
+  "outer_seconds": 34.108611039002426,
+  "reaped": true,
+  "timed_out": false,
+  "source_unchanged": true,
+  "network_attempts": [],
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "accepted_pin_renewal": false,
+  "artifacts": {
+    "baseline-876-quality-diagnostic.json": "57fe49b9cf0cfc988c988aa3c0792f5abe449d8efd59666df0d9b5e84c914404",
+    "capture-stale-final.py": "190c2c8a9abbf9f51cc900399dadaa7b40fffd3f3dcf4bb28b509d08f1cac70c",
+    "child-result-r1.json": "a47b8a3680c9b8407cf2d1976820cb8aab9a309cc6e1ace1db72de890f473e02",
+    "child.py": "6a0e21563f649bf6f70cacb7fba986ba447dffe1698f751fa8fc4b2d9d13b150",
+    "corrected-three-concrete-stale-final.json": "2cfe2c6407636bf1d951d1b69b28f9687c29d2e9ab27693b25ee24f8518eee15",
+    "diagnose.py": "4098f064a728937a70b51cb96408f745c0fcc49a4eea89e477f3bfeb5a4129d8",
+    "priced-source-inventory.json": "05936013b5f9310c4becddcc93c15250f380c9de615ff9c5a321afe1bb6b55ba",
+    "result-r1.json": "f866ea367a115097d9fb9a140554eabc9ec4a605bf11ecec909af1ccc1863f44",
+    "root-first-33-three-wrong.json": "545373b964a806e9fce8577e4e3170c6be050b2cd3dcd2fe04d835330447e240",
+    "run.py": "21dfb219df454fcdff3f4247e3aec144db2421225dbad0d284ade9eaaded72ab",
+    "stderr-r1.log": "66de60fd496b38e6a1c5bf9f7f03dec79cd39446208792e07363fafb23882f68",
+    "stdout-r1.log": "7d8aca9282afec9f49fb020f87d7a753690c15d715b936f26fd060cacf3c53bd"
+  }
+}

@@ -595,14 +595,23 @@ def elicited_reference_holds(reading, field, elicited_ids):
                 continue
             action = target.head
             if target.dep_ == 'nsubj':
-                # The pointed assertion is the grammatical subject of its
-                # own truth predicate, not an adjective elsewhere in a note.
-                # Negating that predicate retracts the assertion; "not
-                # false" and author/access metadata do not supply this edge.
-                if (a._lemma(action) == 'be' and a._negates(action)
-                        and any(t.dep_ == 'acomp' and t.pos_ == 'ADJ' and a._lemma(t) == 'true'
-                                for t in action.children)):
-                    return True
+                # An adjectival predicate about this pointed assertion is a
+                # source dependency, irrespective of its adjective's spelling.
+                # Only the already-qualified, complete literal truth atoms
+                # discharge it; unknown/qualified qualities require review.
+                qualities = [t for t in action.children
+                             if t.dep_ in ('acomp', 'attr', 'oprd') and t.pos_ == 'ADJ']
+                if qualities:
+                    negatives = [t for t in action.children if t.dep_ == 'neg']
+                    atom = qualities[0]
+                    allowed = set(target.subtree) | {action, atom} | set(negatives)
+                    positive = ((a._lemma(atom) in ('true', 'accurate') and not negatives)
+                                or (a._lemma(atom) == 'false' and len(negatives) == 1))
+                    closed = (len(qualities) == 1 and a._lemma(action) == 'be'
+                              and action.dep_ == 'ROOT' and 'Fin' in action.morph.get('VerbForm')
+                              and '?' not in doc.text and all(t in allowed or t.is_punct for t in doc))
+                    if not (positive and closed):
+                        return True
                 continue
             if target.dep_ == 'nsubjpass' and a._lemma(action) == 'make' and a._negates(action):
                 # A passive patient assertion differs from a document's
