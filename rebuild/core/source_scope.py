@@ -506,6 +506,55 @@ def reserved_identity_source(reading, source, claim, field):
         or any(a._fold(t.text).rstrip('.') in a.TITLES | a.CARE_TITLES for t in doc))
 
 
+def completed_document_status_boundary(reading, source, selected, field):
+    """A complete affirmative document event does not prefix another question.
+
+    This discharges only its unfinished-line warning. It supplies no clinical
+    actor, consent permission or signing action. The exact separate answer must
+    name its own unique ordinary destination; all other source floors survive.
+    """
+    from . import generation as g, v3_syntax, v3_actors as a
+    if (field is None or field.get('kind') not in ('text', 'long_text') or field.get('write_protected')
+            or len(reading['named'].get(g.question_key(field['label']), ())) != 1
+            or not selected or source['quote'].count(':') != 1):
+        return False
+    label, _, value = source['quote'].partition(':')
+    if value.strip().rstrip('.').casefold() != 'yes' or any(c in label for c in '?!”“"'):
+        return False
+    if any(pattern.search(source['quote']) for pattern in
+            (g.SELF_CORRECTION, g.INHERITED_SCOPE, g.UNSETTLED, g.SCOPE_POINTER, g.DENIAL)):
+        return False
+    docs = v3_syntax.docs([label] + [reading['parsed'].get(u['id'], ('', ''))[1]
+        if reading['parsed'].get(u['id']) else u['quote'] for u in selected])
+    if docs is None or any(doc is None for doc in docs):return False
+    doc = docs[0]
+    roots = [t for t in doc if t.dep_ == 'ROOT']
+    if len(roots) != 1:return False
+    root = roots[0]
+    subjects = [t for t in root.children if t.dep_ in ('nsubj', 'nsubjpass')]
+    if (root.tag_ not in ('VBN', 'VBD') or a._lemma(root) != 'sign' or len(subjects) != 1
+            or subjects[0].pos_ != 'NOUN' or a._lemma(subjects[0]) not in ('form', 'document')
+            or not subjects[0].i < root.i
+            or any(a.names_person(t) or a.names_carer(t) or a.this_patient(t)
+                   or t.pos_ in ('PRON', 'PROPN', 'AUX') or t.tag_ == 'MD' or a._negates(t) for t in doc)):
+        return False
+    subject_words = set(subjects[0].subtree)
+    if any(t != subjects[0] and t.dep_ not in ('det', 'compound') for t in subject_words):return False
+    if any(t.pos_ not in ('NOUN', 'DET') for t in subject_words):return False
+    if any(not (t in subject_words or t == root or t.is_punct
+            or t.dep_ == 'cc' and a._fold(t.text) == 'and' and t.head == root
+            or t.dep_ == 'conj' and t.head == root and t.tag_ == 'VBN' and a._lemma(t) == 'date') for t in doc):
+        return False
+    key = g.question_key(field['label'])
+    for unit, target in zip(selected, docs[1:]):
+        own = reading['parsed'].get(unit['id'])
+        if (unit['start'] <= source['end'] or not own or own[0] != key or not own[1]
+                or not reading['colon'].get(unit['id'])
+                or any(t.pos_ in ('PRON', 'PROPN') or a.names_person(t) or a.names_carer(t) for t in target)):
+            return False
+    return True
+
+
 def conditional_plan_scope(value):
     """One complete subjectless instruction retains its trailing IF condition.
 
