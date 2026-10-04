@@ -1,0 +1,1482 @@
+{
+  "version": "H03-H20-native-object-adjudication-v2",
+  "recorded_at_utc": "2026-10-04T22:04:35.352079+00:00",
+  "state": "ADDITIVE_RIGHTS_AND_SEMANTIC_EVIDENCE_NOT_APPLICATION_EXECUTION",
+  "prior_addendum": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-release-qualification-20261004/docs/rebuild/v1/WORD-ORIGINAL-RIGHTS-ADDENDUM-20261004.json",
+    "sha256": "a8f05cd01066c8e991840850ed3d70ab45e724221e03f80996f246352267c151"
+  },
+  "prior_ledgers_and_results_preserved": true,
+  "original_denominator": 60,
+  "holdout_denominator": 20,
+  "scoped_holdout_rights_supported": 13,
+  "current_runnable_DOCX_holdout_originals": 11,
+  "actual_asset_scope_holds": 7,
+  "unsupported_immutable_DOC_originals": 2,
+  "remaining_blocked_workflows": 9,
+  "new_automatic_success_credit": 0,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "conversions": 0,
+  "original_document_downloads": 0,
+  "primary_format_metadata_fetches": [
+    {
+      "name": "CharacterProperties",
+      "url": "https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/7022285b-9621-42e9-ad4d-4e02c115ef18",
+      "status": 200,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/word-release-completion-20261004/H03-H20-primary-format-specifications-v2/CharacterProperties.html",
+      "sha256": "943482ac00380bfb248424484e7f574c76c83edee9865c72853d4c36579f120f",
+      "retrieved_at_utc": "2026-10-04T22:04:35.343006+00:00"
+    },
+    {
+      "name": "NilPICFAndBinData",
+      "url": "https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/5830324c-4f03-462a-b1f7-45707cd4036e",
+      "status": 200,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/word-release-completion-20261004/H03-H20-primary-format-specifications-v2/NilPICFAndBinData.html",
+      "sha256": "70ed3f82dec8b7e586d6c1f895ed9837918e70b46847a21882fd4c80fb7621a3",
+      "retrieved_at_utc": "2026-10-04T22:04:35.182302+00:00"
+    },
+    {
+      "name": "HFD",
+      "url": "https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/f41daffe-fb3b-4373-a071-d3e86c59409d",
+      "status": 200,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/word-release-completion-20261004/H03-H20-primary-format-specifications-v2/HFD.html",
+      "sha256": "dacc585812f063aa734129babc5abcbbed1be0c06129d8041503001f36924763",
+      "retrieved_at_utc": "2026-10-04T22:04:35.165130+00:00"
+    },
+    {
+      "name": "OfficeArtContent",
+      "url": "https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/8699a984-3718-44be-adae-08b05827f8b3",
+      "status": 200,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/word-release-completion-20261004/H03-H20-primary-format-specifications-v2/OfficeArtContent.html",
+      "sha256": "b11a0aedfb46c249f1bcd6c8bd6768682c71b76726259290fd039e4ed262f402",
+      "retrieved_at_utc": "2026-10-04T22:04:35.183190+00:00"
+    },
+    {
+      "name": "OfficeArtRecordHeader",
+      "url": "https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/5dc1b9ed-818c-436f-8a4f-905a7ebb1ba9",
+      "status": 200,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/word-release-completion-20261004/H03-H20-primary-format-specifications-v2/OfficeArtRecordHeader.html",
+      "sha256": "08a9e4818366a6980df6beabeb26cf0707ecece0b040346e8fe039bd9ea4f327",
+      "retrieved_at_utc": "2026-10-04T22:04:35.168164+00:00"
+    },
+    {
+      "name": "MSOSPT",
+      "url": "https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/9c0c5c01-9e90-41aa-ba15-477dacb4cc8e",
+      "status": 200,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/word-release-completion-20261004/H03-H20-primary-format-specifications-v2/MSOSPT.html",
+      "sha256": "175f2a78cc561b07684d1e938d28285c1d5058b36b539ca4b503b2f0fa83ebf8",
+      "retrieved_at_utc": "2026-10-04T22:04:35.328128+00:00"
+    }
+  ],
+  "native_binary_count_terminology_correction": "The prior receipts named all CFData anchors native field data. H03 has 84 form fields plus one native hyperlink; H20 has 18 form fields plus two native hyperlinks. The preserved counts 85/20 include hyperlinks.",
+  "records": [
+    {
+      "identity": "H03",
+      "set": "HOLDOUT",
+      "actual_title": "MOD Green Book Form 2: pre-deployment health check (v8, 2013-01-31)",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H03-5adc1289b543.doc",
+      "original_sha256": "5adc1289b543681935fb30afd931a02d785f4a07d5c0801f98a861ee3a24808b",
+      "original_source_org": "Ministry of Defence",
+      "original_publication_url": "https://www.gov.uk/government/publications/mod-working-arrangements-with-media-organisations-forms",
+      "original_download_url": "https://assets.publishing.service.gov.uk/media/5a757b6440f0b6397f35ec44/green_bookv8_form2_20130131.doc",
+      "primary_records": [
+        {
+          "url": "https://www.gov.uk/government/publications/mod-working-arrangements-with-media-organisations-forms",
+          "status": 200,
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-primary-binding-v1/8bb7fdaadd6b1048.html",
+          "sha256": "b7c3de53c6375c68d746bee80c525fe1c9c625c433e4d910efcee840d2aec2ca",
+          "grade": "successful_primary_body",
+          "retrieved_at_utc": "2026-10-04T20:41:29.632922+00:00"
+        }
+      ],
+      "conditions": [
+        "Only internal offline synthetic evidence; no external provider upload or public distribution.",
+        "Preserve every immutable original byte/hash and all historical records/results.",
+        "Preserve source attribution and existing notices; record synthetic changes in a separate evidence sidecar.",
+        "Do not claim source-owner endorsement, funding, clinical approval or affiliation.",
+        "Eligibility is separate from format support, preservation verification, execution admission and measured success."
+      ],
+      "previously_exposed": true,
+      "before": {
+        "status": "EXACT_OGL_PUBLICATION_AND_ALL_WORD_TEXT_BOUND_ASSET_SEMANTICS_PENDING",
+        "offline_filled_copy_replay_supported": false,
+        "legacy_asset_semantics_complete": false
+      },
+      "after": {
+        "status": "EXACT_OGL_PUBLICATION_AND_COMPLETE_NATIVE_OBJECT_SCOPE_SUPPORTED_FORMAT_UNSUPPORTED",
+        "offline_filled_copy_rights_supported": true,
+        "legacy_asset_semantics_complete": true,
+        "format_supported_by_current_DOCX_application": false,
+        "normal_application_execution_eligible": false,
+        "workflow_block": "unsupported immutable original .doc format",
+        "owner_asset_permission_action_required": false,
+        "provider_upload_authorized": false,
+        "native_Word_acceptance_completed": false,
+        "new_automatic_success_credit": 0
+      },
+      "basis": "Exact retained GOV.UK publication/download binding and OGL v3 footer, complete retained CFB/all-Word-story inspection, and actual native field/hyperlink/simple-shape semantics with no embedded image records. Internal offline synthetic scope only; no substitute or conversion.",
+      "evidence": {
+        "whole_CFB_and_all_Word_stories": {
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/H03-whole-OLE-inspection-v1/CFB-inspection.json",
+          "sha256": "879d4ebee7c1d2fb5afe23a81e33c3709340855e1d9337d694c428bc5869a841"
+        },
+        "binary_object_semantics": {
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/H03-H20-binary-object-semantics-v1/H03-binary-object-semantics.json",
+          "sha256": "2738fbe01a4d46dec410d84e5e13da4af649da7c170c5d638917d1a6a534596e"
+        },
+        "semantic_inspector": {
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/inspect_h03_h20_binary_object_semantics.py",
+          "sha256": "439303d38c7387814be32cd4549ce7eb420dba8114ddbd56b974fccc204277bf"
+        }
+      },
+      "native_binary_CFData_anchor_count": 85,
+      "native_binary_field_types": {
+        "FORMTEXT": 32,
+        "FORMCHECKBOX": 52,
+        "HYPERLINK": 1
+      },
+      "native_object_bindings": [
+        {
+          "cp": 290,
+          "field_instruction_start_cp": 279,
+          "field_instruction_end_cp": 291,
+          "field_type": "FORMTEXT",
+          "data_offset": 0,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 354,
+          "field_instruction_start_cp": 343,
+          "field_instruction_end_cp": 355,
+          "field_type": "FORMTEXT",
+          "data_offset": 116,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 404,
+          "field_instruction_start_cp": 393,
+          "field_instruction_end_cp": 405,
+          "field_type": "FORMTEXT",
+          "data_offset": 232,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 472,
+          "field_instruction_start_cp": 461,
+          "field_instruction_end_cp": 473,
+          "field_type": "FORMTEXT",
+          "data_offset": 348,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 676,
+          "field_instruction_start_cp": 661,
+          "field_instruction_end_cp": 709,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 609,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 694,
+          "field_instruction_start_cp": 679,
+          "field_instruction_end_cp": 709,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 725,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 708,
+          "field_instruction_start_cp": 697,
+          "field_instruction_end_cp": 709,
+          "field_type": "FORMTEXT",
+          "data_offset": 841,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 744,
+          "field_instruction_start_cp": 729,
+          "field_instruction_end_cp": 777,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 1088,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 762,
+          "field_instruction_start_cp": 747,
+          "field_instruction_end_cp": 777,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 1204,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 776,
+          "field_instruction_start_cp": 765,
+          "field_instruction_end_cp": 777,
+          "field_type": "FORMTEXT",
+          "data_offset": 1320,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 811,
+          "field_instruction_start_cp": 796,
+          "field_instruction_end_cp": 844,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 1567,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 829,
+          "field_instruction_start_cp": 814,
+          "field_instruction_end_cp": 844,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 1683,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 843,
+          "field_instruction_start_cp": 832,
+          "field_instruction_end_cp": 844,
+          "field_type": "FORMTEXT",
+          "data_offset": 1799,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 897,
+          "field_instruction_start_cp": 882,
+          "field_instruction_end_cp": 930,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2046,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 915,
+          "field_instruction_start_cp": 900,
+          "field_instruction_end_cp": 930,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2162,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 929,
+          "field_instruction_start_cp": 918,
+          "field_instruction_end_cp": 930,
+          "field_type": "FORMTEXT",
+          "data_offset": 2278,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 968,
+          "field_instruction_start_cp": 953,
+          "field_instruction_end_cp": 1001,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2525,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 986,
+          "field_instruction_start_cp": 971,
+          "field_instruction_end_cp": 1001,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2641,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1000,
+          "field_instruction_start_cp": 989,
+          "field_instruction_end_cp": 1001,
+          "field_type": "FORMTEXT",
+          "data_offset": 2757,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1033,
+          "field_instruction_start_cp": 1018,
+          "field_instruction_end_cp": 1066,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3004,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1051,
+          "field_instruction_start_cp": 1036,
+          "field_instruction_end_cp": 1066,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3120,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1065,
+          "field_instruction_start_cp": 1054,
+          "field_instruction_end_cp": 1066,
+          "field_type": "FORMTEXT",
+          "data_offset": 3236,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1102,
+          "field_instruction_start_cp": 1087,
+          "field_instruction_end_cp": 1135,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3483,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1120,
+          "field_instruction_start_cp": 1105,
+          "field_instruction_end_cp": 1135,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3599,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1134,
+          "field_instruction_start_cp": 1123,
+          "field_instruction_end_cp": 1135,
+          "field_type": "FORMTEXT",
+          "data_offset": 3715,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1173,
+          "field_instruction_start_cp": 1158,
+          "field_instruction_end_cp": 1206,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3962,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1191,
+          "field_instruction_start_cp": 1176,
+          "field_instruction_end_cp": 1206,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 4078,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1205,
+          "field_instruction_start_cp": 1194,
+          "field_instruction_end_cp": 1206,
+          "field_type": "FORMTEXT",
+          "data_offset": 4194,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1248,
+          "field_instruction_start_cp": 1233,
+          "field_instruction_end_cp": 1281,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 4441,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1266,
+          "field_instruction_start_cp": 1251,
+          "field_instruction_end_cp": 1281,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 4557,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1280,
+          "field_instruction_start_cp": 1269,
+          "field_instruction_end_cp": 1281,
+          "field_type": "FORMTEXT",
+          "data_offset": 4673,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1328,
+          "field_instruction_start_cp": 1313,
+          "field_instruction_end_cp": 1361,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 4920,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1346,
+          "field_instruction_start_cp": 1331,
+          "field_instruction_end_cp": 1361,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 5036,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1360,
+          "field_instruction_start_cp": 1349,
+          "field_instruction_end_cp": 1361,
+          "field_type": "FORMTEXT",
+          "data_offset": 5152,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1419,
+          "field_instruction_start_cp": 1404,
+          "field_instruction_end_cp": 1452,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 5399,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1437,
+          "field_instruction_start_cp": 1422,
+          "field_instruction_end_cp": 1452,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 5515,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1451,
+          "field_instruction_start_cp": 1440,
+          "field_instruction_end_cp": 1452,
+          "field_type": "FORMTEXT",
+          "data_offset": 5631,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1504,
+          "field_instruction_start_cp": 1489,
+          "field_instruction_end_cp": 1537,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 5878,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1522,
+          "field_instruction_start_cp": 1507,
+          "field_instruction_end_cp": 1537,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 5994,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1536,
+          "field_instruction_start_cp": 1525,
+          "field_instruction_end_cp": 1537,
+          "field_type": "FORMTEXT",
+          "data_offset": 6110,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1601,
+          "field_instruction_start_cp": 1586,
+          "field_instruction_end_cp": 1634,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 6357,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1619,
+          "field_instruction_start_cp": 1604,
+          "field_instruction_end_cp": 1634,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 6473,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1633,
+          "field_instruction_start_cp": 1622,
+          "field_instruction_end_cp": 1634,
+          "field_type": "FORMTEXT",
+          "data_offset": 6589,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1711,
+          "field_instruction_start_cp": 1696,
+          "field_instruction_end_cp": 1744,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 6836,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1729,
+          "field_instruction_start_cp": 1714,
+          "field_instruction_end_cp": 1744,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 6952,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1743,
+          "field_instruction_start_cp": 1732,
+          "field_instruction_end_cp": 1744,
+          "field_type": "FORMTEXT",
+          "data_offset": 7068,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1791,
+          "field_instruction_start_cp": 1776,
+          "field_instruction_end_cp": 1824,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 7362,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1809,
+          "field_instruction_start_cp": 1794,
+          "field_instruction_end_cp": 1824,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 7478,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1823,
+          "field_instruction_start_cp": 1812,
+          "field_instruction_end_cp": 1824,
+          "field_type": "FORMTEXT",
+          "data_offset": 7594,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1931,
+          "field_instruction_start_cp": 1916,
+          "field_instruction_end_cp": 1964,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 7888,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1949,
+          "field_instruction_start_cp": 1934,
+          "field_instruction_end_cp": 1964,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 8004,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 1963,
+          "field_instruction_start_cp": 1952,
+          "field_instruction_end_cp": 1964,
+          "field_type": "FORMTEXT",
+          "data_offset": 8120,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2023,
+          "field_instruction_start_cp": 2008,
+          "field_instruction_end_cp": 2056,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 8414,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2041,
+          "field_instruction_start_cp": 2026,
+          "field_instruction_end_cp": 2056,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 8530,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2055,
+          "field_instruction_start_cp": 2044,
+          "field_instruction_end_cp": 2056,
+          "field_type": "FORMTEXT",
+          "data_offset": 8646,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2103,
+          "field_instruction_start_cp": 2088,
+          "field_instruction_end_cp": 2136,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 8940,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2121,
+          "field_instruction_start_cp": 2106,
+          "field_instruction_end_cp": 2136,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 9056,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2135,
+          "field_instruction_start_cp": 2124,
+          "field_instruction_end_cp": 2136,
+          "field_type": "FORMTEXT",
+          "data_offset": 9172,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2318,
+          "field_instruction_start_cp": 2303,
+          "field_instruction_end_cp": 2351,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 9652,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2336,
+          "field_instruction_start_cp": 2321,
+          "field_instruction_end_cp": 2351,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 9768,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2350,
+          "field_instruction_start_cp": 2339,
+          "field_instruction_end_cp": 2351,
+          "field_type": "FORMTEXT",
+          "data_offset": 9884,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2456,
+          "field_instruction_start_cp": 2441,
+          "field_instruction_end_cp": 2489,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 10186,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2474,
+          "field_instruction_start_cp": 2459,
+          "field_instruction_end_cp": 2489,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 10302,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2488,
+          "field_instruction_start_cp": 2477,
+          "field_instruction_end_cp": 2489,
+          "field_type": "FORMTEXT",
+          "data_offset": 10418,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2641,
+          "field_instruction_start_cp": 2626,
+          "field_instruction_end_cp": 2674,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 10720,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2659,
+          "field_instruction_start_cp": 2644,
+          "field_instruction_end_cp": 2674,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 10836,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2673,
+          "field_instruction_start_cp": 2662,
+          "field_instruction_end_cp": 2674,
+          "field_type": "FORMTEXT",
+          "data_offset": 10952,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2852,
+          "field_instruction_start_cp": 2837,
+          "field_instruction_end_cp": 2885,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 11254,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2870,
+          "field_instruction_start_cp": 2855,
+          "field_instruction_end_cp": 2885,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 11370,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 2884,
+          "field_instruction_start_cp": 2873,
+          "field_instruction_end_cp": 2885,
+          "field_type": "FORMTEXT",
+          "data_offset": 11486,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3509,
+          "field_instruction_start_cp": 3494,
+          "field_instruction_end_cp": 3542,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 11788,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3527,
+          "field_instruction_start_cp": 3512,
+          "field_instruction_end_cp": 3542,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 11904,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3541,
+          "field_instruction_start_cp": 3530,
+          "field_instruction_end_cp": 3542,
+          "field_type": "FORMTEXT",
+          "data_offset": 12020,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3633,
+          "field_instruction_start_cp": 3618,
+          "field_instruction_end_cp": 3666,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 12322,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3651,
+          "field_instruction_start_cp": 3636,
+          "field_instruction_end_cp": 3666,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 12438,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3665,
+          "field_instruction_start_cp": 3654,
+          "field_instruction_end_cp": 3666,
+          "field_type": "FORMTEXT",
+          "data_offset": 12554,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3783,
+          "field_instruction_start_cp": 3768,
+          "field_instruction_end_cp": 3816,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 12848,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3801,
+          "field_instruction_start_cp": 3786,
+          "field_instruction_end_cp": 3816,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 12964,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3815,
+          "field_instruction_start_cp": 3804,
+          "field_instruction_end_cp": 3816,
+          "field_type": "FORMTEXT",
+          "data_offset": 13080,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3927,
+          "field_instruction_start_cp": 3912,
+          "field_instruction_end_cp": 3960,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 13374,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3945,
+          "field_instruction_start_cp": 3930,
+          "field_instruction_end_cp": 3960,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 13490,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 3959,
+          "field_instruction_start_cp": 3948,
+          "field_instruction_end_cp": 3960,
+          "field_type": "FORMTEXT",
+          "data_offset": 13606,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 4300,
+          "field_instruction_start_cp": 4289,
+          "field_instruction_end_cp": 4301,
+          "field_type": "FORMTEXT",
+          "data_offset": 13900,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 4378,
+          "field_instruction_start_cp": 4367,
+          "field_instruction_end_cp": 4379,
+          "field_type": "FORMTEXT",
+          "data_offset": 14016,
+          "record_bytes": 116,
+          "record_sha256": "34dd994e68c106f6b91b1cc6f84088fb032fecab752a1188f338bb0ec95ec908",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 4594,
+          "field_instruction_start_cp": 4550,
+          "field_instruction_end_cp": 4595,
+          "field_type": "HYPERLINK",
+          "data_offset": 14132,
+          "record_bytes": 223,
+          "record_sha256": "e8d739d153672dffbc8004118ada23771d7f0e4de35724a4af9be8ace61a6720",
+          "native_data_type": "HFD"
+        }
+      ],
+      "inline_simple_OfficeArt_shape_count": 0,
+      "floating_shapes": [
+        {
+          "offset": 129,
+          "version": 2,
+          "instance": 0,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_1",
+          "shape_id": 1024,
+          "flags": 5
+        },
+        {
+          "offset": 153,
+          "version": 2,
+          "instance": 136,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_1",
+          "shape_id": 1025,
+          "flags": 2560
+        },
+        {
+          "offset": 411,
+          "version": 2,
+          "instance": 136,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_1",
+          "shape_id": 1026,
+          "flags": 2560
+        },
+        {
+          "offset": 657,
+          "version": 2,
+          "instance": 136,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_1",
+          "shape_id": 1027,
+          "flags": 2560
+        },
+        {
+          "offset": 903,
+          "version": 2,
+          "instance": 136,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_1",
+          "shape_id": 1028,
+          "flags": 2560
+        }
+      ],
+      "BStore_FBSE_BLIP_image_records": 0,
+      "whole_original_unchanged": true,
+      "smallest_next_action": "Engineering compatibility for the immutable original .doc, followed by ordinary application preservation and measured qualification; do not request asset permission based on the resolved unexamined-object hypothesis."
+    },
+    {
+      "identity": "H20",
+      "set": "HOLDOUT",
+      "actual_title": "Opinion of independent qualified medical practitioner (IQMP) - firefighters pension medical form",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H20-97fcbc6e17b6.doc",
+      "original_sha256": "97fcbc6e17b62a7121fb62a2279ffceb21254c98c3e05e26f12d738d7339ef19",
+      "original_source_org": "Ministry of Housing, Communities and Local Government (Firefighters' Pension Scheme)",
+      "original_publication_url": "https://www.gov.uk/government/publications/firefighters-pension-scheme-medical-appeals-forms",
+      "original_download_url": "https://assets.publishing.service.gov.uk/media/5a7993d6e5274a684690a93c/1444281.doc",
+      "primary_records": [
+        {
+          "url": "https://www.gov.uk/government/publications/firefighters-pension-scheme-medical-appeals-forms",
+          "status": 200,
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-primary-binding-v1/db3ed826a773fcf3.html",
+          "sha256": "58adf14ff0f055c4f230e190107c4c51e19fea9692f81386a6340ec128e17bfe",
+          "grade": "successful_primary_body",
+          "retrieved_at_utc": "2026-10-04T20:41:29.633862+00:00"
+        }
+      ],
+      "conditions": [
+        "Only internal offline synthetic evidence; no external provider upload or public distribution.",
+        "Preserve every immutable original byte/hash and all historical records/results.",
+        "Preserve source attribution and existing notices; record synthetic changes in a separate evidence sidecar.",
+        "Do not claim source-owner endorsement, funding, clinical approval or affiliation.",
+        "Eligibility is separate from format support, preservation verification, execution admission and measured success."
+      ],
+      "previously_exposed": true,
+      "before": {
+        "status": "EXACT_OGL_PUBLICATION_AND_ALL_WORD_TEXT_BOUND_ASSET_SEMANTICS_PENDING",
+        "offline_filled_copy_replay_supported": false,
+        "legacy_asset_semantics_complete": false
+      },
+      "after": {
+        "status": "EXACT_OGL_PUBLICATION_AND_COMPLETE_NATIVE_OBJECT_SCOPE_SUPPORTED_FORMAT_UNSUPPORTED",
+        "offline_filled_copy_rights_supported": true,
+        "legacy_asset_semantics_complete": true,
+        "format_supported_by_current_DOCX_application": false,
+        "normal_application_execution_eligible": false,
+        "workflow_block": "unsupported immutable original .doc format",
+        "owner_asset_permission_action_required": false,
+        "provider_upload_authorized": false,
+        "native_Word_acceptance_completed": false,
+        "new_automatic_success_credit": 0
+      },
+      "basis": "Exact retained GOV.UK publication/download binding and OGL v3 footer, complete retained CFB/all-Word-story inspection, and actual native field/hyperlink/simple-shape semantics with no embedded image records. Internal offline synthetic scope only; no substitute or conversion.",
+      "evidence": {
+        "whole_CFB_and_all_Word_stories": {
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/H20-whole-OLE-inspection-v1/CFB-inspection.json",
+          "sha256": "f30a395f60190477f01f5b8dadd806e65fae157bb0404bb4266ee6806154449d"
+        },
+        "binary_object_semantics": {
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/H03-H20-binary-object-semantics-v1/H20-binary-object-semantics.json",
+          "sha256": "a152fbae970f85e584a8a890faf83b1df614954d249f8d1391fe2eaf3446e363"
+        },
+        "semantic_inspector": {
+          "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/inspect_h03_h20_binary_object_semantics.py",
+          "sha256": "439303d38c7387814be32cd4549ce7eb420dba8114ddbd56b974fccc204277bf"
+        }
+      },
+      "native_binary_CFData_anchor_count": 20,
+      "native_binary_field_types": {
+        "HYPERLINK": 2,
+        "FORMCHECKBOX": 18
+      },
+      "native_object_bindings": [
+        {
+          "cp": 732,
+          "field_instruction_start_cp": 647,
+          "field_instruction_end_cp": 733,
+          "field_type": "HYPERLINK",
+          "data_offset": 165,
+          "record_bytes": 401,
+          "record_sha256": "5279e44410c1faf6dd8f040599f5f2a8efbc900ead1c2bdf09472b0b88ac5866",
+          "native_data_type": "HFD"
+        },
+        {
+          "cp": 901,
+          "field_instruction_start_cp": 826,
+          "field_instruction_end_cp": 902,
+          "field_type": "HYPERLINK",
+          "data_offset": 566,
+          "record_bytes": 229,
+          "record_sha256": "bf7b6a8205274c5467db5b7a894a0cc884e02c3a5a0f01dec7c3fc8180ba1456",
+          "native_data_type": "HFD"
+        },
+        {
+          "cp": 4603,
+          "field_instruction_start_cp": 4588,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2040,
+          "record_bytes": 116,
+          "record_sha256": "bdad6fc8de0c592a6ddca098415ae73572a5df52be16cdf4201687bc0900a076",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 4676,
+          "field_instruction_start_cp": 4661,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2156,
+          "record_bytes": 116,
+          "record_sha256": "bdad6fc8de0c592a6ddca098415ae73572a5df52be16cdf4201687bc0900a076",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 4757,
+          "field_instruction_start_cp": 4742,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2272,
+          "record_bytes": 116,
+          "record_sha256": "a4663bf468fb2cda9c55b549d04ca1154c159d3c1fcd9972f037edbf7bff3b34",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 4843,
+          "field_instruction_start_cp": 4828,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2388,
+          "record_bytes": 116,
+          "record_sha256": "648d6a88e2c55a701ceb3c444d2e8b561c8b5ab56f12ca33df993372dc478d46",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5037,
+          "field_instruction_start_cp": 5022,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2504,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5059,
+          "field_instruction_start_cp": 5044,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2620,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5175,
+          "field_instruction_start_cp": 5160,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2736,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5197,
+          "field_instruction_start_cp": 5182,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2852,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5264,
+          "field_instruction_start_cp": 5249,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 2968,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5286,
+          "field_instruction_start_cp": 5271,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3084,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5538,
+          "field_instruction_start_cp": 5523,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3200,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5560,
+          "field_instruction_start_cp": 5545,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3316,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5933,
+          "field_instruction_start_cp": 5918,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3432,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 5956,
+          "field_instruction_start_cp": 5941,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3548,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 6121,
+          "field_instruction_start_cp": 6106,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3664,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 6143,
+          "field_instruction_start_cp": 6128,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 3780,
+          "record_bytes": 116,
+          "record_sha256": "9c7c6e992fa146feb56958e5c5134401d7549ed91302eb8dbad12259d26abcda",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 8575,
+          "field_instruction_start_cp": 8560,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 6644,
+          "record_bytes": 118,
+          "record_sha256": "df4fda6dc957913146e8a1a3bb198337ff5bbb1a0ce689bcea00416f7ba12226",
+          "native_data_type": "FFData"
+        },
+        {
+          "cp": 8599,
+          "field_instruction_start_cp": 8584,
+          "field_instruction_end_cp": 10642,
+          "field_type": "FORMCHECKBOX",
+          "data_offset": 6762,
+          "record_bytes": 118,
+          "record_sha256": "4a3b8509b3ef25fd1be09f1baeb03e06c7065757dea0689e4b2306582846d868",
+          "native_data_type": "FFData"
+        }
+      ],
+      "inline_simple_OfficeArt_shape_count": 9,
+      "floating_shapes": [
+        {
+          "offset": 129,
+          "version": 2,
+          "instance": 0,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_0",
+          "shape_id": 1024,
+          "flags": 5
+        },
+        {
+          "offset": 153,
+          "version": 2,
+          "instance": 20,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_0",
+          "shape_id": 1032,
+          "flags": 2560
+        },
+        {
+          "offset": 239,
+          "version": 2,
+          "instance": 20,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_0",
+          "shape_id": 1036,
+          "flags": 2560
+        },
+        {
+          "offset": 333,
+          "version": 2,
+          "instance": 20,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 3,
+          "scope": "floating_0",
+          "shape_id": 1038,
+          "flags": 2560
+        },
+        {
+          "offset": 433,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 2,
+          "scope": "floating_0",
+          "shape_id": 1025,
+          "flags": 3584
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_3301",
+          "shape_id": 1025,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_3506",
+          "shape_id": 1026,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_3837",
+          "shape_id": 1027,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_4467",
+          "shape_id": 1028,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_6405",
+          "shape_id": 1029,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_6887",
+          "shape_id": 1030,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_7843",
+          "shape_id": 1031,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_8490",
+          "shape_id": 1032,
+          "flags": 2560
+        },
+        {
+          "offset": 8,
+          "version": 2,
+          "instance": 1,
+          "type": "0xf00a",
+          "bytes": 8,
+          "depth": 1,
+          "scope": "inline_cp_10065",
+          "shape_id": 1033,
+          "flags": 2560
+        }
+      ],
+      "BStore_FBSE_BLIP_image_records": 0,
+      "whole_original_unchanged": true,
+      "smallest_next_action": "Engineering compatibility for the immutable original .doc, followed by ordinary application preservation and measured qualification; do not request asset permission based on the resolved unexamined-object hypothesis."
+    }
+  ]
+}
