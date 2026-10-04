@@ -1,0 +1,37 @@
+--- dev_application_gate.py
++++ dev_application_gate_v2.py
+@@ -9,6 +9,7 @@
+ from pathlib import Path
+ import re
+ import subprocess
++import sys
+ import types
+ from unittest.mock import patch
+ from zipfile import ZipFile
+@@ -235,5 +236,7 @@
+ 
+ for record in plan['records']:
+     setattr(ApplicationGate,'test_'+record['development_id'],method(record))
+-failures=DiscoverRunner(verbosity=2,interactive=False).run_tests([ApplicationGate])
++module=types.ModuleType('sol_word_original_dev_gate');module.ApplicationGate=ApplicationGate
++sys.modules[module.__name__]=module
++failures=DiscoverRunner(verbosity=2,interactive=False).run_tests(['sol_word_original_dev_gate.ApplicationGate'])
+ raise SystemExit(bool(failures))
+
+--- run_dev_application_gate.py
++++ run_dev_application_gate_v2.py
+@@ -116,12 +116,12 @@
+  write(out/'database-before.json',database_before)
+  assert database_before['all_absent'],'Prospective task database already exists; nothing was launched'
+  write(out/'plan.json',preparation)
+- harness_before={name:digest((BASE/name).read_bytes()) for name in ('run_dev_application_gate.py','dev_application_gate.py','fixed_render_checker.py')}
++ harness_before={name:digest((BASE/name).read_bytes()) for name in ('run_dev_application_gate_v2.py','dev_application_gate_v2.py','fixed_render_checker.py')}
+  preparation['prospective_harness_sha256']=harness_before
+  # Bind the prepared code before any process starts; the plan is already an
+  # immutable output, so retain this additional identity separately.
+  write(out/'prospective-harness-before.json',harness_before)
+- harness=BASE/'dev_application_gate.py';text=harness.read_text();assert text.count('__PLAN__')==1
++ harness=BASE/'dev_application_gate_v2.py';text=harness.read_text();assert text.count('__PLAN__')==1
+  derived=out/'workflow.py';derived.write_text(text.replace('__PLAN__',str(out/'plan.json')));derived.chmod(0o600)
+  write(out/'harness-provenance.json',{'original':str(harness),'sha256':digest(harness.read_bytes()),'derived_sha256':digest(derived.read_bytes()),
+   'render_checker_sha256':digest((BASE/'fixed_render_checker.py').read_bytes()),'automatic_mapping_corrections':0,'all_cases_previously_exposed':True})
