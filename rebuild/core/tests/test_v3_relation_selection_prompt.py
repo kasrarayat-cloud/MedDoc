@@ -238,6 +238,28 @@ class ReviewedSourceOwnership(SimpleTestCase):
                 self.held(source + ' ' + tail, 'Polyps', [source])
         self.held(source + ' The examination was entered in error.', 'Polyps', [source])
 
+    def test_finished_diff_invalid_source_counterexamples_remain_held(self):
+        source = 'No polyps were seen.'
+        for annotation in ('The report was entered in error.',
+                'The observation was entered in error.', 'The finding was entered in error.',
+                'The results were entered in error.', 'The endoscopy record was entered in error.',
+                'The clinician entered the report in error.'):
+            with self.subTest(annotation=annotation):
+                self.held(source + ' ' + annotation, 'Polyps', [source])
+        # The complete passive frame supplies the invalidation. A numeric
+        # correction is a different source shape, not a new noun whitelist.
+        self.supported(source + ' The earlier six out of ten was entered in error.', 'Polyps', [source])
+        self.supported(source + ' The report was not entered in error.', 'Polyps', [source])
+
+    def test_human_source_scope_survives_bare_headings_until_explicit_patient_reanchor(self):
+        source = 'Diagnostic colonoscopy.'
+        for lead in ('The doctor underwent colonoscopy.', 'The nurse underwent colonoscopy.',
+                     'Alex underwent colonoscopy.', 'Her husband underwent colonoscopy.'):
+            with self.subTest(lead=lead):
+                self.held(lead + ' Procedure. ' + source, 'Procedure', [source])
+        self.supported('The doctor underwent colonoscopy. The patient reports rectal bleeding. '
+                       'Procedure. ' + source, 'Procedure', [source])
+
     def test_numeric_metadata_is_distinct_from_clinical_qualifiers(self):
         source = 'Diagnostic colonoscopy.'
         self.supported('Procedure date, 09/21/2026. Procedure. ' + source, 'Procedure', [source])

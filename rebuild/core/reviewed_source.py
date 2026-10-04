@@ -26,9 +26,10 @@ def complete_ids(reading, field, ordered):
         if len(roots) != 1:
             continue
         root = roots[0]
-        subjects = [t for t in root.children if t.dep_ == 'nsubjpass']
-        if (a._lemma(root) == 'enter' and any(t.dep_ == 'auxpass' for t in root.children)
-                and len(subjects) == 1 and a._lemma(subjects[0]) in a.SOLE_HEADING_WORDS
+        targets = [t for t in root.children if t.dep_ in ('nsubjpass', 'dobj')]
+        if (a._lemma(root) == 'enter' and 'Fin' in {value for t in (root, *root.children)
+                for value in t.morph.get('VerbForm')} and not a._negates(root)
+                and len(targets) == 1 and targets[0].pos_ in ('NOUN', 'PROPN')
                 and any(t.dep_ == 'prep' and a._lemma(t) == 'in'
                     and any(g.V3_IDENTITY_WORDS.fullmatch(c.text) for c in t.children if c.dep_ == 'pobj')
                     for t in root.children)):
@@ -39,6 +40,26 @@ def complete_ids(reading, field, ordered):
     heading = field['label'].strip().rstrip(':').casefold() + '.'
     headings = [u for u in units if u['quote'].casefold() == heading]
     heading_position = reading['position'][headings[0]['id']] if len(headings) == 1 else None
+    # A human subject of a completed source clause establishes somebody's
+    # scope even when its action is absent from the old bearer-verb lexicon.
+    # Printed headings and metadata name no new patient. Only an explicit
+    # patient clause/object can reanchor that scope.
+    foreign_before = {}
+    foreign = False
+    for unit, doc in zip(units, docs):
+        foreign_before[unit['id']] = foreign
+        info = reading['actors'][unit['id']]
+        state = reading['resolved'][unit['id']]
+        if info.get('other_floor') or state.get('self_other'):
+            foreign = True
+            continue
+        subjects = [t for t in doc if t.dep_ in ('nsubj', 'nsubjpass')]
+        if any(a.this_patient(t) for t in subjects):
+            foreign = False
+        elif any(a.names_person(t) or a.names_carer(t)
+                 or t.pos_ == 'PROPN' or t.pos_ == 'PRON' for t in subjects):
+            from .v3_literal_facts import _patient_object
+            foreign = not any(_patient_object(t.head) for t in subjects)
 
     def initialism(t):
         return bool(t.pos_ == 'PROPN' and t.text.isalpha() and t.text.isupper()
@@ -47,7 +68,7 @@ def complete_ids(reading, field, ordered):
     def owned(unit, doc):
         info = reading['actors'][unit['id']]
         if (not proof['start'] <= unit['start'] < unit['end'] <= proof['end']
-                or not info.get('readable') or info.get('other_floor')
+                or foreign_before[unit['id']] or not info.get('readable') or info.get('other_floor')
                 or reading['resolved'][unit['id']].get('self_other')
                 or unit['id'] in reading['unresolved_subjects']
                 or info.get('habitual') or info.get('past_time')
