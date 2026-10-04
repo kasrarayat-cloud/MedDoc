@@ -7290,5 +7290,22 @@
       "rebuild/core/generation.py",
       "rebuild/core/v3_field_relations.py"
     ]
+  },
+  "appended_holdout_stage_adjudication": {
+    "path": "docs/rebuild/v1/WORD-HOLDOUT20-RIGHTS-STAGES-20261004.json",
+    "sha256": "a2eee67070a85704edc973e652ca858a45d81af1a5df43dd2f541610da334696",
+    "state": "READ_ONLY_EVIDENCE_ADJUDICATION_NOT_EXECUTION_LEDGER",
+    "observed_inspection_counts": {
+      "original_hashes_verified": 20,
+      "DOCX_XML_asset_inventories_completed": 18,
+      "OLE2_semantic_inspections_uncompleted": 2,
+      "rights_supported_internal_offline": 4,
+      "exact_excluded_asset_holds": 4,
+      "engineering_evidence_binding_holds": 12,
+      "current_application_originals_executed": 0
+    },
+    "historical_rows_preserved": true,
+    "historical_performance_counts_unchanged": true,
+    "runtime_execution_authorized": false
   }
 }

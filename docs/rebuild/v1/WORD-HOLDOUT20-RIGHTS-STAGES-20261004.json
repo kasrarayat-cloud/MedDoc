@@ -1,0 +1,1321 @@
+{
+  "version": "original-holdout20-retained-stage-adjudication-v1",
+  "recorded_at_utc": "2026-10-04T20:33:54.917303+00:00",
+  "adjudicated_by": "word-release-qualification engineering agent",
+  "state": "READ_ONLY_EVIDENCE_ADJUDICATION_NOT_EXECUTION_LEDGER",
+  "scope": "offline-synthetic-filled-copy-of-immutable-original",
+  "manifest_sha256": "3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33",
+  "original_denominator": 20,
+  "overall_denominator": 60,
+  "originals_previously_exposed": true,
+  "thresholds_unchanged": {
+    "overall_required": 54,
+    "holdout_required": 18,
+    "family_fraction": 0.75
+  },
+  "historical_results_unchanged": {
+    "automatic_success": 0,
+    "originals": 20,
+    "engine_export_checks_passed": 18
+  },
+  "observed_inspection_counts": {
+    "original_hashes_verified": 20,
+    "DOCX_XML_asset_inventories_completed": 18,
+    "OLE2_semantic_inspections_uncompleted": 2,
+    "rights_supported_internal_offline": 4,
+    "exact_excluded_asset_holds": 4,
+    "engineering_evidence_binding_holds": 12,
+    "current_application_originals_executed": 0
+  },
+  "new_independence_claim": false,
+  "provider_upload_authorized": false,
+  "gate_pass": false,
+  "performance_credit_added": 0,
+  "source_fetches": 0,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "conversions": 0,
+  "global_evidence": {
+    "sealed_full_manifest": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/FULL-MANIFEST-SEALED.json",
+      "sha256": "450c0a6af3364ebe382f4b6a8caad578d33284590585f6109ac60fbc7762014f",
+      "purpose": "Exact identities, publisher/download URLs, original hashes, and historical publisher witnesses.",
+      "grade": "retained_bytes_verified"
+    },
+    "collector_a": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/collector-a-manifest.json",
+      "sha256": "5d5ffee6488b4e771396192c42d8a342dc5f992853d14dabd45882789ede79ef",
+      "purpose": "Original publisher/source/product provenance and recorded NIMH customization witness.",
+      "grade": "recorded_collector_observation_not_raw_page_body"
+    },
+    "collector_b": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/collector-b-manifest.json",
+      "sha256": "9fde119db934f7caa128eb6b98758e34939d6fd02490ed295b782e1b3dd571c8",
+      "purpose": "Recorded Health NZ exceptions, Zenodo licence observations, and original provenance.",
+      "grade": "recorded_collector_observation_not_raw_page_body"
+    },
+    "nih_reuse_witness": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/044-development-rights-evidence.json",
+      "sha256": "88a5e8ed535240a916853e06340d1750df913ac20dfc40906a4639720eaa5f29",
+      "purpose": "Positive official NIH reuse statement retained as a primary search-index witness.",
+      "grade": "recorded_primary_search_index_witness_not_raw_http_success"
+    },
+    "applicability_rules": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/052-original-dev40-publisher-rights-evidence.json",
+      "sha256": "16cb83b29359b3b7075a6e5d4ac811971e0b9d2a7129ee47845599c7882eb814",
+      "purpose": "Existing exact-product/exception/asset adjudication rules; dev decisions themselves do not extend to holdout.",
+      "grade": "retained_bytes_verified"
+    },
+    "cms_bni_publication": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/development-audit-20260927/source-rights/0e69dae73fd02775db.html",
+      "sha256": "aa32c48f3903b718beec7a4c72fe1dbc7f84f3ec6e053cf0f0399f3e58e91c98",
+      "purpose": "Positive BNI publication/use evidence, insufficient by itself for exact edition and synthetic replay scope.",
+      "grade": "retained_bytes_verified"
+    },
+    "cms_moon_fact_sheet": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/development-audit-20260927/source-rights/a932c6f3cc18118048.html",
+      "sha256": "217ab24583fc4baeb636286fd5022cc9e68571b34079e12a1b799e511f64a13d",
+      "purpose": "2016 CMS-developed standardized MOON statement; not exact latest edition authorship/rights proof.",
+      "grade": "retained_bytes_verified"
+    },
+    "hhs_disclaimer": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/development-audit-20260927/source-rights/5644565b3423477f37.html",
+      "sha256": "4f5643879867f23577022440d3982ccd15d7acc39ed4a99c89f4dcf68fb344c1",
+      "purpose": "Retained photo disclaimer supplies no blanket permission for exact CMS originals or seals.",
+      "grade": "retained_bytes_verified"
+    },
+    "unrelated_uk_footer_page": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/evidence/8f4bfb320fda3a50.body",
+      "sha256": "ec9cf9a1cbd974d0ff035032f79cf89364292142a94ce893e74c35102370f4c0",
+      "purpose": "OGL witness is for unrelated hospital forms, not H03 MOD or H20 firefighter originals.",
+      "grade": "retained_bytes_verified"
+    },
+    "ole_licence_text": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/original-dev40-rights-20260927/source-rights/4fdeef30b3509ec865.html",
+      "sha256": "f5b2b9f2af63647cde889fa6c3508f5705925295b74912c68caa28dd37e64aa5",
+      "purpose": "Retained general OGL terms do not establish an exact H03/H20 source grant.",
+      "grade": "retained_bytes_verified"
+    },
+    "exact_original_inspection": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/exact-original-inspection.json",
+      "sha256": "71f96a1bf557d849922762db50a401ed15595bf0df357a8e2fdea8ca351089aa",
+      "purpose": "Exact original package hash, safe whole XML scan, unchanged part inventory and asset hashes.",
+      "grade": "retained_bytes_verified"
+    },
+    "visual_asset_adjudication": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/asset-visual-adjudication.json",
+      "sha256": "5a821657e0412d7f29096467fb70b2619284513094c56ae6d8c76447f396d13b",
+      "purpose": "Direct unchanged asset identity checks, with exact part-to-original bindings.",
+      "grade": "retained_bytes_verified"
+    }
+  },
+  "records": [
+    {
+      "holdout_id": "H01",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H01-b50388c19e60.docx",
+      "original_sha256": "b50388c19e609e79d13e0f25fccac2995e7286481fede1c3930d46778ebfd926",
+      "source_metadata_id": "A-NIMH-nimh-concomitant-medication-log-template-v-2026",
+      "source_url": "https://www.nimh.nih.gov/funding/clinical-research/clinical-research-toolbox/nimh-clinical-research-toolbox",
+      "download_url": "https://www.nimh.nih.gov/sites/default/files/documents/funding/clinical-research/clinical-research-toolbox/documents/nimh-concomitant-medication-log-template-v-2026.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "nih_reuse_witness",
+        "collector_a",
+        "applicability_rules"
+      ],
+      "rights_stage": "SUPPORTED_INTERNAL_OFFLINE_SYNTHETIC_REPLAY",
+      "offline_filled_copy_replay_supported": true,
+      "support_basis": "Positive retained NIH publisher reuse declaration, exact NIH toolbox product provenance, no contrary original notice or excluded institutional mark. H01/H02 additionally have a recorded explicit publisher customization statement; H01 contains customization directions in the original.",
+      "smallest_next_action": "Engineering records the exact reviewed decision and retained witness/inspection receipts in the required corpus evidence namespace; no new owner permission requested.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H01-source-text.txt",
+        "sha256": "b3c9a62f923587c6b68c5de14b3e27a178ad730d3d4288d92cb3b68ac53aa574"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H01-rights-notices.json",
+        "sha256": "d49c323d988306b4dfd39aa83f18b6fc4684155b6dc971450caa5341e2d8d82e"
+      },
+      "notice_interpretation": "NIMH customization instructions are positive use directions."
+    },
+    {
+      "holdout_id": "H02",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H02-687e94896e4d.docx",
+      "original_sha256": "687e94896e4df9f48bac6622788d79a6f376110521957b9cd38dc2175897526a",
+      "source_metadata_id": "A-NIMH-nimh-documentation-of-informed-consent-template-v-2026",
+      "source_url": "https://www.nimh.nih.gov/funding/clinical-research/clinical-research-toolbox/nimh-clinical-research-toolbox",
+      "download_url": "https://www.nimh.nih.gov/sites/default/files/documents/funding/clinical-research/clinical-research-toolbox/documents/nimh-documentation-of-informed-consent-template-v-2026.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F4",
+        "F5"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "nih_reuse_witness",
+        "collector_a",
+        "applicability_rules"
+      ],
+      "rights_stage": "SUPPORTED_INTERNAL_OFFLINE_SYNTHETIC_REPLAY",
+      "offline_filled_copy_replay_supported": true,
+      "support_basis": "Positive retained NIH publisher reuse declaration, exact NIH toolbox product provenance, no contrary original notice or excluded institutional mark. H01/H02 additionally have a recorded explicit publisher customization statement; H01 contains customization directions in the original.",
+      "smallest_next_action": "Engineering records the exact reviewed decision and retained witness/inspection receipts in the required corpus evidence namespace; no new owner permission requested.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H02-source-text.txt",
+        "sha256": "e7f8721dd182cc2e1cc87d1651abec1d23c6d06258b1c89ecf3ca79cdb121cd6"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H02-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H03",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H03-5adc1289b543.doc",
+      "original_sha256": "5adc1289b543681935fb30afd931a02d785f4a07d5c0801f98a861ee3a24808b",
+      "source_metadata_id": "mod-greenbook-f2",
+      "source_url": "https://www.gov.uk/government/publications/mod-working-arrangements-with-media-organisations-forms",
+      "download_url": "https://assets.publishing.service.gov.uk/media/5a757b6440f0b6397f35ec44/green_bookv8_form2_20130131.doc",
+      "families": [],
+      "format": "doc (OLE2 legacy)",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": false,
+      "exact_docx_xml_asset_inventory_completed": false,
+      "legacy_semantic_inspection_completed": false,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease",
+        "immutable original .doc format unsupported"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "unrelated_uk_footer_page",
+        "ole_licence_text"
+      ],
+      "rights_stage": "HELD_EXACT_OGL_SCOPE_AND_OLE_INSPECTION",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded OGL claim borrows the footer from an unrelated hospital-forms page. General OGL terms are positive but not an exact source-product binding. Whole legacy OLE text/assets remain uninspected; original .doc upload is unsupported.",
+      "smallest_next_action": "Engineering recovers the exact MOD/firefighter publication-to-file OGL witness and whole unchanged OLE text/assets inspection. Keep original .doc unsupported in the fixed denominator; no substitution or new feature is authorized.",
+      "owner_action_required_now": false
+    },
+    {
+      "holdout_id": "H04",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H04-3715f2f80889.docx",
+      "original_sha256": "3715f2f80889884afd1f014bcd369fa1c2a3a17059b3cab6a603ec559be1f308",
+      "source_metadata_id": "A-NCCIH-2-Inclusion-Exclusion-Core-Form-ver1-07-17-2015",
+      "source_url": "https://www.nccih.nih.gov/grants/toolbox/forms-and-logs",
+      "download_url": "https://files.nccih.nih.gov/s3fs-public/CR-Toolbox/2_Inclusion-Exclusion_Core_Form_ver1_07-17-2015.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "29b611fc7527fefe80c1091ef223bd0b02b5739996ab7636eab4fa0589cfe62b",
+          "classification": "plain_square_checkbox"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "nih_reuse_witness",
+        "collector_a",
+        "applicability_rules"
+      ],
+      "rights_stage": "SUPPORTED_INTERNAL_OFFLINE_SYNTHETIC_REPLAY",
+      "offline_filled_copy_replay_supported": true,
+      "support_basis": "Positive retained NIH publisher reuse declaration, exact NIH toolbox product provenance, no contrary original notice or excluded institutional mark. H01/H02 additionally have a recorded explicit publisher customization statement; H01 contains customization directions in the original.",
+      "smallest_next_action": "Engineering records the exact reviewed decision and retained witness/inspection receipts in the required corpus evidence namespace; no new owner permission requested.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H04-source-text.txt",
+        "sha256": "97535fd660ec922c6e9bd493fdb885df6b765d187e3dff9f31975e04f6777c59"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H04-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H05",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H05-6b2cfc3a29f2.docx",
+      "original_sha256": "6b2cfc3a29f2683b0ed355816d1aeaa55cba8f00846864d429db2ea81312c3f3",
+      "source_metadata_id": "A-NCCIH-3-Demographics-Form-ver1-07-17-2015",
+      "source_url": "https://www.nccih.nih.gov/grants/toolbox/forms-and-logs",
+      "download_url": "https://files.nccih.nih.gov/s3fs-public/CR-Toolbox/3_Demographics_Form_ver1_07-17-2015.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F5",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "29b611fc7527fefe80c1091ef223bd0b02b5739996ab7636eab4fa0589cfe62b",
+          "classification": "plain_square_checkbox"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "nih_reuse_witness",
+        "collector_a",
+        "applicability_rules"
+      ],
+      "rights_stage": "SUPPORTED_INTERNAL_OFFLINE_SYNTHETIC_REPLAY",
+      "offline_filled_copy_replay_supported": true,
+      "support_basis": "Positive retained NIH publisher reuse declaration, exact NIH toolbox product provenance, no contrary original notice or excluded institutional mark. H01/H02 additionally have a recorded explicit publisher customization statement; H01 contains customization directions in the original.",
+      "smallest_next_action": "Engineering records the exact reviewed decision and retained witness/inspection receipts in the required corpus evidence namespace; no new owner permission requested.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H05-source-text.txt",
+        "sha256": "d53e5c1a99cdc91b8655e153a7b82c2f21557b5fe0e533415dc42874fa2d1051"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H05-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H06",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H06-a7bf90d167b5.docx",
+      "original_sha256": "a7bf90d167b5100df402f2bec34ba1e67281ddcefb75428aba82b85db59c5874",
+      "source_metadata_id": "hnz-cw-notif-hosp",
+      "source_url": "https://www.tewhatuora.govt.nz/health-services-and-programmes/national-public-health-service/notifiable-diseases/notify-national-public-health-service-south-island-te-waipounamu",
+      "download_url": "https://static.info.content.health.nz/docs/health-pros/topics/diseases-conditions/notifiable/CW-disease-notification-form-for-hospitals.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "06a9906ee36796a6d453828b928ce1d43b7145d789f70fae23b6f81d8fcbb72f",
+          "classification": "Health_New_Zealand_logo"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXCLUDED_EXACT_ASSETS",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded Health NZ CC BY 4.0 text grant is positive but expressly excepts logos/photos/illustrations. Exact original retains excluded marks; H08 also retains illustrations. Original is not stripped or substituted.",
+      "smallest_next_action": "One rights-holder authorization covering H06-H09 by exact hash for private internal synthetic filled-copy replay with the unchanged marks/assets retained.",
+      "owner_action_required_now": true,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H06-source-text.txt",
+        "sha256": "9ba26e30e42cf74713f6fc77aa89ecc2addb60493ec8336077c3cfc537cad5dc"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H06-rights-notices.json",
+        "sha256": "f3ea2b0e193f2dd39d20cd8fd724843b30d2f049cc9569528f386300b847a916"
+      },
+      "notice_interpretation": "Misdirected-message confidentiality caution is not an exact template copyright denial."
+    },
+    {
+      "holdout_id": "H07",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H07-3d835f883488.docx",
+      "original_sha256": "3d835f8834881bd352305542be889ded4d7ac500d13e97acd9714ba1e9361620",
+      "source_metadata_id": "hnz-cw-notif-gp",
+      "source_url": "https://www.tewhatuora.govt.nz/health-services-and-programmes/national-public-health-service/notifiable-diseases/notify-national-public-health-service-south-island-te-waipounamu",
+      "download_url": "https://static.info.content.health.nz/docs/health-pros/topics/diseases-conditions/notifiable/CW-disease-notification-form-for-general-practices.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "06a9906ee36796a6d453828b928ce1d43b7145d789f70fae23b6f81d8fcbb72f",
+          "classification": "Health_New_Zealand_logo"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXCLUDED_EXACT_ASSETS",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded Health NZ CC BY 4.0 text grant is positive but expressly excepts logos/photos/illustrations. Exact original retains excluded marks; H08 also retains illustrations. Original is not stripped or substituted.",
+      "smallest_next_action": "One rights-holder authorization covering H06-H09 by exact hash for private internal synthetic filled-copy replay with the unchanged marks/assets retained.",
+      "owner_action_required_now": true,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H07-source-text.txt",
+        "sha256": "837452a5234f6eabf91fcadb910c320788dea0718de138ac56c01961919bb9b3"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H07-rights-notices.json",
+        "sha256": "f3ea2b0e193f2dd39d20cd8fd724843b30d2f049cc9569528f386300b847a916"
+      },
+      "notice_interpretation": "Misdirected-message confidentiality caution is not an exact template copyright denial."
+    },
+    {
+      "holdout_id": "H08",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H08-b87238c11dd6.docx",
+      "original_sha256": "b87238c11dd67f69cc334a5562d26122b42e591c44a0674f0dfaf4ba0bafe113",
+      "source_metadata_id": "hnz-northern-hazsub-crf",
+      "source_url": "https://www.tewhatuora.govt.nz/health-services-and-programmes/national-public-health-service/notifiable-diseases/notify-national-public-health-service-northern",
+      "download_url": "https://static.info.content.health.nz/docs/health-pros/topics/diseases-conditions/notifiable/Case-report-form-hazardous-substance-injury.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "548358164150a8a12ec8f3fa060a83e2c5f3448a560b1964fd86846ee2ae49bb",
+          "classification": "Health_New_Zealand_logo"
+        },
+        {
+          "part": "word/media/image3.png",
+          "sha256": "96c58ff138cfd85b424b27742732efb9d73a8cbc219267d316a1174d65451330",
+          "classification": "patterned_illustration_banner"
+        },
+        {
+          "part": "word/media/image2.jpg",
+          "sha256": "0ba393d450b0124b3ec5cc6b40d93dcd8c224f7a44284167e389c36c6a996d6e",
+          "classification": "Health_New_Zealand_name_banner"
+        },
+        {
+          "part": "word/media/image4.jpeg",
+          "sha256": "9deff515caef383e1401ddf51c122d282d21984bc3b4387d4c744d9487331c1f",
+          "classification": "patterned_illustration_banner"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXCLUDED_EXACT_ASSETS",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded Health NZ CC BY 4.0 text grant is positive but expressly excepts logos/photos/illustrations. Exact original retains excluded marks; H08 also retains illustrations. Original is not stripped or substituted.",
+      "smallest_next_action": "One rights-holder authorization covering H06-H09 by exact hash for private internal synthetic filled-copy replay with the unchanged marks/assets retained.",
+      "owner_action_required_now": true,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H08-source-text.txt",
+        "sha256": "fb09586923333a9e2d5153094b9faf5d8ed2e314549e4ef8a71c95615d16663a"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H08-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H09",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H09-430af1e02b91.docx",
+      "original_sha256": "430af1e02b915b2304c663f6c4e25c8af1f25a2ea1a02e4651f51ec7a4d4c366",
+      "source_metadata_id": "hnz-ncsp-hysterectomy",
+      "source_url": "https://www.tewhatuora.govt.nz/health-services-and-programmes/ncsp-hpv-screening/clinical-forms",
+      "download_url": "https://static.info.content.health.nz/docs/health-pros/topics/cervical-screening/total-hysterectomy.docx",
+      "families": [
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.jpg",
+          "sha256": "e76bb5b1f98775e394d453d67fb53dea332d1f77b738f4217db89a25b677b57c",
+          "classification": "Health_New_Zealand_logo"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXCLUDED_EXACT_ASSETS",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded Health NZ CC BY 4.0 text grant is positive but expressly excepts logos/photos/illustrations. Exact original retains excluded marks; H08 also retains illustrations. Original is not stripped or substituted.",
+      "smallest_next_action": "One rights-holder authorization covering H06-H09 by exact hash for private internal synthetic filled-copy replay with the unchanged marks/assets retained.",
+      "owner_action_required_now": true,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H09-source-text.txt",
+        "sha256": "8d1d249cde88af1bcf40fe6ba79b52b8f261ea12d71c1979e7f9d330b79fba8d"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H09-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H10",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H10-2bafe1a4cffe.docx",
+      "original_sha256": "2bafe1a4cffeb777f8b52eda80fe940de9271bd854fde4badf44898b9324eb16",
+      "source_metadata_id": "A-CMS-IM-CMS-10065-2029",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/medicare/medicare-general-information/bni/downloads/important-message-english-and-spanish.zip :: zip member IM_CMS-10065_03312029.docx",
+      "families": [
+        "F5",
+        "F7"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "32f879721f46355844337ec756b55e0ed1643d59472795644d56ef3f412d439c",
+          "classification": "HHS_departmental_seal"
+        },
+        {
+          "part": "word/media/image2.png",
+          "sha256": "711711c0b6d4b9bd400014af254a4421ef21a7986e4ac1c3e56272e1758920ef",
+          "classification": "text_fragment_ica"
+        },
+        {
+          "part": "word/media/image4.png",
+          "sha256": "711711c0b6d4b9bd400014af254a4421ef21a7986e4ac1c3e56272e1758920ef",
+          "classification": "text_fragment_ica"
+        },
+        {
+          "part": "word/media/image3.png",
+          "sha256": "3b5e47a7e8d626e029c037be099fe93ed0a63cdac3b2760ea4db10986168e8a5",
+          "classification": "text_fragment_re"
+        },
+        {
+          "part": "word/media/image5.png",
+          "sha256": "3b5e47a7e8d626e029c037be099fe93ed0a63cdac3b2760ea4db10986168e8a5",
+          "classification": "text_fragment_re"
+        },
+        {
+          "part": "word/media/image6.png",
+          "sha256": "0bf0bf9ce0b54dba9211ff20c28418871f3a6eb640f55e0e8aa61239e3421c3a",
+          "classification": "HHS_departmental_seal"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H10-source-text.txt",
+        "sha256": "7ffe31ae81bf36153b453ac734de0bcb8c84da0cde30aac5d869ddd92b125ca9"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H10-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H11",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H11-ff923d7b8ed2.docx",
+      "original_sha256": "ff923d7b8ed2cd549c6b74fc8d30dd3889d16c5dbbb464c844f69ec0e6159ba4",
+      "source_metadata_id": "A-CMS-DND-CMS-10066-2029",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/medicare/medicare-general-information/bni/downloads/detailed-notice-english-and-spanish.zip :: zip member DND_CMS-10066_03312029.docx",
+      "families": [
+        "F1",
+        "F5",
+        "F7"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "4818a453ad7e2e9aebf96360e3974aefcf839a2f5cc3fedac714e40e4d0bcc0d",
+          "classification": "HHS_departmental_seal"
+        },
+        {
+          "part": "word/media/image4.png",
+          "sha256": "4818a453ad7e2e9aebf96360e3974aefcf839a2f5cc3fedac714e40e4d0bcc0d",
+          "classification": "HHS_departmental_seal"
+        },
+        {
+          "part": "word/media/image2.png",
+          "sha256": "c17055af6fa56b8690666013c23a4f3a37ecfaa320798b316daa423e8fc9585d",
+          "classification": "text_fragment_ica"
+        },
+        {
+          "part": "word/media/image5.png",
+          "sha256": "c17055af6fa56b8690666013c23a4f3a37ecfaa320798b316daa423e8fc9585d",
+          "classification": "text_fragment_ica"
+        },
+        {
+          "part": "word/media/image3.png",
+          "sha256": "95cf6bdc8dd5c7076b1581c83807d4d9f9e724aa51c17b70640429ae4a691904",
+          "classification": "text_fragment_re"
+        },
+        {
+          "part": "word/media/image6.png",
+          "sha256": "95cf6bdc8dd5c7076b1581c83807d4d9f9e724aa51c17b70640429ae4a691904",
+          "classification": "text_fragment_re"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H11-source-text.txt",
+        "sha256": "a1b2343b78c19037a1125b08988f16bce108567afc0a2dc1749d875d169f993a"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H11-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H12",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H12-870414ddbfef.docx",
+      "original_sha256": "870414ddbfefd522c9ed96b21b6f8356dac2b4d6d7ce5951e0ddd944b8544a6b",
+      "source_metadata_id": "A-CMS-HHCCN-CMS-10280-2027",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/files/zip/hhccn-forms-multiple-languages-exp-2027.zip :: zip member HHCCN_2027.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F7"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H12-source-text.txt",
+        "sha256": "d2ee58babdbf21aafb8d2fe1a769e028489036f9b2add26cd713eccd2f1086c9"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H12-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H13",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H13-ea693106c8c4.docx",
+      "original_sha256": "ea693106c8c48eaa167872afb4c34410c3aecc899c0ee5eba8eef458f8a82238",
+      "source_metadata_id": "A-CMS-IDN-CMS-10003-NDMCP",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/files/zip/integrated-denial-notice-form-pdf-word-eff-jan-2025.zip :: zip member CMS-10003_NDMCP_Notice of Denial of Medical Coverage or Payment_v508.docx",
+      "families": [
+        "F1",
+        "F5",
+        "F6"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H13-source-text.txt",
+        "sha256": "d0b2b44397c511750b2574249f50be712b905316d81f6ebc9e425801e9544c8e"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H13-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H14",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H14-99b8c6731291.docx",
+      "original_sha256": "99b8c67312910b7ec8b27c78e0807933b332741e775ce90ba0bf0d2d439ee6c8",
+      "source_metadata_id": "A-CMS-ABN-CMS-R-131-English-v2029",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/medicare/medicare-general-information/bni/downloads/abn-forms-english-and-spanish-incl-large-print.zip :: zip member ABNEnglish_508_v2029.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F4",
+        "F6",
+        "F7"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H14-source-text.txt",
+        "sha256": "7690afd731ba006e6b2bb59a753d88633747d617b65d18f8037c7a4a03f83d7b"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H14-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H15",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H15-d4ce44196f5a.docx",
+      "original_sha256": "d4ce44196f5a71d4b375ca3fd3c17b253d48cb4f841ca224c44c72cc4e6b9112",
+      "source_metadata_id": "A-CMS-MCSN-CMS-10868",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/files/zip/cms-10868-medicare-change-status-notice-and-instructions-english.zip :: zip member 10868-MedicareChangeofStatusNotice (MCSN)_Englishv508.docx",
+      "families": [
+        "F1",
+        "F5",
+        "F7",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [
+        {
+          "part": "word/media/image1.png",
+          "sha256": "6386eadf9ae334ad09ae51916d7245d04caf617a29ad93979b830aea6d321b3e",
+          "classification": "HHS_departmental_seal"
+        },
+        {
+          "part": "word/media/image2.png",
+          "sha256": "34cbf798d67e5f10747ff0e53e958c6cc25d1b11cbdd0f78a193bf2943fc6401",
+          "classification": "text_fragment_ica"
+        },
+        {
+          "part": "word/media/image4.png",
+          "sha256": "34cbf798d67e5f10747ff0e53e958c6cc25d1b11cbdd0f78a193bf2943fc6401",
+          "classification": "text_fragment_ica"
+        },
+        {
+          "part": "word/media/image3.png",
+          "sha256": "41b000dde298ec84a85fb82e43d7ee1c8b72f9413a781134feda3a541f1cd004",
+          "classification": "text_fragment_re"
+        },
+        {
+          "part": "word/media/image5.png",
+          "sha256": "41b000dde298ec84a85fb82e43d7ee1c8b72f9413a781134feda3a541f1cd004",
+          "classification": "text_fragment_re"
+        },
+        {
+          "part": "word/media/image6.png",
+          "sha256": "bb41150d3f3a7e62d0d3da7101a8251a3b474fbdae7787f453ae65346248a5de",
+          "classification": "HHS_departmental_seal"
+        }
+      ],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H15-source-text.txt",
+        "sha256": "39832064ed0241b5f9ae35fabc92c6a7a1376fd550cea253ee581c0926e3a05f"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H15-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H16",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H16-f62811e31a3a.docx",
+      "original_sha256": "f62811e31a3a6a8e912ce9d2673f4bf521424806d6afb62fe7ba2d7ac8dec66d",
+      "source_metadata_id": "A-CMS-DENC-CMS-10124-2024",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/files/zip/detailed-explanation-non-coverage-denc-eff-jan-2025.zip :: zip member DENC_2024_v508.docx",
+      "families": [
+        "F1"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H16-source-text.txt",
+        "sha256": "245a8b9c88a76880b25594ffe7671098eef7ad48068637afd743482e39363911"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H16-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H17",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H17-d2c0100f61b9.docx",
+      "original_sha256": "d2c0100f61b91dd8ed9572f67224efcf228aab25ff1b56a8e8d3238885967d88",
+      "source_metadata_id": "A-CMS-NOMNC-CMS-10123-2024",
+      "source_url": "https://www.cms.gov/medicare/medicare-general-information/bni",
+      "download_url": "https://www.cms.gov/files/zip/notice-medicare-non-coverage-nomnc-eff-jan-2025.zip :: zip member NOMNC_2024_v508.docx",
+      "families": [
+        "F5"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_a",
+        "cms_bni_publication",
+        "cms_moon_fact_sheet",
+        "hhs_disclaimer",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_CMS_EDITION_REPLAY_SCOPE",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Retained official BNI publication and intended provider use are positive provenance. Original collector expressly inferred authorship from OMB. Exact edition/production-or-reuse scope for internal synthetic replay is not established; H10/H11/H15 contain HHS seals whose scope must be checked separately.",
+      "smallest_next_action": "Engineering binds retained official BNI link/download/member evidence to this exact original edition and recovers applicable exact production/reuse evidence; check HHS seal scope for H10/H11/H15. Escalate only an unresolved exact grant/asset after that work.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H17-source-text.txt",
+        "sha256": "b2c4f267107a5bc9c18f99a10939f84ba0175e8b3c57caf8b1efd36d39d3d127"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H17-rights-notices.json",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "notice_interpretation": "No contrary original rights notice found by whole XML scan."
+    },
+    {
+      "holdout_id": "H18",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H18-0a9169f5e9d9.docx",
+      "original_sha256": "0a9169f5e9d907b722c1ff501ad807448ad2eccad4128a984bcbbb3a8af8f614",
+      "source_metadata_id": "zen-4404855-mri",
+      "source_url": "https://zenodo.org/records/4404855",
+      "download_url": "https://zenodo.org/api/records/4404855/files/GCS-NeuroCOVID_Tier2_MRI_CRF_Core+Suppl_CDEs_v1p0.docx/content",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_ZENODO_RECORD_FILE_BINDING",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded Zenodo 4404855 CC BY 4.0 observation remains positive, not a denial. Exact original has no media or contrary original rights notice. Retained raw API record with per-file checksum/size binding was not found.",
+      "smallest_next_action": "Engineering recovers the existing exact Zenodo record witness and checksum/size-to-original binding for the two named files; no blanket new permission request.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H18-source-text.txt",
+        "sha256": "b0070526a9dc1326a9a66eafc997b7df9d79a8b9905b87a0a57938f551338be6"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H18-rights-notices.json",
+        "sha256": "b5f6302c039ddd29d317ff1ae989d76d48ef951a49d5265c72c7893aeb02c505"
+      },
+      "notice_interpretation": "EndNote bibliographic keyword Reproducibility of Results is a regex false positive, not a rights notice."
+    },
+    {
+      "holdout_id": "H19",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H19-64e5706373fa.docx",
+      "original_sha256": "64e5706373fa14538f589fd1da535ff9fda261b6281f99148b3411cdc244ce1f",
+      "source_metadata_id": "zen-4404855-ct",
+      "source_url": "https://zenodo.org/records/4404855",
+      "download_url": "https://zenodo.org/api/records/4404855/files/GCS-NeuroCOVID_Tier2_CT_CRF_Core+Suppl_CDEs_v1p0.docx/content",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "format": "docx",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": true,
+      "exact_docx_xml_asset_inventory_completed": true,
+      "legacy_semantic_inspection_completed": null,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "applicability_rules"
+      ],
+      "rights_stage": "HELD_EXACT_ZENODO_RECORD_FILE_BINDING",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded Zenodo 4404855 CC BY 4.0 observation remains positive, not a denial. Exact original has no media or contrary original rights notice. Retained raw API record with per-file checksum/size binding was not found.",
+      "smallest_next_action": "Engineering recovers the existing exact Zenodo record witness and checksum/size-to-original binding for the two named files; no blanket new permission request.",
+      "owner_action_required_now": false,
+      "private_original_text_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H19-source-text.txt",
+        "sha256": "20921888b81a0d5e3211c2a89855b06ddc247300adf5fcc119158c8d7c6e113a"
+      },
+      "private_notice_scan_evidence": {
+        "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word-release-completion-20261004T2010Z/holdout-adjudication-v2/H19-rights-notices.json",
+        "sha256": "b5f6302c039ddd29d317ff1ae989d76d48ef951a49d5265c72c7893aeb02c505"
+      },
+      "notice_interpretation": "EndNote bibliographic keyword Reproducibility of Results is a regex false positive, not a rights notice."
+    },
+    {
+      "holdout_id": "H20",
+      "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/originals/H20-97fcbc6e17b6.doc",
+      "original_sha256": "97fcbc6e17b62a7121fb62a2279ffceb21254c98c3e05e26f12d738d7339ef19",
+      "source_metadata_id": "mhclg-iqmp",
+      "source_url": "https://www.gov.uk/government/publications/firefighters-pension-scheme-medical-appeals-forms",
+      "download_url": "https://assets.publishing.service.gov.uk/media/5a7993d6e5274a684690a93c/1444281.doc",
+      "families": [],
+      "format": "doc (OLE2 legacy)",
+      "original_unchanged": true,
+      "previously_exposed": true,
+      "metadata_and_unmodified_original_inspection_eligible": true,
+      "original_docx_container_supported": false,
+      "exact_docx_xml_asset_inventory_completed": false,
+      "legacy_semantic_inspection_completed": false,
+      "embedded_assets": [],
+      "current_application_executed": false,
+      "fresh_automatic_success_credit": false,
+      "native_Word_acceptance_completed": false,
+      "provider_upload_authorized": false,
+      "execution_blockers": [
+        "reviewed exact ledger in required evidence namespace",
+        "prospective final source freeze",
+        "exclusive QA lease",
+        "immutable original .doc format unsupported"
+      ],
+      "evidence_ids": [
+        "sealed_full_manifest",
+        "exact_original_inspection",
+        "visual_asset_adjudication",
+        "collector_b",
+        "unrelated_uk_footer_page",
+        "ole_licence_text"
+      ],
+      "rights_stage": "HELD_EXACT_OGL_SCOPE_AND_OLE_INSPECTION",
+      "offline_filled_copy_replay_supported": false,
+      "support_basis": "Recorded OGL claim borrows the footer from an unrelated hospital-forms page. General OGL terms are positive but not an exact source-product binding. Whole legacy OLE text/assets remain uninspected; original .doc upload is unsupported.",
+      "smallest_next_action": "Engineering recovers the exact MOD/firefighter publication-to-file OGL witness and whole unchanged OLE text/assets inspection. Keep original .doc unsupported in the fixed denominator; no substitution or new feature is authorized.",
+      "owner_action_required_now": false
+    }
+  ],
+  "ledger_adoption_requirement": "Retain current exact decisions and required inspection/witness receipts in custodian metadata or holdout/rights, then prospectively review and freeze them with the final source. This report is outside the runner evidence namespace and cannot authorize execution by itself."
+}
