@@ -4245,9 +4245,12 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # (b2) HOLD-ONLY, kept: ONE STATEMENT, TWO SPECIFIC QUESTIONS. An unlabelled statement selected into two
                 # or more text questions that are not general narrative destinations is owned by none of them ('He has
                 # hypertension and takes lisinopril 10 mg daily.' for both Past medical history and Medications); rule
-                # (b) holds this shape only when a sentence stands before it.
+                # (b) holds this shape only when a sentence stands before it. A complete ordinary relation plus the
+                # bounded reviewed-source phrase/observation proof can serve independently applicable destinations;
+                # ambiguous/repeated competitors still refuse in that relation's reader.
                 if (label not in governance[11]['preceding']['general'] and not colon_labelled[unit['id']]
-                        and field.get('kind') in ('text','long_text') and len(specific_claims.get(unit['id'],()))>1):
+                        and field.get('kind') in ('text','long_text') and len(specific_claims.get(unit['id'],()))>1
+                        and unit['id'] not in ordinary.get('shared_ids', set())):
                     guarded=True
                 # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation), and
                 # (d)-(f) (`v3_shape_holds`): read once per unit (`shape_holds`).
