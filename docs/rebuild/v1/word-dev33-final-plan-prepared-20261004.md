@@ -122,3 +122,49 @@ explicit omissions/refusals, clinician corrections, clinical generation
 usefulness, historical holdout and independent qualification stay separate in
 the resulting ledger. Fixed synthetic writer profiles do not qualify model or
 voice usefulness. This DEV preparation cannot satisfy the whole release gate.
+
+## Implemented mixed-processor ledger
+
+`rebuild/ops/fixtures/word_dev33_mixed_consolidation.source` now implements the
+separate metadata-only union. Default invocation reports `PREPARED_NOT_EXECUTED`
+without reading source/evidence, creating output or starting a process. Its
+finished literal is SHA256
+`45194f885ad999e479f6cbe5000794f36aa540e8114fe4adbf378d838bfc17af`.
+The original consolidator, both original drivers, scorers, profiles, ground
+truth, prepared packet membership and prepared-plan SHA remain unchanged.
+
+Execution requires the prospective S seal and independently retained seal hash,
+all 17 packet paths and independent outer-receipt hashes. The seal contains the
+exact native/V3 driver maps, their actual source paths, unchanged helper hashes,
+all packet memberships and the full source inventory used by the normal driver.
+The CLI independently checks every tracked `rebuild` file against its Git blob,
+including non-Python files even if a stale Git status reports clean, then checks
+the unchanged scorer/profile helper bytes. Every batch must match that same
+inventory before and after and retain the exact prospective seal. The CLI also
+checks each immutable original, GT and annotator against the prepared hashes.
+
+The outer receipt binds an after-child `raw-evidence-manifest.json`; the
+independently retained receipt SHA binds that manifest and all consumed raw
+mapping, profile, result, export and teardown files. Missing, changed, duplicate
+or foreign packets/members, changed source/GT/harness/profile, processor
+substitution, manual mapping or value corrections in fixed profiles, missing
+exports and contradictory pass flags refuse. Native manual profiles are
+retained separately and can never contribute to automatic counts. Per-packet
+outer receipts and independent teardown seals must be produced by the normal
+bounded supervisor; the ledger cannot invent them from a screenshot or redirect.
+
+The ledger preserves all 60 original members and 20 unevaluated historical
+holdout members. It distinguishes completed execution with an unmet product
+gate (exit 1), incomplete child/teardown execution (exit 2), and integrity refusal
+(exit 3). Caught child failures earn no automatic credit. `gate_pass` and
+`ci_pass_claim` remain false, independently of DEV success counts. It does not
+provide native Word or clinical-generation qualification.
+
+Thirty-nine focused pure methods passed with actual exit 0 in 0.616640 seconds
+(runner 0.410 seconds), against unchanged literal/test bytes. Raw log SHA256 is
+`5d4296f13be063c4b6f1e59216063dd2f8b6a84db327e82865552fb40f411d52`.
+The protected evidence is
+`operations/word-dev33-mixed-adapter-finished-20261004/{tests.log,result.json}`;
+the earlier 35-method preparation result remains separate. These are synthetic
+metadata controls, not actual corpus/application success. No QA connection,
+renderer, provider send or candidate qualification run occurred.
