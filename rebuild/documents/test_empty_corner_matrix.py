@@ -54,6 +54,102 @@ def by_label(mapping): return {field['label']: field for field in mapping['field
 
 
 class EmptyCornerMatrix(unittest.TestCase):
+    @staticmethod
+    def guided_form(mutate=None):
+        def guide(doc, table):
+            table.cell(3, 3).paragraphs[0].add_run('\uf020[IF YES, SPECIFY BELOW.]')
+            if mutate:
+                mutate(doc, table)
+        return form(headers=('YES', 'NO', 'REFUSED'),
+                    labels=('First observation', 'Second observation', 'OTHER'), mutate=guide)
+
+    def test_guided_other_row_preserves_guidance_and_every_other_original_node(self):
+        original = self.guided_form(); mapping = w.inspect(original)
+        field = by_label(mapping)['OTHER']
+        self.assertEqual((field['kind'], field['options']), ('choice', ['YES', 'NO', 'REFUSED']))
+        self.assertEqual(len(field['locator']['target']['boxes']), 3)
+        self.assertEqual(field['source_questions'][0]['relation'], 'guided_response_row')
+        self.assertEqual(len(field['source_questions'][0]['sources']), 8)
+        self.assertEqual(w.fill(original, mapping['fields'], {}), original)
+        for answer, states in [('YES', [True, False, False]), ('NO', [False, True, False]),
+                               ('REFUSED', [False, False, True])]:
+            with self.subTest(answer=answer):
+                exported = w.fill(original, mapping['fields'], {field['key']: answer})
+                self.assertEqual(w.constrained_option_states(w.SlotIndex(w.open_package(exported)), field), states)
+                with ZipFile(BytesIO(original)) as old, ZipFile(BytesIO(exported)) as new:
+                    self.assertEqual(old.namelist(), new.namelist())
+                    for name in old.namelist():
+                        if name != 'word/document.xml':
+                            self.assertEqual(old.read(name), new.read(name))
+                    before, after = (etree.fromstring(z.read('word/document.xml')) for z in (old, new))
+                    for root in (before, after):
+                        row = root.find(w.q('w:body')).find(w.q('w:tbl')).findall(w.q('w:tr'))[3]
+                        for cell in w.row_cells_of(row)[1:]:
+                            para = cell.find(w.q('w:p'))
+                            # The existing glyph writer isolates and fonts the
+                            # one mark. Mask only that leaf, never its guidance.
+                            w.pin_glyph(para, 0)
+                            run = w.glyph_boxes(para)[0][0].run
+                            run.getparent().replace(run, etree.Element('allowed_original_glyph'))
+                    self.assertEqual(etree.tostring(before), etree.tostring(after))
+
+    def test_guided_other_row_refuses_unknown_hidden_or_competing_sources(self):
+        def unknown(doc, table): table.cell(3, 3).text = '☐ [IF NO, SIGN BELOW.]'
+        def different_caption(doc, table): table.cell(3, 0).text = 'Witness must write the following:'
+        def changed_header(doc, table): table.cell(0, 3).text = 'Signature'
+        def duplicate_header(doc, table): table.cell(0, 2).text = 'YES'
+        def hidden(doc, table): table.cell(3, 3).paragraphs[0].runs[-1].font.hidden = True
+        def extra(doc, table): table.cell(3, 3).paragraphs[0].add_run(' ☐')
+        def native(doc, table): native_box(table.cell(3, 3).paragraphs[0], 'ff')
+        def merge(doc, table): table.cell(3, 2).merge(table.cell(3, 3))
+        def link(doc, table):
+            hyperlink = OxmlElement('w:hyperlink'); run = OxmlElement('w:r'); text = OxmlElement('w:t')
+            text.text = 'fixed'; run.append(text); hyperlink.append(run)
+            table.cell(3, 3).paragraphs[0]._p.append(hyperlink)
+        def split(doc, table): table.cell(3, 3).add_paragraph('extra instruction')
+        def guidance_on_no(doc, table):
+            table.cell(3, 3).text = '☐'; table.cell(3, 2).paragraphs[0].add_run('[IF YES, SPECIFY BELOW.]')
+        def competing_axis(doc, table):
+            row = table.add_row()._tr
+            for cell, text in zip(row.findall(qn('w:tc')), ('', 'Witness', 'Attestation', 'Signature')):
+                para = cell.find(qn('w:p')); run = OxmlElement('w:r'); node = OxmlElement('w:t')
+                node.text = text; run.append(node); para.append(run)
+            table.rows[3]._tr.addprevious(row)
+        def broken_prior_band(doc, table):
+            row = table.add_row()._tr
+            for cell, text in zip(row.findall(qn('w:tc')), ('Independent notes', '_________', '☐', '☐')):
+                para = cell.find(qn('w:p')); run = OxmlElement('w:r'); node = OxmlElement('w:t')
+                node.text = text; run.append(node); para.append(run)
+            table.rows[3]._tr.addprevious(row)
+        for mutate in (unknown, different_caption, changed_header, duplicate_header, hidden,
+                       extra, native, merge, link, split, guidance_on_no, competing_axis, broken_prior_band):
+            with self.subTest(mutate=mutate.__name__):
+                original = self.guided_form(mutate); mapping = w.inspect(original)
+                self.assertFalse(any(r.get('relation') == 'guided_response_row'
+                                     for f in mapping['fields'] for r in f.get('source_questions', [])))
+                self.assertEqual(w.fill(original, mapping['fields'], {}), original)
+
+    def test_guided_other_row_refuses_forged_partial_and_unknown_answers(self):
+        original = self.guided_form(); mapping = w.inspect(original); field = by_label(mapping)['OTHER']
+        def missing_relation(f): f.pop('source_questions')
+        def partial(f): f['locator']['target']['boxes'].pop()
+        def reversed_options(f): f['options'].reverse()
+        def renamed(f): f['label'] = 'Ordinary observation'
+        def copied_source(f): f['source_questions'][0]['sources'][-1]['fingerprint'] = '0' * 64
+        def scalar(f): f['kind'] = 'checkbox'; f['options'] = ['OTHER']
+        for mutate in (missing_relation, partial, reversed_options, renamed, copied_source, scalar):
+            with self.subTest(mutate=mutate.__name__):
+                forged = deepcopy(field); mutate(forged)
+                with self.assertRaises(w.V3Failure):
+                    w.fill(original, [forged], {forged['key']: 'NO'})
+                self.assertEqual(w.fill(original, [forged], {}), original)
+        for answer in ('MAYBE', 'NO[GO TO 3.]', 'checked', 'YES\nNO'):
+            with self.subTest(answer=answer), self.assertRaises(w.V3Failure):
+                w.fill(original, [field], {field['key']: answer})
+        other = deepcopy(field); other['key'] = 'duplicate_writer'
+        with self.assertRaises(w.V3Failure):
+            w.fill(original, [field, other], {field['key']: 'NO', other['key']: 'YES'})
+
     def test_complete_original_axis_yields_each_row_and_never_a_header_answer(self):
         for kind in ('glyph', 'ff', 'sdt'):
             with self.subTest(kind=kind):

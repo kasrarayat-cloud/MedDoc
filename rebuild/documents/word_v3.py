@@ -2562,6 +2562,7 @@ class Detector:
         self.rule_coded_column_sequences()
         self.rule_merged_checkbox_hierarchy()
         self.rule_bracketed_checkbox_hierarchy()
+        self.rule_guided_other_response_rows()
         self.rule_checkboxes()
         self.rule_adjacent_write_ins()
         self.rule_question_boxes(list_only=True)
@@ -6385,6 +6386,85 @@ class Detector:
             return False                # a checkbox its reading does not show (round 3 F1)
         return is_blank_text(txt) and self.is_empty_cell(c) or self.is_box_cell(c)
 
+    def guided_other_response_row(self, table, row):
+        """One OTHER row on a proved YES/NO/REFUSED axis, with fixed trailing guidance.
+
+        The guidance is not an option or a writable span. This narrow source
+        contract keeps three distinct visible glyphs and binds the complete
+        headers, row caption and appended instruction before grouping them.
+        """
+        rows = self.grid(table)
+        first = min(rows)
+        if row <= first or self.response_matrix_corner(table, first) is None:
+            return None
+        header = sorted(rows[first], key=lambda c: c.info['col'])
+        cells = sorted(rows[row], key=lambda c: c.info['col'])
+        if (len(header) != 4 or len(cells) != 4
+                or [self.cell_text(c) for c in header[1:]] != ['YES', 'NO', 'REFUSED']
+                or self.cell_text(cells[0]) != 'OTHER'
+                or any(c.info['col'] != n or c.info['span'] != 1 or c.info['vmerge']
+                       for n, c in enumerate(cells))):
+            return None
+        # The original axis must continue without an intervening header,
+        # divider, merge, hidden control or independent answer band.
+        for previous in range(first + 1, row):
+            band = sorted(rows.get(previous, []), key=lambda c: c.info['col'])
+            if (len(band) != 4 or any(c.info['col'] != n or c.info['span'] != 1 or c.info['vmerge']
+                                     for n, c in enumerate(band))
+                    or not self.is_label_cell(band[0], complete=True)
+                    or any(p.kind != 'p' or not self.tab_source_visible(p) or self.box_units(p)
+                           or self.blank_spans(*self.ptext(p.el)) for p in band[0].children)):
+                return None
+            for cell in band[1:]:
+                if (len(cell.children) != 1 or cell.children[0].kind != 'p'
+                        or not self.tab_source_visible(cell.children[0])
+                        or self.ptext(cell.children[0].el)[0].strip() not in (BOX, CHECKED)
+                        or len(self.box_units(cell.children[0])) != 1
+                        or self.box_units(cell.children[0])[0][0]['kind'] != 'glyph'):
+                    return None
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:hyperlink'), q('w:tbl'), q('w:br')}
+        boxes = []
+        for n, cell in enumerate(cells):
+            if (len(cell.children) != 1 or cell.children[0].kind != 'p'
+                    or not self.tab_source_visible(cell.children[0])
+                    or any(node.tag in unsafe for node in cell.el.iter())
+                    or self.cell_has_claim(cell.el)):
+                return None
+            para = cell.children[0]
+            text = self.ptext(para.el)[0].strip()
+            units = self.box_units(para)
+            if n == 0:
+                if units or self.blank_spans(*self.ptext(para.el)):
+                    return None
+                continue
+            if len(units) != 1 or units[0][0]['kind'] != 'glyph':
+                return None
+            if n < 3 and text not in (BOX, CHECKED):
+                return None
+            if n == 3 and not re.fullmatch(r'[☐☒][\s\uf020]*\[IF YES, SPECIFY BELOW\.\]', text):
+                return None
+            boxes.append(units[0][0])
+        sources = [{'part': c.part, 'slot': c.path, 'fingerprint': fingerprint(c.el)}
+                   for c in [*header, *cells]]
+        return {'boxes': boxes, 'relation': {'relation': 'guided_response_row', 'sources': sources,
+                                           'guidance': self.ptext(cells[3].children[0].el)[0]}}
+
+    def rule_guided_other_response_rows(self):
+        # Bind the complete row before its appended guidance can look like the
+        # caption of a standalone checkbox. Other table readings are unchanged.
+        for table in (s for s in self.index.slots if s.kind == 'tbl'):
+            for row in self.grid(table):
+                guided = self.guided_other_response_row(table, row)
+                if guided is None:
+                    continue
+                cells = sorted(self.grid(table)[row], key=lambda c: c.info['col'])
+                self.add(Area('choice', 'OTHER', cells[1], {'type': 'checkboxes', 'boxes': guided['boxes']},
+                              context=self.context_for(cells[1]), options=['YES', 'NO', 'REFUSED'],
+                              extra_slots=cells[2:], source_questions=[guided['relation']]))
+                for cell in cells[1:]:
+                    self.claimed.update(id(node) for node in cell.el.iter())
+
     def plain_layout_properties(self, table, cell):
         """Resolve the bounded direct/default style set, without assuming a background."""
         cell_props, table_props = cell.el.findall(q("w:tcPr")), table.el.findall(q("w:tblPr"))
@@ -10173,6 +10253,17 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 and field.get('options', []) == area.options
                 and field.get('source_questions', []) == area.source_questions)
 
+    for area in source_detector.areas:
+        if not any(r.get('relation') == 'guided_response_row' for r in area.source_questions):
+            continue
+        regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None}
+                   for ref in area.target['boxes']]
+        active = [f for f in fields if answers.get(f['key']) not in (None, '', [])
+                  and any(reader.touches(place, region) for place in reader.of(f) for region in regions)]
+        if active and (len(active) != 1 or not exact_original_area(active[0], area)):
+            fail('This guided response row needs its complete original question, options and controls. '
+                 'Review the mapping again; its printed guidance remains unchanged.', 'mapping_mismatch')
+
     for identity in {area.slot.id for area in source_detector.areas
                      if area.target.get('shape') == 'after_label'}:
         paired = paired_colon_areas(source_detector, identity)
@@ -10475,7 +10566,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy", "temporal_format_hint") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy", "temporal_format_hint", "guided_response_row") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -10508,7 +10599,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 owns = (any(original_branch_mapping(field, area) for area in relation_areas)
                         or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy', 'temporal_format_hint') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy', 'temporal_format_hint', 'guided_response_row') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas))
