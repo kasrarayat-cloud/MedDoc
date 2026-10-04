@@ -162,6 +162,12 @@ class PersistedFixtureProbeTests(unittest.TestCase):
         self.assertTrue(result['prepared_only']); self.assertEqual(result['clinical_mutations'], 0)
         self.assertEqual(result['provider_requests'], 0)
 
+    def test_preceding_browser_mfa_code_is_not_replayed_or_waited_for_without_bound(self):
+        self.assertAlmostEqual(probe.fresh_mfa_delay(100, 3005), 25.2)
+        self.assertEqual(probe.fresh_mfa_delay(99, 3005), 0)
+        with self.assertRaisesRegex(RuntimeError, 'authenticator_clock_or_counter_requires_review'):
+            probe.fresh_mfa_delay(110, 3005)
+
 
 def sys_module():
     import sys

@@ -47,6 +47,14 @@ def field_summary(answers):
     return dict(sorted(Counter(row.get('status', 'unrecorded') for row in answers.values()).items()))
 
 
+def fresh_mfa_delay(last_counter, now):
+    """Do not replay a code consumed by the preceding browser acceptance run."""
+    auth.require(type(last_counter) is int and isinstance(now, (int, float)), 'invalid_authenticator_counter')
+    delay = max(0, (last_counter + 1) * 30 - now + 0.2)
+    auth.require(delay <= 32, 'authenticator_clock_or_counter_requires_review')
+    return delay
+
+
 def validate_example(record, original, first, exported, kind):
     """Validate only the two declared ordinary positive fixtures, preserving holds.
 
@@ -201,6 +209,7 @@ def main():
     from django.conf import settings
     from django.db import connection
     from django_otp.oath import totp
+    from django_otp.plugins.otp_totp.models import TOTPDevice
     from core import models as m
     from core.security import private_path
     from core.soap_document import original_bytes
@@ -227,7 +236,15 @@ def main():
         auth.require(admin.is_staff and not m.Membership.objects.filter(user=admin, active=True).exists(), 'financial_only_admin_required')
         doctor_client = served.login(accounts['doctor'], 9160)
         foreign_client = served.login(accounts['ultrasound'], 9160)
-        served.login(accounts['admin'], 9161, expect=False)
+        # The existing served authorization gate owns the password-only
+        # negative. Repeating it here would throttle the same seed account.
+        # Its/browser's successful code also cannot be replayed in this run.
+        device = TOTPDevice.objects.get(user=admin, confirmed=True)
+        auth.require(device.step == 30 and device.t0 == 0 and device.digits == 6
+            and device.key == accounts['admin']['totp_key_hex'], 'seed_authenticator_identity_differs')
+        pause = fresh_mfa_delay(device.last_t, time.time())
+        if pause:
+            time.sleep(pause)
         admin_client = served.login(accounts['admin'], 9161,
             otp=str(totp(bytes.fromhex(accounts['admin']['totp_key_hex']), step=30, t0=0, digits=6)).zfill(6))
         for surface, port in (('doctor', 9160), ('admin', 9161)):
