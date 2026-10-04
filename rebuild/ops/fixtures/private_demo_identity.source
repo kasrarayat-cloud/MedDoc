@@ -178,6 +178,14 @@ def main():
         password = secrets.token_urlsafe(32); replacement = secrets.token_urlsafe(32)
         confidential += [password, replacement]
         department_name = 'Synthetic identity ' + unique
+        # Recover this run's own account/department even if the outer deadline
+        # stops the process between HTTP mutation and row readback. No password,
+        # token, session key or clinical text belongs in this declaration.
+        auth.write_new(out / 'identity-declaration.json', {'format': 'quillmd-fixture-identity-v1',
+            'commit': args.expected_commit, 'script_sha256': args.expected_script_sha,
+            'run_id': args.run_id, 'email': email, 'department_name': department_name,
+            'organization': str(organization.pk), 'issuer': str(owner.pk), 'role': 'clinician',
+            'existing_financial_fingerprints': initial_finance, 'provider_requests': 0, 'external_messages': 0})
         post(owner_client, '/team/departments/', {'csrfmiddlewaretoken': csrf(owner_client, '/team/'),
             'organization': organization.pk, 'name': department_name})
         department = m.Department.objects.get(name=department_name, organization=organization)
