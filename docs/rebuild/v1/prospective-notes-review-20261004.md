@@ -25,5 +25,5 @@ in that original denominator and can be separately adjudicated.
 Five offline guard methods passed in 0.801 seconds, including declaration defaults,
 wrong/duplicate hash refusal, final admission binding, changed-review refusal,
 unchanged frozen expectations and exact physical issue controls. Two authenticated
-persisted route methods are committed for verification before provider admission.
+persisted route methods passed in11.932 seconds (outer22.007), including actual immutable review, confirmation, unchanged source, no job/charge, and changed-physical-review refusal. The separate related142-method offline packet passed44.143 seconds, exit0. Both packets used synthetic data; the QA test database was destroyed before release of the serialized slot.
 No provider request was made for this preparation.

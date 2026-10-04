@@ -32,3 +32,21 @@ They do not qualify the60-document cohort, live voice usefulness, native Word,
 private installation or real-patient release. The15 original live raw-ASR field
 outcomes remain unchanged under33132d28; source ownership for subjectless
 procedure values still needs repair and independent qualification.
+
+## Terminal write requests — 2026-10-04
+
+The finished eaf62259 diff recovered ordinary `Other (specify)` destinations but
+independent40 physical controls found two unsafe finalizer-name writes at
+`Attestation (specify)` (sole-caption cell and caption/blank/neighbor layouts).
+The exact originals and wrong exports remain in `root-other-refutation-eaf62259`.
+
+The4571a49f repair reuses the existing complete governing-action frame. The
+expanded48-control physical packet passed10.577 seconds, exit0, with zero unsafe
+writes and zero false holds. It covers attestation/declaration/review, patient,
+witness and manager signing/authoring, temporal qualifiers, forged labels/kinds
+and stripped protection; ordinary receipt, reading, ROS and attestation-status
+controls preserve their printed captions, neighbors, headers and footers.
+This is supplemental safety evidence, not automatic whole-corpus acceptance.
+
+- `root-other-refutation-eaf62259/result.json`: `6508a4d7684f8f55aee3872df5272f5fabb1144fe1472d6b0d118cb9ebb16f3c`
+- `root-other-refutation-4571a49f/result.json`: `2c89319b91924d48d63169bda39c0413f935134174efaefe6c9559a37c0faa3e`
