@@ -176,7 +176,7 @@ class ImportedEvidenceRollback(V3Fixture,TestCase):
 class CodingEvidenceAtTranscriptLeaf(SyntheticFixture,TransactionTestCase):
     """A real multi-migration reverse must refuse at the leaf, preserving every newer guard, or finish cleanly."""
     def setUp(self):
-        self.scope=self.make_scope('transcript-rollback')
+        self.scope=self.make_scope('transcript-rollback',historical_empty_import=True)
         today=timezone.localdate()
         self.release=m.CodeSet.objects.create(system='ICD-10-CM',version='synthetic-transcript-rollback',
             effective_from=today,effective_until=today,source_url='https://example.invalid/synthetic',sha256='d'*64)

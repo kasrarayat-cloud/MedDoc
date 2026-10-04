@@ -65,7 +65,8 @@ class ReinspectionFixture:
         self.inspection = inspect_template(self.path, engine='legacy')
         self.assertEqual(self.inspection['import_manifest']['engine'], 'legacy')
         self.assertEqual(len(self.inspection['fields']), 1)
-        self.original_template, self.original_version = self.version('preserved original')
+        self.original_template, self.original_version = self.version('preserved original',
+            historical_empty_import=getattr(self, 'historical_empty_import', False))
         self.release_encounter = MigrationLoader(connection).project_state(PREVIOUS).apps.get_model('core', 'Encounter')
         self.archive('actual-inspection.json', inspection=self.inspection,
                      original_sha256=hashlib.sha256(self.original).hexdigest())
@@ -74,14 +75,14 @@ class ReinspectionFixture:
             with original.open('xb') as stream: stream.write(self.original)
             original.chmod(0o600)
 
-    def version(self, name, *, marker=False, contract=''):
+    def version(self, name, *, marker=False, contract='', historical_empty_import=False):
         original_key = 'originals/' + name.replace(' ', '-') + '.docx'
         original_path = private_path(original_key)
         original_path.write_bytes(self.original)
         template = Template.objects.create(department=self.department, name='Synthetic ' + name, format='docx',
             original_name=original_path.name, original_path=original_key,
             sha256=hashlib.sha256(self.original).hexdigest(), created_by=self.user)
-        manifest = copy.deepcopy(self.inspection['import_manifest'])
+        manifest = {} if historical_empty_import else copy.deepcopy(self.inspection['import_manifest'])
         if marker:
             manifest['reinspection'] = {'source_template_id': str(self.original_template.pk),
                 'source_version_id': str(self.original_version.pk), 'source_sha256': template.sha256}
@@ -213,6 +214,8 @@ class ReinspectionDatabaseGuard(ReinspectionFixture, TestCase):
 
 @override_settings(QUILLMD_WORD_ENGINE='legacy')
 class ReinspectionMigrationReversal(ReinspectionFixture, TransactionTestCase):
+    historical_empty_import = True  # genuine initial legacy record; never clear an imported row
+
     def tearDown(self):
         executor = MigrationExecutor(connection)
         executor.migrate(executor.loader.graph.leaf_nodes())
@@ -237,6 +240,7 @@ class ReinspectionMigrationReversal(ReinspectionFixture, TransactionTestCase):
             self.assertNotIn(private, str(refused.exception))
 
     def test_ordinary_legacy_database_can_reverse_only_0038_and_reapply_without_record_change(self):
+        self.assertEqual(self.original_version.import_manifest, {})
         draft = self.legacy_draft(self.original_version)
         before = dict(Encounter.objects.filter(pk=draft.pk).values().get())
         MigrationExecutor(connection).migrate([PRIOR])
@@ -246,3 +250,23 @@ class ReinspectionMigrationReversal(ReinspectionFixture, TransactionTestCase):
         MigrationExecutor(connection).migrate([CURRENT])
         self.assertIn("import_manifest ? 'reinspection'", encounter_body())
         self.assertEqual(Encounter.objects.filter(pk=draft.pk).values().get(), before)
+
+    def test_current_import_evidence_refuses_reverse_before_guard_applied_set_or_rows_change(self):
+        template, version = self.version('retained current import')
+        self.assertTrue(version.import_manifest)
+        self.assertEqual(version.import_manifest['source_sha256'], template.sha256)
+        draft = self.legacy_draft(version)
+        before = {'body': encounter_body(), 'applied': set(MigrationRecorder(connection).applied_migrations()),
+            'encounters': list(Encounter.objects.values()), 'versions': list(TemplateVersion.objects.values()),
+            'confirmations': list(MappingConfirmation.objects.values())}
+        self.archive('before-current-import-reversal.json', **before)
+        with self.assertRaisesRegex(IrreversibleError, 'Import selection evidence exists') as refused:
+            MigrationExecutor(connection).migrate([PRIOR])
+        self.assertEqual(encounter_body(), before['body'])
+        self.assertEqual(set(MigrationRecorder(connection).applied_migrations()), before['applied'])
+        self.assertEqual(list(Encounter.objects.values()), before['encounters'])
+        self.assertEqual(list(TemplateVersion.objects.values()), before['versions'])
+        self.assertEqual(list(MappingConfirmation.objects.values()), before['confirmations'])
+        for private in (str(template.pk), str(version.pk), str(draft.pk), self.user.email):
+            self.assertNotIn(private, str(refused.exception))
+        self.assertEqual(self.path.read_bytes(), self.original)

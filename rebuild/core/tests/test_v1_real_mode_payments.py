@@ -658,6 +658,10 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
     job = RealModeNeverSpendsSandboxMoney.job
     BEFORE_0020 = [('core', '0019_clinicinvitation')]
 
+    def make_scope(self, *args, **kwargs):
+        # Only this historical migration class predates import manifests.
+        return super().make_scope(*args, **kwargs, historical_empty_import=True)
+
     def to_leaf(self):
         executor = MigrationExecutor(connection)
         executor.migrate(executor.loader.graph.leaf_nodes())

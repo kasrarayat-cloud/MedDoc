@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from django.db import migrations
 from django.db.migrations.exceptions import IrreversibleError
@@ -103,7 +103,27 @@ class ReinspectionMigrationSource(unittest.TestCase):
         module = importlib.import_module('core.migrations.' + NAME)
         objects = Mock(); objects.using.return_value.filter.return_value.count.return_value = 0
         apps = Mock(); apps.get_model.return_value = SimpleNamespace(objects=objects)
-        module.preserve_reinspection_review(apps, SimpleNamespace(connection=SimpleNamespace(alias='owned_synthetic')))
+        editor = SimpleNamespace(connection=SimpleNamespace(alias='owned_synthetic'), execute=Mock())
+        previous = importlib.import_module('core.migrations.0037_transcript_redaction_boundary')
+        with patch.object(previous, 'refuse_evidence') as prior:
+            module.preserve_reinspection_review(apps, editor)
+        prior.assert_called_once_with(apps, editor)
+        editor.execute.assert_not_called()
+        self.assertEqual(len(objects.mock_calls), 3)
+
+    def test_previous_leaf_refusal_propagates_without_guard_or_record_writes(self):
+        module = importlib.import_module('core.migrations.' + NAME)
+        objects = Mock(); objects.using.return_value.filter.return_value.count.return_value = 0
+        apps = Mock(); apps.get_model.return_value = SimpleNamespace(objects=objects)
+        editor = SimpleNamespace(connection=SimpleNamespace(alias='owned_synthetic'), execute=Mock())
+        previous = importlib.import_module('core.migrations.0037_transcript_redaction_boundary')
+        original = IrreversibleError('Import selection evidence exists; preserve import_manifest before any rollback.')
+        with patch.object(previous, 'refuse_evidence', side_effect=original) as prior:
+            with self.assertRaises(IrreversibleError) as refused:
+                module.preserve_reinspection_review(apps, editor)
+        self.assertIs(refused.exception, original)
+        prior.assert_called_once_with(apps, editor)
+        editor.execute.assert_not_called()
         self.assertEqual(len(objects.mock_calls), 3)
 
     def test_historical_nineteen_migration_install_contract_refuses_the_added_guard(self):

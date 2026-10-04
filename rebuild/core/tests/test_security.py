@@ -39,7 +39,7 @@ class SyntheticFixture:
             self.addCleanup(self._synthetic_media_override.disable)
         return self._synthetic_media_directory
 
-    def make_scope(self, label="xray", organization=None):
+    def make_scope(self, label="xray", organization=None, *, historical_empty_import=False):
         self.isolate_media()
         user = User.objects.create_user(username=label, email=f"{label}@synthetic.invalid", verified_at=timezone.now())
         org = organization or Organization.objects.create(name=f"Synthetic {label}")
@@ -51,7 +51,11 @@ class SyntheticFixture:
         synthetic_original.persist(private_path(original_path), blob)
         info = synthetic_original.inspection()
         template = Template.objects.create(department=department, name=label, format="docx", original_name="synthetic.docx", original_path=f"originals/{label}.docx", sha256=hashlib.sha256(blob).hexdigest(), created_by=user)
-        version = TemplateVersion.objects.create(template=template, number=1, fields=info['fields'], import_manifest=info['import_manifest'], created_by=user)
+        # A migration control may explicitly represent a legacy record created
+        # before import evidence existed. Keep the real original and inspector
+        # mapping; never erase evidence on an existing imported version.
+        version = TemplateVersion.objects.create(template=template, number=1, fields=info['fields'],
+            import_manifest={} if historical_empty_import else info['import_manifest'], created_by=user)
         key = version.fields[0]['key']
         encounter = Encounter.objects.create(department=department, patient=patient, template_version=version, created_by=user, service_date=timezone.localdate(), notes="Symptoms: no chest pain", answers={key: {"text": "no chest pain", "status": "supported", "reviewed": True, "evidence": []}})
         welcome_credit(user)
