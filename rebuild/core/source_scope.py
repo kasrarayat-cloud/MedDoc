@@ -915,6 +915,49 @@ def owned_oppositions(reading,claim):
     return result
 
 
+def distinct_observation_and_assessment(reading, observation, assessment, label):
+    """An affirmative observed Examination is not its uncertain diagnosis.
+
+    This proves the two literal source roles, not an inferred patient or
+    clinical synonym. The complete ordinary relation and all actual contrary,
+    correction, time and actor floors remain prerequisites in the caller.
+    """
+    from . import v3_actors as a, v3_syntax
+    if label != 'examination' or len(reading['named'].get(label, ())) != 1:
+        return False
+    if len(reading['named'].get('assessment', ())) != 1:
+        return False
+    uid, oid = observation['id'], assessment['id']
+    if not {uid, oid} <= reading.get('sole_patient', frozenset()):
+        return False
+    mine = reading['actors'][uid].get('sole') or {}
+    theirs = reading['actors'][oid].get('sole') or {}
+    own = reading['parsed'].get(uid)
+    other = reading['parsed'].get(oid)
+    if ((own[0] if own else reading['subjects'].get(uid)) != label
+            or not other or other[0] != 'assessment'
+            or not mine.get('current') or mine.get('reach') or mine.get('unknown')
+            or mine.get('uncertain') or not theirs.get('doubt_only')
+            or theirs.get('unknown') or 'global' in theirs.get('reach', ())):
+        return False
+    docs = v3_syntax.docs((observation['quote'], assessment['quote']))
+    if docs is None or any(doc is None for doc in docs):
+        return False
+    # Full noun heads and predicate assertions still compete. An adjectival
+    # location modifier ("medial") is not itself a diagnostic assertion.
+    noun_keys = [a.keys({a._lemma(t) for t in doc if t.pos_ in ('NOUN', 'PROPN')}) for doc in docs]
+    predicate_keys = [frozenset().union(frozenset(), *(head | a.keys(complement)
+        for head, _, _, complement, _ in reading['predicates'][u['id']]))
+        for u in (observation, assessment)]
+    heads = frozenset().union(frozenset(), *(head for u in (observation, assessment)
+        for head, _, _, _, _ in reading['predicates'][u['id']]))
+    modifiers = a.keys({a._lemma(t) for doc in docs for t in doc
+        if t.pos_ == 'ADJ' and t.dep_ == 'amod' and a._lemma(t) in a.SOLE_NEUTRAL_WORDS}) - heads
+    shared = noun_keys[0] & noun_keys[1]
+    shared |= (predicate_keys[0] & predicate_keys[1]) - modifiers
+    return not shared
+
+
 def unresolved_medication_changes(reading):
     """A generic old medication argument does not identify what changed.
 

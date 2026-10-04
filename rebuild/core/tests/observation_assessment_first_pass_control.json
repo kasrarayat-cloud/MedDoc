@@ -1,0 +1,488 @@
+{
+  "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+  "fields": [
+    {
+      "context": "Clinic visit record",
+      "key": "v3_1",
+      "kind": "text",
+      "label": "Chief complaint",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Clinic visit record",
+      "key": "v3_2",
+      "kind": "long_text",
+      "label": "History of present illness",
+      "locator": {
+        "contract": "v3",
+        "extra": [
+          {
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]"
+          }
+        ],
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Clinic visit record",
+      "key": "v3_3",
+      "kind": "long_text",
+      "label": "Past medical history",
+      "locator": {
+        "contract": "v3",
+        "extra": [
+          {
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[2]/tr[0]/tc[0]/p[2]"
+          }
+        ],
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[2]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Clinic visit record",
+      "key": "v3_4",
+      "kind": "long_text",
+      "label": "Medications",
+      "locator": {
+        "contract": "v3",
+        "extra": [
+          {
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[3]/tr[0]/tc[0]/p[2]"
+          }
+        ],
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[3]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Clinic visit record",
+      "key": "v3_5",
+      "kind": "text",
+      "label": "Allergies",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[4]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Clinic visit record > Smoker",
+      "key": "v3_6",
+      "kind": "choice",
+      "label": "Smoker",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "b17e68f7d5a37a55497deee326a5faf89ff0c5994985d79a53796a6540e2f77d",
+        "part": "word/document.xml",
+        "slot": "b/tbl[5]/tr[0]/tc[1]/p[0]/glyphs",
+        "target": {
+          "boxes": [
+            {
+              "glyph": 0,
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[5]/tr[0]/tc[1]/p[0]/glyphs"
+            },
+            {
+              "glyph": 1,
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[5]/tr[0]/tc[1]/p[0]/glyphs"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "options": [
+        "Yes",
+        "No"
+      ]
+    },
+    {
+      "context": "Clinic visit record",
+      "key": "v3_7",
+      "kind": "long_text",
+      "label": "Examination",
+      "locator": {
+        "contract": "v3",
+        "extra": [
+          {
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[6]/tr[0]/tc[0]/p[2]"
+          }
+        ],
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[6]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Clinic visit record",
+      "key": "v3_8",
+      "kind": "long_text",
+      "label": "Assessment",
+      "locator": {
+        "contract": "v3",
+        "extra": [
+          {
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[7]/tr[0]/tc[0]/p[2]"
+          }
+        ],
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[7]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Clinic visit record",
+      "key": "v3_9",
+      "kind": "long_text",
+      "label": "Plan",
+      "locator": {
+        "contract": "v3",
+        "extra": [
+          {
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[8]/tr[0]/tc[0]/p[2]"
+          }
+        ],
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[8]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        }
+      }
+    },
+    {
+      "context": "Sign-off",
+      "key": "v3_10",
+      "kind": "checkbox",
+      "label": "Consent obtained",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "7dd26b68b73b77a2eab27b9c8b8506a4d4a936122d11250686d1195d1191321e",
+        "part": "word/document.xml",
+        "slot": "b/tbl[9]/tr[0]/tc[0]/p[0]/glyphs",
+        "target": {
+          "boxes": [
+            {
+              "glyph": 0,
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[9]/tr[0]/tc[0]/p[0]/glyphs"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "options": [
+        "Consent obtained"
+      ],
+      "review_reason": "This printed document action is human-owned. Complete it through the established signing workflow.",
+      "write_protected": true
+    },
+    {
+      "context": "Sign-off",
+      "key": "v3_11",
+      "kind": "signature",
+      "label": "Clinician signature",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "4c54b116a859b9e5e32eadb7ef18731f4469d6e2f80e66406f44aa5f4c175883",
+        "part": "word/document.xml",
+        "slot": "b/p[12]",
+        "target": {
+          "end": 51,
+          "shape": "blank",
+          "start": 21,
+          "type": "span"
+        }
+      }
+    }
+  ],
+  "model_body": {
+    "fields": [
+      {
+        "key": "v3_1",
+        "unit_ids": [
+          1
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            1
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_2",
+        "unit_ids": [
+          1
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            1
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_3",
+        "unit_ids": [
+          2
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            2
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_4",
+        "unit_ids": [
+          2
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            2
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_5",
+        "unit_ids": [
+          3
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            3
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            4,
+            5,
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_6",
+        "unit_ids": [
+          4
+        ],
+        "conflict": false,
+        "option_ids": [
+          "v3_6:1"
+        ],
+        "context": {
+          "answer": [
+            4
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            5,
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_7",
+        "unit_ids": [
+          5
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            5
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_8",
+        "unit_ids": [
+          6
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            6
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            7
+          ]
+        }
+      },
+      {
+        "key": "v3_9",
+        "unit_ids": [
+          7
+        ],
+        "conflict": false,
+        "option_ids": [],
+        "context": {
+          "answer": [
+            7
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        }
+      }
+    ]
+  },
+  "original_statuses": {
+    "v3_1": "supported",
+    "v3_10": "missing",
+    "v3_11": "missing",
+    "v3_2": "supported",
+    "v3_3": "conflict",
+    "v3_4": "conflict",
+    "v3_5": "supported",
+    "v3_6": "supported",
+    "v3_7": "conflict",
+    "v3_8": "supported",
+    "v3_9": "supported"
+  },
+  "sha256": {
+    "request.json": "a2bf17cae04b6c47be13d0f0b42fabe51802456f2f4280ca4c56e741bd88a017",
+    "provider-result.json": "f73ad7ea334073b7394cb95b2fdab8ca3ff4e68eda6437fe70a702f6c0e4af42",
+    "case/mapping.json": "30ee28ccf480063e8753bc1254a3642d47d17fa474c33c5e2bde5be9ca6b037b",
+    "case/notes.txt": "b2962b041211a49bebf2e5351807f2319ca3fc7cabf89dbbf67980989c2d60e8",
+    "answers-adopted.json": "fa43f2dac3a08a690fc563bc5e15c90cf8535a96dc66327ebaf571488fa367b1"
+  }
+}

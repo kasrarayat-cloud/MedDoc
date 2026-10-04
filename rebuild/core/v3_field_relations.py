@@ -523,7 +523,9 @@ def sole_independent(reading, unit, chosen, label):
             return False
         if 'class' in theirs['reach'] and (shared_class or mine['classes'] & sole_bears_on(theirs['classes'])
                                            or theirs['classes'] & sole_bears_on(mine['classes'])):
-            return False
+            from .source_scope import distinct_observation_and_assessment
+            if not distinct_observation_and_assessment(reading, unit, other, label):
+                return False
         if owner is not None and owner == label:
             return False
         if shared_class and oid != first and owner is None:
