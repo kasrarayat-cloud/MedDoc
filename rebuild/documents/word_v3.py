@@ -5094,6 +5094,48 @@ class Detector:
             clauses.append(rest)
         return clauses
 
+    @classmethod
+    def named_instruction_source_action(cls, text):
+        """Read complete nested clauses before proving local selection scope.
+
+        Parenthetical appointments and coordinated response clauses remain part
+        of the physical named instruction. A complete prospective determined
+        response with an unresolved verb is held rather than appointed to the
+        ordinary clinical writer. The original text and its binding stay intact.
+        """
+        clauses = cls.named_instruction_clauses(text)
+        readings = [text, *(clauses or []), *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)]
+        # Balanced parentheses give complete subordinate source clauses. Keep
+        # every ancestor and child reading; never use a substring name match.
+        stack = []
+        for at, char in enumerate(text):
+            if char == '(':
+                stack.append(at)
+            elif char == ')' and stack:
+                readings.append(text[stack.pop() + 1:at])
+        for reading in tuple(readings):
+            readings.extend(re.split(r'(?:\s+|,\s*)(?:and|or|but)\s+|,\s*', reading, flags=re.I))
+            readings.extend(re.split(r'\b(?:if|when)\s+', reading, flags=re.I)[1:])
+        for reading in readings:
+            source = re.sub(r'^(?:if|when|and|or|but)\s+', '', reading.strip(), flags=re.I)
+            action = cls.checkbox_source_action(source, governing=True)
+            # A possessive has/have/had takes an ordinary adjectival "initial"
+            # noun phrase. A modal "must initial this response" still appoints
+            # the signing act. Other complete source clauses keep their own
+            # role readings; no clinical noun list supplies this distinction.
+            initial_state = (cls.complete_signing_action(source)
+                and cls.ordinary_source_kind([source], 'initials')
+                and re.search(r'\b(?:has|have|had)\s+(?:(?:an?|the|my|our|your|his|her|their)\s+)?initial\b', source, re.I))
+            if (action and not initial_state or cls.prospective_response(source, located=True)):
+                return True
+            # A present-tense signing predicate has an explicit subject and
+            # determined object. "Clinical signs" / "initial observations"
+            # lack this actor + finite predicate + object relationship.
+            if re.fullmatch(r'[^.;:?!\r\n]+?\s+(?:sign|initial)s\s+'
+                            r'(?:this|the|these|those)\s+[^.;:?!\r\n]+[.:]?', source, re.I):
+                return True
+        return False
+
     def named_local_object_scope(self, entries, options):
         """Prove selection objects stay on this uniquely captioned local group.
 
@@ -5170,9 +5212,7 @@ class Detector:
                 or not self.tab_source_visible(candidates[0])
                 or any(not self.named_instruction_visible(slot) for slot, _ in entries)):
             return {'problem': problem, 'source_slots': candidates + [slot for slot, _ in entries]}
-        clauses = [clause.strip() for _, text in entries for clause in
-                   [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip()]
-        if any(self.checkbox_source_action(clause, governing=True) for clause in clauses):
+        if any(self.named_instruction_source_action(text) for _, text in entries):
             return {'problem': 'This exact named instruction appoints a human signing or author action; ordinary clinical answers cannot perform it.', 'human': True, 'source_slots': candidates + [slot for slot, _ in entries]}
         if any(WIDER_REACH.search(text) for _, text in entries):
             local_objects = self.named_local_object_scope(entries, options)
@@ -7099,6 +7139,23 @@ class Detector:
             relation["instructions"] = instructions
         return question, prompt, context, protection, relation, sources
 
+    @staticmethod
+    def prospective_response(text, *, located=False):
+        """Existing finite subject/auxiliary/determined-response relationship.
+
+        Its verb can be unresolved. The ordinary authorship reader still requires
+        the existing writing predicate; a named instruction can hold that exact
+        ambiguous current response without granting another person's authority.
+        """
+        response = r"(?:comments?|concerns?|statements?|answers?|responses?)"
+        location = (r"(?:\s+(?:here|in\s+this\s+(?:(?:answer|response)\s+)?"
+                    r"(?:section|area|space|box|field)))?" if located else '')
+        return re.fullmatch(
+            r"\s*[^;:?!\r\n]+?\s+(?:" + SOURCE_ACTION_AUXILIARY + r"\s+)+"
+            r"(?:(?:required\s+)?to\s+)?(?P<predicate>[^.;:?!\r\n]+?)\s+"
+            r"(?P<object>the\s+following|(?:this|the|these|my|our|your|his|her|their)\s+" + response + r")"
+            + location + r"\s*[:.]?\s*", text, re.I)
+
     @classmethod
     def question_box_authorship(cls, text):
         # Complete prospective authorship frames appoint the author, without
@@ -7131,10 +7188,7 @@ class Detector:
                    r"[^:;?!\r\n]+?\s*[:.]?\s*$")
         # An explicit subject obligated to write this response is its author;
         # clinical obligations about medication/signs are different arguments.
-        prospective = re.fullmatch(
-            r"\s*[^;:?!\r\n]+?\s+(?:" + SOURCE_ACTION_AUXILIARY + r"\s+)+"
-            r"(?:(?:required\s+)?to\s+)?(?P<predicate>[^.;:?!\r\n]+?)\s+"
-            r"(?P<object>the\s+following|(?:this|the|these|my|our|your|his|her|their)\s+" + response + r")\s*[:.]?\s*", text, re.I)
+        prospective = cls.prospective_response(text)
         # Reuse the existing data-entry instruction grammar. A prospective
         # clinical obligation to include/avoid something is not a writer.
         writing = prospective and (re.match(r'write\b', prospective['predicate'], re.I)

@@ -120,3 +120,60 @@ class NamedLocalObjectScope(unittest.TestCase):
         self.assertEqual(result['commands'],[])
         self.assertEqual(result['selected_objects'],['Home','Work','Remote'])
         self.assertIsNone(det.named_local_object_scope([(owner,'Select Home if defined above.')],field['options']))
+
+
+class NamedConditionSourceActs(unittest.TestCase):
+    suffix = 'Select Work when not received. Select Remote when unclear.'
+
+    def test_complete_nested_appointed_and_ambiguous_response_clauses_stay_held(self):
+        clauses = (
+            'Select Home if applicable (this area is for Alex Reed to enter the answer), as defined in Quantity above.',
+            'Select Home if applicable (Alex Reed must complete this answer), as defined in Quantity above.',
+            'Select Home if applicable, as defined in Quantity above, and Alex Reed is to write his comments in this answer area.',
+            'Select Home if received, as defined in Quantity above. Alex Reed is to write his comments here.',
+            'Select Home if the manager signs this question, as defined in Quantity above.',
+            'Select Home if applicable (context (I approve this document)), as defined in Quantity above.',
+            'Select Home if applicable (Dr. Avery is required to enter this answer), as defined in Quantity above.',
+            'Select Home if applicable (Alex Reed must not complete this answer), as defined in Quantity above.',
+        )
+        for native in (False, True):
+            for clause in clauses:
+                with self.subTest(native=native, clause=clause):
+                    instruction = 'Modality – ' + clause + ' ' + self.suffix
+                    self.assertTrue(w.Detector.named_instruction_source_action(instruction))
+                    raw = coverage.NamedSelectionInstructions().form(instruction, native=native)
+                    info = w.inspect(raw)
+                    self.assertFalse([f for f in info['fields'] if f['label'] == 'Modality' and not f.get('write_protected')])
+                    self.assertTrue(any('human' in x['detail'].casefold() for x in info['coverage_issues']))
+                    self.assertEqual(w.fill(raw, info['fields'], {}), raw)
+
+    def test_clinical_recorded_conditions_remain_local_with_identical_ink(self):
+        for condition in ('the manager recorded the observation',
+                          'the patient has clinical signs',
+                          'the patient had initial symptoms',
+                          'the signed referral was received',
+                          'applicable (the clinician recorded initial symptoms)',
+                          'applicable (the manager recorded the observation)'):
+            for native in (False, True):
+                with self.subTest(condition=condition, native=native):
+                    instruction = 'Modality – Select Home if ' + condition + ', as defined in Quantity above. ' + self.suffix
+                    self.assertFalse(w.Detector.named_instruction_source_action(instruction))
+                    raw = coverage.NamedSelectionInstructions().form(instruction, native=native)
+                    info = w.inspect(raw); field = next(f for f in info['fields'] if f['label'] == 'Modality')
+                    output = w.fill(raw, info['fields'], {field['key']: 'Work'})
+                    self.assertEqual(w.constrained_option_states(w.SlotIndex(w.open_package(output)), field), [False, True, False])
+                    before, after = Document(io.BytesIO(raw)), Document(io.BytesIO(output))
+                    self.assertEqual([p._p.xml for p in before.paragraphs], [p._p.xml for p in after.paragraphs])
+                    self.assertEqual(before.tables[0].cell(0,1)._tc.xml, after.tables[0].cell(0,1)._tc.xml)
+                    self.assertEqual(w.fill(raw, info['fields'], {}), raw)
+
+    def test_existing_general_authorship_reader_still_requires_the_writing_relation(self):
+        for text in ('Alex Reed must write this answer', 'Alex Reed should enter the response',
+                     'This area is for Alex Reed to record his comments'):
+            self.assertTrue(w.Detector.question_box_authorship(text))
+        for text in ('Alex Reed must complete this answer', 'the manager recorded the observation',
+                     'This section is for the clinician to record initial symptoms',
+                     'This section is for the clinician to record signed document receipt'):
+            self.assertFalse(w.Detector.question_box_authorship(text))
+        self.assertTrue(w.Detector.prospective_response('Alex Reed must complete this answer', located=True))
+        self.assertFalse(w.Detector.prospective_response('The patient must start the medication', located=True))
