@@ -1,0 +1,88 @@
+{
+  "root_file_unchanged": true,
+  "base_sha256": "54dc4c73fd42e28d212b3196893cd040741240f6f9619527f079127a06c80ff7",
+  "pending_sha256": "3b5c1d2866be9d592aa6ba5bece03f5d5780448b5e7e24f5d1c8e65b20168583",
+  "patch_sha256": "1a8e41c392863c1a5373ff3489cb62f07e76de9b57df2dd6f132210df00034e6",
+  "replacements": [
+    {
+      "before": "              'notes_qualification': 'ordinary_notes',",
+      "after": "              'notes_qualification': 'ordinary_notes', 'elicited_qualification': 'ordinary_notes',",
+      "occurrences": 1
+    },
+    {
+      "before": "                 'notes_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),",
+      "after": "                 'notes_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),\n                 'elicited_qualification': ('ordinary_notes_field_relations',),",
+      "occurrences": 1
+    },
+    {
+      "before": "               'notes_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},",
+      "after": "               'notes_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},\n               'elicited_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},",
+      "occurrences": 1
+    },
+    {
+      "before": "    'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',",
+      "after": "    'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',\n    'rebuild/ops/standing_qa_elicited.py', 'rebuild/ops/fixtures/elicited-qualification-v1.json',",
+      "occurrences": 1
+    },
+    {
+      "before": "    if 'notes_qualification' in ids:\n",
+      "after": "    if 'elicited_qualification' in ids:\n        require(one('elicited_fixture_manifest', r'([0-9a-f]{64})') == elicited_module().MANIFEST_SHA256\n                and next(stage.sends for stage in stages if stage.id == 'elicited_qualification') == 5,\n                'The elicited stage requires its exact separately declared five-case synthetic freeze.')\n    elif re.search(r'^elicited_fixture_manifest:', text, re.M):\n        raise Refused('An elicited fixture declaration requires its own stage.')\n    if 'notes_qualification' in ids:\n",
+      "occurrences": 1
+    },
+    {
+      "before": "def send_inputs(send, inputs):",
+      "after": "def elicited_module():\n    try:\n        from . import standing_qa_elicited\n    except ImportError:\n        import standing_qa_elicited\n    return standing_qa_elicited\n\n\ndef send_inputs(send, inputs):",
+      "occurrences": 1
+    },
+    {
+      "before": "    if send.path in batch_module().PATHS:\n",
+      "after": "    if send.group == 'elicited_qualification':\n        return elicited_module().send_inputs(send, inputs)\n    if send.path in batch_module().PATHS:\n",
+      "occurrences": 1
+    },
+    {
+      "before": "    if stage == 'ordinary_batch':\n        return batch_module().plan_sends(inputs)",
+      "after": "    if stage == 'elicited_qualification':\n        return elicited_module().plan_sends(inputs)\n    if stage == 'ordinary_batch':\n        return batch_module().plan_sends(inputs)",
+      "occurrences": 1
+    },
+    {
+      "before": "        own_inputs = batch_module().frozen_inputs() if stage == 'ordinary_batch' else inputs",
+      "after": "        own_inputs = (batch_module().frozen_inputs() if stage == 'ordinary_batch'\n                      else elicited_module().frozen_inputs() if stage == 'elicited_qualification' else inputs)",
+      "occurrences": 1
+    },
+    {
+      "before": "    if stage == 'model_check':\n        return None\n",
+      "after": "    if stage == 'model_check':\n        return None\n    if stage == 'elicited_qualification':\n        require(declaration.stage(stage).sends == 5, 'The declaration does not admit the complete elicited plan.')\n        return elicited_module().frozen_inputs()\n",
+      "occurrences": 1
+    },
+    {
+      "before": "    if stage == 'ordinary_batch':\n        return batch_module().price_sends(sends, inputs, state_dir, declaration, limits)",
+      "after": "    if stage == 'elicited_qualification':\n        return elicited_module().price_sends(sends, inputs, state_dir, declaration, limits)\n    if stage == 'ordinary_batch':\n        return batch_module().price_sends(sends, inputs, state_dir, declaration, limits)",
+      "occurrences": 1
+    },
+    {
+      "before": "    if stage != 'notes_qualification' or stops:",
+      "after": "    if stage not in ('notes_qualification', 'elicited_qualification') or stops:",
+      "occurrences": 1
+    },
+    {
+      "before": "    if stage == 'notes_qualification':\n        cap = min(cap, 1)",
+      "after": "    if stage in ('notes_qualification', 'elicited_qualification'):\n        cap = min(cap, 1)",
+      "occurrences": 1
+    },
+    {
+      "before": "                 else batch_module().build_forms(root / 'forms' / stage, inputs) if stage == 'ordinary_batch'",
+      "after": "                 else elicited_module().build_forms(root / 'forms' / stage, inputs) if stage == 'elicited_qualification'\n                 else batch_module().build_forms(root / 'forms' / stage, inputs) if stage == 'ordinary_batch'",
+      "occurrences": 1
+    },
+    {
+      "before": "            worker_class = batch_module().BatchRun if stage == 'ordinary_batch' else stages.Run",
+      "after": "            worker_class = (elicited_module().ElicitedRun if stage == 'elicited_qualification'\n                            else batch_module().BatchRun if stage == 'ordinary_batch' else stages.Run)",
+      "occurrences": 1
+    },
+    {
+      "before": "name in ('ordinary_batch', 'notes_qualification')",
+      "after": "name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification')",
+      "occurrences": 3
+    }
+  ]
+}

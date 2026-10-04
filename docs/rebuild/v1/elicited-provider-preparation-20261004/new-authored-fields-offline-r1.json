@@ -1,0 +1,885 @@
+{
+  "source": "876285516c1aae1607e5355640720bb902d8f367",
+  "rows": [
+    {
+      "case": "E01",
+      "notes": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        }
+      ],
+      "answers": {
+        "v3_1": {
+          "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 155
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj-FuhCAQhN-F35KIgoqvcjEGYbmQcosBvPZy8d0LtWnSnzvf7Ozsm-iAOSqdyUxCNA5VfFHrwBsawavsAib65KQhm8OC78XX886MbOtAjiCV5H03gBGCKW0N79pNCK0GYdg4CCEt3ybO287Kdpq45QODEvYIBnyJ0l4dBmgKiJCpKOQDXkV_9isrgw6PHbLLISYy3y51-ZPxvoYj70fp_r7YfGPL2ZAEHnStXsG_wANdXp1JP84ahNa7-rxVPkFDwl7Xfh2XIcNXrscVpk-IZDnPbwmxY1E:1xDQz5:O5lt6I0hFT0iAkyfU9aYCfMQDeNZYgljQrBXqI0CUAw",
+          "own_evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 155
+            }
+          ]
+        }
+      },
+      "page": {
+        "v3_1": {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 155
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj-FuhCAQhN-F35KIgoqvcjEGYbmQcosBvPZy8d0LtWnSnzvf7Ozsm-iAOSqdyUxCNA5VfFHrwBsawavsAib65KQhm8OC78XX886MbOtAjiCV5H03gBGCKW0N79pNCK0GYdg4CCEt3ybO287Kdpq45QODEvYIBnyJ0l4dBmgKiJCpKOQDXkV_9isrgw6PHbLLISYy3y51-ZPxvoYj70fp_r7YfGPL2ZAEHnStXsG_wANdXp1JP84ahNa7-rxVPkFDwl7Xfh2XIcNXrscVpk-IZDnPbwmxY1E:1xDQz5:O5lt6I0hFT0iAkyfU9aYCfMQDeNZYgljQrBXqI0CUAw",
+          "own_evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 155
+            }
+          ]
+        }
+      },
+      "final": []
+    },
+    {
+      "case": "E02",
+      "notes": "The current supported residence provides staff supervision and secure medication storage.\n\nThe patient reports stable relationships with family and expects no relationship changes before the next report.\n\nThe relationship reporting condition is monitored during weekly supervision visits.\n\nWhen asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.\n\nThe patient attends an art class three times a week and enjoys painting.\n\nThe diagnosis remains unchanged from the previous clinical report.\n\nThe prescribed medication is administered by residence staff and each administered dose is recorded.\n\nThe patient has taken every prescribed dose during this reporting period.\n\nNo new physical illness has affected treatment attendance during this reporting period.\n\nThe clinical supervisor saw the patient at the community clinic on 20 September 2026.\n\nThe patient says regular attendance at the art class is the main progress since discharge.\n\nThe patient has read the report and had an opportunity to add comments about the report.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Housing suitability",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Housing suitability",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Monitoring relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Monitoring relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[1]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[2]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Clinical diagnosis",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Clinical diagnosis",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[3]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Medication administration",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Medication administration",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[4]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Physical illness affecting attendance",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Physical illness affecting attendance",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[5]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_7",
+          "label": "Clinician contact and patient seen",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Clinician contact and patient seen",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[6]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        }
+      ],
+      "answers": {
+        "v3_1": {
+          "text": "The current supported residence provides staff supervision and secure medication storage.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The current supported residence provides staff supervision and secure medication storage.",
+              "start": 0,
+              "end": 89
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJzNkF1uwyAQhO_Csy2B8Q_xVSLLgmWJUAlYgJNGke9eqKtKvUFfVtqZ2W8X3gSCz1FCJjMJUVsv46s1Fp1uIzqZbfCpffSkIcr6Yt9Kzohp6jtjFB9AMmr4xFCJjgscLuOomKQgQVEGoLmiuocOp5HTixJiHAVXBXYPGl1BgZO7xjYF7zG3Q3E-8FX0B19ZaSDcN8w2h5jIfD3V5Vf2tzXsedvL7e_Tm69sORqS0CHU06vxB7h7m1er03eygrxxtj7eSJewIWGrYz-JM5DxM9fl0qcnxsIo_4AbluLzv-qW4_gCcOebEw:1xDQz8:X1MPxym6I6euZ9iMRyRR51l14dhdHqU-jcDXrGRUoYM"
+        },
+        "v3_2": {
+          "text": "The relationship reporting condition is monitored during weekly supervision visits.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The relationship reporting condition is monitored during weekly supervision visits.",
+              "start": 205,
+              "end": 288
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJy9j8lqwzAQht9FZxtsy4uSVwnGaBkFUWVkpHHSEPzulepSCL33IvgXfTPzYjogRamJnVmIxqGMz9o68KaO4CW5gKm-96xiymGOr7lnxTT1nbWKD1q2jeVTC0p0XMBwGkfVykZLrZpWa8NVY3rdwTTy5qSEGEfBVYbdggGfUdrLzUCdAiJQPeTkA57Zv_Oly0KH2wrkKMTEzpfDnX9tvC5ho3XLu7-O7Hzh816xBB50Wb0Eb8ANHS3OpO9mAaH1rhxvpU9QsbCWbz-No0DwSWV4Ph9WyA9SBr0riekB8Y_9v2re9y9-npsb:1xDQz8:-_PYzEYu5Qm71B70qZdlMLM9XLoW2GGCoj_fP_yyYTs"
+        },
+        "v3_3": {
+          "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 290,
+              "end": 445
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJytj81uwyAQhN-Fsy3Zxj8krxJZFixLhErAgnXSKPK7F-qqUi_tpRekmfmY3X0xCJ6iBGJnFqK2XsZnbSw6XUd0kmzwqb73rGLK-hxfM2fENPWdMYoPINvG8KlFJToucDiNo2plAxJU0wJorhrdQ4fTyJuTEmIcBVe57BY0ulwFTm4a6xS8R6qHnLzhM_t3vvAsINxWJEshJna-HO78bfvrEjZat7z768jOl37eK5bQIZTVS_CjcPOWFqvTJ1mKvHG2HG-kS1ixsJZvX8QBEL5TGZ7PxxXz4ykX_aakTw-Mf0D_r-Z9_wCHlZsh:1xDQz8:cTd2-_-5aOI9EgOBulJP9K-6Zd6NBQleSLi06VNi6pQ"
+        },
+        "v3_4": {
+          "text": "The diagnosis remains unchanged from the previous clinical report.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The diagnosis remains unchanged from the previous clinical report.",
+              "start": 521,
+              "end": 587
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJylj91qwzAMhd_F1wkkceK4eZUSgn_kYubawVbalZJ3n92UwS52s90IdM7RJ-lJVPAYhUIykRC19SI-amPB6TqCE2iDT_WtJxWR1mf7knOGj2PfGSPpoETbGDq2IHlHOQwnxmQrGiWUbFqlNJWN7lUHI6PNSXLOGKcyw65Bg8so5cSmoU7Be8B6yM4HPLJ-o0vZqcJ1BbQYYiLT-VDnb9lflrDhuuXbn4c3ndm8VySBA1VOL8YP4OYtLlanV7KAvHG2PG-ES1CRsJaxd-IIIHxiWZ7fhxVy8ZhBf-2ET3eI_wD83s37_gWVTJsp:1xDQz8:12Q6RwHWc-T87PVVSXy3d94fdJ7WL9JRbxspK4un_wU"
+        },
+        "v3_5": {
+          "text": "The prescribed medication is administered by residence staff and each administered dose is recorded.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The prescribed medication is administered by residence staff and each administered dose is recorded.",
+              "start": 589,
+              "end": 689
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJytj91qwzAMhd_F1wkkcX7cvEoJwZblYubawVa6lZJ3n72Mwe57I9A5R5-kF4PgKUogNrMQtfUyPmtj0ek6opNkg0_1o2cVU9Zn-5ZzRkxT3xmj-ACybQyfWlSi4wKHyziqVjYgQTUtgOaq0T10OI28uSghxlFwlWH3oNFlFDi5a6xT8B6pHrLzgc-sP_haGgj3DclSiInN11Nd_mR_W8NO255vf53efJ2Wo2IJHUI5vRj_gLu3tFqdfpIF5I2z5XkjXcKKha2M_SbOAOEXleX5fdwwF08Z9J5O-vSJ8U245Ti-AZ5Dmy8:1xDQz8:2usgY4qmMydupdMnpMbtTHl6GxjndF4prGoPWgEn0tk"
+        },
+        "v3_6": {
+          "text": "No new physical illness has affected treatment attendance during this reporting period.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No new physical illness has affected treatment attendance during this reporting period.",
+              "start": 766,
+              "end": 853
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJy1j91ugzAMhd8l1yABgRB4lQqh_DhVtNRBSehWVbx7kzJN2uUudmPJ5xx_tp9EeUxBqERm4oO2KMKjNhacrgM4kazHWN97UhFpMdvXnDN8HPvOGEkHJdrG0LEFyTvKYZgYk61olFCyaZXSVDa6Vx2MjDaT5JwxTmWG3bwGl1HKiV1DHT0ipHrIzgc8sn6nK8uN8rcNkk0-RDJfTnX5kfG6-j1te779eXrzZVqOikRwoMrpxfgF3NGm1er4ThYQGmfL80a4CBXxWxn7TpyBBF-pLM_vwwa5YMqg_-8Exk8IfxhZjuMFq_qbNw:1xDQz8:_eFqGDgX6kGGN3_qsSH9084i0C68Zpq2JRVBiJPidtM"
+        },
+        "v3_7": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+              "start": 855,
+              "end": 940
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJy9kN1qxCAQhd_F6wRMTIybV1lC8GdcpO4Y1Ox2WfLuVVIKvellbwbmnG_OjL6JDpij1JnMJETjUMZXax1400bwMruAqX0MpCHKYbFvhbNimobeWsVGLTtq2dSBEj0TMF44V52kWmpFO60NU9QMuoeJM3pRQnAumCph92DAlyjt5W6gTQERcjsW5wNeRX-wdSqNDvcNssshJjJfT3X5kfG2hj1ve7n9fXrztaPL0ZAEHnS9vTq_End0eXUmnWiNQutdfb6VPkFDwlbnvpETyPCZ6_ryAbBBKZhL0n93EtMT4p_Qchxfjqabiw:1xDQz8:F-9qWwGhE1S9mYopLi0QhEYx2gwVTTy73bZzgGk7T_Y",
+          "held_candidate": {
+            "text": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+            "evidence": [
+              {
+                "quote": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+                "start": 855,
+                "end": 940
+              }
+            ],
+            "context": [
+              {
+                "quote": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+                "start": 855,
+                "end": 940,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "page": {
+        "v3_1": {
+          "key": "v3_1",
+          "label": "Housing suitability",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Housing suitability",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "The current supported residence provides staff supervision and secure medication storage.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The current supported residence provides staff supervision and secure medication storage.",
+              "start": 0,
+              "end": 89
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJzNkF1uwyAQhO_Csy2B8Q_xVSLLgmWJUAlYgJNGke9eqKtKvUFfVtqZ2W8X3gSCz1FCJjMJUVsv46s1Fp1uIzqZbfCpffSkIcr6Yt9Kzohp6jtjFB9AMmr4xFCJjgscLuOomKQgQVEGoLmiuocOp5HTixJiHAVXBXYPGl1BgZO7xjYF7zG3Q3E-8FX0B19ZaSDcN8w2h5jIfD3V5Vf2tzXsedvL7e_Tm69sORqS0CHU06vxB7h7m1er03eygrxxtj7eSJewIWGrYz-JM5DxM9fl0qcnxsIo_4AbluLzv-qW4_gCcOebEw:1xDQz8:X1MPxym6I6euZ9iMRyRR51l14dhdHqU-jcDXrGRUoYM"
+        },
+        "v3_2": {
+          "key": "v3_2",
+          "label": "Monitoring relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Monitoring relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[1]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "The relationship reporting condition is monitored during weekly supervision visits.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The relationship reporting condition is monitored during weekly supervision visits.",
+              "start": 205,
+              "end": 288
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJy9j8lqwzAQht9FZxtsy4uSVwnGaBkFUWVkpHHSEPzulepSCL33IvgXfTPzYjogRamJnVmIxqGMz9o68KaO4CW5gKm-96xiymGOr7lnxTT1nbWKD1q2jeVTC0p0XMBwGkfVykZLrZpWa8NVY3rdwTTy5qSEGEfBVYbdggGfUdrLzUCdAiJQPeTkA57Zv_Oly0KH2wrkKMTEzpfDnX9tvC5ho3XLu7-O7Hzh816xBB50Wb0Eb8ANHS3OpO9mAaH1rhxvpU9QsbCWbz-No0DwSWV4Ph9WyA9SBr0riekB8Y_9v2re9y9-npsb:1xDQz8:-_PYzEYu5Qm71B70qZdlMLM9XLoW2GGCoj_fP_yyYTs"
+        },
+        "v3_3": {
+          "key": "v3_3",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[2]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 290,
+              "end": 445
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJytj81uwyAQhN-Fsy3Zxj8krxJZFixLhErAgnXSKPK7F-qqUi_tpRekmfmY3X0xCJ6iBGJnFqK2XsZnbSw6XUd0kmzwqb73rGLK-hxfM2fENPWdMYoPINvG8KlFJToucDiNo2plAxJU0wJorhrdQ4fTyJuTEmIcBVe57BY0ulwFTm4a6xS8R6qHnLzhM_t3vvAsINxWJEshJna-HO78bfvrEjZat7z768jOl37eK5bQIZTVS_CjcPOWFqvTJ1mKvHG2HG-kS1ixsJZvX8QBEL5TGZ7PxxXz4ykX_aakTw-Mf0D_r-Z9_wCHlZsh:1xDQz8:cTd2-_-5aOI9EgOBulJP9K-6Zd6NBQleSLi06VNi6pQ"
+        },
+        "v3_4": {
+          "key": "v3_4",
+          "label": "Clinical diagnosis",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Clinical diagnosis",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[3]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "The diagnosis remains unchanged from the previous clinical report.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The diagnosis remains unchanged from the previous clinical report.",
+              "start": 521,
+              "end": 587
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJylj91qwzAMhd_F1wkkceK4eZUSgn_kYubawVbalZJ3n92UwS52s90IdM7RJ-lJVPAYhUIykRC19SI-amPB6TqCE2iDT_WtJxWR1mf7knOGj2PfGSPpoETbGDq2IHlHOQwnxmQrGiWUbFqlNJWN7lUHI6PNSXLOGKcyw65Bg8so5cSmoU7Be8B6yM4HPLJ-o0vZqcJ1BbQYYiLT-VDnb9lflrDhuuXbn4c3ndm8VySBA1VOL8YP4OYtLlanV7KAvHG2PG-ES1CRsJaxd-IIIHxiWZ7fhxVy8ZhBf-2ET3eI_wD83s37_gWVTJsp:1xDQz8:12Q6RwHWc-T87PVVSXy3d94fdJ7WL9JRbxspK4un_wU"
+        },
+        "v3_5": {
+          "key": "v3_5",
+          "label": "Medication administration",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Medication administration",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[4]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "The prescribed medication is administered by residence staff and each administered dose is recorded.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The prescribed medication is administered by residence staff and each administered dose is recorded.",
+              "start": 589,
+              "end": 689
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJytj91qwzAMhd_F1wkkcX7cvEoJwZblYubawVa6lZJ3n72Mwe57I9A5R5-kF4PgKUogNrMQtfUyPmtj0ek6opNkg0_1o2cVU9Zn-5ZzRkxT3xmj-ACybQyfWlSi4wKHyziqVjYgQTUtgOaq0T10OI28uSghxlFwlWH3oNFlFDi5a6xT8B6pHrLzgc-sP_haGgj3DclSiInN11Nd_mR_W8NO255vf53efJ2Wo2IJHUI5vRj_gLu3tFqdfpIF5I2z5XkjXcKKha2M_SbOAOEXleX5fdwwF08Z9J5O-vSJ8U245Ti-AZ5Dmy8:1xDQz8:2usgY4qmMydupdMnpMbtTHl6GxjndF4prGoPWgEn0tk"
+        },
+        "v3_6": {
+          "key": "v3_6",
+          "label": "Physical illness affecting attendance",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Physical illness affecting attendance",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[5]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "No new physical illness has affected treatment attendance during this reporting period.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "No new physical illness has affected treatment attendance during this reporting period.",
+              "start": 766,
+              "end": 853
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJy1j91ugzAMhd8l1yABgRB4lQqh_DhVtNRBSehWVbx7kzJN2uUudmPJ5xx_tp9EeUxBqERm4oO2KMKjNhacrgM4kazHWN97UhFpMdvXnDN8HPvOGEkHJdrG0LEFyTvKYZgYk61olFCyaZXSVDa6Vx2MjDaT5JwxTmWG3bwGl1HKiV1DHT0ipHrIzgc8sn6nK8uN8rcNkk0-RDJfTnX5kfG6-j1te779eXrzZVqOikRwoMrpxfgF3NGm1er4ThYQGmfL80a4CBXxWxn7TpyBBF-pLM_vwwa5YMqg_-8Exk8IfxhZjuMFq_qbNw:1xDQz8:_eFqGDgX6kGGN3_qsSH9084i0C68Zpq2JRVBiJPidtM"
+        },
+        "v3_7": {
+          "key": "v3_7",
+          "label": "Clinician contact and patient seen",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Clinician contact and patient seen",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[6]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+              "start": 855,
+              "end": 940
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJy9kN1qxCAQhd_F6wRMTIybV1lC8GdcpO4Y1Ox2WfLuVVIKvellbwbmnG_OjL6JDpij1JnMJETjUMZXax1400bwMruAqX0MpCHKYbFvhbNimobeWsVGLTtq2dSBEj0TMF44V52kWmpFO60NU9QMuoeJM3pRQnAumCph92DAlyjt5W6gTQERcjsW5wNeRX-wdSqNDvcNssshJjJfT3X5kfG2hj1ve7n9fXrztaPL0ZAEHnS9vTq_End0eXUmnWiNQutdfb6VPkFDwlbnvpETyPCZ6_ryAbBBKZhL0n93EtMT4p_Qchxfjqabiw:1xDQz8:F-9qWwGhE1S9mYopLi0QhEYx2gwVTTy73bZzgGk7T_Y",
+          "held_candidate": {
+            "text": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+            "evidence": [
+              {
+                "quote": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+                "start": 855,
+                "end": 940
+              }
+            ],
+            "context": [
+              {
+                "quote": "The clinical supervisor saw the patient at the community clinic on 20 September 2026.",
+                "start": 855,
+                "end": 940,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "final": []
+    },
+    {
+      "case": "E03",
+      "notes": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        }
+      ],
+      "answers": {
+        "v3_1": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 154
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj9uKwzAMRP_FzwnEua7zKyUEX6Ri1rWDrbRbSv597aYs7KPmjEajF9PBU5Sa2MxCNNbL-KzRgjN1BCfJBp_qe88qpqzP-Jp9BvWkej3qqQM1tZJrjYOSQ2-QN03bdwI5NkYMiMKMExjJvwB5K9Q4CiWGHHYLBlyO0k7uBuoUvAeqC_mGZ9bv3crzoMNtA7IUYmLz5VSXP9lf17DTtufur5PNF74cFUvgQJfqBfwL3L2l1Zr0dpYgj86W51G6BBULW1n7OE4DwQ-V49KnB0S2HMcvjN1k_w:1xDQzC:cn-AtKjm855JFl5VYOFIz2VHGfB4tA7Z9plfLFBW-tg",
+          "own_evidence": [
+            {
+              "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 154
+            }
+          ],
+          "held_candidate": {
+            "text": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "evidence": [
+              {
+                "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 154
+              }
+            ],
+            "context": [
+              {
+                "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 154,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true,
+                "other_person": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: this line may be about someone other than the patient (another person is named as who it is about or whose it is). Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "page": {
+        "v3_1": {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 154
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj9uKwzAMRP_FzwnEua7zKyUEX6Ri1rWDrbRbSv597aYs7KPmjEajF9PBU5Sa2MxCNNbL-KzRgjN1BCfJBp_qe88qpqzP-Jp9BvWkej3qqQM1tZJrjYOSQ2-QN03bdwI5NkYMiMKMExjJvwB5K9Q4CiWGHHYLBlyO0k7uBuoUvAeqC_mGZ9bv3crzoMNtA7IUYmLz5VSXP9lf17DTtufur5PNF74cFUvgQJfqBfwL3L2l1Zr0dpYgj86W51G6BBULW1n7OE4DwQ-V49KnB0S2HMcvjN1k_w:1xDQzC:cn-AtKjm855JFl5VYOFIz2VHGfB4tA7Z9plfLFBW-tg",
+          "own_evidence": [
+            {
+              "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 154
+            }
+          ],
+          "held_candidate": {
+            "text": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "evidence": [
+              {
+                "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 154
+              }
+            ],
+            "context": [
+              {
+                "quote": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 154,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true,
+                "other_person": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: this line may be about someone other than the patient (another person is named as who it is about or whose it is). Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "final": []
+    },
+    {
+      "case": "E04",
+      "notes": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        }
+      ],
+      "answers": {
+        "v3_1": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 153
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj12OwyAMhO_Cc5CgoSTNVaoo4sdUaKmJgHS3qnL3QrNaaZ8sz4w_2y9iIpakTCETicl6VOlJnYdgaYKgio-Y6UOQjmiP1b7VnBDjIPQoT0Ywyxn0F6d0FYYzc0JIblwvR6YlgNVSDoyJiwYJlp9qGXtWYfdoIVSUCWqzQHNEhELP1fmCZ9Uf_cJrY-J9heJLTJlM10Od_2S8LXEr61Zvfx3edOXz3pEMAUw7vRn_gBv6snibP8kGQhd8e96pkKEjcW1jv4kjUOCntOUK8zckMu_7G0BZY6I:1xDQzC:il991f45BAIenpcwAmLRz4qiQWQboJr7UBB8h05CrJ0",
+          "own_evidence": [
+            {
+              "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 153
+            }
+          ],
+          "held_candidate": {
+            "text": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "evidence": [
+              {
+                "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 153
+              }
+            ],
+            "context": [
+              {
+                "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 153,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true,
+                "other_person": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: this line may be about someone other than the patient (another person is named as who it is about or whose it is). Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "page": {
+        "v3_1": {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 153
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj12OwyAMhO_Cc5CgoSTNVaoo4sdUaKmJgHS3qnL3QrNaaZ8sz4w_2y9iIpakTCETicl6VOlJnYdgaYKgio-Y6UOQjmiP1b7VnBDjIPQoT0Ywyxn0F6d0FYYzc0JIblwvR6YlgNVSDoyJiwYJlp9qGXtWYfdoIVSUCWqzQHNEhELP1fmCZ9Uf_cJrY-J9heJLTJlM10Od_2S8LXEr61Zvfx3edOXz3pEMAUw7vRn_gBv6snibP8kGQhd8e96pkKEjcW1jv4kjUOCntOUK8zckMu_7G0BZY6I:1xDQzC:il991f45BAIenpcwAmLRz4qiQWQboJr7UBB8h05CrJ0",
+          "own_evidence": [
+            {
+              "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+              "start": 0,
+              "end": 153
+            }
+          ],
+          "held_candidate": {
+            "text": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+            "evidence": [
+              {
+                "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 153
+              }
+            ],
+            "context": [
+              {
+                "quote": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+                "start": 0,
+                "end": 153,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true,
+                "other_person": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: this line may be about someone other than the patient (another person is named as who it is about or whose it is). Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "final": []
+    },
+    {
+      "case": "E05",
+      "notes": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        }
+      ],
+      "answers": {
+        "v3_1": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+              "start": 0,
+              "end": 156
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj1FuwyAQRO_Ct5GCDZj4KpFlYXaJUAlYgNNGke9eqKtK_dx5s7Ozb2JiKEmbQiYSE7ig04tahx5oQq-LiyHTJycdWV2o-F59nNmRj4BXwXrLtL2i1b0CuEiuBgChlJFCrVyC6Ee79hehJGNyGKRBNaKqYY8I6GuU8XoHpDmGgIWKSj7wVfXnsLA6mPjYsLgSUybT7VTnPzncl7iXba_d3yebbmw-OpLRo2nVG_gXuAdXFgf5x9mCgvWuPW-1z9iRuLW1X8dpKPhV2nEd8icmMh_HN0jxY5Q:1xDQzC:YA5wq-S784SmFXogHWvTeo9-1uiacne-Y2LjeGKBd2s",
+          "own_evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+              "start": 0,
+              "end": 156
+            }
+          ],
+          "held_candidate": {
+            "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+            "evidence": [
+              {
+                "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+                "start": 0,
+                "end": 156
+              }
+            ],
+            "context": [
+              {
+                "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+                "start": 0,
+                "end": 156,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true,
+                "other_person": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: this line may be about someone other than the patient (another person is named as who it is about or whose it is). Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "page": {
+        "v3_1": {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          },
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+              "start": 0,
+              "end": 156
+            }
+          ],
+          "reviewed": false,
+          "ordinary_relation": ".eJxVj1FuwyAQRO_Ct5GCDZj4KpFlYXaJUAlYgNNGke9eqKtK_dx5s7Ozb2JiKEmbQiYSE7ig04tahx5oQq-LiyHTJycdWV2o-F59nNmRj4BXwXrLtL2i1b0CuEiuBgChlJFCrVyC6Ee79hehJGNyGKRBNaKqYY8I6GuU8XoHpDmGgIWKSj7wVfXnsLA6mPjYsLgSUybT7VTnPzncl7iXba_d3yebbmw-OpLRo2nVG_gXuAdXFgf5x9mCgvWuPW-1z9iRuLW1X8dpKPhV2nEd8icmMh_HN0jxY5Q:1xDQzC:YA5wq-S784SmFXogHWvTeo9-1uiacne-Y2LjeGKBd2s",
+          "own_evidence": [
+            {
+              "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+              "start": 0,
+              "end": 156
+            }
+          ],
+          "held_candidate": {
+            "text": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+            "evidence": [
+              {
+                "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+                "start": 0,
+                "end": 156
+              }
+            ],
+            "context": [
+              {
+                "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+                "start": 0,
+                "end": 156,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true,
+                "other_person": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: this line may be about someone other than the patient (another person is named as who it is about or whose it is). Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "final": []
+    }
+  ],
+  "provider_calls": 0,
+  "database_calls": 0,
+  "elapsed_seconds": 7.269308028000523
+}
