@@ -3106,6 +3106,19 @@ class Detector:
                         predicate,re.I)
         return predicate[aspect.end():]
 
+    @staticmethod
+    def complete_signing_action(text):
+        """A complete actor/auxiliary/signing predicate, without an identity guess.
+
+        A temporal caption still qualifies that act. Clinical signs, initial
+        observations and received signed documents have no such predicate.
+        Dotted names and negation do not turn another person's act into data.
+        """
+        return re.fullmatch(r'\s*[^:;?!\r\n]+?\s+'
+            r'(?:' + SOURCE_ACTION_AUXILIARY + r'\s+)+'
+            r'(?:(?:required\s+)?to\s+)?(?:sign|initial)'
+            r'(?:\s+(?!of\b)[^:;?!\r\n]+)?\s*[:.]?', text, re.I)
+
     @classmethod
     def checkbox_source_action(cls,text,*,governing=False):
         """Printed performative ownership, not a signer-name guess.
@@ -3117,7 +3130,7 @@ class Detector:
         requests from ordinary clinical questions and nonhuman observations.
         """
         source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
-        if cls.question_box_authorship(source):
+        if cls.complete_signing_action(source) or cls.question_box_authorship(source):
             return 'human_signing_action'
         # Quoting or qualifying a printed human act supplies no authority to
         # perform it. Read only a complete paired quotation / explicit clause;
@@ -4536,15 +4549,8 @@ class Detector:
                         for text in clauses)
             if scalar is not None and scalar.kind == 'date' and question is not None:
                 temporal = DATE_LABEL.sub(' ', LIST_MARKER.sub('', self.text(question.el).strip()))
-                # The temporal qualifier does not remove an appointed actor's
-                # finite signing predicate. A bare verb needs its complete
-                # subject/auxiliary frame, not an inferred name or role.
-                prospective_signing = re.fullmatch(r'\s*[^:;?!\r\n]+?\s+'
-                    r'(?:' + SOURCE_ACTION_AUXILIARY + r'\s+)+'
-                    r'(?:(?:required\s+)?to\s+)?(?:sign|initial)'
-                    r'(?:\s+(?!of\b)[^:;?!\r\n]+)?\s*[:.]?', temporal, re.I)
                 human = human or bool(self.checkbox_source_action(temporal, governing=True)
-                    or prospective_signing or signing_place(temporal) or BOX_SIGNING_VERB.search(temporal)
+                    or signing_place(temporal) or BOX_SIGNING_VERB.search(temporal)
                     and not self.ordinary_source_kind([temporal], 'signature'))
             if human:
                 self.protected_regions.add(cell.id)

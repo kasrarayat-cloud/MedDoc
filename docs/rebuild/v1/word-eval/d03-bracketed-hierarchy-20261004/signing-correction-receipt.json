@@ -1,0 +1,659 @@
+{
+  "first_wrong_revision": "d416791928a6e689b1ca5fb2c31d0557d98f4454",
+  "verified_wrong_exports": 9,
+  "root_first_actual_exit": 1,
+  "our_first_expected_wrong_reproduction_exit": 0,
+  "fixed_results": {
+    "d03-signing-first-original-replay-20261004": {
+      "source_before": {
+        "rebuild/documents/word_v3.py": "bf48ab905997cb27bea31d16b48513a732e6a0aa393d4804ba803e757d35875f",
+        "rebuild/documents/test_source_coverage.py": "879f0b738836db7d8c4dfa677b07b4c755e24f3fffa1557c31911b6439fd6bae"
+      },
+      "source_unchanged": true,
+      "controls": 18,
+      "wrong": 0,
+      "rows": [
+        {
+          "id": "glyph-0",
+          "caption": "Date Alex Reed should sign:",
+          "original_sha256": "f29f7787d74ce09598062f26bd1eafe3a42b5f544f900802ff37e1038a2b7e45",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "8ca0ca431b8550cbf0fd5ec881b19ae7427829ad032be06779f8c1ce60e95937",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "glyph-1",
+          "caption": "Alex Reed should sign:",
+          "original_sha256": "6d5dc0b12642410fdce59e93f4af761c82d6df3db72996c03065080da77a2507",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "ae023ae7a5f6731ccfd18de720845c7467d58c0ddc4eb12229e034566314808c",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "glyph-2",
+          "caption": "Date Dr. Avery must initial:",
+          "original_sha256": "dd7e70f3c524bd1afe84b5dd19a2eeb410a03d7c80599e4129f193b20bb8aee8",
+          "expected_human_hold": true,
+          "correct": true
+        },
+        {
+          "id": "glyph-3",
+          "caption": "Date Avery is required to sign:",
+          "original_sha256": "511c75f5450c5462e69823a4e65d51ff1aef5b4f7ae55f1db89ec753c6ae560c",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "3106d3f983d5487dee8c39b465b4b47ffd827270bf480fd9ee2a6bda8d4e9042",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "glyph-4",
+          "caption": "Initial observations",
+          "original_sha256": "4dfdd6d539dc6b3a3260ecb8e5c320881e0fe4fe1acff769d94ae2d838a3814b",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "9bcee9ecb4c35191166c37777aedc5762d69a2201be78e8295c43fd2754ebc34",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "glyph-5",
+          "caption": "Signed referral received",
+          "original_sha256": "73fe18513ee8c2ed591bf3286c02c282a784850f45d0264f990e0b1b46daa92d",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "775ba29b96a3b92686fd7c8043da3ad9f74bdd2c0c2666b55def135773696ab4",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "ff-0",
+          "caption": "Date Alex Reed should sign:",
+          "original_sha256": "403c4b1891a1188fa15cca41dfba3eb7b42f4beb7bb61f4ae945469e952d0acd",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "d6c7a73bc81a3149be05ba9e9509c4d5bd9cf4aa92a29880d644957b4d422339",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "ff-1",
+          "caption": "Alex Reed should sign:",
+          "original_sha256": "9b3c5f3757a67f088c2acf26086695c58132890c514e11b9b0690cc34d44a28a",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "ea5975b0b0319a9ced1cb63d8a87cc73e04fe61546a19e94277fc0f230154677",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "ff-2",
+          "caption": "Date Dr. Avery must initial:",
+          "original_sha256": "e193a8f7d9e5dda98be8029e62078c242f4f12849689c6e187f15d506eeea09f",
+          "expected_human_hold": true,
+          "correct": true
+        },
+        {
+          "id": "ff-3",
+          "caption": "Date Avery is required to sign:",
+          "original_sha256": "4abb44e62a24c36966483944770fc59efe657b79de6a8452355fbd528bb490b1",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "338b85f9107c0a0e048ab73a428b6c99147d98c92adfa683171f0d92202d05cb",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "ff-4",
+          "caption": "Initial observations",
+          "original_sha256": "ec98526c5a9ea9a906f0466e644682fff3bb5438561c99b4b2942e6dc7217007",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "f3a08815c0f3fa2d770208eeb6ac8cd912f8065d629e2b9f3988724a1cdcc1fd",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "ff-5",
+          "caption": "Signed referral received",
+          "original_sha256": "4110c03b7da99ac35459ba6264713d57162691209149567a76dbfdbabd16dfb8",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "3a9481fbe7419ba63d143adbba2bf905bc64af63db8ef313628e9dfef473b4ac",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "sdt-0",
+          "caption": "Date Alex Reed should sign:",
+          "original_sha256": "4a5ba09d7f905c354bbc68262852c601394eebf9392609870d7a0de01ff1c7dc",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "447ac850e9108c7ec54b8af129b5caa6750a3fc30905a27d686180395f0f7421",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "sdt-1",
+          "caption": "Alex Reed should sign:",
+          "original_sha256": "90f29182415e68eb7205c79f453d4c925080b8ca206fb7e323d3bb287889bfd9",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "c143d016783a2d9f313fa059e5bb7159fd90cf965c1cd068b0619688a9b3a5dc",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "sdt-2",
+          "caption": "Date Dr. Avery must initial:",
+          "original_sha256": "5ca187d8bef9b536c5bffb469b6c64664b203e610b98408de71776ae175fa59f",
+          "expected_human_hold": true,
+          "correct": true
+        },
+        {
+          "id": "sdt-3",
+          "caption": "Date Avery is required to sign:",
+          "original_sha256": "367e0b8f9dd185ad53a73314d0d86fa037438752c8d396f8a2c692823e417999",
+          "expected_human_hold": true,
+          "refused": false,
+          "export_sha256": "d539b190efb1da5c6d6f9f0691f1b9f5a50c80d8fec7ba67043c6fc66e41fa88",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "sdt-4",
+          "caption": "Initial observations",
+          "original_sha256": "a97b3b36e670823a8a72045d74dfb4e62da8987155b5eb0e5370569b5e5d6b47",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "afaa7bece9aed31a2ae3fbaa4557c6d473da846e435d522f7a09bb97c95518a0",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "sdt-5",
+          "caption": "Signed referral received",
+          "original_sha256": "7694f4ff6519d4af19e32886b92aa63bcdba173f1e3c394035d1a2dfc6178f3a",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "d3733ce499f692b5357ae56b76d85d76e7f14d08a835df4709310d49ae18e989",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        }
+      ],
+      "elapsed_seconds": 7.224280119997275,
+      "provider_calls": 0,
+      "database_calls": 0,
+      "renderer_calls": 0
+    },
+    "d03-signing-shared-affected-20261004": {
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "success": true,
+      "elapsed": 103.38413459900039,
+      "source_hashes": {
+        "rebuild/documents/word_v3.py": "32cd48b7000da4f2da154b9400781d8dc1ddee1d0160ff44e1797db007fd7651",
+        "rebuild/documents/test_source_coverage.py": "5b820bdeba32b254334321af2f349cfd53b587dc56c58bab69225091b760bfde"
+      },
+      "source_unchanged": true,
+      "fill_attempts": 292,
+      "refused": 117,
+      "exports": 175,
+      "provider_calls": 0,
+      "db_calls": 0,
+      "render_calls": 0
+    },
+    "d03-signing-fixed-original-replay-20261004": {
+      "source_before": {
+        "rebuild/documents/word_v3.py": "32cd48b7000da4f2da154b9400781d8dc1ddee1d0160ff44e1797db007fd7651",
+        "rebuild/documents/test_source_coverage.py": "5b820bdeba32b254334321af2f349cfd53b587dc56c58bab69225091b760bfde"
+      },
+      "source_unchanged": true,
+      "controls": 18,
+      "wrong": 0,
+      "rows": [
+        {
+          "id": "glyph-0",
+          "caption": "Date Alex Reed should sign:",
+          "original_sha256": "f29f7787d74ce09598062f26bd1eafe3a42b5f544f900802ff37e1038a2b7e45",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "glyph-1",
+          "caption": "Alex Reed should sign:",
+          "original_sha256": "6d5dc0b12642410fdce59e93f4af761c82d6df3db72996c03065080da77a2507",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "glyph-2",
+          "caption": "Date Dr. Avery must initial:",
+          "original_sha256": "dd7e70f3c524bd1afe84b5dd19a2eeb410a03d7c80599e4129f193b20bb8aee8",
+          "expected_human_hold": true,
+          "correct": true
+        },
+        {
+          "id": "glyph-3",
+          "caption": "Date Avery is required to sign:",
+          "original_sha256": "511c75f5450c5462e69823a4e65d51ff1aef5b4f7ae55f1db89ec753c6ae560c",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "glyph-4",
+          "caption": "Initial observations",
+          "original_sha256": "4dfdd6d539dc6b3a3260ecb8e5c320881e0fe4fe1acff769d94ae2d838a3814b",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "9bcee9ecb4c35191166c37777aedc5762d69a2201be78e8295c43fd2754ebc34",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "glyph-5",
+          "caption": "Signed referral received",
+          "original_sha256": "73fe18513ee8c2ed591bf3286c02c282a784850f45d0264f990e0b1b46daa92d",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "775ba29b96a3b92686fd7c8043da3ad9f74bdd2c0c2666b55def135773696ab4",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "ff-0",
+          "caption": "Date Alex Reed should sign:",
+          "original_sha256": "403c4b1891a1188fa15cca41dfba3eb7b42f4beb7bb61f4ae945469e952d0acd",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "ff-1",
+          "caption": "Alex Reed should sign:",
+          "original_sha256": "9b3c5f3757a67f088c2acf26086695c58132890c514e11b9b0690cc34d44a28a",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "ff-2",
+          "caption": "Date Dr. Avery must initial:",
+          "original_sha256": "e193a8f7d9e5dda98be8029e62078c242f4f12849689c6e187f15d506eeea09f",
+          "expected_human_hold": true,
+          "correct": true
+        },
+        {
+          "id": "ff-3",
+          "caption": "Date Avery is required to sign:",
+          "original_sha256": "4abb44e62a24c36966483944770fc59efe657b79de6a8452355fbd528bb490b1",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "ff-4",
+          "caption": "Initial observations",
+          "original_sha256": "ec98526c5a9ea9a906f0466e644682fff3bb5438561c99b4b2942e6dc7217007",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "f3a08815c0f3fa2d770208eeb6ac8cd912f8065d629e2b9f3988724a1cdcc1fd",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "ff-5",
+          "caption": "Signed referral received",
+          "original_sha256": "4110c03b7da99ac35459ba6264713d57162691209149567a76dbfdbabd16dfb8",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "3a9481fbe7419ba63d143adbba2bf905bc64af63db8ef313628e9dfef473b4ac",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "sdt-0",
+          "caption": "Date Alex Reed should sign:",
+          "original_sha256": "4a5ba09d7f905c354bbc68262852c601394eebf9392609870d7a0de01ff1c7dc",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "sdt-1",
+          "caption": "Alex Reed should sign:",
+          "original_sha256": "90f29182415e68eb7205c79f453d4c925080b8ca206fb7e323d3bb287889bfd9",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "sdt-2",
+          "caption": "Date Dr. Avery must initial:",
+          "original_sha256": "5ca187d8bef9b536c5bffb469b6c64664b203e610b98408de71776ae175fa59f",
+          "expected_human_hold": true,
+          "correct": true
+        },
+        {
+          "id": "sdt-3",
+          "caption": "Date Avery is required to sign:",
+          "original_sha256": "367e0b8f9dd185ad53a73314d0d86fa037438752c8d396f8a2c692823e417999",
+          "expected_human_hold": true,
+          "refused": true,
+          "code": "protected_signing_area",
+          "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+          "correct": true
+        },
+        {
+          "id": "sdt-4",
+          "caption": "Initial observations",
+          "original_sha256": "a97b3b36e670823a8a72045d74dfb4e62da8987155b5eb0e5370569b5e5d6b47",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "afaa7bece9aed31a2ae3fbaa4557c6d473da846e435d522f7a09bb97c95518a0",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        },
+        {
+          "id": "sdt-5",
+          "caption": "Signed referral received",
+          "original_sha256": "7694f4ff6519d4af19e32886b92aa63bcdba173f1e3c394035d1a2dfc6178f3a",
+          "expected_human_hold": false,
+          "refused": false,
+          "export_sha256": "d3733ce499f692b5357ae56b76d85d76e7f14d08a835df4709310d49ae18e989",
+          "same_as_retained_export": true,
+          "states": [
+            true,
+            true,
+            false
+          ],
+          "correct": true
+        }
+      ],
+      "elapsed_seconds": 5.32180979399709,
+      "provider_calls": 0,
+      "database_calls": 0,
+      "renderer_calls": 0
+    },
+    "d03-signing-shared-scalar-six-20261004": {
+      "source_before": {
+        "rebuild/documents/word_v3.py": "32cd48b7000da4f2da154b9400781d8dc1ddee1d0160ff44e1797db007fd7651",
+        "rebuild/documents/test_source_coverage.py": "5b820bdeba32b254334321af2f349cfd53b587dc56c58bab69225091b760bfde"
+      },
+      "source_unchanged": true,
+      "controls": 6,
+      "wrong": 0,
+      "expected": "refused",
+      "rows": [
+        {
+          "id": "glyph-unknown",
+          "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+          "refused": true,
+          "refusal": "unresolved_source_range",
+          "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+          "correct": true
+        },
+        {
+          "id": "glyph-signing-date",
+          "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+          "refused": true,
+          "refusal": "unresolved_source_range",
+          "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+          "correct": true
+        },
+        {
+          "id": "ff-unknown",
+          "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+          "refused": true,
+          "refusal": "unresolved_source_range",
+          "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+          "correct": true
+        },
+        {
+          "id": "ff-signing-date",
+          "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+          "refused": true,
+          "refusal": "unresolved_source_range",
+          "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+          "correct": true
+        },
+        {
+          "id": "sdt-unknown",
+          "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+          "refused": true,
+          "refusal": "unresolved_source_range",
+          "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+          "correct": true
+        },
+        {
+          "id": "sdt-signing-date",
+          "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+          "refused": true,
+          "refusal": "unresolved_source_range",
+          "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+          "correct": true
+        }
+      ],
+      "elapsed_seconds": 1.6569595760010998,
+      "provider_calls": 0,
+      "database_calls": 0,
+      "renderer_calls": 0
+    },
+    "d03-signing-fixed-original-fidelity-20261004": {
+      "source_word_sha256": "32cd48b7000da4f2da154b9400781d8dc1ddee1d0160ff44e1797db007fd7651",
+      "source_unchanged": true,
+      "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+      "groundtruth_sha256": "172ad655015aaa9eb02d6c099e5424f7e09d80807966f9640c9bfe928bf05618",
+      "mapping_summary": {
+        "n": 88,
+        "ok": 49,
+        "missed": 29,
+        "wrong": 10,
+        "extras": 2,
+        "strict": false
+      },
+      "attempts": [
+        {
+          "plan": "ordinary-root",
+          "expected_refusal": false,
+          "refused": false,
+          "export_sha256": "26376ee104af5fc615e85000a8735c351c7e2d25e38b07a844f6316e99abfbb3",
+          "states": {
+            "Food/beverage": [
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "Wine": [
+              false,
+              false
+            ],
+            "Alcohol beverages": [
+              false,
+              false
+            ]
+          },
+          "untargeted_paragraphs_exact": true,
+          "untargeted_parts_raw_exact": true
+        },
+        {
+          "plan": "parent-children-other",
+          "expected_refusal": false,
+          "refused": false,
+          "export_sha256": "7fb05a35e5a3d74737262fe85bc7223744150727df66a530f4b0b09e26a5d2cc",
+          "states": {
+            "Food/beverage": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              true
+            ],
+            "Wine": [
+              true,
+              true
+            ],
+            "Alcohol beverages": [
+              true,
+              true
+            ]
+          },
+          "untargeted_paragraphs_exact": true,
+          "untargeted_parts_raw_exact": true,
+          "other_readback": "Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail Synthetic original-source detail"
+        },
+        {
+          "plan": "unselected-parent",
+          "expected_refusal": true,
+          "refused": true,
+          "code": "conditional_answer_unselected",
+          "message": "This subgroup has a selected answer while its own printed parent is unselected. Review the parent and child answers; no selection was inferred."
+        }
+      ],
+      "no_answer_original_bytes": true,
+      "elapsed_seconds": 14.494669596999302,
+      "full_application_route": false,
+      "manual_mapping_corrections": 0,
+      "provider_calls": 0,
+      "database_calls": 0,
+      "renderer_calls": 0
+    }
+  },
+  "all_fixed_actual_exits": 0,
+  "seal_sha256": "73905dad59975a0945bb704d2b78df53b7acd454c1ebab2332b1c7df6b8aae5e",
+  "active_children": [],
+  "source_snapshot": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-signing-corrective-finished-source-20261004",
+  "provider": 0,
+  "DB": 0,
+  "renderer": 0
+}

@@ -1296,6 +1296,43 @@ class BracketedCheckboxHierarchy(unittest.TestCase):
             for r in f.get('source_questions',[]))]
         return mapping,{f['label']:f for f in groups}
 
+    def test_complete_actor_signing_clauses_hold_fresh_and_historical_hierarchy_destinations(self):
+        captions=('Date Alex Reed should sign:', 'Alex Reed should sign:', 'Date Avery is required to sign:',
+                  'Date Dr. Avery must initial:', 'Dr. Avery cannot sign:', 'Avery shall not sign:',
+                  'Date Avery may personally initial:', 'Avery is not yet required to sign:',
+                  'Avery should sign the form:', 'Date Avery should sign it:')
+        for family in ('glyph','ff','sdt'):
+            ordinary=self.form(family);old,groups=self.groups(ordinary);root=groups['Source items']
+            for caption in captions:
+                with self.subTest(family=family,caption=caption):
+                    raw=self.form(family,title=caption);mapping,held=self.groups(raw)
+                    self.assertFalse(held)
+                    self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+                    # Retain physical targets and source fingerprints from the
+                    # actual original while forging only ordinary metadata.
+                    index=word_v3.SlotIndex(word_v3.open_package(raw))
+                    forged=deepcopy(root);forged.pop('source_questions')
+                    locator=forged['locator'];locator['fingerprint']=word_v3.fingerprint(index.by_id[
+                        locator['part']+'#'+locator['slot']].el)
+                    for extra in locator.get('extra',[]):
+                        extra['fingerprint']=word_v3.fingerprint(index.by_id[extra['part']+'#'+extra['slot']].el)
+                    with self.assertRaises(word_v3.V3Failure):
+                        word_v3.fill(raw,[forged],{forged['key']:['Alpha','Beta']})
+
+    def test_complete_ordinary_clinical_predicates_keep_hierarchy_answers_useful(self):
+        for family in ('glyph','ff','sdt'):
+            for caption in ('Initial observations','Signed referral received','Date symptoms should improve:',
+                    'Date medication must start:','Date patient should report symptoms:',
+                    'Signs of infection:', 'Initial signs of infection:'):
+                with self.subTest(family=family,caption=caption):
+                    raw=self.form(family,title=caption);mapping,groups=self.groups(raw)
+                    self.assertEqual(len(groups),3)
+                    root=groups['Source items'];out=word_v3.fill(raw,mapping['fields'],{root['key']:['Alpha','Beta']})
+                    self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),root),
+                                     [True,True,False])
+                    self.assertEqual(Document(io.BytesIO(raw)).tables[0].cell(0,0).paragraphs[0].text,
+                                     Document(io.BytesIO(out)).tables[0].cell(0,0).paragraphs[0].text)
+
     def test_complete_source_proves_separate_parent_bracket_children_and_write_in(self):
         for family in('glyph','ff','sdt'):
             raw=self.form(family);mapping,groups=self.groups(raw)
