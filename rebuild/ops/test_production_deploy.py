@@ -1079,12 +1079,57 @@ BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8
 ORDINARY_PRICED_SHA256 = 'efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb'
 
 
+# PREPARED ONLY: the accepted ordinary fingerprint above remains unchanged.
+# These transitive bodies and parser inputs must join its exact source proof.
+# None is deliberate fail-closed state, never an accepted/current-source pin.
+# Renew only after the reviewed final source and actual wire/accounting witness.
+ORDINARY_PRICED_DEPENDENCY_PATHS = (
+    'core/generation.py', 'core/ordinary_source_scope.py', 'core/reviewed_source.py',
+    'core/reviewed_procedure_source.py', 'core/source_scope.py', 'core/v3_actors.py',
+    'core/v3_syntax.py', 'core/v3_literal_facts.py', 'core/reviewed_speaker.py',
+    'core/transcript_context.py', 'core/v3_destination.py', 'core/v3_mapping.py',
+)
+ORDINARY_PRICED_DEPENDENCIES = dict.fromkeys(ORDINARY_PRICED_DEPENDENCY_PATHS)
+ORDINARY_PRICED_INPUT_PATHS = (
+    'core/v3_syntax_model.json', 'requirements.txt', 'requirements-production.lock',
+    'requirements-production.manifest.json',
+)
+ORDINARY_PRICED_INPUTS = dict.fromkeys(ORDINARY_PRICED_INPUT_PATHS)
+
+
+def ordinary_dependency_proof(where):
+    """Union of complete helper/caller ASTs and exact pinned parser inputs.
+
+    This verifies declared source, not installed packages or provider access.
+    An unchanged importing caller cannot conceal a changed helper body/import.
+    """
+    if (set(ORDINARY_PRICED_DEPENDENCIES) != set(ORDINARY_PRICED_DEPENDENCY_PATHS)
+            or set(ORDINARY_PRICED_INPUTS) != set(ORDINARY_PRICED_INPUT_PATHS)):
+        raise Unresolved(f'{where}: ordinary dependency proof is incomplete')
+    for relative, expected in ORDINARY_PRICED_DEPENDENCIES.items():
+        try:
+            tree = ast.parse((REBUILD / relative).read_text())
+        except (OSError, SyntaxError, UnicodeError):
+            raise Unresolved(f'{where}: {relative} is unreadable; its ordinary proof needs review') from None
+        actual = hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+        if actual != expected:
+            raise Unresolved(f'{where}: {relative} changed or is unreviewed; its complete ordinary proof needs review')
+    for relative, expected in ORDINARY_PRICED_INPUTS.items():
+        try:
+            actual = hashlib.sha256((REBUILD / relative).read_bytes()).hexdigest()
+        except OSError:
+            raise Unresolved(f'{where}: {relative} is unreadable; its ordinary parser input needs review') from None
+        if actual != expected:
+            raise Unresolved(f'{where}: {relative} changed or is unreviewed; its ordinary parser input needs review')
+
+
 def ordinary_module_proof(where):
     path = REBUILD / 'core/v3_field_relations.py'
     tree = ast.parse(path.read_text())
     actual = hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
     if actual != ORDINARY_PRICED_SHA256:
         raise Unresolved(f'{where}: complete ordinary compiler/binding/price proof needs review')
+    ordinary_dependency_proof(where)
     return tree
 
 
