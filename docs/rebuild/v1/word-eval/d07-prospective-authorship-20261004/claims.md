@@ -1,0 +1,9 @@
+# Prospective response ownership correction, 2026-10-04
+
+The next root refutation of 830dc4e7 retained three concrete wrong exports: “Witness should write the following:”, “Witness must enter the following:”, and “Manager is required to write this response:”. The existing literal must/write frame was insufficient; the source revision remains unqualified until this correction is independently checked.
+
+Prospective authored-response ownership now reuses the existing complete finite auxiliary grammar shared with documentary source-action reading. An optional passive required-to relationship and the existing data-entry instruction grammar describe who supplies this particular response. The full prospective subject, predicate and deictic response argument are required, without guessing an actor's job title. A dotted name is permitted as in the existing area-assignment grammar. Clinical obligations to include or avoid something remain ordinary controls. This is a finite grammar improvement and does not assert universal natural-language authorship detection.
+
+All three exact root originals now detect no conditional write-in and refuse their unchanged historical mappings/answers with protected_signing_area before an export. The dotted-name reservation stays held. The two ordinary initial/signed-status controls remain writable; their exports are byte-identical to root's retained positive exports. Empty fill returns the exact original for all six cases. The root originals, old wrong exports and first results remain untouched and hash-sealed.
+
+The first expanded seven-method archived packet passed with no database, renderer or provider calls. The final affected 17-method packet and its exit are recorded separately in receipt.json. Independent finished-diff refutation is still required; fixed corpus denominators and all prior failed attempts remain unchanged. D03 option-branch work is saved separately and is not part of this source correction.

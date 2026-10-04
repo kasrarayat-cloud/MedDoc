@@ -1077,7 +1077,10 @@ class TerminalChoiceWriteIns(unittest.TestCase):
         with self.assertRaises(word_v3.V3Failure):word_v3.fill(protected,[signature],{signature['key']:'Dr Synthetic Finalizer'})
 
     def test_prospective_author_and_reserved_area_do_not_gain_a_conditional_writer(self):
-        for question in ('Witness must write the following:','Alex Reed shall write this response:',
+        for question in ('Witness must write the following:','Witness should write the following:',
+                'Witness must enter the following:','Manager is required to write this response:',
+                'Alex Reed cannot write this response:','Dr. Alex Reed should write this response:',
+                'Alex Reed shall write this response:',
                 'This area is for Alex Reed to enter the answer:',
                 'This section is for Dr. Alex Reed to record symptoms:',
                 'This box is reserved for another person to supply a statement:',

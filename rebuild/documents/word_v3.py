@@ -180,6 +180,11 @@ KNOWN_LAYOUT_FAILURES = {
 MAX_ANSWER = 100_000
 #: A content control the original locks (contentLocked / sdtContentLocked): its content cannot take an answer, so
 #: its area is protected and the control is a destination role (destination_roles).
+# Shared finite auxiliary grammar: prospective source actions and appointed
+# response authors read the same tense/aspect/obligation relationship.
+SOURCE_ACTION_AUXILIARY = (r'(?:will|would|shall|should|can|could|may|might|must|cannot|'
+                           r'am|is|are|was|were|has|have|had|do|does|did|been|being|not|yet|hereby|personally)')
+
 LOCKED_CONTROL = "This content control is locked in the original form. It remains unchanged; review it by hand."
 FLOATING_INITIALS_REFUSAL = ("Filled export is unavailable for this form's floating initials boxes: answer reflow can "
                            "clip or move a box away from its question. The unchanged original remains available. "
@@ -3173,8 +3178,7 @@ class Detector:
         # neither tense, negation nor an unfamiliar actor creates authority.
         # This also protects an actor blank before the predicate. Clinical
         # complements keep their ordinary meaning ("will review the dose").
-        auxiliary = (r'(?:will|would|shall|should|can|could|may|might|must|cannot|'
-                     r'am|is|are|was|were|has|have|had|do|does|did|been|being|not|yet|hereby|personally)')
+        auxiliary = SOURCE_ACTION_AUXILIARY
         finite = re.match(r'^(?:(?P<subject>[^.;:?!\r\n]+?)\s+)?'
                           r'(?P<aspect>(?:'+auxiliary+r'\s+)+)(?P<complement>\S.+)$', source, re.I)
         if finite and not first_person:
@@ -6336,10 +6340,15 @@ class Detector:
                    r"[^:;?!\r\n]+?\s*[:.]?\s*$")
         # An explicit subject obligated to write this response is its author;
         # clinical obligations about medication/signs are different arguments.
-        prospective = (r"^\s*[^.;:?!\r\n]+?\s+(?:must|shall|will|is\s+to)\s+write\s+"
-                       r"(?:the\s+following|(?:this|the|these)\s+" + response + r")\s*[:.]?\s*$")
-        return (re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I)
-                or re.fullmatch(prospective, text, re.I))
+        prospective = re.fullmatch(
+            r"\s*[^;:?!\r\n]+?\s+(?:" + SOURCE_ACTION_AUXILIARY + r"\s+)+"
+            r"(?:(?:required\s+)?to\s+)?(?P<predicate>[^.;:?!\r\n]+?)\s+"
+            r"(?P<object>the\s+following|(?:this|the|these)\s+" + response + r")\s*[:.]?\s*", text, re.I)
+        # Reuse the existing data-entry instruction grammar. A prospective
+        # clinical obligation to include/avoid something is not a writer.
+        writing = prospective and (re.match(r'write\b', prospective['predicate'], re.I)
+                                    or ENTER_HINT.match(prospective['predicate'] + ' ' + prospective['object']))
+        return re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I) or writing
 
     def manual_numeric_parts(self, chosen):
         """Visible, empty, plain numeric parts available for explicit human mapping only."""

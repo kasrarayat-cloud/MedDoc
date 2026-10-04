@@ -1,0 +1,19 @@
+{
+  "word_sha256": "5cd57ce0b01faa6037485f0f14433714a6b0b2550168acb2d09edba6d70e8511",
+  "tests_sha256": "5e33f1ddd45745e0d9c690c7aa3975a421dd0c53a9b9ad117a6d132009c4b064",
+  "affected_methods": 17,
+  "affected_actual_exit": 0,
+  "affected_seconds": 43.578,
+  "affected_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/terminal-other-obligation-affected-17-20261004.log",
+  "affected_log_sha256": "30ece4b8448553cb560122587f5b58f7ce40585c24d1c49b9c4a8c3d65435fb4",
+  "exact_root_originals": 6,
+  "new_wrong_exports_retained": 3,
+  "old_mapping_refusals": 3,
+  "ordinary_positive_exports_byte_identical": 2,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "fixed_overall_denominator": 60,
+  "fixed_holdout_denominator": 20,
+  "artifact_seal_sha256": "d8e4faa148036eff037e4b94c14fc938ebfff280cf028267894fb5a13b3b6325"
+}
