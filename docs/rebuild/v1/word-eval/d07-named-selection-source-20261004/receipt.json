@@ -579,5 +579,19 @@
     "provider_calls": 0,
     "db_calls": 0,
     "render_calls": 0
+  },
+  "prose_correction_20261004": {
+    "raw_mapping_summary_unchanged": true,
+    "correct": "21/28 correct7miss0wrong4extras strictfalse",
+    "correct_remaining_missed_ids": [
+      "A10",
+      "A13",
+      "A15",
+      "A17",
+      "A26",
+      "A27",
+      "A28"
+    ],
+    "incorrect_prior_prose_retained": "22/28 correct6miss"
   }
 }

@@ -1,0 +1,158 @@
+{
+  "source_commit": "3a3af5f5e724a1216bcc059824c4ff5a58f0698e",
+  "source_word_sha256": "34446176aec9bfa5cc528e0f6859c353ebc3995d8c974da360c741f4ea6f8c6d",
+  "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+  "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+  "scorer_sha256": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+  "mapping_summary": {
+    "n": 28,
+    "ok": 23,
+    "missed": 5,
+    "wrong": 0,
+    "extras": 4,
+    "strict": false
+  },
+  "new_alternatives": 2,
+  "full_application_route": false,
+  "manual_mapping_corrections": 0,
+  "provider_calls": 0,
+  "db_calls": 0,
+  "render_calls": 0,
+  "attempts": [
+    {
+      "plan": "unknown",
+      "refused": false,
+      "export_sha256": "017c44897babca29e91544c2ff1b3b949fc4b4abaa6c1beb4e9c87387a9e2870",
+      "states": [
+        [
+          true
+        ],
+        [
+          true
+        ]
+      ],
+      "scalar_values": [
+        "",
+        ""
+      ],
+      "untargeted_parts_unchanged": true,
+      "instruction_unchanged": true
+    },
+    {
+      "plan": "dates",
+      "refused": false,
+      "export_sha256": "0271cec8957d45811e6005671d2f5e5b64a3d85a8c1b75b84b2858c62119acd1",
+      "states": [
+        [
+          false
+        ],
+        [
+          false
+        ]
+      ],
+      "scalar_values": [
+        "04-Oct-2026",
+        "05-Oct-2026"
+      ],
+      "untargeted_parts_unchanged": true,
+      "instruction_unchanged": true
+    },
+    {
+      "plan": "conflict",
+      "refused": true,
+      "code": "conflicting_alternative_answers",
+      "message": "The printed Or control and its scalar answer cannot both be filled. Review the answer and explicitly untick the alternative before entering a value."
+    }
+  ],
+  "no_answer_original_bytes": true,
+  "source_unchanged": true,
+  "affected_regression": {
+    "tests": 35,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 93.57186690500384,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "34446176aec9bfa5cc528e0f6859c353ebc3995d8c974da360c741f4ea6f8c6d",
+      "rebuild/documents/test_source_coverage.py": "0740dad1b0d83cda7cf09f6567d1f6890eb3b8327ede9a140797c9c88cc7c87f"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 294,
+    "refused": 125,
+    "exports": 169,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "affected_actual_exit": 0,
+  "original_proof_actual_exit": 0,
+  "baseline_original": {
+    "source_commit": "3a3af5f5e724a1216bcc059824c4ff5a58f0698e",
+    "source_word_sha256": "d9f7ff25109afbbff05a1867d8393324d94c7c4f46e85ebdc6cab01eeadf9629",
+    "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+    "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+    "scorer_sha256": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+    "mapping_summary": {
+      "n": 28,
+      "ok": 21,
+      "missed": 7,
+      "wrong": 0,
+      "extras": 4,
+      "strict": false
+    },
+    "new_alternatives": 0,
+    "full_application_route": false,
+    "manual_mapping_corrections": 0,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0,
+    "attempts": [],
+    "no_answer_original_bytes": true,
+    "source_unchanged": true
+  },
+  "baseline_actual_exit": 0,
+  "first_failed_packet": {
+    "tests": 7,
+    "failures": 2,
+    "errors": 1,
+    "success": false,
+    "elapsed": 17.272197425998456,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "ff02bccef9160aed895df7a918f5820532ccdfdb39029ec5a75c508363cf4092",
+      "rebuild/documents/test_source_coverage.py": "188ee2769f3f36b04d36c21e2824319f82020edf99e1c7c6773801f0ccc13211"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 49,
+    "refused": 20,
+    "exports": 29,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "first_actual_exit": 1,
+  "first_counterexamples_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-scalar-first-context-counterexamples-20261004",
+  "remaining_missed_ids": [
+    "A10",
+    "A17",
+    "A26",
+    "A27",
+    "A28"
+  ],
+  "original_gate_denominators": [
+    60,
+    20
+  ],
+  "acceptance_thresholds": [
+    54,
+    18
+  ],
+  "native_word_inspection": false,
+  "full_gate_pass": false,
+  "verified_cleanup_bytes": 0,
+  "correction": {
+    "prior_prose": "22/28 correct6miss",
+    "authoritative_retained_result": "21/28 correct7miss0wrong4extras",
+    "additional_original_miss": "A10 Delivered",
+    "raw_original_result_not_changed": true
+  }
+}

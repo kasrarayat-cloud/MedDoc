@@ -2393,6 +2393,7 @@ class Detector:
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
         self.guard_action_participants()
+        self.rule_scalar_alternatives()
         self.guard_numeric_bands()
         self.guard_fixed_containers()
         self.merge_header_copies()
@@ -4330,6 +4331,126 @@ class Detector:
                 'write_context': ' > '.join(x for x in (context, label) if x),
                 'source_slots': sources + [question] + [slot for slot in paragraphs if not self.text(slot.el).strip()],
                 'option_paras': boxes, 'local_cell_owner': True}
+
+    def rule_scalar_alternatives(self):
+        """A printed Or control is an alternative to one proven empty scalar.
+
+        This deferred proof uses the immutable original's already detected
+        scalar, never a reviewed label. Independent nested captions and one
+        complete control must occupy the same cell. Other questions, blanks,
+        hidden source and unknown native states retain the original hold.
+        """
+        for cell in [slot for slot in self.index.slots if slot.kind == 'tc']:
+            paragraphs = self.own_paragraphs(cell)
+            options = [(p, units[0]) for p in paragraphs for units in [self.box_units(p)]
+                       if len(units) == 1 and not units[0][2].strip()
+                       and re.fullmatch(r'Or\s+[^:;?!\n\t]{1,80}', option_text(units[0][1]), re.I)]
+            if not options:
+                continue
+            table, outer = cell.parent, cell.parent.parent
+            if (outer is None or outer.kind != 'tc' or outer.parent.parent is not None
+                    or outer.part != 'word/document.xml'
+                    or len(self.grid(outer.parent).get(outer.info['row'], [])) != 1):
+                continue
+            partition = self.nested_cell_partition(table)
+            question = partition.get(cell.id) if partition else None
+            scalars = [area for area in self.areas if self.host_cell(area.slot) is cell]
+            option_p, unit = options[0]
+            problem = 'The printed Or control does not have one proven empty scalar in its own captioned cell.'
+            scalar = scalars[0] if len(scalars) == 1 else None
+            eligible = (question is not None and scalar is not None and len(options) == 1
+                        and scalar.slot is question and scalar.kind in ('text', 'date', 'time')
+                        and not scalar.protection and not scalar.extra_slots
+                        and scalar.target == {'type': 'span', 'start': len(self.ptext(question.el)[0]),
+                            'end': len(self.ptext(question.el)[0]), 'shape': 'after_label'}
+                        and sum(len(self.box_units(p)) for p in paragraphs) == 1
+                        and not any(area.slot is option_p or option_p in area.extra_slots for area in self.areas))
+            guidance = [p for p in paragraphs if p not in (question, option_p) and self.text(p.el).strip()]
+            if eligible:
+                eligible = all(re.match(r'^Instructions?\s*:', self.text(p.el).strip(), re.I)
+                               and len(self.LABEL_COLON.findall(self.text(p.el))) == 1
+                               for p in guidance)
+                eligible = (eligible and all(self.tab_source_visible(p) and not self.blank_spans(*self.ptext(p.el))
+                            and not any(node.tag in (q('w:drawing'), q('w:pict'), q('w:hyperlink'), q('w:sectPr'))
+                                        for node in p.el.iter())
+                            for p in paragraphs)
+                            and all(self.plain_spacing_paragraph(p) for p in paragraphs
+                                    if not self.text(p.el).strip() and not self.box_units(p)))
+            before = [p for p in outer.children if p.seq < table.seq]
+            sources = [p for p in before if p.kind == 'p' and self.text(p.el).strip()]
+            inherited, inherited_problem = self.question_box_context(outer.parent, require_visible=True)
+            context = ' > '.join(x for x in (inherited, *(self.text(p.el).strip() for p in sources),
+                                 self.text(question.el).strip() if question else '',
+                                 *(self.text(p.el).strip() for p in guidance)) if x)
+            eligible = (eligible and not inherited_problem and len(context) <= MAX_MAPPING_CONTEXT
+                        and all(p.kind == 'p' and self.tab_source_visible(p) and (
+                            self.text(p.el).strip() or self.plain_spacing_paragraph(p)) for p in before))
+            # Structural context separators are not part of a caption's noun
+            # phrase. Read each complete original component and every clause;
+            # appending a section title must not turn Review of systems into
+            # an assigned review. A temporal caption still qualifies its own
+            # governing act (Manager review date), rather than erasing it.
+            source_texts = [*inherited.split(' > '), *(self.text(p.el).strip() for p in sources),
+                            *(self.text(p.el).strip() for p in paragraphs)]
+            clauses = [LIST_MARKER.sub('', clause.strip()) for text in source_texts
+                       for clause in [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip()]
+            human = any(self.checkbox_source_action(text, governing=True) or signing_place(text)
+                        for text in clauses)
+            if scalar is not None and scalar.kind == 'date' and question is not None:
+                temporal = DATE_LABEL.sub(' ', LIST_MARKER.sub('', self.text(question.el).strip()))
+                human = human or bool(self.checkbox_source_action(temporal, governing=True)
+                    or signing_place(temporal) or BOX_SIGNING_VERB.search(temporal)
+                    and not self.ordinary_source_kind([temporal], 'signature'))
+            if human:
+                self.protected_regions.add(cell.id)
+                eligible = False
+            if eligible:
+                decision = self.cardinality(self.text(question.el), ['Scalar answer', option_text(unit[1])],
+                    local=[self.text(p.el) for p in guidance], own={id(p.el) for p in paragraphs},
+                    context=context)
+                eligible = not decision.get('problem') and decision.get('kind') == 'choice'
+            if eligible:
+                box = unit[0]
+                state = box_state(self.index, box)
+                if box['kind'] == 'ff':
+                    native = self.index.by_id.get(box['part'] + '#' + box['slot'])
+                    fc = native.el.find(FLDCHAR) if native else None
+                    data = fc.find(q('w:ffData')) if fc is not None else None
+                    controls = data.findall(q('w:checkBox')) if data is not None else []
+                    valid = len(controls) == 1 and all(len(controls[0].findall(q(tag))) <= 1
+                        and all(n.get(q('w:val')) in (None, '1', 'true', 'on', '0', 'false', 'off')
+                                for n in controls[0].findall(q(tag))) for tag in ('w:checked', 'w:default'))
+                    eligible = valid and (state is True or state is False)
+                elif box['kind'] == 'sdt':
+                    native = self.index.by_id.get(box['part'] + '#' + box['slot'])
+                    controls = native.el.findall('./' + q('w:sdtPr') + '/' + q('w14:checkbox')) if native else []
+                    eligible = (len(controls) == 1 and len(controls[0].findall(q('w14:checked'))) <= 1
+                        and all(n.get(q('w14:val')) in (None, '1', 'true', '0', 'false')
+                                for n in controls[0].findall(q('w14:checked')))
+                        and (state is True or state is False))
+                else:
+                    eligible = state is True or state is False
+            if not eligible:
+                for p in dict.fromkeys([*( [question] if question else []), *[p for p, _ in options]]):
+                    self.coverage_issue(p, 'scalar_alternative_source', problem)
+                continue
+            ref = lambda p: {'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+            anchor = self.index.by_id[unit[0]['part'] + '#' + unit[0]['slot']]
+            relation = {'relation': 'scalar_checkbox_alternative', 'scalar': ref(scalar.slot),
+                'scalar_target': dict(scalar.target), 'scalar_kind': scalar.kind, 'scalar_label': scalar.label,
+                'scalar_context': scalar.context, 'cell': ref(cell), 'sources': [ref(p) for p in dict.fromkeys(
+                    [outer, table, cell, question, option_p, *sources, *guidance])], 'original_checked': state}
+            self.add(Area('checkbox', option_text(unit[1]), anchor,
+                {'type': 'checkboxes', 'boxes': [unit[0]]}, context=context, options=[option_text(unit[1])],
+                complete_source=True, source_questions=[relation], label_slot=question))
+            removed = {issue['detail'] for issue in self.coverage_issues
+                       if issue['part'] == option_p.part and issue['slot'] == option_p.path
+                       and issue['code'] == 'nested_options'}
+            self.coverage_issues[:] = [issue for issue in self.coverage_issues
+                if not (issue['part'] == option_p.part and issue['slot'] == option_p.path
+                        and issue['code'] == 'nested_options')]
+            self.notes[:] = [note for note in self.notes if note not in removed
+                            or any(issue['detail'] == note for issue in self.coverage_issues)]
 
     def nested_checkbox_source(self, group):
         """One complete nested option grid belongs to its printed source question.
@@ -9088,7 +9209,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                             'start': issue.get('start'), 'end': issue.get('end')}
                            for issue in source_detector.coverage_issues
                            if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
-                                                'unmapped_bracketed_source', 'named_selection_source')]
+                                                'unmapped_bracketed_source', 'named_selection_source',
+                                                'scalar_alternative_source')]
     adjacent_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
     requested_answers = [area for area in source_detector.areas if any(
@@ -9099,6 +9221,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relation.get('relation') == 'option_branch_instruction' for relation in area.source_questions)]
     named_choices = [area for area in source_detector.areas if any(
         relation.get('relation') == 'named_selection_instruction' for relation in area.source_questions)]
+    scalar_alternatives = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'scalar_checkbox_alternative' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
@@ -9129,6 +9253,47 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 and field.get('options') == relation['printed']
                 and field.get('context') == relation['original_context']
                 and field.get('source_questions', []) == relation['original_relations'])
+
+    def exact_original_area(field, area):
+        loc = field.get('locator') or {}
+        extras = [{'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+                  for slot in area.extra_slots]
+        return (loc.get('part') == area.slot.part and loc.get('slot') == area.slot.path
+                and loc.get('fingerprint') == fingerprint(area.slot.el) and loc.get('extra', []) == extras
+                and loc.get('target') == area.target and field.get('kind') == area.kind
+                and field.get('label') == area.label and field.get('context') == area.context
+                and field.get('options', []) == area.options
+                and field.get('source_questions', []) == area.source_questions)
+
+    # The printed Or is an exclusive alternative, not an invitation to silently
+    # clear an existing selection. Read the exact original pair before queuing
+    # any edits, including when a stored mapping omitted the alternative.
+    for alternative in scalar_alternatives:
+        relation = alternative.source_questions[0]
+        region = {'place': relation['cell']['part'] + '#' + relation['cell']['slot'],
+                  'start': None, 'end': None}
+        writers = [field for field in fields if any(reader.touches(place, region) for place in reader.of(field))]
+        active = [field for field in writers if answers.get(field['key']) not in (None, '', [])]
+        if not active:
+            continue
+        scalar = next(area for area in source_detector.areas
+                      if area.slot.id == relation['scalar']['part'] + '#' + relation['scalar']['slot']
+                      and area.target == relation['scalar_target'])
+        scalar_fields = [field for field in writers if exact_original_area(field, scalar)]
+        alternative_fields = [field for field in writers if exact_original_area(field, alternative)]
+        if (len(scalar_fields) > 1 or len(alternative_fields) > 1
+                or any(not exact_original_area(field, scalar) and not exact_original_area(field, alternative)
+                       for field in active)):
+            fail('This printed Or alternative requires its exact original scalar and checkbox mappings. '
+                 'Review the complete caption and control again.', 'mapping_mismatch')
+        scalar_value = answers.get(scalar_fields[0]['key']) if scalar_fields else None
+        checked_value = answers.get(alternative_fields[0]['key']) if alternative_fields else None
+        checked = (bool(_options_chosen(alternative_fields[0], checked_value))
+                   if checked_value not in (None, '', []) else relation['original_checked'])
+        if checked and scalar_value not in (None, '', []):
+            fail('The printed Or control and its scalar answer cannot both be filled. '
+                 'Review the answer and explicitly untick the alternative before entering a value.',
+                 'conflicting_alternative_answers')
 
     for field in fields:
         loc = field.get("locator") or {}
@@ -9326,7 +9491,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -9359,7 +9524,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 owns = (any(original_branch_mapping(field, area) for area in relation_areas)
                         or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas))

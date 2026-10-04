@@ -20,6 +20,7 @@ from lxml import etree
 from . import word_v3
 from .service import inspect_template
 from .test_word_v3 import ff_field
+from .test_word_v3 import checkbox_control
 
 
 def data(doc):
@@ -1259,6 +1260,152 @@ class PrintedOptionBranchInstructions(unittest.TestCase):
             with self.assertRaises(word_v3.V3Failure):word_v3.fill(human,[candidate],{candidate['key']:candidate['options'][0]})
             self.assertEqual(word_v3.fill(raw,fields,{}),raw)
 
+
+
+class ScalarCheckboxAlternatives(unittest.TestCase):
+    def form(self, *, family='ff', checked=False, caption='1. Start date:', outer='Required items',
+             guidance='', extra='', hidden=False, malformed=False, second=False):
+        doc=Document();host=doc.add_table(rows=1,cols=1).cell(0,0);host.text=outer
+        table=host.add_table(rows=1,cols=2);cell=table.cell(0,0);cell.text=caption
+        p=cell.add_paragraph()
+        if family=='ff':
+            ff_field(p,'checkbox',checked=checked)
+            if malformed:
+                flag=p._p.find('.//'+qn('w:default'));flag.set(qn('w:val'),'unknown')
+        elif family=='sdt':p._p.append(checkbox_control(checked=checked))
+        else:p.add_run('☒'if checked else'☐')
+        p.add_run(' Or Unknown')
+        if hidden:p.runs[-1].font.hidden=True
+        if guidance:cell.add_paragraph(guidance)
+        if extra:cell.add_paragraph(extra)
+        if second:cell.add_paragraph('☐ Or Not recorded')
+        neighbor=table.cell(0,1);neighbor.text='2. Independent observations (choose one):'
+        neighbor.add_paragraph('☐ Present');neighbor.add_paragraph('☒ Absent')
+        doc.sections[0].header.paragraphs[0].text='Preserved header'
+        doc.sections[0].footer.paragraphs[0].text='Preserved footer'
+        return data(doc)
+
+    def pair(self,raw):
+        mapping=word_v3.inspect(raw)
+        alternative=next(f for f in mapping['fields']if any(r.get('relation')=='scalar_checkbox_alternative'
+            for r in f.get('source_questions',[])))
+        relation=alternative['source_questions'][0]
+        scalar=next(f for f in mapping['fields']if f['locator']['part']==relation['scalar']['part']
+            and f['locator']['slot']==relation['scalar']['slot']and f['locator']['target']==relation['scalar_target'])
+        return mapping,scalar,alternative
+
+    def test_exact_empty_scalar_and_its_single_or_control_are_separate_answers(self):
+        for family in('ff','sdt','glyph'):
+            with self.subTest(family=family):
+                raw=self.form(family=family,guidance='Instruction: Same as previous date if only one visit')
+                mapping,scalar,alternative=self.pair(raw)
+                self.assertEqual((scalar['kind'],alternative['kind']),('date','checkbox'))
+                self.assertEqual(alternative['label'],'Or Unknown')
+                self.assertFalse([i for i in mapping['coverage_issues']if i['code']=='scalar_alternative_source'])
+                out=word_v3.fill(raw,mapping['fields'],{alternative['key']:True})
+                self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),alternative),[True])
+                original=Document(io.BytesIO(raw));export=Document(io.BytesIO(out))
+                self.assertEqual(original.tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text,
+                    export.tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text)
+                self.assertEqual(original.tables[0].cell(0,0).tables[0].cell(0,1)._tc.xml,
+                    export.tables[0].cell(0,0).tables[0].cell(0,1)._tc.xml)
+                with ZipFile(io.BytesIO(raw))as before,ZipFile(io.BytesIO(out))as after:
+                    for name in before.namelist():
+                        if name!='word/document.xml':self.assertEqual(before.read(name),after.read(name),name)
+                self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_scalar_and_checked_alternative_conflict_including_original_ticks(self):
+        for family in('ff','sdt','glyph'):
+            for checked in(False,True):
+                raw=self.form(family=family,checked=checked);mapping,scalar,alternative=self.pair(raw)
+                plans=[{scalar['key']:'04-Oct-2026',alternative['key']:True}]
+                if checked:plans.append({scalar['key']:'04-Oct-2026'})
+                for plan in plans:
+                    with self.subTest(family=family,checked=checked,plan=plan),self.assertRaises(word_v3.V3Failure)as error:
+                        word_v3.fill(raw,mapping['fields'],plan)
+                    self.assertEqual(error.exception.code,'conflicting_alternative_answers')
+                out=word_v3.fill(raw,mapping['fields'],{scalar['key']:'04-Oct-2026',alternative['key']:False})
+                after=word_v3.SlotIndex(word_v3.open_package(out))
+                self.assertEqual(word_v3.constrained_option_states(after,alternative),[False])
+                self.assertIn('04-Oct-2026',Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text)
+
+    def test_omitted_alternative_does_not_authorize_clearing_original_unknown(self):
+        for checked in(False,True):
+            raw=self.form(checked=checked);mapping,scalar,alternative=self.pair(raw)
+            if checked:
+                with self.assertRaises(word_v3.V3Failure)as error:
+                    word_v3.fill(raw,[scalar],{scalar['key']:'04-Oct-2026'})
+                self.assertEqual(error.exception.code,'conflicting_alternative_answers')
+            else:
+                out=word_v3.fill(raw,[scalar],{scalar['key']:'04-Oct-2026'})
+                self.assertIn('04-Oct-2026',Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text)
+            self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_forged_or_stale_relationship_and_whole_cell_writer_are_refused(self):
+        raw=self.form();mapping,scalar,alternative=self.pair(raw)
+        for change in('relation','source','scalar','label','kind','context','options','target','whole'):
+            forged=deepcopy(alternative)
+            if change=='relation':forged.pop('source_questions')
+            elif change=='source':forged['source_questions'][0]['sources'][0]['fingerprint']='0'*64
+            elif change=='scalar':forged['source_questions'][0]['scalar_target']['start']-=1
+            elif change=='label':forged['label']='Clinical value'
+            elif change=='kind':forged['kind']='text'
+            elif change=='context':forged['context']='Unrelated history'
+            elif change=='options':forged['options']=['Not recorded']
+            elif change=='target':forged['locator']['target']['boxes'][0]['slot']=scalar['locator']['slot']
+            else:
+                forged['locator'].update(forged['source_questions'][0]['cell']);forged['locator']['target']={'type':'cell_append'}
+                forged['kind']='text';forged.pop('source_questions')
+            with self.subTest(change=change),self.assertRaises(word_v3.V3Failure):
+                word_v3.fill(raw,[forged],{forged['key']:'Synthetic response'if forged['kind']=='text'else True})
+        with self.assertRaises(word_v3.V3Failure):
+            word_v3.fill(self.form(caption='1. End date:'),[alternative],{alternative['key']:True})
+
+    def test_competing_blanks_captions_controls_and_unreadable_source_remain_held(self):
+        for config in({'extra':'Another date:'},{'extra':'______'},{'second':True},{'hidden':True},
+                       {'malformed':True},{'guidance':'Instruction: Select all applicable answers.'},
+                       {'guidance':'Instruction: Another date: ______'}):
+            with self.subTest(config=config):
+                raw=self.form(**config);mapping=word_v3.inspect(raw)
+                self.assertFalse([f for f in mapping['fields']if any(r.get('relation')=='scalar_checkbox_alternative'
+                    for r in f.get('source_questions',[]))])
+                self.assertTrue(any(i['code']=='scalar_alternative_source'for i in mapping['coverage_issues']))
+                self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_source_human_acts_and_named_signers_never_receive_an_alternative_writer(self):
+        for config in({'caption':'Witness signing date:'},{'caption':'Signed (mother, date):'},
+                {'caption':'Manager review date:'},{'caption':'Signature (participant, date):'},
+                {'outer':'I certify that I witnessed the patient sign this consent form.'},
+                {'guidance':'Instruction: I approve this document.'},
+                {'guidance':'Instruction: This area is for Alex Reed to enter the answer:'}):
+            with self.subTest(config=config):
+                raw=self.form(**config);mapping=word_v3.inspect(raw)
+                self.assertFalse([f for f in mapping['fields']if any(r.get('relation')=='scalar_checkbox_alternative'
+                    for r in f.get('source_questions',[]))])
+                # A changed review label cannot write the physically held
+                # control, even when its ordinary field metadata is forged.
+                index=word_v3.SlotIndex(word_v3.open_package(raw))
+                slot=next(s for s in index.slots if s.kind=='ff'and s.info['field']=='FORMCHECKBOX')
+                forged=word_v3.area_to_field(900,word_v3.Area('checkbox','Clinical value',slot,
+                    {'type':'checkboxes','boxes':[{'kind':'ff','part':slot.part,'slot':slot.path}]},
+                    options=['Or Unknown']))
+                with self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(raw,[forged],{forged['key']:True})
+                self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_ordinary_initial_reading_signed_receipt_and_review_stay_ordinary(self):
+        for caption in('Initial reading:','Signed referral received:','Review of systems:'):
+            raw=self.form(caption=caption);mapping,scalar,alternative=self.pair(raw)
+            self.assertEqual(scalar['kind'],'text')
+            out=word_v3.fill(raw,mapping['fields'],{scalar['key']:'Synthetic observation',alternative['key']:False})
+            self.assertIn('Synthetic observation',Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text)
+
+    def test_temporal_modifier_preserves_ordinary_observation_and_receipt_arguments(self):
+        for caption in('Initial observations date:','Signed referral received date:','Review of systems date:'):
+            raw=self.form(caption=caption);mapping,scalar,alternative=self.pair(raw)
+            self.assertEqual(scalar['kind'],'date')
+            out=word_v3.fill(raw,mapping['fields'],{scalar['key']:'04-Oct-2026',alternative['key']:False})
+            self.assertIn('04-Oct-2026',Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text)
 
 
 class NamedSelectionInstructions(unittest.TestCase):
