@@ -1,10 +1,12 @@
 """The prospective financial witness refuses before reading source or runtime state."""
 import contextlib
+import ast
 import io
 import json
 import os
 from pathlib import Path
 import runpy
+import re
 import sys
 import tempfile
 import unittest
@@ -12,6 +14,61 @@ from unittest.mock import patch
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'fixtures/current_wire_price_witness.source'
+
+
+class StandingEvidenceIdentity(unittest.TestCase):
+    """Compile the literal admission guard without executing the witness or reading evidence."""
+    @classmethod
+    def setUpClass(cls):
+        tree = ast.parse(SOURCE.read_bytes())
+        guards = [node for node in tree.body if isinstance(node, ast.If) and any(
+            isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+            and call.func.attr == 'fullmatch' and call.args
+            and isinstance(call.args[0], ast.Constant)
+            and isinstance(call.args[0].value, str)
+            and call.args[0].value.startswith('v1-standing-api-testing-')
+            for call in ast.walk(node.test))]
+        assert len(guards) == 1
+        cls.admission = compile(ast.Expression(guards[0].test), str(SOURCE), 'eval')
+        normal = ast.parse((SOURCE.parents[1] / 'standing_qa.py').read_bytes())
+        declaration = next(node for node in normal.body if isinstance(node, ast.Assign)
+                           and any(isinstance(target, ast.Name) and target.id == 'LIVE_CAMPAIGN'
+                                   for target in node.targets))
+        cls.normal_pattern = re.compile(ast.literal_eval(declaration.value.args[0]))
+
+    def refused(self, evidence):
+        return bool(eval(self.admission, {'evidence': Path(evidence), 'Path': Path, 're': re}))
+
+    def test_first_and_all_authorized_later_campaign_roots_pass_this_guard(self):
+        for suffix in ['', *['-' + str(number) for number in range(2, 100)]]:
+            with self.subTest(suffix=suffix):
+                self.assertFalse(self.refused('/opt/meddoc-pro/rebuild/.runtime/'
+                    'v1-standing-api-testing-20261004' + suffix + '/evidence'))
+
+    def test_zero_one_padded_and_unbounded_later_identities_refuse(self):
+        for suffix in ['-0', '-1', '-01', '-02', '-100', '-999', '-2-extra', '-2/child']:
+            with self.subTest(suffix=suffix):
+                self.assertTrue(self.refused('/opt/meddoc-pro/rebuild/.runtime/'
+                    'v1-standing-api-testing-20261004' + suffix + '/evidence'))
+
+    def test_foreign_root_and_evidence_directory_cannot_use_a_valid_suffix(self):
+        for path in ['/tmp/v1-standing-api-testing-20261004-2/evidence',
+                     '/opt/meddoc-pro/rebuild/.runtime/foreign-20261004-2/evidence',
+                     '/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004-2/other',
+                     '/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004-2/child/evidence']:
+            with self.subTest(path=path):
+                self.assertTrue(self.refused(path))
+
+    def test_literal_identity_grammar_matches_the_normal_standing_runner(self):
+        identities = ['20261004', '20261004-2', '20261004-99', '20261004-100',
+                      '20261004-0', '20261004-1', '20261004-02', '20261004-2-other',
+                      '19991004', '2026100', '202610040', 'foreign-20261004-2']
+        for identity in identities:
+            with self.subTest(identity=identity):
+                normal_accepts = self.normal_pattern.fullmatch(
+                    'quillmd-v1-standing-api-testing-' + identity) is not None
+                self.assertEqual(not self.refused('/opt/meddoc-pro/rebuild/.runtime/'
+                    'v1-standing-api-testing-' + identity + '/evidence'), normal_accepts)
 
 
 class PreparedPriceWitness(unittest.TestCase):

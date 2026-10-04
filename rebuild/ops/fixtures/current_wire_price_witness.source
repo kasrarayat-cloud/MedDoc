@@ -40,7 +40,7 @@ if any(not re.fullmatch('[0-9]{3,}',attempt) for attempt in args.attempt):
  raise ValueError('Evidence attempt identity is malformed.')
 evidence=args.evidence.resolve(strict=True)
 if (evidence.name!='evidence' or evidence.parent.parent!=Path('/opt/meddoc-pro/rebuild/.runtime')
-    or not re.fullmatch('v1-standing-api-testing-[0-9]{8}',evidence.parent.name)):
+    or not re.fullmatch('v1-standing-api-testing-20[0-9]{6}(?:-([2-9]|[1-9][0-9]))?',evidence.parent.name)):
  raise ValueError('Only retained standing-authority synthetic evidence may be read.')
 owned=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations').resolve()
 root=args.output
