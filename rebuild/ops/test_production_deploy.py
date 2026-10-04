@@ -1079,7 +1079,16 @@ BATCH_PRICED_MODULES = {
 # is about a fifth of v3's per unit, so far more fields fit one bounded 20,000-token response (25 units: 60 fields, was
 # 17) and the relations field batches split far later. compile_request, maximum_cost, generate, validated, records,
 # read, claimed, disagrees and the send are AST-identical.
-ORDINARY_PRICED_SHA256 = '6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55'
+# Financial renewal 2026-10-04, elicited-proof correction: only the complete
+# relations reader/source-dependency AST and three generation governance floors
+# changed. Independent ROOT33 controls qualify the finished semantic correction;
+# the SDK compiler, quotes, caps, billing and 13 other guarded ASTs/four inputs
+# remain identical. Four genuine OLD-paid/NEW1229 offline reconstructions pass
+# with unchanged actual request/usage/QA-settlement rows. Full original and new
+# identities, proof limits and affected119 gate are recorded separately in
+# docs/rebuild/v1/financial-renewal-20261004/ELICITED-RENEWAL.md.
+# Old campaigns stay closed. This is no voice, corpus or invoice qualification.
+ORDINARY_PRICED_SHA256 = '2819cea85a4e1a911603dd55b15dd21244f8a24064677c35ae61a2b72c4de1bc'
 
 
 # Financial renewal 2026-10-04: genuine paid campaign-3 children 002/003 on
@@ -1095,7 +1104,7 @@ ORDINARY_PRICED_DEPENDENCY_PATHS = (
     'core/transcript_context.py', 'core/v3_destination.py', 'core/v3_mapping.py',
 )
 ORDINARY_PRICED_DEPENDENCIES = {
-    'core/generation.py': 'c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4',
+    'core/generation.py': '840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227',
     'core/ordinary_source_scope.py': '259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e',
     'core/reviewed_source.py': '8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157',
     'core/reviewed_procedure_source.py': 'aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0',
