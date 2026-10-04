@@ -1,0 +1,11 @@
+{
+  "created_utc": "2026-10-04T11:21:03.171960+00:00",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-word-d10-automatic-ruled-20261004",
+  "source_commit": "e626325acb54beb88117c817a0db0427bffe24f9",
+  "source_word_sha256": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27",
+  "source_tests_sha256": "e5e057b89614e838087c02c801c61ac05ca71300433694bcf4edb6da9b1d4c21",
+  "active_children": [],
+  "receipt_sha256": "f9580a2cea1c1781b6b64acdc058e50482a7a6524f7e26fb85ac12ef91f00108",
+  "seal_sha256": "98601870a4c2ec73536549e2e629a62fb11c1191eb59025f5852c238c2e58f72",
+  "next": "Root finished-diff refutation before integration; actual original upload-to-export on coherent candidate with its supported layout adapter. Keep automatic/manual/fixed gate evidence separate."
+}
