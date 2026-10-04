@@ -12,6 +12,7 @@ from unittest.mock import Mock
 from django.db import migrations
 from django.db.migrations.exceptions import IrreversibleError
 from ops import integrity_contract
+from ops import capture_v1_install_schema
 from ops import v1_private_install_adapter as adapter
 from ops import v1_private_install_preparation as preparation
 
@@ -26,6 +27,15 @@ def literal(name, variable):
 
 
 class ReinspectionMigrationSource(unittest.TestCase):
+    def test_catalog_capture_refuses_a_newer_foreign_or_ambiguous_leaf_before_migration(self):
+        for nodes in ([('core', NAME)], [('core', NAME), ('core', preparation.LEAF)],
+                      [], [('auth', '0001_initial')]):
+            graph = SimpleNamespace(leaf_nodes=lambda: nodes)
+            with self.subTest(nodes=nodes), self.assertRaisesRegex(ValueError, 'Actual core migration leaf differs'):
+                capture_v1_install_schema.require_declared_core_leaf(graph, preparation.LEAF)
+        graph = SimpleNamespace(leaf_nodes=lambda: [('core', preparation.LEAF), ('auth', '0001_initial')])
+        capture_v1_install_schema.require_declared_core_leaf(graph, preparation.LEAF)
+
     def test_the_only_forward_sql_change_is_the_exact_reinspection_predicate(self):
         previous = literal('0031_previous_release_mapping_writes', 'GATE')
         expected = previous.replace("v.contract='v3' AND NOT EXISTS",

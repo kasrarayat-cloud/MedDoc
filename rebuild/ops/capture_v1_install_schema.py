@@ -19,6 +19,12 @@ DATABASE = 'quillmd_qa_sol_installcontract1004'
 OWNED_OUTPUT = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations')
 
 
+def require_declared_core_leaf(graph, leaf):
+    """A final migrate-all must never apply an undeclared newer core migration."""
+    if [node for node in graph.leaf_nodes() if node[0] == 'core'] != [('core', leaf)]:
+        raise ValueError('Actual core migration leaf differs from the reviewed capture contract.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True)
@@ -71,6 +77,7 @@ def main():
                 return v1_install_catalog.stream_hash(stream)
         return v1_install_catalog.read(query, copy_hash, before=before)
     executor = MigrationExecutor(connection)
+    require_declared_core_leaf(executor.loader.graph, p.LEAF)
     noncore = [node for node in executor.loader.graph.leaf_nodes() if node[0] != 'core']
     executor.migrate(noncore + [('core', p.BASELINE_NODE)])
     call_command('migrate', 'core', p.BASELINE_NODE, interactive=False, verbosity=0)

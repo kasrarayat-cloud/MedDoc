@@ -186,7 +186,11 @@ class InstalledBaselineUpgradePreservation(TransactionTestCase):
         for key, expected in seeded['files'].items():
             self.assertEqual(private_path(key).read_bytes(), expected)
             if self.capture:
-                (self.capture / Path(key).name).write_bytes(expected)
+                archived = self.capture / 'files' / key
+                archived.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                with archived.open('xb') as stream:
+                    stream.write(expected)
+                archived.chmod(0o600)
         version = models.TemplateVersion.objects.get(pk=seeded['version'])
         self.assertEqual((version.contract, version.corrections, version.assistance, version.import_manifest),
                          ('', {}, {}, {}))
