@@ -1,0 +1,48 @@
+{
+  "source_code_change": false,
+  "evaluation_executed": false,
+  "required_source_freeze": "explicit root JSON full SHA before application run",
+  "eligible_ids": [
+    "D01",
+    "D02"
+  ],
+  "harnesses": {
+    "dev_application_gate_native_v1.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev_application_gate_native_v1.py",
+      "sha256": "fef4adee73037e0bc5d941caaa4d4589d0b8a192429fc92243f28ed93faa14ed"
+    },
+    "run_dev_application_gate_native_v1.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_dev_application_gate_native_v1.py",
+      "sha256": "4f0dcbb9917b8ef4133c1d2d3b2604d9ee372094b99464d086a1f177e138d9e3"
+    }
+  },
+  "unchanged_helpers": {
+    "fixed_render_checker.py": "ab0cb64fb4133cadb3f1672323751d30e950712d0443724b8e3440a609d9024d",
+    "run_dev_application_gate_v2.py": "38b02636093e8c8997da15a02973f8f9d67501ced3c9347b5d9a66a26ac6b1ac",
+    "dev_application_gate_v2.py": "a996c18cd4ee0b7373a1a2eac8d86070dd96e46e5d51710a86aac5f86fe654e0"
+  },
+  "source_only_projection": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/native-projection-preparation-20261004/source-only-native-projection.json",
+    "sha256": "ab5bfa743b9a3a2521d66e07e89c4285cb9226c7f0fc1b694eea0bc6c35ed310",
+    "gt_scoring_performed": false,
+    "native_mapping_unchanged": true
+  },
+  "provider_calls": 0,
+  "execution_requires_serialized_grant": true,
+  "child_deadline_seconds": 900,
+  "total_deadline_seconds": 1200,
+  "maximum_partition_size": 2,
+  "mapping_corrections": 0,
+  "fixed_profiles": "empty/ordinary/long unchanged existing helpers; refuse invalid native values honestly",
+  "supplemental_profiles": "native-ordinary/native-long explicit clinician recovery; never count toward automatic correctness",
+  "protocol": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  },
+  "ordinary_runtime_ownership_gate": "UNVERIFIED by this authorized QA qualification; no ordinary ownership/skip guard patched",
+  "preservation": "original/export/hash archived before fidelity assertions; actual persisted review, signed claim tokens, finalization and authenticated download captured; normal application APIs only",
+  "first_attempts_retained": "dev-application-7907ae5aa38c-1791089107491093724 D01/D02 were legacy adapter coverage unverified, not proved native-export failures"
+}

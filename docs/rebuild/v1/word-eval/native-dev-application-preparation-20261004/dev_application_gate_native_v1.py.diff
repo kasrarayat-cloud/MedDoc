@@ -1,0 +1,390 @@
+--- dev_application_gate_v2.py
++++ dev_application_gate_native_v1.py
+@@ -1,4 +1,4 @@
+-"""Fixed original DEV gate through actual application routes. No manual map repair or provider.
++"""Native selected-legacy original DEV adapter through actual application routes. No provider.
+ Loaded only after a prospective exact-source freeze by run_dev_application_gate.py.
+ """
+ import ast
+@@ -93,138 +93,264 @@
+     return '\n'.join(w.paragraph_text(p)[0] for p in added)
+ 
+ 
++def native_coordinate_projection(raw, fields):
++    """Read-only GT coordinates; never passed to an application writer/version.
++
++    Native locators remain unchanged and retain their own reviewed contract.
++    Each projection is resolved by its original element or rejected; labels and
++    kind classes are not changed to resemble the ground truth.
++    """
++    index=w.SlotIndex(w.open_package(raw));root=index.package.tree('word/document.xml')
++    body=root.find(w.q('w:body'));body_paragraphs=body.findall(w.q('w:p'));tables=body.findall(w.q('w:tbl'))
++    native_paragraphs={part:list(index.package.tree(part).iter(w.q('w:p'))) for part in index.package.displayed_parts()}
++    projected=[]
++    for field in fields:
++        loc=field['locator'];targets=[]
++        if 'tab_form' in loc:
++            for anchor in loc['tab_form']['anchors']:
++                p=native_paragraphs[anchor['part']][anchor['paragraph']]
++                slot=index.by_el[id(p)];run=p.findall(w.q('w:r'))[anchor['run']]
++                child=run[anchor['child']]
++                assert child.tag==w.q('w:tab')
++                piece=next(piece for piece in w.paragraph_text(p)[1] if piece.node is child)
++                targets.append({'part':slot.part,'slot':slot.path,'target':{'type':'span','start':piece.start,'end':piece.end}})
++        elif 'sdt_id' in loc:
++            matches=[slot for slot in index.slots if slot.kind=='sdt' and slot.part==loc['part']
++                     and slot.el.find(w.q('w:sdtPr')+'/'+w.q('w:id')) is not None
++                     and slot.el.find(w.q('w:sdtPr')+'/'+w.q('w:id')).get(w.q('w:val'))==loc['sdt_id']]
++            assert len(matches)==1
++            slot=matches[0];targets=[{'part':slot.part,'slot':slot.path,'target':{'type':'sdt_choice'}}]
++        elif 'body_paragraph' in loc:
++            slot=index.by_el[id(body_paragraphs[loc['body_paragraph']])]
++            end=len(w.paragraph_text(slot.el)[0])
++            targets=[{'part':slot.part,'slot':slot.path,'target':{'type':'span','start':end,'end':end}}]
++        elif all(key in loc for key in ('table','row','column')):
++            table=tables[loc['table']];row=w.table_rows_of(table)[loc['row']];cell=w.row_cells_of(row)[loc['column']]
++            slot=index.by_el[id(cell)];paras=w.own_paragraph_slots(slot);assert len(paras)==1
++            p=paras[0];text=w.paragraph_text(p.el)[0];marker=loc.get('marker')
++            if marker:
++                assert text.count(marker)==1
++                start=text.index(marker);end=start+len(marker)
++            else:
++                assert not text
++                start=end=0
++            targets=[{'part':p.part,'slot':p.path,'target':{'type':'span','start':start,'end':end}}]
++        else:raise ValueError('Unproved native source locator: '+field['key'])
++        projected.append({**field,'locator':{**targets[0],'extra':[
++            {'part':target['part'],'slot':target['slot']} for target in targets[1:]]}})
++    return projected
++
++
++def native_answer_readbacks(raw, export, fields, values):
++    """Independent complete-value reads from each native destination."""
++    old=w.SlotIndex(w.open_package(raw));new=w.SlotIndex(w.open_package(export));result={}
++    for field in fields:
++        key=field['key'];value=values.get(key)
++        if value is None:continue
++        loc=field['locator'];actual=None
++        if 'sdt_id' in loc:
++            matches=[slot for slot in new.slots if slot.kind=='sdt' and slot.part==loc['part']
++                and slot.el.find(w.q('w:sdtPr')+'/'+w.q('w:id')) is not None
++                and slot.el.find(w.q('w:sdtPr')+'/'+w.q('w:id')).get(w.q('w:val'))==loc['sdt_id']]
++            if len(matches)==1:actual=''.join(t.text or '' for t in matches[0].el.find(w.q('w:sdtContent')).iter(w.q('w:t')))
++            matched=actual==str(value)
++        elif 'tab_form' in loc:
++            paragraphs={part:list(new.package.tree(part).iter(w.q('w:p'))) for part in new.package.displayed_parts()}
++            actual='\n'.join(w.paragraph_text(paragraphs[a['part']][a['paragraph']])[0] for a in loc['tab_form']['anchors'])
++            matched=''.join(str(value).split()) in ''.join(actual.split())
++        elif 'body_paragraph' in loc:
++            original=old.package.tree('word/document.xml').find(w.q('w:body')).findall(w.q('w:p'))[loc['body_paragraph']]
++            current=new.package.tree('word/document.xml').find(w.q('w:body')).findall(w.q('w:p'))[loc['body_paragraph']]
++            caption=w.paragraph_text(original)[0];actual=w.paragraph_text(current)[0]
++            matched=actual.startswith(caption) and ''.join(str(value).split()) in ''.join(actual[len(caption):].split())
++        else:
++            table=new.package.tree('word/document.xml').find(w.q('w:body')).findall(w.q('w:tbl'))[loc['table']]
++            cell=w.row_cells_of(w.table_rows_of(table)[loc['row']])[loc['column']]
++            actual='\n'.join(w.paragraph_text(p)[0] for p in cell.findall(w.q('w:p')))
++            expected=str(value).removesuffix(' '+loc['unit']) if 'unit' in loc else str(value)
++            matched=''.join(expected.split()) in ''.join(actual.split())
++        result[key]={'expected':value,'actual':actual,'matched':matched}
++    return result
++
++
+ @override_settings(**dict(TEST_SETTINGS,QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True,
+  QUILLMD_LAYOUT_SOCKET=plan['layout_socket'],QUILLMD_ROLE_SUGGESTIONS=False,
+  V3_FIELD_RELATIONS=True,V3_GENERATION_BATCHES=False,AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-5-5',
+  AI_INPUT_RATE='2',AI_OUTPUT_RATE='10',AI_CACHED_RATE='0.20',AI_THINKING='between_tools',AI_EFFORT='medium',AI_INFERENCE_GEO=''))
+ class ApplicationGate(V3Fixture,TestCase):
+     def evaluate(self, record):
++        from core.models import Template
+         identity=record['development_id'];directory=OUT/identity;directory.mkdir(mode=0o700)
+         result={'identity':identity,'source_commit':plan['source_commit'],'source_sha256':record['sha256'],
+-                'automatic_success':False,'manual_mapping_corrections':0,'profiles':{},'failures':[],
+-                'clinical_generation_usefulness':'NOT ASSESSED: fixed synthetic writer profiles, no model or transcription request',
+-                'native_word':'unverified','previously_exposed':True,'families':record['families']}
+-        from core import generation
+-        configuration=generation.configuration()
+-        self.assertEqual(configuration['model'],'claude-sonnet-5-5')
+-        self.assertNotIn('invalid',configuration['request_profile'])
+-        self.assertIn('ordinary_field_contract',configuration)
+-        result['fixture_configuration']={key:configuration[key] for key in ('mode','provider','model','request_profile','ordinary_field_contract','pricing_version')}
+-        original=C/record['corpus_file'];expected=Path(record['prior_expected_map_path'])
+-        assert original.is_relative_to(C/'dev/originals') and expected.is_relative_to(C/'dev/groundtruth')
+-        assert not original.is_symlink() and not expected.is_symlink()
+-        raw=original.read_bytes();assert digest(raw)==record['sha256']
+-        groundtruth_raw=expected.read_bytes();gt=json.loads(groundtruth_raw)
+-        result['groundtruth_sha256']=digest(groundtruth_raw);result['destinations']=len(gt['answer_areas'])
+-        response=self.upload(data=raw,name='SYNTHETIC FIXED ORIGINAL '+identity)
++            'automatic_success':False,'manual_mapping_corrections':0,'profiles':{},'failures':[],
++            'native_word':'unverified','previously_exposed':True,'families':record['families'],
++            'clinical_generation_usefulness':'NOT ASSESSED: fixed synthetic writer profiles and separate clinician recovery, no provider',
++            'ordinary_processor_ownership_acceptance':'UNVERIFIED: authorized isolated qualification runtime; production ownership guard is not patched'}
++        original=C/record['corpus_file'];raw=original.read_bytes();assert digest(raw)==record['sha256']
++        gt_raw=Path(record['prior_expected_map_path']).read_bytes();gt=json.loads(gt_raw)
++        result['groundtruth_sha256']=digest(gt_raw);result['destinations']=len(gt['answer_areas'])
++        (directory/'original.docx').write_bytes(raw)
++        response=self.upload(data=raw,name='SYNTHETIC NATIVE ORIGINAL '+identity)
+         retain(artifact_name(identity,'upload-response'),{'status':response.status_code,'body':response.content.decode(errors='replace')})
+         if response.status_code!=302:
+-            result['failures'].append('Actual original upload refused; no conversion or alternate source attempted')
+-            retain(artifact_name(identity,'result'),result);return result
+-        from core.models import Template
+-        template=Template.objects.get(name='SYNTHETIC FIXED ORIGINAL '+identity);version=template.versions.get(number=1)
++            result['failures'].append('Actual original upload refused; no processor override or conversion')
++            retain(artifact_name(identity,'result'),result);return
++        template=Template.objects.get(name='SYNTHETIC NATIVE ORIGINAL '+identity);version=template.versions.get(number=1)
+         self.assertEqual(private_path(template.original_path).read_bytes(),raw)
+-        retain(artifact_name(identity,'initial-mapping'),{'fields':version.fields,'import_manifest':version.import_manifest,
+-            'contract':version.contract,'document_backend':version.document_backend,'original_sha256':template.sha256})
+-        if version.contract!='v3':
+-            result['failures'].append('Actual selected application processor is not contract v3; no engine override or mapping substitute')
+-            retain(artifact_name(identity,'result'),result);return result
+-        fields=json.loads(json.dumps(version.fields))
+-        scoring=scorer.score_doc(gt,{'fields':fields});result['mapping']=scoring
+-        retain(artifact_name(identity,'automatic-groundtruth'),scoring)
+-        if not scoring['strict']:result['failures'].append('Fixed strict first-pass whole-document mapping failed')
+-        issues=version.import_manifest.get('coverage',{}).get('selected_engine_issues',[])
+-        result['source_exclusions']=issues
+-        result['explicit_coverage_review_required']=bool(version.import_manifest.get('coverage',{}).get('block_generation'))
+-        if version.import_manifest.get('coverage',{}).get('block_generation'):
+-            response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_coverage','mapping_version':version.pk,
+-                **{'exclude_'+issue['id']:'on' for issue in issues}})
+-            retain(artifact_name(identity,'explicit-source-exclusions'),{'status':response.status_code,
+-                'body':response.content.decode(errors='replace'),'reviewed_exact_issue_ids':[issue['id'] for issue in issues]})
++        retain(artifact_name(identity,'initial-mapping'),{'fields':version.fields,'review_requirements':version.review_requirements,
++            'import_manifest':version.import_manifest,'contract':version.contract,'document_backend':version.document_backend,
++            'original_sha256':template.sha256})
++        if version.contract=='v3':
++            result['failures'].append('Actual processor is v3; this native adapter does not substitute a processor')
++            retain(artifact_name(identity,'result'),result);return
++        native_fields=json.loads(json.dumps(version.fields));projection=native_coordinate_projection(raw,native_fields)
++        retain(artifact_name(identity,'readonly-coordinate-projection'),{'fields':projection,'application_mapping_changed':False,
++            'purpose':'Read-only source coordinates for unchanged fixed GT scorer; never used as application fields',
++            'native_mapping_sha256':digest(json.dumps(native_fields,sort_keys=True).encode())})
++        score=scorer.score_doc(gt,{'fields':projection});result['mapping']=score
++        retain(artifact_name(identity,'automatic-groundtruth'),score)
++        if not score['strict']:result['failures'].append('Fixed strict first-pass whole-document mapping failed')
++        result['selected_engine']='legacy';result['document_backend']=version.document_backend
++        result['initial_import_coverage']=version.import_manifest.get('coverage',{})
++        page=self.client.get(f'/templates/{template.pk}/')
++        retain(artifact_name(identity,'mapping-review-page'),{'status':page.status_code,'body':page.content.decode(errors='replace')})
++        response=self.client.post(f'/templates/{template.pk}/',{'mapping_version':version.pk,
++            'labels':json.dumps({field['key']:field['label'] for field in native_fields})})
++        retain(artifact_name(identity,'unchanged-mapping-review'),{'status':response.status_code,'body':response.content.decode(errors='replace')})
++        if response.status_code!=302:
++            result['failures'].append('Actual unchanged native mapping review refused')
++            retain(artifact_name(identity,'result'),result);return
++        version=self.latest(template);self.assertEqual(version.fields,native_fields)
++        retain(artifact_name(identity,'reviewed-mapping'),{'fields':version.fields,'review_requirements':version.review_requirements,
++            'import_manifest':version.import_manifest,'contract':version.contract,'document_backend':version.document_backend,
++            'source_sha256':template.sha256,'manual_mapping_corrections':0})
++        for profile in ('empty','ordinary','long','native-ordinary','native-long'):
++            recovery=profile.startswith('native-')
++            fixed_answers,_,chosen,answer_notes,_=answering.plan(gt,{'fields':projection},profile.removeprefix('native-'),scorer.score_doc,answers_for)
++            if profile=='empty':fixed_answers,chosen={},{}
++            values=dict(fixed_answers);variants={row['key']:row['default_variant'] for row in version.review_requirements}
++            if recovery:
++                if version.document_backend:
++                    for field in native_fields:
++                        if field['kind']=='choice':value=next(value for value in field['options'] if value not in ('reflux positive.','Asymptomatic'))
++                        elif field['kind']=='measurement':value='3.2 mm' if field['locator']['unit']=='mm' else '400 ms'
++                        else:value='SYNTHETIC '+field['key']
++                        values[field['key']]=value
++                    if profile=='native-long':values['patient_name']='SYNTHETIC '+('documented long answer ' * 19)+'END-OF-COMPLETE-ANSWER'
++                    for key in ('claim_23','claim_27'):variants[key]='original'
++                    for key in ('claim_30','claim_31','claim_34','claim_35'):variants[key]='selected'
++                    variants.update(claim_19='technique_only',claim_32='negative',claim_36='negative')
++                else:
++                    from core.tab_review import electronic_identity
++                    for field in native_fields:
++                        if electronic_identity(field):values[field['key']]=self.user.get_full_name()
++            profile_result={'profile':profile,'fixed_answers':values,'unchanged_fixed_profile_answers':fixed_answers,
++                'chosen_groundtruth_options':chosen,'answer_plan_notes':answer_notes,'passed':False,'failures':[],
++                'fixed_failures':[],'profile_kind':'native_manual_recovery' if recovery else 'fixed_protocol',
++                'manual_value_corrections':{key:{'fixed':fixed_answers.get(key),'reviewed':value}
++                    for key,value in values.items() if fixed_answers.get(key)!=value},
++                'fixed_automatic_gate_credit':False if recovery else 'pending'}
++            retain(artifact_name(identity,profile+'-profile-plan'),profile_result)
++            notes='\n'.join(field['label']+': '+str(values[field['key']]) for field in native_fields if field['key'] in values)
++            if version.document_backend:
++                from documents import resolve_template
++                from django.utils import timezone
++                offered={field['key']:{'text':values.get(field['key'],''),'status':'supported' if values.get(field['key']) else 'missing',
++                    'reviewed_by':'','revision':0,'evidence':[]} for field in native_fields}
++                from documents import DocumentError
++                try:
++                    resolved=resolve_template(private_path(template.original_path),version.document_backend,offered,claim_variants=variants,
++                        trusted_context={'reviewer_id':str(self.user.pk),'revision':0,'notes':'','signer_name':self.user.get_full_name(),
++                                         'finalized_at':timezone.now().isoformat()})['review_requirements']
++                except DocumentError as error:
++                    profile_result['failures'].append('Actual native wording resolution refused: '+str(error))
++                    retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
++                notes+='\n'+'\n'.join(row['label']+': '+row['text'] for row in resolved if row['kind']=='assertion')
++            retain(artifact_name(identity,profile+'-typed-notes'),{'notes':notes,'provider_calls':0,'generated_answers':False})
++            response=self.new_encounter(version,notes=notes)
+             if response.status_code!=302:
+-                result['failures'].append('Actual source-bound partial coverage review refused; no manual map repair')
+-                retain(artifact_name(identity,'result'),result);return result
+-            version=self.latest(template);self.assertEqual(version.fields,fields)
+-        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_confirm','mapping_version':version.pk,'checked_every_field':'on'})
+-        retain(artifact_name(identity,'confirmation'),{'status':response.status_code,'body':response.content.decode(errors='replace')})
+-        if response.status_code!=302:
+-            result['failures'].append('Actual initial field mapping cannot be confirmed; original failures retained')
+-            retain(artifact_name(identity,'result'),result);return result
+-        for profile in ('empty','ordinary','long'):
+-            answers,_,chosen,answer_notes,_=answering.plan(gt,{'fields':fields},profile,scorer.score_doc,answers_for)
+-            if profile=='empty':answers,chosen={},{}
+-            profile_result={'profile':profile,'fixed_answers':answers,'chosen_groundtruth_options':chosen,
+-                            'answer_plan_notes':answer_notes,'passed':False,'failures':[]}
+-            retain(artifact_name(identity,profile+'-profile-plan'),profile_result)
+-            response=self.new_encounter(version,notes='Synthetic fixed Word writer profile; explicit clinician review.')
+-            if response.status_code!=302:
+-                profile_result['failures'].append('Actual encounter creation refused')
++                profile_result['failures'].append('Actual native encounter creation refused')
+                 retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
+             encounter=Encounter.objects.get(pk=response.url.strip('/').split('/')[-1])
+-            payload={'revision':encounter.revision}
+-            for field in fields:
+-                if field['kind'] in ('signature','initials'):continue
+-                key=field['key']
+-                if key in answers:
+-                    payload['answer_'+key]=supplied(answers[key],field['kind']);payload['reviewed_'+key]='on'
+-                else:payload['blank_'+key]='on'
+-            response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
+-            retain(artifact_name(identity,profile+'-save'),{'status':response.status_code,'body':response.content.decode(errors='replace'),'review_payload':payload})
+-            encounter.refresh_from_db()
++            def payload(reviewed):
++                page=self.client.get(f'/encounters/{encounter.pk}/');self.assertEqual(page.status_code,200)
++                posted={'revision':encounter.revision}
++                for field in native_fields:
++                    key=field['key'];value=str(values.get(key,''))
++                    posted['answer_'+key]=value;posted['source_'+key]=field['label']+': '+value if value else ''
++                    if reviewed:posted['reviewed_'+key]='on'
++                rows=page.context['wm_requirements'] if version.document_backend else []
++                for row in rows:
++                    key=row['key'];posted['claim_variant_'+key]=variants[key]
++                    posted['claim_token_'+key]=row.get('review_token','')
++                    posted['claim_source_'+key]=row['label']+': '+row['text'] if row['kind']=='assertion' else ''
++                    if reviewed:posted['claim_reviewed_'+key]='on'
++                return posted,rows,page.content.decode(errors='replace')
++            if version.document_backend:
++                posted,rows,html=payload(False)
++                response=self.client.post(f'/encounters/{encounter.pk}/save/',posted);encounter.refresh_from_db()
++                retain(artifact_name(identity,profile+'-unreviewed-variant-save'),{'status':response.status_code,'payload':posted,
++                    'rendered_requirements':rows,'page':html,'body':response.content.decode(errors='replace')})
++                if response.status_code!=302:
++                    profile_result['failures'].append('Actual native variant selection refused')
++                    retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
++            posted,rows,html=payload(True)
++            response=self.client.post(f'/encounters/{encounter.pk}/save/',posted);encounter.refresh_from_db()
++            retain(artifact_name(identity,profile+'-save'),{'status':response.status_code,'payload':posted,'rendered_requirements':rows,
++                'page':html,'body':response.content.decode(errors='replace'),'persisted_answers':encounter.answers,
++                'persisted_template_review':encounter.template_review})
+             if response.status_code!=302:
+-                profile_result['failures'].append('Actual explicit answer review refused')
++                profile_result['failures'].append('Actual native explicit review refused')
+                 retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
+             response=self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'},follow=True)
+             encounter.refresh_from_db()
+             retain(artifact_name(identity,profile+'-finalization'),{'status':encounter.status,'response_status':response.status_code,
+-                'messages':[str(message) for message in response.context['messages']] if response.context else [],'answers':encounter.answers,
+-                'original_sha256':template.sha256,'mapping_version':str(version.pk)})
++                'answers':encounter.answers,'template_review':encounter.template_review,
++                'messages':[str(message) for message in response.context['messages']] if response.context else []})
+             if encounter.status!='finalized':
+-                profile_result['failures'].append('Actual reviewed profile finalization refused')
++                profile_result['failures'].append('Actual native reviewed finalization refused')
+                 retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
+-            private_export=private_path(encounter.export_path).read_bytes()
+-            file=directory/(profile+'-export.docx');file.write_bytes(private_export);file.chmod(0o600)
+-            profile_result['export_sha256']=digest(private_export)
+-            retain(artifact_name(identity,profile+'-export-before-assertions'),{'export_sha256':digest(private_export),
+-                'original_sha256':template.sha256,'mapping':version.fields,'reviewed_answers':encounter.answers})
++            export=private_path(encounter.export_path).read_bytes();(directory/(profile+'-export.docx')).write_bytes(export)
++            profile_result['export_sha256']=digest(export)
++            retain(artifact_name(identity,profile+'-export-before-assertions'),{'export_sha256':digest(export),'mapping':version.fields,
++                'reviewed_answers':encounter.answers,'template_review':encounter.template_review,'original_sha256':template.sha256})
+             response=self.client.get(f'/encounters/{encounter.pk}/export/')
+-            retain(artifact_name(identity,profile+'-download-response'),{'status':response.status_code})
+-            self.assertEqual(response.status_code,200)
+-            output=b''.join(response.streaming_content);self.assertEqual(output,private_export)
+-            Document(io.BytesIO(output));w.open_package(output)
+-            touched=set()
+-            for field in fields:
+-                if field['key'] not in answers:continue
+-                loc=field['locator'];target=loc['target'];touched.add(loc['part'])
+-                touched.update(ref['part'] for ref in target.get('copies',[])+target.get('boxes',[]))
+-            package_problems=checks.package_identity(raw,output,set() if profile=='empty' else touched)
+-            profile_result['failures'].extend(package_problems)
+-            supplemental_failures=[]
+-            if profile!='empty':
+-                profile_result['failures'].extend(checks.check_with(raw,output,fields,answers))
+-                source_index=w.SlotIndex(w.open_package(raw));output_index=w.SlotIndex(w.open_package(output))
+-                scalar_readbacks={}
+-                for field in fields:
+-                    value=answers.get(field['key'])
+-                    if not isinstance(value,str) or field['kind'] not in ('text','long_text','measurement','number','date','time'):continue
+-                    actual=source_bound_answer_readback(source_index,output_index,field)
+-                    scalar_readbacks[field['key']]={'expected':value,'actual':actual,'matched':actual==value}
+-                    if actual!=value:supplemental_failures.append('Full scalar answer readback differs: '+field['key'])
+-                profile_result['supplemental_full_scalar_readbacks']=scalar_readbacks
+-            profile_result['independent_choice_reader']=ticked.check_document(raw,output,gt,chosen)
+-            if not profile_result['independent_choice_reader']['passed']:
+-                profile_result['failures'].append('Fixed independent original-destination choice reader failed')
++            self.assertEqual(response.status_code,200);self.assertEqual(b''.join(response.streaming_content),export)
++            self.assertEqual(private_path(template.original_path).read_bytes(),raw)
++            Document(io.BytesIO(export));w.open_package(export)
++            allowed={'word/document.xml'} if values else set()
++            profile_result['failures'].extend(checks.package_identity(raw,export,allowed))
++            if values:profile_result['failures'].extend(checks.check_with(raw,export,projection,values))
++            choice=ticked.check_document(raw,export,gt,chosen)
++            profile_result['independent_choice_reader']=choice
++            if not choice['passed']:profile_result['failures'].append('Fixed independent original-destination choice reader failed')
+             profile_result['fixed_failures']=list(profile_result['failures'])
+             profile_result['fixed_mechanical_passed']=not profile_result['fixed_failures']
+-            profile_result['supplemental_failures']=supplemental_failures
+-            profile_result['failures'].extend(supplemental_failures)
+-            profile_result['render']='PENDING bounded original/export render by exact checker; cannot count as pass'
++            readbacks=native_answer_readbacks(raw,export,native_fields,values)
++            profile_result['supplemental_full_scalar_readbacks']=readbacks
++            for key,row in readbacks.items():
++                if not row['matched']:profile_result['failures'].append('Complete native answer differs at original destination: '+key)
++            if recovery:
++                supplemental_projection=list(projection);supplemental_answers=dict(values)
++                source=w.SlotIndex(w.open_package(raw))
++                source_paragraphs=source.package.tree('word/document.xml').find(w.q('w:body')).findall(w.q('w:p'))
++                for row in version.review_requirements:
++                    key=row['key'];decision=encounter.template_review['assessment']['assertions'][key]
++                    self.assertTrue(decision['reviewed']);self.assertEqual(decision['status'],'supported')
++                    slot=source.by_el[id(source_paragraphs[row['body_paragraph']])]
++                    supplemental_projection.append({'key':key,'kind':'text','label':row['label'],
++                        'locator':{'part':slot.part,'slot':slot.path,'target':{'type':'paragraph'}}})
++                    supplemental_answers[key]=decision['statement']
++                supplemental=checks.check_with(raw,export,supplemental_projection,supplemental_answers)
++                profile_result['native_reviewed_contract_fidelity']={'problems':supplemental,
++                    'authorized_native_claim_paragraphs':[row['body_paragraph'] for row in version.review_requirements],
++                    'automatic_gate_credit':False}
++                profile_result['native_reviewed_contract_passed']=not supplemental and all(row['matched'] for row in readbacks.values())
+             profile_result['mechanical_passed']=not profile_result['failures']
+-            self.assertEqual(private_path(template.original_path).read_bytes(),raw)
++            profile_result['render']='PENDING bounded exact checker'
+             retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result
+         self.assertFalse(Job.objects.exists());self.assertFalse(Reservation.objects.exists());self.assertFalse(Usage.objects.exists())
+         retain(artifact_name(identity,'result'),result)
+-        return result
+ 
+ 
+ def method(record):
+@@ -234,9 +360,7 @@
+     return test
+ 
+ 
+-for record in plan['records']:
+-    setattr(ApplicationGate,'test_'+record['development_id'],method(record))
+-module=types.ModuleType('sol_word_original_dev_gate');module.ApplicationGate=ApplicationGate
+-sys.modules[module.__name__]=module
+-failures=DiscoverRunner(verbosity=2,interactive=False).run_tests(['sol_word_original_dev_gate.ApplicationGate'])
++for record in plan['records']:setattr(ApplicationGate,'test_'+record['development_id'],method(record))
++module=types.ModuleType('sol_word_native_dev_gate');module.ApplicationGate=ApplicationGate;sys.modules[module.__name__]=module
++failures=DiscoverRunner(verbosity=2,interactive=False).run_tests(['sol_word_native_dev_gate.ApplicationGate'])
+ raise SystemExit(bool(failures))
