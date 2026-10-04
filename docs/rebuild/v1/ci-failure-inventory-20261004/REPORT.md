@@ -29,3 +29,24 @@ established finalizer positives and unknown/patient/witness/manager negatives.
 Both synthetic test databases were destroyed and independently absent from
 the PostgreSQL catalog. Source stayed clean and unchanged; no provider call.
 The append-only packet receipts and hashes are in inventory.json.
+
+## R105 profile and complete-wire diagnosis
+
+The unchanged actual route remains held both on the historical default
+GPT-4.1-mini/natural-v1 fixture and on the correctly stored qualified
+Sonnet 5.5/ordinary-v4 fixture. The configuration difference is not a complete
+explanation. An initial suspicion that missing answer_text caused rejection is
+also withdrawn: the reader permits None. The qualified capture establishes
+the narrower fixture-wire cause: the unmapped completed Consent metadata is
+classified unresolved, invalidating Plan's relation. The offline positive used
+an independent metadata relation and therefore missed that assembled wire.
+
+The proposed correction is limited to fixture classification using the existing
+structural completed-document-status proof. Evidence validators and the
+no-relation, question, foreign-person and ambiguous-source holds stay intact.
+Neither manual Plan replacement nor an expectation change is accepted. The
+exact notes, immutable form, first answer, saved decisions, messages and
+failed finalization from both actual captures remain retained.
+
+- `clinical/r105-actual-1684-diagnosis/captures.json`: `b4b85de8d1b30e73bd7a5af4bd30428b61439c1414829ff5511949efb30fbe5e`
+- `clinical/r105-qualified-1684-capture/captures.json`: `6991be394a360210963ea10e962de28bcf5b9322bf0abb7128af65ddc112a20f`
