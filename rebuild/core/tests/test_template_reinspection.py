@@ -208,6 +208,78 @@ class TemplateReinspection(V3Fixture, TestCase):
         self.assertEqual(self.new_encounter(current).status_code, 302)
         self.assertEqual(current.import_manifest['reinspection']['source_version_id'], str(version.pk))
 
+    def reject_physical_mapping(self, template, current, fields, label):
+        invalid = TemplateVersion.objects.create(template=template, number=current.number + 1,
+            fields=fields, contract=current.contract,
+            import_manifest=import_binding.for_mapping(current.import_manifest, fields), created_by=self.user)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm',
+            'mapping_version': invalid.pk, 'checked_every_field': 'on'})
+        invalid.refresh_from_db()
+        self.archive(label, **{'original.docx': private_path(template.original_path).read_bytes(),
+            'fields.json': fields, 'response.html': response.content,
+            'result.json': {'status': response.status_code, 'confirmed': bool(invalid.confirmed)}})
+        self.assertEqual(response.status_code, 400, response.content.decode())
+        self.assertFalse(invalid.confirmed); self.assertFalse(Job.objects.exists()); self.assertFalse(Reservation.objects.exists())
+
+    def test_manual_origin_cannot_launder_an_automatic_destination_swap(self):
+        old, version = self.old_form(); fresh, current = self.fresh(old, version)
+        fields = copy.deepcopy(current.fields)
+        fields[0]['origin'] = 'manual'; fields[0]['locator'] = copy.deepcopy(fields[1]['locator'])
+        self.reject_physical_mapping(fresh, current, fields, 'forged-manual-origin')
+
+    def test_fresh_manual_key_cannot_duplicate_an_existing_destination(self):
+        from documents.service import locate_fields
+        template, current = self.uploaded(data=build_legacy_table_form())
+        plan = self.by_label(current)['Plan']
+        added = locate_fields(private_path(template.original_path), [{'slot': plan['locator']['part'] + '#' + plan['locator']['slot'],
+            'kind': 'text', 'label': 'Second plan'}])['fields'][0]
+        self.reject_physical_mapping(template, current, current.fields + [added], 'fresh-compiled-duplicate')
+
+    def test_duplicate_keys_cannot_hide_two_physical_destinations(self):
+        template, current = self.uploaded(data=build_legacy_table_form())
+        fields = copy.deepcopy(current.fields); fields[1]['key'] = fields[0]['key']
+        self.reject_physical_mapping(template, current, fields, 'duplicate-keys')
+
+    def test_manual_destination_key_survives_an_ordinary_label_correction(self):
+        template, current = self.uploaded(data=build_legacy_table_form())
+        allergies = self.by_label(current)['Allergies']
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': current.pk,
+            'remove_' + allergies['key']: 'on'})
+        self.assertEqual(response.status_code, 302)
+        current = self.latest(template)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': current.pk,
+            'slot': allergies['locator']['part'] + '#' + allergies['locator']['slot'], 'kind': 'text', 'label': 'Known allergies'})
+        self.assertEqual(response.status_code, 302, response.content.decode())
+        current = self.latest(template); manual = self.by_label(current)['Known allergies']
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': current.pk,
+            'label_' + manual['key']: 'Allergies'})
+        self.assertEqual(response.status_code, 302)
+        current = self.latest(template); self.assertEqual(self.by_label(current)['Allergies']['key'], manual['key'])
+        current = self.confirm(template, current)
+        self.assertFalse(current.needs_confirmation)
+        encounter, exported = self.finish(current)
+        self.assertIn('None documented', part_text(exported)); self.assertIn('Rest', part_text(exported))
+
+    @override_settings(QUILLMD_WORD_ENGINE='legacy')
+    def test_empty_or_malformed_reinspection_marker_never_restores_legacy_admission(self):
+        old, prior = self.uploaded(data=build_legacy_table_form())
+        for index, marker in enumerate(({}, None, [], '', {'source_template_id': 'not-a-uuid', 'source_version_id': 'invalid',
+                'source_sha256': old.sha256, 'source_engine_code_sha256': ''})):
+            fresh = Template.objects.create(department=self.department, name=f'Synthetic malformed {index}',
+                format=old.format, original_name=old.original_name, original_path=old.original_path,
+                sha256=old.sha256, created_by=self.user)
+            current = TemplateVersion.objects.create(template=fresh, number=1, fields=prior.fields,
+                import_manifest={**prior.import_manifest, 'reinspection': marker}, created_by=self.user)
+            self.assertTrue(current.needs_confirmation)
+            with self.assertRaisesMessage(ValidationError, 'does not bind its preserved source form'):
+                import_binding.verify(current, allow_unreviewed=True)
+            self.assertEqual(self.client.get(f'/templates/{fresh.pk}/').status_code, 200)
+            response = self.client.post(f'/templates/{fresh.pk}/', {'action': 'confirm_reinspection',
+                'mapping_version': current.pk, 'checked_every_field': 'on'})
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(current.confirmed)
+        self.assertFalse(Encounter.objects.exists()); self.assertFalse(Job.objects.exists()); self.assertFalse(Reservation.objects.exists())
+
     def test_known_destination_swap_and_changed_fingerprint_are_not_ordinary_corrections(self):
         template, current = self.uploaded(data=build_legacy_table_form(), name='Synthetic current physical mapping')
         for number, change in enumerate(('swap', 'fingerprint'), 2):

@@ -325,7 +325,7 @@ class TemplateVersion(Entity):
     @property
     def needs_confirmation(self):
         """New v3 mappings and freshly reinspected forms require their own explicit review."""
-        return (self.contract=='v3' or bool(self.import_manifest.get('reinspection'))) and self.confirmed is None
+        return (self.contract=='v3' or 'reinspection' in self.import_manifest) and self.confirmed is None
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
 class MappingConfirmation(Entity):
     """A clinician's statement that every field of one contract v3 mapping version was checked against the form.

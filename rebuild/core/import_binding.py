@@ -1,5 +1,6 @@
 """Import provenance carried by each immutable mapping version."""
 from copy import deepcopy
+from uuid import UUID
 from django.core.exceptions import ValidationError
 from documents.import_selection import digest, ENGINE_VERSIONS
 
@@ -30,15 +31,22 @@ def verify(version, *, allow_unreviewed=False, reviewing_reinspection=False):
         raise ValidationError('The stored import choice does not match this original and mapping version. '
                               'Nothing was sent or exported. Open the form and choose Recheck answer locations, '
                               'then review its freshly inspected mapping.')
-    lineage = manifest.get('reinspection')
-    if lineage:
+    if 'reinspection' in manifest:
+        lineage = manifest['reinspection']
         from .models import TemplateVersion
-        if (not isinstance(lineage, dict) or lineage.get('source_sha256') != version.template.sha256
-                or not TemplateVersion.objects.filter(pk=lineage.get('source_version_id'),
-                    template_id=lineage.get('source_template_id'),
-                    template__department_id=version.template.department_id,
-                    template__sha256=version.template.sha256).exists()):
-            raise ValidationError('This reinspection does not bind its preserved source form. Nothing was sent or exported.')
+        refusal = 'This reinspection does not bind its preserved source form. Nothing was sent or exported.'
+        if not isinstance(lineage, dict) or lineage.get('source_sha256') != version.template.sha256:
+            raise ValidationError(refusal)
+        try:
+            identifiers = [UUID(lineage[key]) for key in ('source_version_id', 'source_template_id')]
+        except (KeyError, AttributeError, TypeError, ValueError):
+            raise ValidationError(refusal) from None
+        source = TemplateVersion.objects.filter(pk=identifiers[0], template_id=identifiers[1],
+            template__department_id=version.template.department_id,
+            template__sha256=version.template.sha256).first()
+        if (source is None or lineage.get('source_engine_code_sha256')
+                != source.import_manifest.get('engine_code_sha256', '')):
+            raise ValidationError(refusal)
         # V3 confirmation already reads physical roles through verify(). Legacy reinspection
         # uses a separate review route; ordinary legacy imports retain their historical contract.
         if expected == 'legacy' and not allow_unreviewed and not reviewing_reinspection and version.needs_confirmation:
@@ -131,8 +139,9 @@ def verify_review_places(version):
     the same physical destination under the current immutable original.
     """
     from .security import private_path
-    from documents.service import outline_template, locate_fields
-    from documents.word_v3 import box_key
+    from documents.service import outline_template, locate_fields, writing_places
+    from documents.word_v3 import box_key, _PlaceReader
+    from types import SimpleNamespace
     verify(version, allow_unreviewed=True)
     outline = outline_template(private_path(version.template.original_path))
     if outline.get('sha256') != version.template.sha256:
@@ -140,8 +149,18 @@ def verify_review_places(version):
     places = {row['slot']: row for row in outline['slots']}
     initial = version.template.versions.order_by('number').first()
     initial_fields = {field['key']: field for field in initial.fields}
-    manual, targets = [], []
+    # A manual field keeps the key assigned at its first source compilation,
+    # including through a later ordinary label correction. Its declared origin
+    # alone cannot turn an automatic key into a different physical destination.
+    first_manual = {}
+    for fields in version.template.versions.filter(number__lte=version.number).order_by('number').values_list('fields', flat=True):
+        for field in fields:
+            if field.get('origin') == 'manual':
+                first_manual.setdefault(field['key'], field)
+    manual, targets, identities = [], [], []
     refusal = 'An answer location no longer matches this preserved original. Remove that field and add it again from the form; nothing was confirmed.'
+    if len({field['key'] for field in version.fields}) != len(version.fields):
+        raise ValidationError(refusal)
     for field in version.fields:
         locator = field.get('locator') or {}
         target = locator.get('target') or {}
@@ -174,11 +193,43 @@ def verify_review_places(version):
                 raise ValidationError(refusal)
             request['glyph'] = 0 if empty_cell else keys.index(box_key(boxes[0]))
         manual.append(field); targets.append(request)
+        identity_request = {**request, 'label': first_manual[field['key']]['label']}
+        identities.append(identity_request)
     for start in range(0, len(targets), 200):
         compiled = locate_fields(private_path(version.template.original_path), targets[start:start + 200])
-        if compiled.get('sha256') != version.template.sha256:
+        if compiled.get('sha256') != version.template.sha256 or len(compiled['fields']) != len(targets[start:start + 200]):
             raise ValidationError('Original integrity check failed.')
         for field, current in zip(manual[start:start + 200], compiled['fields']):
             if any(field.get(key) != current.get(key) for key in
                    ('locator', 'source_questions', 'source_instructions', 'write_protected', 'answer_policy')):
                 raise ValidationError(refusal)
+        # Compile the original manual label too when it was subsequently renamed;
+        # this proves its stored stable key without rejecting an ordinary rename.
+        original_requests = identities[start:start + 200]
+        original = compiled if original_requests == targets[start:start + 200] else locate_fields(
+            private_path(version.template.original_path), original_requests)
+        if original.get('sha256') != version.template.sha256 or len(original['fields']) != len(original_requests):
+            raise ValidationError('Original integrity check failed.')
+        if any(field['key'] != current['key'] or field['locator'] != current['locator']
+               for field, current in zip(manual[start:start + 200], original['fields'])):
+            raise ValidationError(refusal)
+    # Read offsets from the same immutable original inside the existing sandbox.
+    # Whole cells, native controls, glyphs and partial spans use the established
+    # physical overlap semantics; distinct inline destinations remain distinct.
+    writable = [field for field in version.fields if field.get('locator', {}).get('target', {}).get('type') != 'none']
+    resolved = writing_places(private_path(version.template.original_path), writable)
+    if resolved.get('sha256') != version.template.sha256:
+        raise ValidationError('Original integrity check failed.')
+    destinations = resolved.get('places', {})
+    reader = _PlaceReader(SimpleNamespace(by_id={}))
+    seen = []
+    for field in writable:
+        if not destinations.get(field['key']):
+            raise ValidationError(refusal)
+        for place in destinations[field['key']]:
+            for other in seen:
+                region = {'place': other[0], 'start': other[1], 'end': other[2]}
+                reverse = {'place': place[0], 'start': place[1], 'end': place[2]}
+                if (place == other or reader.touches(place, region) or reader.touches(other, reverse)):
+                    raise ValidationError('Two fields share an answer location. Remove the duplicate or correct its place; nothing was confirmed.')
+        seen.extend(destinations[field['key']])
