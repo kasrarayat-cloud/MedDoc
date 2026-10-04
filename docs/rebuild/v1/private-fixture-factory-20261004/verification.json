@@ -1,0 +1,41 @@
+{
+  "scope": "New isolated fixture archive preparation only; normal later launch/verification remains required.",
+  "source_base": "4bf7cd932851dc46da3a2b3470a33a89a4ea5bf3",
+  "factory_executed": false,
+  "inventory_cli_executed_against_real_repo": false,
+  "database_used": false,
+  "installed_mutation": false,
+  "old_demo_modified": false,
+  "provider_calls": 0,
+  "tests": {
+    "initial_methods": 5,
+    "initial_seconds": 0.136,
+    "initial_exit": 0,
+    "initial_log_sha256": "a6398efc3ff1025623b422ab227bd02c36649e816e15ad18cf981a6803833c57",
+    "final_methods": 7,
+    "final_seconds": 0.173,
+    "final_exit": 0,
+    "final_log_sha256": "9d725d5226f551622ee8693858b692bc7fa55f55f4880d504ea2b997350195bd",
+    "scope": "Pure bundle and mocked local-Git gate controls, with actual pinned nonsecret retained helper bytes; no factory CLI host operation."
+  },
+  "source_sha256": {
+    "rebuild/ops/private_fixture_candidate.py": "ab7c37ebd1b963789d64f5c8df1e74792dc16251f9d76926e70f1e8b76af7093",
+    "rebuild/ops/tests/test_private_fixture_candidate.py": "1bbc9176bee27d5f172b3bfa5021ed1a9013a37caa2ae83402ca0ded59951ca7"
+  },
+  "model_status": "claude-sonnet-5-5 fixture configuration only; no returned-model/provider qualification claim.",
+  "exact_candidate": null,
+  "exact_ci": null,
+  "source_refutation": null,
+  "served_workflows_verified": false,
+  "retained_demo_release": "789c0372127d89b1750a2f790c561e68c19f1654",
+  "qa_ports": [
+    9160,
+    9161
+  ],
+  "qa_database_host": "127.0.0.1:55731",
+  "installed_ports_untouched": [
+    9130,
+    9131
+  ],
+  "demo_rollback": "Keep old789 archive, DB, state, helper bytes and recorded process identity; switch only after new candidate ready; stop new using its identity-bound helper if needed; no DB drop or source/schema restoration."
+}
