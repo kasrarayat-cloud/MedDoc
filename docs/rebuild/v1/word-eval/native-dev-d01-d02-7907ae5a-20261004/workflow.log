@@ -1,0 +1,92 @@
+fixture-only QA test; worktree=/opt/meddoc-pro/.worktrees/v1-release-candidate-7907ae5a; database=quillmd_qa_sol_word_dev1180267
+Creating test database for alias 'default' ('test_quillmd_qa_sol_word_dev1180267')...
+56 objects imported automatically (use -v 2 for details).
+
+Found 2 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying core.0023_retention_preservation... OK
+  Applying core.0024_preserved_file... OK
+  Applying core.0025_preservation_guards... OK
+  Applying core.0026_preservation_scope_identity... OK
+  Applying core.0028_disposition_preparation... OK
+  Applying core.0027_generation_batches... OK
+  Applying core.0029_merge_batch_disposition... OK
+  Applying core.0030_empty_draft_disposition... OK
+  Applying core.0031_previous_release_mapping_writes... OK
+  Applying core.0032_restore_hold_replay_admission... OK
+  Applying core.0033_redaction_tombstone... OK
+  Applying core.0034_coding_ledger... OK
+  Applying core.0035_import_manifest... OK
+  Applying core.0036_transcript_review... OK
+  Applying core.0037_transcript_redaction_boundary... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_D01 (<run_path>.ApplicationGate.test_D01) ... /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release-candidate-7907ae5a/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ERROR
+test_D02 (<run_path>.ApplicationGate.test_D02) ... ok
+
+======================================================================
+ERROR: test_D01 (<run_path>.ApplicationGate.test_D01)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-native-application-7907ae5aa38c-1791091912307208692/workflow.py", line 359, in test
+    self.evaluate(record)
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-native-application-7907ae5aa38c-1791091912307208692/workflow.py", line 329, in evaluate
+    readbacks=native_answer_readbacks(raw,export,native_fields,values)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-native-application-7907ae5aa38c-1791091912307208692/workflow.py", line 168, in native_answer_readbacks
+    cell=w.row_cells_of(w.table_rows_of(table)[loc['row']])[loc['column']]
+                        ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+IndexError: list index out of range
+
+----------------------------------------------------------------------
+Ran 2 tests in 52.021s
+
+FAILED (errors=1)
+Destroying test database for alias 'default' ('test_quillmd_qa_sol_word_dev1180267')...
+ OK
+System check identified no issues (0 silenced).
