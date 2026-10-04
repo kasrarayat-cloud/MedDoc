@@ -1,0 +1,45 @@
+{
+  "utc": "2026-10-04T12:31:38.474189+00:00",
+  "claim": "NOTHING FOUND in the finite corrected visibility diff",
+  "source": "55847ad8916d2e4f09af9735158833d346115dc9",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-refute-visibility-55847ad8",
+  "source_clean": true,
+  "matrix": {
+    "controls": 20,
+    "exit": {
+      "actual_exit": 0,
+      "elapsed_seconds": 6.286107937004999,
+      "bound_seconds": 120
+    },
+    "result_sha256": "22be90c0787c3233ef4c277f5661b9939820101e6512a6f5ae4957b0f44ef96d"
+  },
+  "inline_valid": {
+    "controls": 7,
+    "exit": {
+      "actual_exit": 0,
+      "elapsed_seconds": 2.275524447999487,
+      "bound_seconds": 60
+    },
+    "result_sha256": "8133552391627054a80dc465d595889fe250780917d230c8bd8fa4adc3ecb555"
+  },
+  "all_valid_controls": 27,
+  "findings": 0,
+  "first_inline_instrument": {
+    "path": "inline-parent",
+    "controls": 7,
+    "credits_withdrawn": [
+      "parent-paragraph-hidden",
+      "parent-paragraph-off"
+    ],
+    "reason": "Direct pPr/vanish was an invalid paragraph-format instrument; later source-style controls are the authoritative inline paragraph lens. Original outputs preserved."
+  },
+  "inline_limit": "Baseline inline scalar remains refused by the existing inseparable export contract. This packet checks visibility refusal, not automatic inline success.",
+  "previous_2c_hidden_counterexample": "Preserved exact paid16 wrong-hidden-export SHA3921318552f2618302ef2fed0163d4af433b97aeabb67a599f378e043e46e129; not regraded as a successful historical attempt.",
+  "raw_evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/new558-visibility-refutation-20261004",
+  "artifact_seal_sha256": "b415bcbff90f2b1b98e38366bb61d4b506213321e0d9639ab160eb648d8980f3",
+  "network_DB_render_provider_calls": 0,
+  "own_children_finished": true,
+  "source_changes": 0,
+  "native_Word_acceptance": false,
+  "full_Word_gate_qualification": false
+}

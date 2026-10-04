@@ -1,0 +1,119 @@
+{
+  "source": "55847ad8916d2e4f09af9735158833d346115dc9",
+  "cases": [
+    {
+      "case": "visible",
+      "workflow_success": false,
+      "visibility_problem": false,
+      "expected_visibility_problem": false,
+      "problems": [
+        {
+          "where": "outside the written fields",
+          "why": "printed content outside the written fields changed: inseparable word/document.xml#b/p[0]"
+        }
+      ],
+      "original_sha256": "3effdb7d83e2bb0b794e4c08d577ff933d1330959cc8b7a8b40b8eb0d8cf0dbb",
+      "export_sha256": "854ff143dbfcfe319d9a917d373a8918142d1c3e15b72f23690ebc34e44f9622"
+    },
+    {
+      "case": "own-run-hidden",
+      "workflow_success": false,
+      "visibility_problem": true,
+      "expected_visibility_problem": true,
+      "problems": [
+        {
+          "where": "v3_1",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "outside the written fields",
+          "why": "printed content outside the written fields changed: inseparable word/document.xml#b/p[0]"
+        }
+      ],
+      "original_sha256": "3effdb7d83e2bb0b794e4c08d577ff933d1330959cc8b7a8b40b8eb0d8cf0dbb",
+      "export_sha256": "56f0ec6d842d1e5c3fec432ab1e7dceec54f1c28119c0725e472d30b25f631e0"
+    },
+    {
+      "case": "own-run-off",
+      "workflow_success": false,
+      "visibility_problem": false,
+      "expected_visibility_problem": false,
+      "problems": [
+        {
+          "where": "outside the written fields",
+          "why": "printed content outside the written fields changed: inseparable word/document.xml#b/p[0]"
+        }
+      ],
+      "original_sha256": "3effdb7d83e2bb0b794e4c08d577ff933d1330959cc8b7a8b40b8eb0d8cf0dbb",
+      "export_sha256": "e4650a42b4b8f2e4f6669653c9b81c4b7305fafc9890ee18c5734357909afa4e"
+    },
+    {
+      "case": "parent-paragraph-hidden",
+      "workflow_success": false,
+      "visibility_problem": true,
+      "expected_visibility_problem": true,
+      "problems": [
+        {
+          "where": "v3_1",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "outside the written fields",
+          "why": "printed content outside the written fields changed: inseparable word/document.xml#b/p[0]"
+        }
+      ],
+      "original_sha256": "3effdb7d83e2bb0b794e4c08d577ff933d1330959cc8b7a8b40b8eb0d8cf0dbb",
+      "export_sha256": "672ece396ef77c5d3344fd88788ca34996e61b4acb72dc2b4f8cee993407ed34"
+    },
+    {
+      "case": "parent-paragraph-off",
+      "workflow_success": false,
+      "visibility_problem": false,
+      "expected_visibility_problem": false,
+      "problems": [
+        {
+          "where": "outside the written fields",
+          "why": "printed content outside the written fields changed: inseparable word/document.xml#b/p[0]"
+        }
+      ],
+      "original_sha256": "3effdb7d83e2bb0b794e4c08d577ff933d1330959cc8b7a8b40b8eb0d8cf0dbb",
+      "export_sha256": "8b8037c25aff4017b5c423ac178c1d02d8d27bc1658e6c5eb12844656ae2d0c6"
+    },
+    {
+      "case": "inherited-character-hidden",
+      "workflow_success": false,
+      "visibility_problem": true,
+      "expected_visibility_problem": true,
+      "problems": [
+        {
+          "where": "v3_1",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "outside the written fields",
+          "why": "printed content outside the written fields changed: inseparable word/document.xml#b/p[0]"
+        }
+      ],
+      "original_sha256": "3effdb7d83e2bb0b794e4c08d577ff933d1330959cc8b7a8b40b8eb0d8cf0dbb",
+      "export_sha256": "e802d99e7f59dd60cde32f7e6aed9b0faa6a9dc83da9e06635feb4066df64cda"
+    },
+    {
+      "case": "inherited-character-off",
+      "workflow_success": false,
+      "visibility_problem": false,
+      "expected_visibility_problem": false,
+      "problems": [
+        {
+          "where": "outside the written fields",
+          "why": "printed content outside the written fields changed: inseparable word/document.xml#b/p[0]"
+        }
+      ],
+      "original_sha256": "3effdb7d83e2bb0b794e4c08d577ff933d1330959cc8b7a8b40b8eb0d8cf0dbb",
+      "export_sha256": "30fd66ea06f06f17942b667be882f1f076e306c5b4e2d1a9fe3636ebdc957538"
+    }
+  ],
+  "findings": [],
+  "scope": "Inline control is already outside the independently separable export contract. Visibility denial must additionally follow its own run and containing paragraph; disabled properties do not create a new visibility denial.",
+  "network_DB_render_provider_calls": 0,
+  "source_clean": true
+}
