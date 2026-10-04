@@ -1,0 +1,320 @@
+"""Prepare OLD-paid / NEW-source financial reconstruction; never renew accepted pins.
+
+The unchanged witness is run separately through the normal bounded runner. This
+helper creates literal copies/commands and adjudicates their sealed zero-exit
+receipts. It never launches a child, imports Django, or connects to a provider/DB.
+"""
+import argparse
+import ast
+import difflib
+import hashlib
+import json
+from pathlib import Path
+import re
+import subprocess
+
+FORMAT = 'quillmd-paid-financial-source-transfer-v1'
+AUTHORITY = 'quillmd-v1-private-api-testing-standing-20260930'
+WITNESS_SHA = 'c10dba6840c90ccbacec04c4d4a4393d70d6cf9db0f88ab4d505adce3ae6e34c'
+PROVENANCE = "  assert manifest['runner']['commit']==args.revision and manifest['runner']['clean']"
+WORKTREES = Path('/opt/meddoc-pro/.worktrees')
+RUNTIME = Path('/opt/meddoc-pro/rebuild/.runtime')
+OWNED = RUNTIME / 'v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations'
+PYTHON = WORKTREES / 'v1-workflow-candidate/rebuild/.venv/bin/python'
+MODULES = ('core/v3_field_relations.py', 'core/generation_batch.py', 'core/batch_jobs.py',
+    'core/generation.py', 'core/ordinary_source_scope.py', 'core/reviewed_source.py',
+    'core/reviewed_procedure_source.py', 'core/source_scope.py', 'core/v3_actors.py',
+    'core/v3_syntax.py', 'core/v3_literal_facts.py', 'core/reviewed_speaker.py',
+    'core/transcript_context.py', 'core/v3_destination.py', 'core/v3_mapping.py')
+INPUTS = ('core/v3_syntax_model.json', 'requirements.txt', 'requirements-production.lock',
+          'requirements-production.manifest.json')
+# The original witness reports these additional billing bytes. They are bound
+# independently; the full guarded-set AST adjudication remains the owner's gate.
+EXTRA = ('core/billing.py',)
+WITNESSED_MODULES = set(MODULES) - {'core/v3_destination.py', 'core/v3_mapping.py'} | set(EXTRA)
+PAID_GROUPS = [
+    {'campaign': 'v1-standing-api-testing-20261004-3', 'attempts': ['002', '003'],
+     'paid_revision': '04fb7603282dc47eda98058c6d790f407951acba', 'kind': 'ordinary_batch_child',
+     'manifests': {'002': 'eec0ad735501b1689c195cd2f8233fa0624a3fefe65e8fe40821a13dc6d9fb32',
+                   '003': '27af2b576272a21b1e8b14b686bfb934969e2732efbd62c5932b63e914289e70'}},
+    {'campaign': 'v1-standing-api-testing-20261004-4', 'attempts': ['002'],
+     'paid_revision': '5bf3024508c65d99d2e8573fd87e920a754a65e1', 'kind': 'ordinary_single',
+     'manifests': {'002': '31a95c1689d574a1d249f6fc81fe47cbeca22542e668c897986ab08da12d0afc'}},
+]
+VOICE_PENDING = {'status': 'PENDING separate reviewed-context wire proof',
+    'campaign': 'v1-standing-api-testing-20261004-4', 'attempts': ['017', '019'],
+    'paid_revision': '5bf3024508c65d99d2e8573fd87e920a754a65e1',
+    'context_authorization_reconstructed': False, 'live_replay_qualified': False}
+REPORT_KEYS = {'source_head', 'source_tree', 'witness_source_sha256', 'source_bytes',
+    'current_actual_provider_rows', 'pure_batch_child_price_witnesses', 'network_connect_attempts',
+    'new_provider_requests', 'database_queries', 'scanner_fingerprints_changed',
+    'clinical_qualification', 'context_live_provider_qualified', 'batch_live_provider_qualified'}
+ROW_KEYS = {'attempt', 'request_kind', 'manifest_sha256', 'request_file_sha256',
+    'recorded_http_body_sha256', 'compiled_wire_dict_equals_actual_http_body', 'quoted_wire_bytes',
+    'actual_http_body_bytes', 'max_tokens', 'model_sent', 'model_returned', 'stop',
+    'provider_calculated_cost', 'provider_maximum_quote', 'settled_retail_charge', 'stored_customer_limit',
+    'request_id', 'message_id', 'all_audit_checks_pass', 'invoice_reconciled', 'audit_sha256'}
+
+
+def digest(value):
+    return hashlib.sha256(value).hexdigest()
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def revision(value):
+    require(isinstance(value, str) and re.fullmatch('[0-9a-f]{40}', value), 'Exact source commit required.')
+    return value
+
+
+def derivative(original, paid_revision):
+    """Exactly one assertion differs; all execution/price/receipt guards survive."""
+    revision(paid_revision)
+    require(digest(original) == WITNESS_SHA, 'Original witness bytes changed.')
+    text = original.decode()
+    require(text.count(PROVENANCE) == 1, 'Original provenance assertion is not unique.')
+    replacement = PROVENANCE.replace('args.revision', repr(paid_revision))
+    changed = text.replace(PROVENANCE, replacement, 1).encode()
+    before, after = ast.parse(original), ast.parse(changed)
+    different = [(left, right) for left, right in zip(before.body, after.body)
+                 if ast.dump(left) != ast.dump(right)]
+    require(len(before.body) == len(after.body) and len(different) == 1,
+            'Derivative changed more than the provenance assertion.')
+    # The assertion is inside the same loop/settings statement. Removing only
+    # the declared literal restores the entire original AST and byte sequence.
+    require(changed.decode().replace(replacement, PROVENANCE, 1).encode() == original,
+            'Derivative is not reversible to the immutable original.')
+    return changed, ''.join(difflib.unified_diff(text.splitlines(True),
+        changed.decode().splitlines(True), fromfile='original-witness', tofile='paid-source-derivative'))
+
+
+def source_identity(path, commit):
+    revision(commit)
+    require(not path.is_symlink() and path.resolve(strict=True).parent == WORKTREES,
+            'Source must be an exact isolated worktree.')
+    require(not (path / 'rebuild/.env').exists(), 'Environment files are forbidden.')
+    def git(*args):
+        return subprocess.check_output(['git', *args], cwd=path, text=True, timeout=10).strip()
+    require(git('rev-parse', 'HEAD') == commit and not git('status', '--porcelain', '--untracked-files=no'),
+            'Source is dirty or on a different commit.')
+    files = {}
+    for name in (*MODULES, *INPUTS, *EXTRA):
+        item = path / 'rebuild' / name
+        require(not item.is_symlink() and item.is_file(), 'Missing guarded dependency: ' + name)
+        raw = item.read_bytes()
+        entry = {'bytes_sha256': digest(raw)}
+        if name in MODULES or name in EXTRA:
+            entry['whole_AST_sha256'] = digest(ast.dump(ast.parse(raw), include_attributes=False).encode())
+        files[name] = entry
+    relation_tree = ast.parse((path / 'rebuild/core/v3_field_relations.py').read_bytes())
+    compiler = {}
+    for name in ('compile_request', 'maximum_cost'):
+        found = [node for node in relation_tree.body if isinstance(node, ast.FunctionDef) and node.name == name]
+        require(len(found) == 1, 'Missing or duplicate compiler/quote function.')
+        compiler[name] = digest(ast.dump(found[0], include_attributes=False).encode())
+    compiler['transcript_context_whole_AST'] = files['core/transcript_context.py']['whole_AST_sha256']
+    compiler['exact_inputs'] = {name: files[name]['bytes_sha256'] for name in INPUTS}
+    return {'commit': commit, 'tree': git('rev-parse', 'HEAD^{tree}'), 'files': files,
+            'unchanged_compiler_context_inputs': compiler}
+
+
+def evidence_envelope(row):
+    """Read only exact declared immutable standing evidence, never a substitute."""
+    require(set(row) == {'campaign', 'attempts', 'paid_revision', 'manifests', 'kind'},
+            'Evidence group fields changed.')
+    require(re.fullmatch('v1-standing-api-testing-20[0-9]{6}(?:-([2-9]|[1-9][0-9]))?', row['campaign']),
+            'Foreign campaign identity.')
+    revision(row['paid_revision'])
+    require(row['kind'] in ('ordinary_single', 'ordinary_batch_child') and row['attempts']
+            and len(row['attempts']) == len(set(row['attempts']))
+            and set(row['attempts']) == set(row['manifests']), 'Evidence membership changed.')
+    records = []
+    for number in row['attempts']:
+        require(re.fullmatch('[0-9]{3,}', number), 'Malformed attempt.')
+        directory = RUNTIME / row['campaign'] / 'evidence' / number
+        path = directory / 'manifest.json'
+        require(not directory.is_symlink() and not path.is_symlink(), 'Evidence aliases are forbidden.')
+        raw = path.read_bytes()
+        require(digest(raw) == row['manifests'][number], 'Original manifest changed.')
+        manifest = json.loads(raw)
+        require(manifest['authority_id'] == AUTHORITY and manifest['settings']['data_mode'] == 'synthetic'
+                and manifest['runner']['commit'] == row['paid_revision'] and manifest['runner']['clean'] is True,
+                'Paid authority/source identity changed.')
+        for name, sha in manifest['evidence'].items():
+            relative = Path(name); artifact = directory / relative
+            require(not relative.is_absolute() and '..' not in relative.parts
+                    and relative.suffix in ('.json', '.body', '.txt', '.docx')
+                    and not artifact.is_symlink() and artifact.resolve(strict=True).is_relative_to(directory)
+                    and re.fullmatch('[0-9a-f]{64}', sha) and digest(artifact.read_bytes()) == sha,
+                    'Manifest-bound artifact changed.')
+        request = json.loads((directory / 'request.json').read_bytes())
+        payload = json.loads(request['body_json']['messages'][0]['content'])
+        require(not payload.get('patient_default_context'),
+                'Reviewed voice context requires its separate reconstruction proof.')
+        require((directory / 'batch-plan.json').exists() == (row['kind'] == 'ordinary_batch_child'),
+                'Actual batch/single identity changed.')
+        records.append({'attempt': int(number), 'manifest_sha256': digest(raw),
+            'request_file_sha256': manifest['evidence']['request.json'],
+            'recorded_http_body_sha256': request['body_sha256'],
+            'audit_sha256': manifest['evidence']['audit-billing.json'], 'kind': row['kind']})
+    return records
+
+
+def prepare(binding, original, output):
+    require(binding['format'] == FORMAT and binding['status'] == 'prospectively_bound',
+            'A prospective source binding is required.')
+    require(binding['witness_sha256'] == WITNESS_SHA and binding['new_revision'] is not None,
+            'Final current-source identity is unset.')
+    require(binding['groups'] == PAID_GROUPS and binding['reviewed_voice'] == VOICE_PENDING,
+            'Declared representative paid evidence or pending voice scope changed.')
+    current = source_identity(Path(binding['new_source']), binding['new_revision'])
+    require(binding['new_source_tree'] == current['tree'] and binding['new_files'] == current['files'],
+            'Prospectively declared current source differs.')
+    require(digest(original) == WITNESS_SHA, 'Original witness changed.')
+    require(not output.is_symlink() and output.parent.resolve(strict=True).is_relative_to(OWNED),
+            'Output must be a new owned directory.')
+    # Validate every source/evidence before creating any executable literal.
+    groups = []
+    for index, row in enumerate(binding['groups'], 1):
+        old = source_identity(Path(binding['old_sources'][row['paid_revision']]), row['paid_revision'])
+        require(binding['old_files'][row['paid_revision']] == old, 'Declared OLD source changed.')
+        require(old['commit'] != current['commit'], 'OLD and NEW identities must remain separate.')
+        require(old['unchanged_compiler_context_inputs'] == current['unchanged_compiler_context_inputs'],
+                'Complete compiler/quote/context AST or exact parser/package inputs changed.')
+        records = evidence_envelope(row)
+        changed, diff = derivative(original, old['commit'])
+        groups.append((index, row, old, records, changed, diff))
+    require(groups and len({(row['campaign'], number) for _, row, *_ in groups
+                            for number in row['attempts']}) == sum(len(row['attempts']) for _, row, *_ in groups),
+            'Missing or duplicate paid attempts.')
+    output.mkdir(mode=0o700, exist_ok=False)
+    (output / 'original-witness.py').write_bytes(original)
+    planned = []
+    for index, row, old, records, changed, diff in groups:
+        script = output / ('paid-source-%d.py' % index)
+        script.write_bytes(changed)
+        (output / ('paid-source-%d.diff' % index)).write_text(diff)
+        common = ['--evidence', str(RUNTIME / row['campaign'] / 'evidence')]
+        for number in row['attempts']:
+            common += ['--attempt', number]
+        commands = {}
+        for side, source, commit, literal in [('old', binding['old_sources'][old['commit']], old['commit'],
+                                              output / 'original-witness.py'),
+                                             ('new', binding['new_source'], current['commit'], script)]:
+            commands[side] = [str(PYTHON), str(literal), '--source', source, '--revision', commit,
+                             *common, '--output', str(output / ('group-%d-%s' % (index, side))), '--execute']
+        planned.append({'group': index, 'old_source': old, 'new_source': current,
+            'paid_evidence': records, 'derivative_sha256': digest(changed), 'diff_sha256': digest(diff.encode()),
+            'commands': commands, 'execution': 'NOT RUN'})
+    result = {'format': FORMAT, 'status': 'prepared', 'groups': planned,
+        'binding_sha256': digest(json.dumps(binding, sort_keys=True).encode()),
+        'witness_sha256': WITNESS_SHA, 'reviewed_voice': binding['reviewed_voice'],
+        'new_provider_requests': 0, 'database_queries': 0, 'fingerprints_changed': False,
+        'clinical_qualification': False, 'invoice_reconciled': False,
+        'guarded_dependency_adjudication': 'PENDING owner review; AST changes are not approved by wire equality'}
+    (output / 'prepared.json').write_text(json.dumps(result, indent=2) + '\n')
+    return result
+
+
+def adjudicate(group, old, new, receipts):
+    """Whole report rows/quotes match; original paid identities remain OLD."""
+    for side, report in [('old', old), ('new', new)]:
+        require(set(report) == REPORT_KEYS, 'Witness report schema changed.')
+        receipt = receipts[side]
+        require(receipt['argv'] == group['commands'][side] and receipt['child_exit'] == 0
+                and receipt['supervisor_exit'] == 0 and receipt['timed_out'] is False
+                and receipt['reaped'] is True and receipt['source_unchanged'] is True
+                and receipt['result_sha256'] == digest(receipt['result_bytes'].encode()),
+                'Missing, failed or changed bounded execution receipt.')
+        require(json.loads(receipt['result_bytes']) == report, 'Report differs from sealed original execution.')
+        identity = group[side + '_source']
+        require(report['source_head'] == identity['commit'] and report['source_tree'] == identity['tree'],
+                'Reconstruction source identity changed.')
+        expected_script = WITNESS_SHA if side == 'old' else group['derivative_sha256']
+        require(report['witness_source_sha256'] == expected_script and receipt['script_sha256'] == expected_script,
+                'Witness literal changed.')
+        require(set(report['source_bytes']) == WITNESSED_MODULES and all(identity['files'][name]['bytes_sha256'] == sha
+                for name, sha in report['source_bytes'].items()), 'Reconstruction dependency bytes changed.')
+        require(report['network_connect_attempts'] == [] and report['new_provider_requests'] == 0
+                and report['database_queries'] == 0 and report['scanner_fingerprints_changed'] is False
+                and report['clinical_qualification'] is False and report['context_live_provider_qualified'] is False
+                and report['batch_live_provider_qualified'] is False,
+                'Reconstruction crossed its financial-only boundary.')
+        rows = report['current_actual_provider_rows']  # Original legacy report key; these are OLD paid attempts.
+        require(len(rows) == len(group['paid_evidence']) and len({row['attempt'] for row in rows}) == len(rows),
+                'Missing or duplicate actual paid rows.')
+        for record in group['paid_evidence']:
+            matching = [row for row in rows if row['attempt'] == record['attempt']]
+            require(len(matching) == 1, 'Wrong paid membership.')
+            row = matching[0]
+            require(set(row) == ROW_KEYS and all(row[key] == record[key] for key in ('manifest_sha256', 'request_file_sha256',
+                'recorded_http_body_sha256', 'audit_sha256')) and row['request_kind'] == record['kind']
+                and row['compiled_wire_dict_equals_actual_http_body'] is True
+                and row['all_audit_checks_pass'] is True and row['invoice_reconciled'] is False,
+                'Captured wire or original settlement identity changed.')
+    require(old['current_actual_provider_rows'] == new['current_actual_provider_rows'],
+            'Full SDK/quote/rate-derived cost/actual settlement rows differ.')
+    require(old['pure_batch_child_price_witnesses'] == new['pure_batch_child_price_witnesses'],
+            'Offline geographic/context quote controls differ.')
+    return {'financial_reconstruction_equal': True, 'paid_source': group['old_source']['commit'],
+        'reconstruction_source': group['new_source']['commit'],
+        'original_paid_rows': old['current_actual_provider_rows'], 'new_provider_requests': 0,
+        'clinical_qualification': False, 'fingerprints_changed': False, 'invoice_reconciled': False,
+        'guarded_dependency_adjudication': 'PENDING owner review'}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--prepare', action='store_true')
+    modes.add_argument('--adjudicate', action='store_true')
+    parser.add_argument('--binding', type=Path)
+    parser.add_argument('--witness', type=Path)
+    parser.add_argument('--prepared', type=Path)
+    parser.add_argument('--prepared-sha256')
+    parser.add_argument('--group', type=int)
+    parser.add_argument('--old-receipt', type=Path)
+    parser.add_argument('--new-receipt', type=Path)
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    if not args.prepare and not args.adjudicate:
+        print(json.dumps({'status': 'prepared', 'new_provider_requests': 0, 'database_queries': 0,
+                          'fingerprints_changed': False, 'clinical_qualification': False}))
+        return
+    if args.adjudicate:
+        require(args.prepared and args.prepared_sha256 and args.group and args.old_receipt
+                and args.new_receipt and args.output, 'Sealed preparation and both original execution receipts required.')
+        def read(path):
+            require(not path.is_symlink() and path.suffix == '.json'
+                    and path.resolve(strict=True).is_relative_to(OWNED), 'Only owned JSON receipts are read.')
+            return path.read_bytes()
+        raw = read(args.prepared)
+        require(digest(raw) == args.prepared_sha256, 'Prepared binding changed.')
+        prepared = json.loads(raw)
+        groups = [group for group in prepared['groups'] if group['group'] == args.group]
+        require(prepared['format'] == FORMAT and prepared['status'] == 'prepared' and len(groups) == 1,
+                'Prepared group is missing or duplicated.')
+        receipts = {'old': json.loads(read(args.old_receipt)), 'new': json.loads(read(args.new_receipt))}
+        result = adjudicate(groups[0], json.loads(receipts['old']['result_bytes']),
+                            json.loads(receipts['new']['result_bytes']), receipts)
+        require(not args.output.is_symlink() and args.output.parent.resolve(strict=True).is_relative_to(OWNED),
+                'Output must be a new owned directory.')
+        args.output.mkdir(mode=0o700, exist_ok=False)
+        result['prepared_sha256'] = args.prepared_sha256
+        result['execution_receipts'] = {side: digest(read(path)) for side, path in
+                                      [('old', args.old_receipt), ('new', args.new_receipt)]}
+        (args.output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+        print(json.dumps({'financial_reconstruction_equal': True, 'new_provider_requests': 0,
+                          'fingerprints_changed': False}))
+        return
+    require(args.binding and args.witness and args.output, 'Exact binding, immutable witness and owned output required.')
+    require(not args.binding.is_symlink() and not args.witness.is_symlink(), 'Input aliases refused.')
+    result = prepare(json.loads(args.binding.read_bytes()), args.witness.read_bytes(), args.output)
+    print(json.dumps({'status': result['status'], 'groups': len(result['groups']), 'execution': 'NOT RUN'}))
+
+
+if __name__ == '__main__':
+    main()
