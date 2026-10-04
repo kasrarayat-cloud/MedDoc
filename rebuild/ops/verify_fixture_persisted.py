@@ -8,7 +8,7 @@ never proves a live model response, provider charge or human microphone test.
 """
 import argparse
 from collections import Counter
-from hashlib import sha256
+from hashlib import md5, sha256
 from html import unescape
 from io import BytesIO
 import json
@@ -29,6 +29,16 @@ from ops import v1_private_install_preparation as preparation
 LABELS = {'soap': ('Subjective', 'Objective', 'Assessment', 'Plan'),
           'custom': ('History', 'Findings', 'Plan')}
 SCRATCH = auth.TASK / 'storage-resume-20261003T215613Z/operations'
+# Exact static inputs from the pinned django-otp 1.7.3 dependency. These are
+# public assets, not a permission to admit other untracked runtime content.
+STATIC_DEPENDENCY_ASSETS = {
+    'django_otp/css/login.css': ('django_otp/static/django_otp/css/login.css',
+        'c46b11a02eb0bd7835fa26862a84efc9bf79bdc6661343796bae317eaf56de39'),
+    'otp_totp/css/qrcode.css': ('django_otp/plugins/otp_totp/static/otp_totp/css/qrcode.css',
+        '59b3b4964fe158beac514820ff47c1177c4105c972191ecb796d2c439660d757'),
+    'otp_totp/js/qrcode.js': ('django_otp/plugins/otp_totp/static/otp_totp/js/qrcode.js',
+        '943b25309bc5a4ad175bc09ad34347ed3148708d899d20588c7e4d8bd00bc32e'),
+}
 
 
 def digest(raw):
@@ -136,6 +146,100 @@ def validate_example(record, original, first, exported, kind):
             'live_model_qualification': False, 'invoice_reconciliation': False}
 
 
+def compiled_static_file(path, root):
+    """Read a bounded public collectstatic output without following links."""
+    auth.require(path.is_relative_to(root) and not any(p.is_symlink() for p in (path, *path.parents)),
+                 'compiled_static_link_refused')
+    before = path.lstat()
+    auth.require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid()
+        and before.st_nlink == 1 and stat.S_IMODE(before.st_mode) in (0o600, 0o644)
+        and before.st_size <= 2 * 1024 * 1024, 'compiled_static_file_metadata_differs')
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, 'rb') as stream:
+        raw = stream.read(2 * 1024 * 1024 + 1)
+        after = os.fstat(stream.fileno())
+    current = path.lstat()
+    identity = ('st_dev', 'st_ino', 'st_uid', 'st_mode', 'st_nlink', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+    auth.require(len(raw) == before.st_size and all(getattr(before, key) == getattr(value, key)
+        for value in (after, current) for key in identity), 'compiled_static_file_changed')
+    return raw
+
+
+def compiled_static_identity(root, archived):
+    """Admit only genuine current collectstatic assets, hashes and compression.
+
+    The five current CSS/JS inputs need no URL/import rewriting. If that changes,
+    qualification must extend this strict byte comparison; it never guesses at
+    generated source or accepts an arbitrary static tree.
+    """
+    from importlib.metadata import distribution
+    from whitenoise.compress import Compressor
+    generated = root / 'staticfiles'
+    auth.require(not any(name.startswith('rebuild/staticfiles/') for name in archived),
+                 'compiled_static_is_not_archived_source')
+    requirements = (root / 'requirements.txt').read_text()
+    for name, version in (('Django', '5.2.17'), ('django-otp', '1.7.3'), ('whitenoise', '6.12.0')):
+        auth.require(re.search(r'^' + re.escape(name) + '==' + re.escape(version) + r'$', requirements, re.M)
+            and distribution(name).version == version, 'compiled_static_dependency_version_differs')
+    app_names = {name.removeprefix('rebuild/static/') for name in archived if name.startswith('rebuild/static/')}
+    auth.require(app_names == {'app.css', 'app.js'}, 'compiled_static_source_catalogue_differs')
+    inputs = {name: (root / 'static' / name).read_bytes() for name in app_names}
+    dependency = distribution('django-otp')
+    recorded = {str(path): path for path in dependency.files or []}
+    for name, (relative, expected) in STATIC_DEPENDENCY_ASSETS.items():
+        import base64
+        path = recorded.get(relative)
+        auth.require(path is not None and path.hash and path.hash.mode == 'sha256',
+                     'compiled_static_dependency_record_missing')
+        raw = Path(dependency.locate_file(path)).read_bytes()
+        auth.require(digest(raw) == expected and base64.urlsafe_b64encode(sha256(raw).digest()).decode().rstrip('=')
+            == path.hash.value, 'compiled_static_dependency_asset_differs')
+        inputs[name] = raw
+    expected_files, paths = {}, {}
+    compressor = Compressor(quiet=True)
+    for name, raw in inputs.items():
+        path = Path(name)
+        hashed = str(path.with_name(path.stem + '.' + md5(raw, usedforsecurity=False).hexdigest()[:12] + path.suffix))
+        paths[name] = hashed
+        for output in (name, hashed):
+            expected_files[output] = raw
+            if compressor.use_brotli:
+                compressed = compressor.compress_brotli(raw)
+                auth.require(len(compressed) <= len(raw) * 0.95, 'compiled_static_brotli_not_qualified')
+                expected_files[output + '.br'] = compressed
+            compressed = compressor.compress_gzip(raw)
+            auth.require(len(compressed) <= len(raw) * 0.95, 'compiled_static_gzip_not_qualified')
+            expected_files[output + '.gz'] = compressed
+    manifest = {'paths': paths, 'version': '1.1',
+        'hash': md5(json.dumps(sorted(paths.items())).encode(), usedforsecurity=False).hexdigest()[:12]}
+    manifest_raw = compiled_static_file(generated / 'staticfiles.json', generated)
+    try:
+        actual_manifest = json.loads(manifest_raw)
+    except (ValueError, UnicodeDecodeError):
+        raise RuntimeError('compiled_static_manifest_invalid') from None
+    auth.require(actual_manifest == manifest and json.dumps(actual_manifest).encode() == manifest_raw,
+                 'compiled_static_manifest_differs')
+    # Finder traversal order may change JSON key order. Its complete logical
+    # mapping/hash and the normal serializer are checked independently above.
+    expected_files['staticfiles.json'] = manifest_raw
+    actual_files, actual_dirs = {}, set()
+    for directory, names, files in os.walk(generated, followlinks=False):
+        parent = Path(directory)
+        info = parent.lstat()
+        auth.require(stat.S_ISDIR(info.st_mode) and not parent.is_symlink() and info.st_uid == os.getuid()
+            and stat.S_IMODE(info.st_mode) in (0o700, 0o755), 'compiled_static_directory_metadata_differs')
+        auth.require(all(not (parent / name).is_symlink() for name in names), 'compiled_static_directory_link_refused')
+        actual_dirs.add(str(parent.relative_to(generated)))
+        auth.require(len(actual_dirs) <= 16 and len(actual_files) + len(files) <= 32,
+                     'compiled_static_catalogue_bound')
+        for name in files:
+            path = parent / name
+            actual_files[str(path.relative_to(generated))] = compiled_static_file(path, generated)
+    expected_dirs = {'.'} | {str(parent) for name in expected_files for parent in Path(name).parents}
+    auth.require(actual_dirs == expected_dirs and actual_files == expected_files, 'compiled_static_inventory_or_bytes_differ')
+    return {name: digest(raw) for name, raw in sorted(actual_files.items())}
+
+
 def archive_identity(demo, expected):
     auth.require(re.fullmatch('[a-f0-9]{40}', expected or ''), 'invalid_release_identity')
     auth.require(demo == demo.resolve() and demo.parent == auth.TASK
@@ -167,11 +271,13 @@ def archive_identity(demo, expected):
     auth.require(seen == prepared['runtime_source_sha256'], 'complete_archive_inventory_differs')
     actual_files = set()
     root = demo / 'src/rebuild'
+    if os.path.lexists(root / 'staticfiles'):
+        compiled_static_identity(root, seen)
     for directory, names, files in os.walk(root, followlinks=False):
-        # The existing seed/browser writes only this top-level private state.
-        # Every other extracted runtime file must belong to the archive.
+        # Compiled public assets were independently verified above. The existing
+        # seed/browser writes only the separate top-level private state.
         if Path(directory) == root:
-            names[:] = [name for name in names if name != '.runtime']
+            names[:] = [name for name in names if name not in ('.runtime', 'staticfiles')]
         auth.require(all(not (Path(directory) / name).is_symlink() for name in names), 'untracked_source_directory_linked')
         for name in files:
             actual_files.add(str((Path(directory) / name).relative_to(demo / 'src')))

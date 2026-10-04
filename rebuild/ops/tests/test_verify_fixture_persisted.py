@@ -151,6 +151,128 @@ class PersistedFixtureProbeTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'new_demo_scope_required'):
                     probe.archive_identity(directory / 'demo-789c0372', '789c0372' + '0' * 32)
 
+    def compiled_archive(self, directory):
+        """Archive real app inputs and collect them with the normal storage backend."""
+        from importlib.metadata import distribution
+        from django.conf import settings
+        from django.core.files.base import ContentFile
+        from quillmd.static_storage import PublicCompressedManifestStaticFilesStorage
+        from django.test import override_settings
+        target, demo, source, prepared = self.archive(directory)
+        repo = Path(probe.__file__).parent.parent
+        (source / 'static').mkdir(mode=0o700)
+        for name in ('app.css', 'app.js'):
+            path = source / 'static' / name
+            path.write_bytes((repo / 'static' / name).read_bytes()); path.chmod(0o600)
+        (source / 'requirements.txt').write_bytes((repo / 'requirements.txt').read_bytes())
+        (source / 'requirements.txt').chmod(0o600)
+        stream = BytesIO()
+        with tarfile.open(fileobj=stream, mode='w', format=tarfile.PAX_FORMAT,
+                          pax_headers={'comment': target}) as archive:
+            for path in sorted(source.rglob('*')):
+                if path.is_file(): archive.add(path, arcname='rebuild/' + str(path.relative_to(source)))
+        raw = stream.getvalue()
+        prepared.update(source_tar_sha256=probe.digest(raw), runtime_source_sha256={
+            'rebuild/' + str(path.relative_to(source)): probe.digest(path.read_bytes())
+            for path in source.rglob('*') if path.is_file()})
+        (demo / 'source.tar').write_bytes(raw)
+        (demo / 'prepared.json').write_text(json.dumps(prepared))
+        # Minimal synthetic settings only when the source-only unittest runner
+        # has not configured Django; never load application settings/credentials.
+        if not settings.configured:
+            settings.configure(STATIC_URL='/static/', STATIC_ROOT=str(source / 'staticfiles'),
+                INSTALLED_APPS=[], FILE_UPLOAD_PERMISSIONS=0o600, FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o700)
+        with override_settings(STATIC_ROOT=str(source / 'staticfiles'), STATIC_URL='/static/'):
+            storage = PublicCompressedManifestStaticFilesStorage(location=source / 'staticfiles',
+                file_permissions_mode=0o644, directory_permissions_mode=0o755)
+            inputs = {name: (source / 'static' / name).read_bytes() for name in ('app.css', 'app.js')}
+            dependency = distribution('django-otp')
+            inputs.update({name: Path(dependency.locate_file(relative)).read_bytes()
+                           for name, (relative, _) in probe.STATIC_DEPENDENCY_ASSETS.items()})
+            for name, content in inputs.items(): storage.save(name, ContentFile(content))
+            paths = {name: (storage, name) for name in inputs}
+            outcomes = list(storage.post_process(paths))
+            self.assertFalse(any(isinstance(status, Exception) for _, _, status in outcomes))
+        return target, demo, source, prepared
+
+    def test_normal_compressed_manifest_assets_are_verified_without_relaxing_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary); directory.chmod(0o700)
+            target, demo, source, prepared = self.compiled_archive(directory)
+            with patch.object(probe.auth, 'TASK', directory):
+                self.assertEqual(probe.archive_identity(demo, target), prepared)
+                inventory = probe.compiled_static_identity(source, prepared['runtime_source_sha256'])
+                self.assertIn('staticfiles.json', inventory)
+                self.assertEqual(len(inventory), 21 if not any(name.endswith('.br') for name in inventory) else 31)
+
+    def test_generated_assets_refuse_tampered_missing_extra_symlink_and_nonstatic_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary); directory.chmod(0o700)
+            target, demo, source, prepared = self.compiled_archive(directory)
+            generated = source / 'staticfiles'
+            with patch.object(probe.auth, 'TASK', directory):
+                for name in ('app.js', 'app.js.gz', 'staticfiles.json'):
+                    path = generated / name; original = path.read_bytes()
+                    path.write_bytes(original + b'foreign payload')
+                    with self.subTest(name=name), self.assertRaises(RuntimeError):
+                        probe.archive_identity(demo, target)
+                    path.write_bytes(original)
+                    path.unlink()
+                    with self.subTest(missing=name), self.assertRaises((RuntimeError, FileNotFoundError)):
+                        probe.archive_identity(demo, target)
+                    path.write_bytes(original); path.chmod(0o644)
+                foreign = generated / 'foreign.py'; foreign.write_bytes(b'nonstatic untracked source'); foreign.chmod(0o644)
+                with self.assertRaisesRegex(RuntimeError, 'compiled_static_inventory_or_bytes_differ'):
+                    probe.archive_identity(demo, target)
+                foreign.unlink(); (generated / 'empty-foreign').mkdir(mode=0o755)
+                with self.assertRaisesRegex(RuntimeError, 'compiled_static_inventory_or_bytes_differ'):
+                    probe.archive_identity(demo, target)
+                (generated / 'empty-foreign').rmdir()
+                (generated / 'alias.css').symlink_to(generated / 'app.css')
+                with self.assertRaisesRegex(RuntimeError, 'compiled_static_link_refused'):
+                    probe.archive_identity(demo, target)
+                (generated / 'alias.css').unlink()
+                (generated / 'alias-directory').symlink_to(generated / 'otp_totp', target_is_directory=True)
+                with self.assertRaisesRegex(RuntimeError, 'compiled_static_directory_link_refused'):
+                    probe.archive_identity(demo, target)
+                (generated / 'alias-directory').unlink()
+                (generated / 'app.js').chmod(0o666)
+                with self.assertRaisesRegex(RuntimeError, 'compiled_static_file_metadata_differs'):
+                    probe.archive_identity(demo, target)
+                (generated / 'app.js').chmod(0o644)
+                import os
+                os.link(generated / 'app.js', generated / 'hardlink.js')
+                with self.assertRaisesRegex(RuntimeError, 'compiled_static_file_metadata_differs'):
+                    probe.archive_identity(demo, target)
+                (generated / 'hardlink.js').unlink()
+                original = (source / 'static/app.js').read_bytes(); (source / 'static/app.js').write_bytes(original + b'changed')
+                with self.assertRaisesRegex(RuntimeError, 'served_source_bytes_changed'):
+                    probe.archive_identity(demo, target)
+
+    def test_generated_manifest_cannot_rebind_valid_assets_or_dependency_inputs(self):
+        from importlib.metadata import distribution
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary); directory.chmod(0o700)
+            target, demo, source, prepared = self.compiled_archive(directory)
+            path = source / 'staticfiles/staticfiles.json'; raw = path.read_bytes()
+            with patch.object(probe.auth, 'TASK', directory):
+                value = json.loads(raw); value['paths']['app.js'] = value['paths']['app.css']
+                path.write_text(json.dumps(value))
+                with self.assertRaisesRegex(RuntimeError, 'compiled_static_manifest_differs'):
+                    probe.archive_identity(demo, target)
+                path.write_bytes(raw)
+                with patch.dict(probe.STATIC_DEPENDENCY_ASSETS, {
+                        'otp_totp/js/qrcode.js': (probe.STATIC_DEPENDENCY_ASSETS['otp_totp/js/qrcode.js'][0], '0' * 64)}):
+                    with self.assertRaisesRegex(RuntimeError, 'compiled_static_dependency_asset_differs'):
+                        probe.archive_identity(demo, target)
+                for selected in ('Django', 'django-otp', 'whitenoise'):
+                    def changed_version(name):
+                        return SimpleNamespace(version='0.0.0') if name == selected else distribution(name)
+                    with self.subTest(dependency=selected), patch('importlib.metadata.distribution', changed_version):
+                        with self.assertRaisesRegex(RuntimeError, 'compiled_static_dependency_version_differs'):
+                            probe.archive_identity(demo, target)
+
     def test_default_cli_does_not_open_credentials_or_start_database_network_services(self):
         output = StringIO()
         with patch.object(sys_module(), 'argv', ['verify_fixture_persisted']), \
