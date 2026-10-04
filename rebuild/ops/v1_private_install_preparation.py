@@ -14,8 +14,8 @@ import re
 BASELINE = 'dedac1625032e32c7a149e6771be22e26c307eb1'
 BASELINE_NODE = '0018_servicehealth'
 LEAF = '0038_reinspection_confirmation_guard'
-SCHEMA_PATH = 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract-0038.json'
-SCHEMA_SHA256 = '47e45ec7ff94ce89cfa3ce8f3fbc514fa05eddb5e88e480d1ed58fa26706da96'
+SCHEMA_PATH = 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract-0038-reverse-guard.json'
+SCHEMA_SHA256 = '8be79bb31d92f109b4112e751d1ac2d8e38050c631585a66e2c47b4970e829ac'
 WORKFLOWS = frozenset({'CI', 'secrets-scan'})
 MODEL = 'claude-sonnet-5-5'
 CONTRACT = 'ordinary-field-relations-v4'
