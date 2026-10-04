@@ -8,7 +8,9 @@ function: no new trigger, schema, data rewrite or import-provenance exception.
 
 Key presence deliberately holds malformed/empty markers as well. Reversal
 refuses before replacing the function while any such mapping exists, confirmed
-or otherwise. An ordinary legacy database can restore the unchanged 0031 body.
+or otherwise. The older leaf's refusals also run before this leaf is reversed,
+so a later refusal cannot leave 0038 unapplied. A legacy database without
+protected downstream evidence can restore the unchanged 0031 body.
 """
 import importlib
 
@@ -45,6 +47,10 @@ def preserve_reinspection_review(apps, schema_editor):
             'retain reinspection evidence. Preserve the exact-version clinician review gate and use a '
             'reviewed forward repair or compatible code rollback. 0038 was not reversed; its guard '
             'and all retained mapping and document records are unchanged.')
+    # MigrationExecutor commits each reversed migration separately. Compose
+    # the previous leaf's existing refusals before replacing this guard, too.
+    importlib.import_module('core.migrations.0037_transcript_redaction_boundary').refuse_evidence(
+        apps, schema_editor)
 
 
 class Migration(migrations.Migration):
