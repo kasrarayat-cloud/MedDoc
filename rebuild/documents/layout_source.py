@@ -40,6 +40,13 @@ def safety(package):
                     w.fail("Linked resources cannot be used for layout verification.", "layout_unsafe_source")
         if name.endswith(".xml"):
             for node in package.tree(name).iter():
+                # lxml retains comments with callable tags. They are not
+                # font/resource elements; keep the source annotation unchanged.
+                if not isinstance(node.tag, str):
+                    if isinstance(node, w.etree._Comment):
+                        continue
+                    w.fail("XML processing instructions and unknown node types cannot use layout verification.",
+                           "layout_unsafe_source")
                 if node.tag == w.q("w:instrText") and re.search(
                         r"\b(?:INCLUDETEXT|INCLUDEPICTURE|DDE|DDEAUTO|LINK|DATABASE)\b", node.text or "", re.I):
                     w.fail("An updating resource field cannot be rendered safely.", "layout_unsafe_source")
