@@ -1,0 +1,21 @@
+{
+  "status": "source_only_served_flow_unexecuted",
+  "source_commit": "c3761d19878a563635134e26b4f50be5c231910f",
+  "source_commits": ["50fb7b8e", "c3761d19"],
+  "literal_sha256": "5e0aaf004118fcdc9e9cc902ac6a541e86f03cbaf3653c37b1b72ece31eb490b",
+  "test_sha256": "abff41e0f3351d06102da26bb07645c163be9a921720ec868236a5c89adf4191",
+  "source_unchanged": true,
+  "methods": 6,
+  "test_seconds": 0.048,
+  "outer_elapsed_seconds": 0.26536584299901733,
+  "actual_exit_code": 0,
+  "raw_evidence_directory": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/identity-literal-source-tests-c3761d19-20261004",
+  "raw_log_sha256": "da3a47b22720b2fd8fcab1b5ff75929749151e8037a59b996e152954582cb325",
+  "database_calls": 0,
+  "provider_calls": 0,
+  "credential_reads": 0,
+  "service_actions": 0,
+  "external_messages": 0,
+  "actual_served_outcomes": null,
+  "historical_authorization_124_replaced": false
+}
