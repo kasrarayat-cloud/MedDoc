@@ -307,3 +307,36 @@ and prospective changed-source qualification are still open.
 - `root-protected-scalar-readback-986b/result.json`: `5db264e6f7db7df5f5bf06f7b5808f65c9997ca07c9fefcdc3cfbeea677350cb`
 - `root-noop-46992-corrective-snapshot/result.json`: `a628cb2c3b507f2251e1f81c1e0797bad047e0391acedaf83a6529651a0694b4`
 - `root-labelled-correction-700410-adjudicated/result.json`: `b349f16e6487c858cbac1c030b0faaa25f8c0c0656b70f84692b5ac013a1e212`
+
+## Nested original question cells and observed Examination — 2026-10-04
+
+Finishededac4f70 passes64 independent pure controls, using new glyph and legacy
+FF originals with separate own-cell questions. Exact no-op originals, complete
+checked choices, untouched captions/paragraphs/header/footer/other parts pass.
+Forged labels/context/options/kind/relationships/wrong questions refuse.
+Competing/hidden source, separate subgroups and drawn blank areas stay held.
+Numbered witness, assigned-author and attestation controls refuse; numbered
+ordinary initial findings and received signed-referral captions remain writable.
+Actual child exit0/18.178 seconds, source unchanged and no DB/renderer/provider.
+D07's fixed14/28 source score remains a failure; no corpus regrading occurs.
+
+Finished4238ec9a passes23 independent complete-wire controls through current
+page reading and finalization governance. The two positive observations preserve
+full literal source and uncertainty in a separately labelled Assessment. Twenty-
+one negatives cover shared findings, opposite findings, conditional/unknown/
+foreign assessment, source invalidation, global deletion, medication changes,
+missing/foreign ownership and noncurrent/uncertain/negative observations. Actual
+exit0/9.605seconds; no unsafe output or false hold, network or DB call. N01 and
+procedure overholds remain unfinished, and live changed-source qualification is
+not supplied by these offline controls.
+
+The legacy archive-comment correction2da3457b is also independently refuted:
+five changed WM exports retain empty/text/binary/all256-byte/65535-byte comments,
+with document.xml identical to parent layout output, all other raw parts
+unchanged and byte-identical second pass. An unrelated package is a complete
+no-op. Original parent metadata loss and the refuter's first mistaken re-entry
+summary expectation remain retained. No layout behavior was relaxed.
+
+- `root-nested-cells-edac-independent/result.json`: `c7f7e8bca301fb782e6f50cfbc4b1bdf92d79215a3eff91ddc63d8c6b170ac48`
+- `root-observation-assessment-4238-independent/result.json`: `e838e0c4e935da8d0006ea0b90b965e7dcd5c3bfa50221e5ca0171e53f492938`
+- `operations/layout-comment-refutation-2da3457b-20261004/replay-02/result.json`: `329477f625b095e0f8877fdfba22828b5b5b066b337bfb2b5bacfb628db2dcc6`

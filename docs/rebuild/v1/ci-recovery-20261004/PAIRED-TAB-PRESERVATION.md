@@ -36,4 +36,4 @@ The correction changes no table/limb layout behavior.
 - Corrected receipt: `root-layout-comment-affected-20261004T062856Z/result.json`.
 - Log SHA256: `b6183a7bb1d6524a3f0e18874c4bb2419feb0f18399ae191ee5ccbd2df6a910e`.
 
-This separate metadata repair awaits independent refutation.
+Independent refutation confirms all five archive-comment shapes including the ZIP maximum65535bytes, identical parent table/layout XML, untouched raw parts and byte-identical second pass. Actual exit0; evidence SHA256 `329477f625b095e0f8877fdfba22828b5b5b066b337bfb2b5bacfb628db2dcc6`.
