@@ -5,6 +5,14 @@ All originals, wrong exports, scripts, source hashes and results remain under
 `rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/`.
 No patient, provider or database was involved in these independent packets.
 
+## Finished numeric-date chain — October4,04:36 UTC
+
+The initial88d repair released a finding despite explicit earlier-report invalidation. The fd259 repair retains that backward dependency. The7f69 exactISO repair recovered both examination-date positives, but the unchanged45-control packet then demonstrated an unsafe release for `No polyps were seen. Correction: that procedure date was 09/21/2026.` All intermediate outputs and expectations are retained; none was integrated alone.
+
+Finished d3b1ed04 rejects grammatical demonstratives in the correction's date subject. The unchanged45 controls now have zero unsafe releases, six date positives supported, and one known typed-no-current-patient-proof hold: actual exit1,33.937 seconds. Its result SHA256 is `7c5059c642f317c3c2b3e747af64d3bfa0bce8ba95df329953ed56ce9df72d21`. The unchanged ten supplemental backward-invalidation controls have zero unsafe releases/false holds, actual exit0,11.731 seconds; result SHA256 `eee385978f5e74632d61b1333ccf422e5b7d1b92d2e6d21a8eaed76dce70347f`. Across55 controls the48 negative controls are held and six of seven original positive expectations pass; the remaining expectation is not regraded. C08 remains held.
+
+The writer's separate16-control whole-wire pointer packet has zero unsafe releases/false holds, and all12 affected numeric methods pass67.760 seconds. The complete88→fd→7f→d3 chain was integrated together only after this finished-diff refutation. These finite source controls permit prospective synthetic qualification; they do not establish live usefulness, whole-corpus Word acceptance, installed model identity or launch readiness.
+
 | Frozen source and claim | Independent physical/source controls | Result |
 | --- | --- | --- |
 | f65c2181 nominal clinical captions have no appointed author |32 SDT/legacy-control × paragraph/table inputs, with three actor assignments and ordinary observation controls |12 unsafe exports;0 false holds; original outputs retained |
