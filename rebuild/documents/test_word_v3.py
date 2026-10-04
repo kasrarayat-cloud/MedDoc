@@ -1821,7 +1821,9 @@ class SourceBoundGlyphWrites(unittest.TestCase):
                 sdt_states = [state for _, state in controls_shown(result)]
                 self.assertEqual(sdt_states, (['0'] if before == 'sdt' else []) + (['1'] if after == 'sdt' else []))
                 ff_states = root.xpath('//w:checkBox/w:checked/@w:val', namespaces={'w': W})
-                self.assertEqual(ff_states, (['0'] if before == 'ff' else []) + (['1'] if after == 'ff' else []))
+                self.assertEqual(ff_states, ['1'] if after == 'ff' else [])
+                ff_effective=[w.ff_checkbox_state(node)for node in w.checkbox_nodes(root)if node.tag==w.q('w:r')]
+                self.assertEqual(ff_effective, ([False]if before=='ff'else[]) + ([True]if after=='ff'else[]))
 
     def test_deleted_original_box_and_stale_source_reference_are_refused(self):
         from . import word_v3 as w
@@ -2751,3 +2753,60 @@ class RoundFive(unittest.TestCase):
         with mock.patch.object(w.Detector, "shared_rows", rows):
             w.inspect(data)
         self.assertEqual(calls, ["word/document.xml#b/tbl[0]/tr[1]/tc[5]"])
+
+
+class LegacyCheckboxSameStatePreservation(unittest.TestCase):
+    def form(self, default='0', explicit=None):
+        doc=Document();p=doc.add_paragraph('Observed finding: ');ff_field(p,'checkbox');p.add_run(' Present')
+        doc.add_paragraph('Neighbor question remains unchanged')
+        doc.sections[0].header.paragraphs[0].text='Retained header'
+        doc.sections[0].footer.paragraphs[0].text='Retained footer'
+        cb=p._p.find('.//'+qn('w:checkBox'));node=cb.find(qn('w:default'))
+        if default=='absent':cb.remove(node)
+        elif default is None:node.attrib.clear()
+        else:node.set(qn('w:val'),default)
+        if explicit!='absent'and explicit is not None:
+            checked=OxmlElement('w:checked')
+            if explicit!='present':checked.set(qn('w:val'),explicit)
+            cb.append(checked)
+        stream=io.BytesIO();doc.save(stream);raw=stream.getvalue()
+        from . import word_v3 as w
+        fields=w.inspect(raw)['fields'];field=next(f for f in fields if f['kind']=='checkbox')
+        return raw,fields,field
+
+    def test_same_effective_state_preserves_exact_default_and_checked_representation(self):
+        from . import word_v3 as w
+        for default,explicit,value in (('0',None,False),('false',None,False),('off',None,False),
+                                      ('absent',None,False),('1',None,True),('true',None,True),
+                                      ('on',None,True),(None,None,True),('1','0',False),
+                                      ('0','1',True),('0','false',False),('0','present',True)):
+            with self.subTest(default=default,explicit=explicit):
+                raw,fields,field=self.form(default,explicit)
+                out=w.fill(raw,fields,{field['key']:value});self.assertEqual(out,raw)
+                after=w.SlotIndex(w.open_package(out));self.assertEqual(w.constrained_option_states(after,field),[value])
+
+    def test_genuine_change_overrides_default_and_preserves_neighbors_and_other_parts(self):
+        from . import word_v3 as w
+        for default,explicit,value in (('1',None,False),('0',None,True),('0','1',False),('1','0',True)):
+            raw,fields,field=self.form(default,explicit);out=w.fill(raw,fields,{field['key']:value})
+            self.assertNotEqual(out,raw);after=w.SlotIndex(w.open_package(out))
+            self.assertEqual(w.constrained_option_states(after,field),[value])
+            with ZipFile(io.BytesIO(raw))as old,ZipFile(io.BytesIO(out))as new:
+                self.assertTrue(all(old.read(n)==new.read(n)for n in old.namelist()if n!='word/document.xml'))
+            before_doc=Document(io.BytesIO(raw));after_doc=Document(io.BytesIO(out))
+            self.assertEqual(before_doc.paragraphs[1]._p.xml,after_doc.paragraphs[1]._p.xml)
+            cb=after_doc.paragraphs[0]._p.find('.//'+qn('w:checkBox'))
+            self.assertEqual(cb.find(qn('w:default')).get(qn('w:val')),default)
+            self.assertEqual(cb.find(qn('w:checked')).get(qn('w:val')),'1'if value else'0')
+
+    def test_malformed_or_duplicate_state_is_refused_before_mutation(self):
+        from . import word_v3 as w
+        for default,explicit,duplicate in (('bogus',None,False),('0','bogus',False),('0','0',True)):
+            raw,fields,field=self.form(default,explicit);package=w.open_package(raw)
+            slot=w.SlotIndex(package).by_id[field['locator']['part']+'#'+field['locator']['slot']]
+            cb=slot.el.find(w.FLDCHAR).find(qn('w:ffData')).find(qn('w:checkBox'))
+            if duplicate:cb.append(deepcopy(cb.find(qn('w:checked'))))
+            before=etree.tostring(slot.el)
+            with self.assertRaises(w.V3Failure):w.set_ff_checkbox(slot.el,False)
+            self.assertEqual(etree.tostring(slot.el),before)
+        with self.assertRaises(w.V3Failure):w.set_ff_checkbox(OxmlElement('w:r'),False)

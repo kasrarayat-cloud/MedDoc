@@ -8756,11 +8756,24 @@ def tick_sdt_checkbox(sdt):
 
 def set_ff_checkbox(begin_run, ticked):
     """A legacy checkbox: an explicit checked state, which overrides the field's default."""
-    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
-    cb = data.find(q("w:checkBox")) if data is not None else None
-    if cb is None:
-        fail("A stored checkbox is no longer a legacy checkbox.", "mapping_mismatch")
-    for x in cb.findall(q("w:checked")):
+    fc = begin_run.find(FLDCHAR)
+    data = fc.find(q("w:ffData")) if fc is not None else None
+    boxes = data.findall(q("w:checkBox")) if data is not None else []
+    if len(boxes) != 1:
+        fail("A stored checkbox is no longer one legacy checkbox.", "mapping_mismatch")
+    cb = boxes[0]
+    checked_nodes, defaults = cb.findall(q("w:checked")), cb.findall(q("w:default"))
+    if (len(checked_nodes) > 1 or len(defaults) > 1
+            or any(node.get(q("w:val")) not in (None, "1", "true", "on", "0", "false", "off")
+                   for node in [*checked_nodes, *defaults])):
+        fail("The original legacy checkbox has an unreadable checked/default state. Keep it unchanged and review the form.",
+             "unsupported_layout")
+    # Word reads the explicit state before the default. Preserve the exact
+    # original representation when that effective state already agrees; a
+    # reviewed blank must not materialize a new zero in an unticked field.
+    if ff_checkbox_state(begin_run) is bool(ticked):
+        return False
+    for x in checked_nodes:
         cb.remove(x)
     checked = _el("w:checked")
     checked.set(q("w:val"), "1" if ticked else "0")
