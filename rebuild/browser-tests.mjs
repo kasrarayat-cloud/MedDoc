@@ -215,7 +215,7 @@ try {
       Object.fromEntries(nodes.map(node => [...node.querySelectorAll('td')].map(cell => cell.innerText.trim()))));
     assert.match(rows['provider requests'], /^(?:warning\s+)?NONE — QUILLMD_AI_MODE is fixture,/);
     assert.match(rows.QUILLMD_AI_MODEL, /^claude-sonnet-5-5 \(inactive:/);
-    assert.match(rows['ordinary field contract'], /^ordinary-fields-v4 —/);
+    assert.match(rows['ordinary field contract'], /^ordinary-field-relations-v4 —/);
     assert(rows['request profile'].includes('INACTIVE — no provider request is sent'));
     assert.match(rows['request profile'], /"max_output_tokens":\s*20000/);
     assert.match(rows['request profile'], /"type":\s*"between_tools"/);

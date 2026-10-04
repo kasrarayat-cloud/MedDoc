@@ -1,5 +1,6 @@
 """Actual service-table/Node assertion controls; no browser, DB or provider."""
 from html.parser import HTMLParser
+import ast
 import json
 from pathlib import Path
 import re
@@ -40,10 +41,10 @@ class BrowserServedProfileRender(unittest.TestCase):
         return {' '.join(parser.cells[i].split()): ' '.join(parser.cells[i + 1].split())
                 for i in range(0, len(parser.cells), 2)}
 
-    def accepted(self, rows):
+    def accepted(self, rows, marker="assert.match(rows['provider requests']"):
         source = (ROOT / 'rebuild/browser-tests.mjs').read_text()
         assertions = [line.strip() for line in source.splitlines()
-                      if "assert.match(rows['provider requests']" in line]
+                      if marker in line]
         self.assertEqual(len(assertions), 1)
         code = ("const assert=require('node:assert/strict');const vm=require('node:vm');"
                 "const rows=JSON.parse(process.argv[1]);try{vm.runInNewContext(process.argv[2],{assert,rows});"
@@ -76,6 +77,26 @@ class BrowserServedProfileRender(unittest.TestCase):
         for rows in negatives:
             with self.subTest(rows=rows):
                 self.assertFalse(self.accepted(self.rendered(rows)))
+
+    def test_current_source_contract_and_actual_service_template_agree_with_browser(self):
+        source = ast.parse((ROOT / 'rebuild/core/v3_field_relations.py').read_text())
+        contract = next(node.value.value for node in source.body
+                        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
+                        and any(isinstance(target, ast.Name) and target.id == 'CONTRACT' for target in node.targets))
+        self.assertEqual(contract, 'ordinary-field-relations-v4')
+        value = contract + ' — configured for source-bound ordinary v3 fields (inactive: QUILLMD_AI_MODE is not live)'
+        rows = self.rendered([{'name': 'ordinary field contract', 'value': value, 'severity': ''}])
+        self.assertEqual(rows['ordinary field contract'], value)
+        self.assertTrue(self.accepted(rows, "assert.match(rows['ordinary field contract']"))
+
+    def test_missing_legacy_wrong_or_truncated_contract_identifiers_refuse(self):
+        for value in (None, 'ordinary-fields-v4 — inactive', 'ordinary-field-relations-v3 — inactive',
+                      'not configured — new ordinary v3 generation uses the base workflow',
+                      'ordinary-field-relations-v4-other — inactive', 'ordinary-field-relations-v4'):
+            with self.subTest(value=value):
+                rows = self.rendered([] if value is None else [
+                    {'name': 'ordinary field contract', 'value': value, 'severity': ''}])
+                self.assertFalse(self.accepted(rows, "assert.match(rows['ordinary field contract']"))
 
 
 if __name__ == '__main__':

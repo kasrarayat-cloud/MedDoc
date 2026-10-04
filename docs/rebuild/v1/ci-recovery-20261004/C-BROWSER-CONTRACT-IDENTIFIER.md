@@ -1,0 +1,22 @@
+# C browser contract identifier: original failure and narrow recovery
+
+The completed private-browser job `111476058856` in CI run `37215844080`, attempt 1, failed the check “Served administrator configuration records the inactive Sonnet 5.5 ordinary-v4 profile.” Its report retains 13 preceding passed checks and this failed check; the remaining browser checks and downstream scripts did not run. The run's head is `6346019377ed1a2e65763da7040c6f85da13f72c`. The artifact's two served health records both report release `eb8479682da8cae89f92799c0eb7a4ccf01b1979`, the observed CI checkout identity, rather than silently relabeling that response as the branch head.
+
+The original expectation in `rebuild/browser-tests.mjs:218` was `^ordinary-fields-v4 —`. The current source's `core/v3_field_relations.py:32` defines `CONTRACT = 'ordinary-field-relations-v4'`, and `admin_console.language_model_rows()` prints that exact configured identifier. With the exact CI fixture settings, the real configuration function and actual service-table template produce `ordinary-field-relations-v4 — configured for source-bound ordinary v3 fields; this row does not certify clinical or voice qualification (inactive: QUILLMD_AI_MODE is not live)`. All eight unchanged language-model assertions were replayed against those rendered cells: seven passed and only the erroneous contract identifier failed. The original source-only probe returned actual exit 1 in 0.881999 seconds; its Node child returned 0 after recording the assertion outcomes. SQL was explicitly refused, with only the queue-status read replaced by an honest “not queried” value. No browser or provider was invoked.
+
+The repair changes only the literal expected contract prefix to the existing identifier. It retains all mode, model, 20,000-token, thinking, effort, pricing, release, host, worker and financial assertions. The existing service-template controls now include the actual source constant and reject missing, old-v3, mistyped, extended and truncated identifiers. Five focused source/template/Node methods passed (0.799 seconds; child exit 0, supervisor elapsed 1.067968 seconds). The corrected complete eight-assertion actual-configuration/template replay passed with actual exit 0 in 1.018831 seconds. `node --check rebuild/browser-tests.mjs` and `git diff --check` also returned 0. All tested source bytes and the complete source diff stayed unchanged during both runs. These are narrow source controls; a later exact-revision CI browser run and actual private demonstration remain necessary.
+
+Protected evidence root: `/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/`.
+
+| Evidence | Retained location | SHA-256 |
+| --- | --- | --- |
+| Original completed CI job log | `ci-63460193-one-snapshot-20261004T161747Z/browser-completed-job-api.log` | `08b40d2fd8e17946efc110f2346188f05437710dcf7d556f7bec6fe0143cdb1e` |
+| Original browser artifact | `ci-63460193-one-snapshot-20261004T161747Z/private-browser-evidence.zip` | `82c872a686250be4f453caf026f9e94fbcb897a796377ad4df2344e06a147499` |
+| Original actual-render failure | `browser-profile-ci-63460193-before-20261004T162322Z/result.json` | `c0345c3d23b1490af15891f510c587443a577950ee5e2558757797fbbb026ad5` |
+| Original source/control seal | `browser-profile-ci-63460193-before-20261004T162322Z/hashes.json` | `3558d1751cd5b2ba17357a8555db6b4e8a404b6fcb4548b942d505923b5d496c` |
+| Corrected actual-render positive | `browser-profile-ci-corrected-20261004T162642Z/result.json` | `255fa7956a91a18edd974a96a912c900e741a5f651ad1e520f3cd3a437f4cc77` |
+| Corrected real exit/source receipts | `browser-profile-ci-corrected-20261004T162642Z/execution-receipts.json` | `9f86ebaee0717eb1fa8ab48a8d20bedb641e32467d9300972f211e5f09cc9e7a` |
+| Corrected actual-render literal | `browser-profile-ci-corrected-20261004T162642Z/actual_render_probe.py` | `6758338c31364eb2222e714b14cbea9bf65e8efe5b5ebc3a092fa637fb7111ec` |
+| Corrected source/control seal | `browser-profile-ci-corrected-20261004T162642Z/hashes.json` | `7cac64aa877a3304b709329e0dfe5eaf0102b4e73132dbab30e2b0ca0a02ef73` |
+
+Original failures, denominators and artifacts remain retained. No backend, model setting, profile, clinical source, field mapping, provider account, charge, golden corpus or source gate changed. No QA database, application service, installation, push, merge or PR event was performed by this repair.
