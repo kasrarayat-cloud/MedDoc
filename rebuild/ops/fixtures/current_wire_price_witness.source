@@ -64,6 +64,38 @@ from django.test import override_settings
 from django.core.exceptions import ValidationError
 from core import generation as g,v3_field_relations as r,generation_batch as b,transcript_context as tc
 flags=dict(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL=g.SONNET_5_5,AI_INPUT_RATE='2',AI_OUTPUT_RATE='10',AI_CACHED_RATE='0.20',AI_THINKING='disabled',AI_EFFORT='medium',AI_INFERENCE_GEO='',V3_FIELD_RELATIONS=False,V3_FIELD_RELATIONS_SWITCH=None,V3_HISTORY_CONTEXT=False,V3_GENERATION_BATCHES=False,QUILLMD_WORD_ENGINE='v3')
+
+def reconstruct_request(directory, manifest, wire, config):
+ """Bind one actual ordinary request, including a full-plan batch child."""
+ payload=json.loads(wire['messages'][0]['content'])
+ fields=payload['catalogue'];notes=payload['notes']
+ plan_path=directory/'batch-plan.json'
+ if not plan_path.exists():
+  compiled=r.compile_request(notes,fields,config,context_labels=[row['label'] for row in payload['requirements']],requirements=payload['requirements'])
+  assert compiled['wire']==wire
+  return compiled,r.maximum_cost(notes,fields,config,context_labels=[row['label'] for row in payload['requirements']],requirements=payload['requirements']),'ordinary_single'
+ assert manifest['evidence']['batch-plan.json']==hashlib.sha256(plan_path.read_bytes()).hexdigest()
+ child_path=directory/'compiled-child-request.json'
+ assert manifest['evidence']['compiled-child-request.json']==hashlib.sha256(child_path.read_bytes()).hexdigest()
+ plan=json.loads(plan_path.read_text())
+ assert plan['config']==config and plan['fields']==fields and plan['notes']==notes
+ assert plan['original_sha256']==hashlib.sha256((directory/'case/form.docx').read_bytes()).hexdigest()
+ assert plan['mapping_sha256']==b.digest(fields) and plan['notes_sha256']==hashlib.sha256(notes.encode()).hexdigest()
+ assert not plan.get('patient_default_context')  # Genuine reviewed voice has its separate proof.
+ parts=[(i,part) for i,part in enumerate(plan['parts'],1) if part['field_ids']==payload['requested_field_ids']]
+ assert len(parts)==1
+ ordinal,part=parts[0]
+ compiled=r.compile_request(notes,fields,config,context_labels=[row['label'] for row in plan['requirements']],requirements=plan['requirements'],requested_ids=part['field_ids'],constraints=plan['constraints'])
+ assert compiled['wire']==wire==b.request(plan,ordinal)==json.loads(child_path.read_text())
+ assert part['request_sha256']==b.digest(wire)
+ rate=g.rates(config);profile=g.job_request_profile(config);size=len(json.dumps(wire).encode())
+ quote=(Decimal(size+12000)*rate['input_per_million']+Decimal(profile['max_output_tokens'])*rate['output_per_million'])/1000000
+ if profile.get('inference_geo')=='us':quote*=g.US_INFERENCE_MULTIPLIER
+ quote=quote.quantize(g.COST_QUANTUM,rounding=ROUND_CEILING)
+ assert part['input_token_bound']==size+12000 and Decimal(part['maximum_cost'])==quote
+ assert Decimal(part['maximum_charge'])==quote*Decimal('1.5')
+ return compiled,quote,'ordinary_batch_child'
+
 assert g.US_INFERENCE_MULTIPLIER==Decimal('1.1')
 rows=[];witnesses=[]
 with override_settings(**flags):
@@ -81,9 +113,7 @@ with override_settings(**flags):
     raise ValueError('Only regular manifest-bound synthetic evidence files are read.')
    assert re.fullmatch('[0-9a-f]{64}',sha) and hashlib.sha256(artifact.read_bytes()).hexdigest()==sha
   request=json.loads((directory/'request.json').read_text());wire=request['body_json'];payload=json.loads(wire['messages'][0]['content']);fields=payload['catalogue'];notes=payload['notes'];config=g.configuration(fields)
-  compiled=r.compile_request(notes,fields,config,context_labels=[row['label'] for row in payload['requirements']],requirements=payload['requirements'])
-  assert compiled['wire']==wire
-  quote=r.maximum_cost(notes,fields,config,context_labels=[row['label'] for row in payload['requirements']],requirements=payload['requirements'])
+  compiled,quote,request_kind=reconstruct_request(directory,manifest,wire,config)
   response=json.loads((directory/'provider-result.json').read_text())['provider_output'];units=response['usage'];rate=g.rates(config)
   raw=json.loads((directory/'provider-response.body').read_text())
   receipt=json.loads((directory/'provider-response.json').read_text())
@@ -106,7 +136,7 @@ with override_settings(**flags):
   assert Decimal(row['user_charge_usd'])==calculated*Decimal('1.5')
   assert Decimal(row['customer_limit_usd'])==quote*Decimal('1.5')
   assert calculated<=quote and row['checks']['no_held_reservation']
-  rows.append({'attempt':int(number),'manifest_sha256':hashlib.sha256((directory/'manifest.json').read_bytes()).hexdigest(),'request_file_sha256':manifest['evidence']['request.json'],'recorded_http_body_sha256':request['body_sha256'],'compiled_wire_dict_equals_actual_http_body':True,'quoted_wire_bytes':len(json.dumps(wire).encode()),'actual_http_body_bytes':request['body_bytes'],'max_tokens':wire['max_tokens'],'model_sent':wire['model'],'model_returned':response['model'],'stop':response['stop_reason'],'provider_calculated_cost':str(calculated),'provider_maximum_quote':str(quote),'settled_retail_charge':row['user_charge_usd'],'stored_customer_limit':row['customer_limit_usd'],'request_id':row['http_request_id'],'message_id':response['id'],'all_audit_checks_pass':True,'invoice_reconciled':False,'audit_sha256':manifest['evidence']['audit-billing.json']})
+  rows.append({'attempt':int(number),'request_kind':request_kind,'manifest_sha256':hashlib.sha256((directory/'manifest.json').read_bytes()).hexdigest(),'request_file_sha256':manifest['evidence']['request.json'],'recorded_http_body_sha256':request['body_sha256'],'compiled_wire_dict_equals_actual_http_body':True,'quoted_wire_bytes':len(json.dumps(wire).encode()),'actual_http_body_bytes':request['body_bytes'],'max_tokens':wire['max_tokens'],'model_sent':wire['model'],'model_returned':response['model'],'stop':response['stop_reason'],'provider_calculated_cost':str(calculated),'provider_maximum_quote':str(quote),'settled_retail_charge':row['user_charge_usd'],'stored_customer_limit':row['customer_limit_usd'],'request_id':row['http_request_id'],'message_id':response['id'],'all_audit_checks_pass':True,'invoice_reconciled':False,'audit_sha256':manifest['evidence']['audit-billing.json']})
   # The full same original/field/source catalogue also reconstructs one complete
   # batch child; this is an offline financial witness, not another send.
   version=SimpleNamespace(pk=uuid4(),contract='v3',fields=fields,review_requirements=[],template=SimpleNamespace(sha256=hashlib.sha256((directory/'case/form.docx').read_bytes()).hexdigest()),generation_constraints=None)
@@ -118,7 +148,7 @@ with override_settings(**flags):
     for context in ['',proof]:
      plan=b.plan_for(encounter,cfg,patient_context=context)
      joined=[key for part in plan['parts'] for key in part['field_ids']]
-     assert len(joined)==len(set(joined)) and set(joined)==set(payload['requested_field_ids'])
+     assert len(joined)==len(set(joined)) and set(joined)=={field['key'] for field in compiled['asked']}
      if not geo and not context:
       whole={**plan,'parts':[{'field_ids':payload['requested_field_ids']}]}
       assert b.request(whole,1)==wire

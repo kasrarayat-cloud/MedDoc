@@ -2,6 +2,8 @@
 import contextlib
 import ast
 import io
+import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from decimal import Decimal, ROUND_CEILING
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'fixtures/current_wire_price_witness.source'
@@ -134,3 +137,101 @@ class PreparedPriceWitness(unittest.TestCase):
         self.assertIsInstance(error, ValueError)
         self.assertIn('aliases', str(error))
         self.assertEqual((output, git, network), ('', 0, 0))
+
+
+class CapturedOrdinaryPrice(unittest.TestCase):
+    """Actual full compiler and two-child quote; evidence/plan forgeries refuse."""
+    @classmethod
+    def setUpClass(cls):
+        from core import generation as g, generation_batch as b, v3_field_relations as r
+        function = next(n for n in ast.parse(SOURCE.read_bytes()).body
+                        if isinstance(n, ast.FunctionDef) and n.name == 'reconstruct_request')
+        namespace = dict(json=json, hashlib=hashlib, Decimal=Decimal,
+                         ROUND_CEILING=ROUND_CEILING, g=g, b=b, r=r)
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(SOURCE), 'exec'), namespace)
+        cls.read = staticmethod(namespace['reconstruct_request'])
+        cls.g, cls.b, cls.r = g, b, r
+
+    def setUp(self):
+        from django.test import override_settings
+        from ops import sonnet5_qa as sq, sonnet5_stages as stages, standing_qa_batch as batch
+        from documents import word_v3
+        settings = override_settings(**{**stages.steps.PATH_FLAGS['field_relations'],
+            'AI_MODE': 'live', 'AI_PROVIDER': 'anthropic', 'AI_MODEL': self.g.SONNET_5_5,
+            'AI_INPUT_RATE': '2', 'AI_OUTPUT_RATE': '10', 'AI_CACHED_RATE': '0.20'})
+        settings.enable(); self.addCleanup(settings.disable)
+        environment = patch.dict(os.environ, sq.PRICE_SETTINGS)
+        environment.start(); self.addCleanup(environment.stop)
+        fixture = batch.frozen_inputs()['batch']; self.original = batch.original_bytes()
+        self.fields = word_v3.inspect(self.original)['fields']
+        self.config = self.g.configuration(self.fields)
+        self.plan = batch.compiled_plan({'batch': fixture}, self.fields)
+        self.assertEqual([len(p['field_ids']) for p in self.plan['parts']], [100, 1])
+        folder = tempfile.TemporaryDirectory(); self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name); (self.folder / 'case').mkdir()
+        (self.folder / 'case/form.docx').write_bytes(self.original)
+
+    def record(self, plan, wire):
+        paths = {'batch-plan.json': plan, 'compiled-child-request.json': wire}
+        for name, value in paths.items():
+            (self.folder / name).write_text(json.dumps(value))
+        return {'evidence': {name: hashlib.sha256((self.folder / name).read_bytes()).hexdigest()
+                             for name in paths}}
+
+    def test_both_actual_children_reconstruct_their_full_source_and_individual_quote(self):
+        for ordinal in (1, 2):
+            wire = self.b.request(self.plan, ordinal)
+            manifest = self.record(self.plan, wire)
+            compiled, quote, kind = self.read(self.folder, manifest, wire, self.config)
+            self.assertEqual(compiled['wire'], wire)
+            self.assertEqual(kind, 'ordinary_batch_child')
+            self.assertEqual(quote, Decimal(self.plan['parts'][ordinal - 1]['maximum_cost']))
+            self.assertEqual(len(compiled['asked']), 101)
+            self.assertEqual(len(json.loads(wire['messages'][0]['content'])['requested_field_ids']),
+                             100 if ordinal == 1 else 1)
+
+    def test_single_request_retains_its_original_complete_compiler_and_price(self):
+        fields = self.fields[:2]; notes = 'The patient reports mild nausea.'
+        config = self.g.configuration(fields)
+        wire = self.r.compile_request(notes, fields, config)['wire']
+        compiled, quote, kind = self.read(self.folder, {'evidence': {}}, wire, config)
+        self.assertEqual(compiled['wire'], wire)
+        self.assertEqual(quote, self.r.maximum_cost(notes, fields, config))
+        self.assertEqual(kind, 'ordinary_single')
+
+    def test_unlisted_or_changed_plan_and_child_are_not_actual_evidence(self):
+        wire = self.b.request(self.plan, 1)
+        for changed in ('batch-plan.json', 'compiled-child-request.json'):
+            manifest = self.record(self.plan, wire)
+            with self.subTest(changed=changed), self.assertRaises((AssertionError, KeyError)):
+                manifest['evidence'].pop(changed)
+                self.read(self.folder, manifest, wire, self.config)
+            manifest = self.record(self.plan, wire)
+            with (self.folder / changed).open('a') as output: output.write(' ')
+            with self.subTest(changed=changed, bytes=True), self.assertRaises(AssertionError):
+                self.read(self.folder, manifest, wire, self.config)
+
+    def test_rehashed_plan_cannot_change_source_binding_child_digest_or_charge(self):
+        wire = self.b.request(self.plan, 1)
+        mutants = [
+            ('original_sha256', '0' * 64), ('mapping_sha256', '0' * 64),
+            ('notes_sha256', '0' * 64), ('notes', 'Unrelated encounter.'),
+            ('patient_default_context', 'forged-token'),
+        ]
+        for key, value in mutants:
+            plan = copy.deepcopy(self.plan); plan[key] = value
+            manifest = self.record(plan, wire)
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                self.read(self.folder, manifest, wire, self.config)
+        for key, value in [('request_sha256', '0' * 64), ('input_token_bound', 1),
+                           ('maximum_cost', '0'), ('maximum_charge', '0')]:
+            plan = copy.deepcopy(self.plan); plan['parts'][0][key] = value
+            manifest = self.record(plan, wire)
+            with self.subTest(part_key=key), self.assertRaises(AssertionError):
+                self.read(self.folder, manifest, wire, self.config)
+
+    def test_full_101_field_batch_cannot_be_mislabelled_as_one_ordinary_send(self):
+        from django.core.exceptions import ValidationError
+        wire = self.b.request(self.plan, 1)
+        with self.assertRaises(ValidationError):
+            self.read(self.folder, {'evidence': {}}, wire, self.config)
