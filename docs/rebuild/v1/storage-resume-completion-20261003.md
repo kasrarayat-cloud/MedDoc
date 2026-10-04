@@ -176,3 +176,46 @@ attempts and$1.866631505200 calculated exposure remain unchanged. Installed
 dedac and demo789 remain unchanged;7907 CI failed and is not a citation for
 this candidate. Accepted financial proof fingerprints have not yet been
 renewed. Root and specialists continue actual implementation/qualification.
+
+## Preserved failures and bounded qualification — 2026-10-04 12:33 UTC
+
+The preceding 11:44 entry is a historical checkpoint. Campaign2 subsequently
+finished its fourteen plain requests and one qualified N01 response, then
+closed failed on the frozen secondary export checker. Actual N01 usefulness
+was seven of eight requested answers, one unnecessary HPI hold and three
+correct holds; no unsafe answer. Its multiline Plan was complete in the DOCX,
+but the checker discarded line breaks. The original failed stage is neither
+reopened nor regraded. Sixteen campaign2 attempts cost an estimated $0.085026;
+cumulative exposure is 176 attempts/$1.951657505200, with zero open or unknown
+outcomes, not an invoice reconciliation. No new transcription was sent.
+
+The first checker repair falsely accepted an actually hidden Plan. Root
+verified that counterexample, preserved both wrong exports and repaired the
+readback using the existing structural/style visibility resolver. Eighteen
+affected methods passed, the exact hidden paid16 export now refuses, and the
+original intact export passes. A finished independent refutation on
+`55847ad8916d2e4f09af9735158833d346115dc9` passed 27 valid controls with no
+finding; withdrawn instrument controls and original failures remain retained.
+
+Canonical4, integrated as `19d1e269`, prospectively declares one model check,
+the complete fourteen-case qualified arm and two synthetic voice pairs, with
+one qualified send per run and an explicit unsafe-stage stop. Root independently
+checked its complete historical arm, every unsafe outcome with mixed answers,
+malformed classifications, unsafe second-run refusal and canonical identity;
+all five controls passed in 1.095 seconds with no database/provider calls.
+Campaign4 is not yet started, and no accepted financial fingerprint is renewed.
+
+The first five DEV33 packets on481b remain failed/partial original evidence.
+The layout QA UID omission was repaired prospectively, but root demonstrated
+a second harness defect: replacing an owned socket by another same-UID
+process passed its binding check while the recorded renderer remained alive.
+Both disposable test children were reaped. Operations is repairing and
+refuting that exact identity failure before the new seventeen-packet replay.
+D01 original-table preservation is still a product defect under active repair.
+Seven rights-held originals remain in the60 denominator; neither Word gate
+is claimed. Installed dedac and the old789 demo remain unchanged.
+
+Latest actual preflight is GO at12:02:05 UTC with unchanged thresholds. At
+12:33 the expanded root filesystem has633927315456 bytes total and
+314061688832 available. No deliberate cleanup, expansion, production service
+change or public/real-patient cutover occurred.
