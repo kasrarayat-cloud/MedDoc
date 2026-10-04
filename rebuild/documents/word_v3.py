@@ -5067,7 +5067,7 @@ class Detector:
         """
         clauses, qualifiers, start, stack, quote = [], [], 0, [], None
         pairs = {'‘': '’', '“': '”', "'": "'", '"': '"'}
-        delimiters = {'(': ')', '[': ']'}
+        delimiters = {'(': ')', '[': ']', '{': '}'}
         for at, char in enumerate(text):
             boundary = False
             if quote:

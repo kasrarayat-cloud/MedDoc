@@ -184,7 +184,7 @@ class NamedBalancedSourceQualifiers(unittest.TestCase):
     suffix = ', as defined in Quantity above. Select Work when not received. Select Remote when unclear.'
 
     def test_complete_bracketed_quoted_and_nested_authorship_is_not_a_scope_escape(self):
-        for wrapper in ('[{}]', '“{}”', '‘{}’', '"{}"', "'{}'", '([{}])', '“context ({})”'):
+        for wrapper in ('[{}]', '{{{}}}', '“{}”', '‘{}’', '"{}"', "'{}'", '([{}])', '“context ({})”', '“context {{{}}}”'):
             for native in (False, True):
                 with self.subTest(wrapper=wrapper, native=native):
                     instruction = 'Modality – Select Home if applicable ' + wrapper.format(self.action) + self.suffix
@@ -194,7 +194,7 @@ class NamedBalancedSourceQualifiers(unittest.TestCase):
                     self.assertEqual(w.fill(raw, info['fields'], {}), raw)
 
     def test_ordinary_balanced_qualifiers_and_quoted_definition_names_remain_usable(self):
-        for qualifier in ('[the manager has recorded the observation]', '“the manager recorded the observation”',
+        for qualifier in ('[the manager has recorded the observation]', '{the manager recorded the observation}', '“the manager recorded the observation”',
                           '[the patient had several initial symptoms]', '“context (the signed referral was received)”'):
             instruction = 'Modality – Select Home if applicable ' + qualifier + self.suffix
             raw = coverage.NamedSelectionInstructions().form(instruction); info = w.inspect(raw)
@@ -220,7 +220,8 @@ class NamedBalancedSourceQualifiers(unittest.TestCase):
 
     def test_malformed_qualifiers_cannot_prove_a_complete_named_scope(self):
         for qualifier in ('[the manager recorded the observation)', '(the manager recorded the observation]',
-                          '[the manager recorded the observation', '“the manager recorded the observation'):
+                          '[the manager recorded the observation', '“the manager recorded the observation',
+                          '{the manager recorded the observation]', '{the manager recorded the observation'):
             instruction = 'Modality – Select Home if applicable ' + qualifier + self.suffix
             self.assertIsNone(w.Detector.named_instruction_clauses(instruction))
             raw = coverage.NamedSelectionInstructions().form(instruction); info = w.inspect(raw)
