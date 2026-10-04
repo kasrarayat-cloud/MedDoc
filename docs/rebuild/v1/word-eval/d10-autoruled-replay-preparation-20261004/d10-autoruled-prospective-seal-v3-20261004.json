@@ -1,0 +1,28 @@
+{
+  "scope": "Prospective D10 affected manual-recovery replay; NOT executed and NOT fixed60/20 qualification",
+  "candidate": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+  "old_harness": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/development_renderer_numeric_archive_v2.py",
+  "old_harness_sha256": "81e292d47f7e9c92aec9a6a61eef1cb62907dde77337a13234cd45d6e63ae9e5",
+  "new_harness": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/development_renderer_numeric_autoruled_archive_v3.py",
+  "new_harness_sha256": "29a9a174e6e33f086513490091945907120eed190fe73ea7966facce0a4fc760",
+  "launcher": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_numeric_autoruled_archived_word_workflow_s2.py",
+  "launcher_sha256": "cfdb33b7e2ed7057345a5fbf3502b5adfd3a875414340880ccb5d179a72fcab6",
+  "old_launcher_sha256": "055aca21f08cff0bbb508f307c612d65fde8ea0ccece0cd47b96a693abc99b4b",
+  "exact_harness_diff_sha256": "6ccfa641e162cb9b926ed2e5ce45e2c5888ddac3de031dcf02f296585cec101e",
+  "fixed_GT198_sha256": "47145449ca9d46858f169d21f8c09dc77017fa28fe04028f41b0270d984ec67b",
+  "fixed_scorer_sha256": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+  "provider_calls": 0,
+  "no_execution": true,
+  "outer_bound_seconds": 1200,
+  "test_DB": "quillmd_qa_sol_word_autoruled1004",
+  "automatic_score_unchanged": true,
+  "answers_unchanged": true,
+  "explicit_numeric_and_Other_corrections_unchanged": true,
+  "command": [
+    "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+    "-B",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_numeric_autoruled_archived_word_workflow_s2.py",
+    "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-481b65ad",
+    "481b65adb8ffa97053b694f0de3ba4dbaac72d0a"
+  ]
+}

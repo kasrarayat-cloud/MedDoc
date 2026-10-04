@@ -1,0 +1,43 @@
+--- /opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/development_renderer_numeric_archive_v2.py
++++ /opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/development_renderer_numeric_autoruled_archive_v3.py
+@@ -87,12 +87,34 @@
+   self.assertEqual(template.sha256,row['sha256']);self.assertTrue(version.fields)
+   first_mapping=json.loads(json.dumps(version.fields));first_manifest=json.loads(json.dumps(version.import_manifest))
+   automatic_score=scored('D10',row,first_mapping,'automatic-groundtruth');self.assertEqual(automatic_score['n'],198)
+-  response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_add',mapping_version=version.pk,
+-      slot='word/document.xml#b/p[10]',label='Impression',kind='long_text'))
+-  retain('D10','manual-add-response',{'status':response.status_code,'body':response.content.decode(),'mapping_version':str(version.pk)})
+-  self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
+-  narrative=next(f for f in version.fields if f['locator']['target']['type']=='ruled_paragraphs')
+-  self.assertEqual(narrative['key'],'m3_20dbe3728879');self.assertEqual(len(narrative['locator']['extra']),13)
++  # Reuse only the exact complete automatic A198 source compilation. The
++  # fixed automatic score above is captured before every manual correction.
++  detector=word_v3.Detector(word_v3.open_package(data))
++  area=detector.manual_ruled_paragraphs(detector.index.by_id['word/document.xml#b/p[10]'],'long_text')
++  self.assertIsNotNone(area)
++  fresh=word_v3.area_to_field(1,area)
++  writing_slots=['b/p[%d]' % n for n in range(10,37,2)]
++  self.assertEqual([fresh['locator']['slot'],*[x['slot'] for x in fresh['locator']['extra']]],writing_slots)
++  candidates=[field for field in first_mapping if field.get('locator',{}).get('target',{}).get('type')=='ruled_paragraphs'
++      and field['locator']['part']=='word/document.xml' and field['locator']['slot']=='b/p[10]']
++  complete=[field for field in candidates if not field.get('origin') and not field.get('write_protected')
++      and all(field.get(k)==fresh.get(k) for k in ('kind','label','context','locator','source_questions'))]
++  self.assertLessEqual(len(complete),1)
++  reuse=len(complete)==1 and len(candidates)==1
++  retain('D10','ruled-destination-decision',{'automatic_reused':reuse,'automatic_candidates':candidates,
++      'fresh_source_compilation':fresh,'source_sha256':row['sha256'],
++      'fixed_automatic_score_precedes_corrections':True,'manual_correction':not reuse})
++  if reuse:
++   narrative=complete[0]
++  else:
++   response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_add',mapping_version=version.pk,
++       slot='word/document.xml#b/p[10]',label='Impression',kind='long_text'))
++   retain('D10','manual-add-response',{'status':response.status_code,'body':response.content.decode(),'mapping_version':str(version.pk)})
++   self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
++   narrative=next(f for f in version.fields if f['locator']['target']['type']=='ruled_paragraphs')
++   self.assertEqual(narrative['key'],'m3_20dbe3728879');self.assertEqual(narrative['origin'],'manual')
++  self.assertEqual(len(narrative['locator']['extra']),13)
++  self.assertEqual([narrative['locator']['slot'],*[x['slot'] for x in narrative['locator']['extra']]],writing_slots)
+   numeric_slots=('b/tbl[0]/tr[3]/tc[0]/p[0]','b/tbl[0]/tr[6]/tc[0]/p[0]')
+   whole_bands=[field for field in version.fields if field['locator']['slot'] in numeric_slots]
+   self.assertEqual(len(whole_bands),2)
