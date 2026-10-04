@@ -5057,42 +5057,45 @@ class Detector:
         return None
 
     @staticmethod
-    def named_instruction_clauses(text):
-        """Complete clauses, retaining punctuation inside quotes and parentheses.
+    def named_instruction_clauses(text, *, qualified=False):
+        """Complete balanced source clauses and, when requested, qualifiers.
 
         A sentence's terminal period can be inside its closing quote. Apostrophes
-        within a word are not quotation boundaries. Malformed framing remains
-        unproved; no original text is changed by this analysis.
+        within a word are not quotation boundaries. Parentheses, brackets and
+        quotation marks bind complete qualifier clauses, not a source-act escape.
+        Malformed framing remains unproved; original text is never changed.
         """
-        clauses, start, depth, quote = [], 0, 0, None
+        clauses, qualifiers, start, stack, quote = [], [], 0, [], None
         pairs = {'‘': '’', '“': '”', "'": "'", '"': '"'}
+        delimiters = {'(': ')', '[': ']'}
         for at, char in enumerate(text):
             boundary = False
             if quote:
-                if char == quote:
+                if char == quote[0]:
+                    qualifiers.append(text[quote[1] + 1:at])
                     quote = None
-                    boundary = depth == 0 and at > 0 and text[at - 1] in '.!?'
+                    boundary = not stack and at > 0 and text[at - 1] in '.!?'
             elif char in pairs and (char in '‘“' or at == 0 or not text[at - 1].isalnum()):
-                quote = pairs[char]
-            elif char == '(':
-                depth += 1
-            elif char == ')':
-                if not depth:
+                quote = (pairs[char], at)
+            elif char in delimiters:
+                stack.append((delimiters[char], at))
+            elif char in delimiters.values():
+                if not stack or char != stack[-1][0]:
                     return None
-                depth -= 1
-            elif not depth and char in '.;!?\r\n':
+                qualifiers.append(text[stack.pop()[1] + 1:at])
+            elif not stack and char in '.;!?\r\n':
                 boundary = True
             if boundary:
                 value = text[start:at + 1].strip(' .;!?\r\n')
                 if value:
                     clauses.append(value)
                 start = at + 1
-        if quote or depth:
+        if quote or stack:
             return None
         rest = text[start:].strip(' .;!?\r\n')
         if rest:
             clauses.append(rest)
-        return clauses
+        return clauses + qualifiers if qualified else clauses
 
     @classmethod
     def named_instruction_source_action(cls, text):
@@ -5103,16 +5106,19 @@ class Detector:
         response with an unresolved verb is held rather than appointed to the
         ordinary clinical writer. The original text and its binding stay intact.
         """
-        clauses = cls.named_instruction_clauses(text)
-        readings = [text, *(clauses or []), *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)]
-        # Balanced parentheses give complete subordinate source clauses. Keep
-        # every ancestor and child reading; never use a substring name match.
-        stack = []
-        for at, char in enumerate(text):
-            if char == '(':
-                stack.append(at)
-            elif char == ')' and stack:
-                readings.append(text[stack.pop() + 1:at])
+        # Quoted qualifiers can themselves contain balanced subordinate
+        # clauses. Every proper qualifier is shorter than its enclosing source;
+        # this finite invocation-local reading never derives authority from output.
+        readings, pending, seen = [], [text], set()
+        while pending:
+            reading = pending.pop()
+            if reading in seen:
+                continue
+            seen.add(reading); readings.append(reading)
+            frames = cls.named_instruction_clauses(reading, qualified=True)
+            if frames is not None:
+                pending.extend(frame for frame in frames if frame not in seen)
+        readings.extend(re.split(r'(?<=[.;!?])\s*|[\r\n]+', text))
         for reading in tuple(readings):
             readings.extend(re.split(r'(?:\s+|,\s*)(?:and|or|but)\s+|,\s*', reading, flags=re.I))
             readings.extend(re.split(r'\b(?:if|when)\s+', reading, flags=re.I)[1:])
@@ -5211,6 +5217,8 @@ class Detector:
         if (len(candidates) != 1 or id(candidates[0].el) not in own
                 or not self.tab_source_visible(candidates[0])
                 or any(not self.named_instruction_visible(slot) for slot, _ in entries)):
+            return {'problem': problem, 'source_slots': candidates + [slot for slot, _ in entries]}
+        if any(self.named_instruction_clauses(text) is None for _, text in entries):
             return {'problem': problem, 'source_slots': candidates + [slot for slot, _ in entries]}
         if any(self.named_instruction_source_action(text) for _, text in entries):
             return {'problem': 'This exact named instruction appoints a human signing or author action; ordinary clinical answers cannot perform it.', 'human': True, 'source_slots': candidates + [slot for slot, _ in entries]}

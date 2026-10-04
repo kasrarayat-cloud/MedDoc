@@ -177,3 +177,53 @@ class NamedConditionSourceActs(unittest.TestCase):
             self.assertFalse(w.Detector.question_box_authorship(text))
         self.assertTrue(w.Detector.prospective_response('Alex Reed must complete this answer', located=True))
         self.assertFalse(w.Detector.prospective_response('The patient must start the medication', located=True))
+
+
+class NamedBalancedSourceQualifiers(unittest.TestCase):
+    action = 'this area is for Alex Reed to enter the answer'
+    suffix = ', as defined in Quantity above. Select Work when not received. Select Remote when unclear.'
+
+    def test_complete_bracketed_quoted_and_nested_authorship_is_not_a_scope_escape(self):
+        for wrapper in ('[{}]', '“{}”', '‘{}’', '"{}"', "'{}'", '([{}])', '“context ({})”'):
+            for native in (False, True):
+                with self.subTest(wrapper=wrapper, native=native):
+                    instruction = 'Modality – Select Home if applicable ' + wrapper.format(self.action) + self.suffix
+                    self.assertTrue(w.Detector.named_instruction_source_action(instruction))
+                    raw = coverage.NamedSelectionInstructions().form(instruction, native=native); info = w.inspect(raw)
+                    self.assertFalse([f for f in info['fields'] if f['label'] == 'Modality' and not f.get('write_protected')])
+                    self.assertEqual(w.fill(raw, info['fields'], {}), raw)
+
+    def test_ordinary_balanced_qualifiers_and_quoted_definition_names_remain_usable(self):
+        for qualifier in ('[the manager has recorded the observation]', '“the manager recorded the observation”',
+                          '[the patient had several initial symptoms]', '“context (the signed referral was received)”'):
+            instruction = 'Modality – Select Home if applicable ' + qualifier + self.suffix
+            raw = coverage.NamedSelectionInstructions().form(instruction); info = w.inspect(raw)
+            field = next(f for f in info['fields'] if f['label'] == 'Modality')
+            output = w.fill(raw, info['fields'], {field['key']: 'Work'})
+            self.assertEqual(w.constrained_option_states(w.SlotIndex(w.open_package(output)), field), [False, True, False])
+            before, after = Document(io.BytesIO(raw)), Document(io.BytesIO(output))
+            self.assertEqual(before.paragraphs[-1]._p.xml, after.paragraphs[-1]._p.xml)
+            self.assertEqual(w.fill(raw, info['fields'], {}), raw)
+
+    def test_short_bracket_placeholders_do_not_become_ordinary_instruction_ink(self):
+        # The established source reader interprets these short bracketed noun
+        # phrases as answer placeholders. A new scope proof cannot erase that
+        # separate answer destination merely because its words look clinical.
+        for qualifier in ('[the manager recorded the observation]', '[the patient had initial symptoms]'):
+            instruction = 'Modality – Select Home if applicable ' + qualifier + self.suffix
+            self.assertFalse(w.Detector.named_instruction_source_action(instruction))
+            self.assertTrue(list(w.BRACKET.finditer(qualifier)))
+            raw = coverage.NamedSelectionInstructions().form(instruction); info = w.inspect(raw)
+            self.assertFalse([f for f in info['fields'] if f['label'] == 'Modality'])
+            self.assertTrue(any(x['code'] == 'named_selection_source' for x in info['coverage_issues']))
+            self.assertEqual(w.fill(raw, info['fields'], {}), raw)
+
+    def test_malformed_qualifiers_cannot_prove_a_complete_named_scope(self):
+        for qualifier in ('[the manager recorded the observation)', '(the manager recorded the observation]',
+                          '[the manager recorded the observation', '“the manager recorded the observation'):
+            instruction = 'Modality – Select Home if applicable ' + qualifier + self.suffix
+            self.assertIsNone(w.Detector.named_instruction_clauses(instruction))
+            raw = coverage.NamedSelectionInstructions().form(instruction); info = w.inspect(raw)
+            self.assertFalse([f for f in info['fields'] if f['label'] == 'Modality'])
+            self.assertTrue(any(x['code'] == 'named_selection_source' for x in info['coverage_issues']))
+            self.assertEqual(w.fill(raw, info['fields'], {}), raw)
