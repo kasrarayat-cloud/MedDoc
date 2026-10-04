@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import time
+import traceback
 import types
 
 from . import v1_private_install_adapter as protocol
@@ -29,6 +30,7 @@ PRIVATE = APP / '.runtime'
 LINEAGE = 'scripts/activate-denial-heading-install.py'
 LINEAGE_SHA256 = '5590578db46cb9a498da0a93882cfbdf34eadd54a10b1d69f03aefc3def952cc'
 PARTICIPANT_LOCKS = ('backup-monitor/capture.lock', 'automatic-offsite/execution.lock', 'backup-alerts/monitor.lock')
+FAILURE_MATERIAL_LIMIT = 2 * 1024 * 1024
 
 
 def require(value, message):
@@ -52,6 +54,7 @@ class Backend:
             module.BASELINE = module.RUNNING_RELEASE = p.BASELINE
             module.EVIDENCE = self.state
         self.phase = 0
+        self.failure = 0
 
     def validate_live(self, declaration, evidence, contract):
         self.live_source(declaration['target'])
@@ -130,6 +133,42 @@ class Backend:
         self.identity.private_write(self.state / ('phase-%02d.json' % self.phase), outcome)
         self.phase += 1
 
+    def record_failure(self, error, scope):
+        """Seal original error material; summaries contain no exception text.
+
+        Tracebacks never capture locals. Messages/argv/child stderr can contain
+        protected values, so only this 0600 evidence contains them. Every byte
+        is hashed before the bounded retained prefix is written; an oversized
+        item is explicitly reported as truncated, never claimed to be exact.
+        """
+        from .backup_restore import write_private
+        import re
+        require(re.fullmatch('[a-z_][a-z_0-9]*', scope), 'Fixed failure scope required.')
+        number = getattr(self, 'failure', 0)
+        self.failure = number + 1
+        stem = 'failure-%03d-%s' % (number, scope)
+        result = {'kind': type(error).__name__, 'material': {}}
+        for name, value in (
+            ('traceback', ''.join(traceback.format_exception(type(error), error, error.__traceback__))),
+            ('stdout', getattr(error, 'stdout', getattr(error, 'output', None))),
+            ('stderr', getattr(error, 'stderr', None)),
+        ):
+            if value is None:
+                continue
+            raw = value if isinstance(value, bytes) else str(value).encode('utf-8', errors='backslashreplace')
+            retained = raw[:FAILURE_MATERIAL_LIMIT]
+            relative = stem + '-' + name + '.bin'
+            write_private(self.state / relative, retained)
+            result['material'][name] = {'relative': relative, 'sha256': p.sha(raw),
+                'bytes': len(raw), 'retained_sha256': p.sha(retained), 'retained_bytes': len(retained),
+                'truncated': len(raw) != len(retained)}
+        if type(getattr(error, 'returncode', None)) is int:
+            result['returncode'] = error.returncode
+        if isinstance(getattr(error, 'timeout', None), (int, float)):
+            result['timeout_seconds'] = error.timeout
+        self.identity.private_write(self.state / (stem + '.json'), result)
+        return result
+
     @contextmanager
     def exclude_publication(self):
         from . import activation_exclusion as exclusion
@@ -138,6 +177,9 @@ class Backend:
         self.publisher = __import__('ops.install_operations_publisher', fromlist=['scope'])
         self.publisher.scope()
         self.publisher_before = self.publisher.published_row()
+        # Refuse an invalid baseline before pausing ANY operational participant.
+        require(self.lineage.unit_state(self.lineage.PUBLISHER_TIMER, ('ActiveState', 'UnitFileState')) ==
+                {'ActiveState': 'active', 'UnitFileState': 'enabled'}, 'Existing publisher timer must be active and enabled.')
         from . import v1_install_participants as participants
         prior = []
         for timer in participants.TIMERS:
@@ -148,19 +190,40 @@ class Backend:
         timer_record = {'target': self.declaration['target'], 'pid': os.getpid(),
                         'start': participants.start_identity(os.getpid()), 'prior_active': prior}
         participants.validate(timer_record)
-        self.identity.private_write(self.state / 'timer-pause.json', timer_record)
-        timer_watchdog = participants.spawn(self.state, timer_record, source=self.source)
-        participants.action('stop', participants.TIMERS, directory=self.state)
         # The publisher timer uses the existing durable pause/debt/watchdog.
         # Other existing actors already own fixed flock paths. Acquire those
         # locks too: schema/source changes cannot overlap a backup/offsite/check.
-        descriptors = []
-        watchdog = exclusion.spawn_bootstrap_watchdog(owner, self.source / 'rebuild', PRIVATE)
-        require(self.lineage.unit_state(self.lineage.PUBLISHER_TIMER, ('ActiveState', 'UnitFileState')) ==
-                {'ActiveState': 'active', 'UnitFileState': 'enabled'}, 'Existing publisher timer must be active and enabled.')
-        exclusion.note_timer_paused(owner, prior_active=True)
-        self.lineage.systemctl('stop', self.lineage.PUBLISHER_TIMER)
+        descriptors, restoration_failures = [], []
+        timer_watchdog = watchdog = None
+        timer_record_attempted = publisher_pause_attempted = False
+        primary = primary_traceback = None
+
+        def attempt_restore(operation, action):
+            try:
+                action()
+                return True
+            except BaseException as error:
+                # A secondary recovery fault must not replace the original
+                # migration/pause error or prevent the other timers recovering.
+                proof = {'operation': operation, 'kind': type(error).__name__}
+                try:
+                    proof['evidence'] = self.record_failure(error, 'participant_restore')
+                except BaseException:
+                    proof['evidence_retained'] = False
+                restoration_failures.append(proof)
+                return False
+
         try:
+            # This try starts BEFORE marker/spawn/pause calls. Each may fail
+            # after a partial effect while the owning process remains alive.
+            timer_record_attempted = True
+            self.identity.private_write(self.state / 'timer-pause.json', timer_record)
+            timer_watchdog = participants.spawn(self.state, timer_record, source=self.source)
+            participants.action('stop', participants.TIMERS, directory=self.state)
+            publisher_pause_attempted = True
+            exclusion.note_timer_paused(owner, prior_active=True)
+            watchdog = exclusion.spawn_bootstrap_watchdog(owner, self.source / 'rebuild', PRIVATE)
+            self.lineage.systemctl('stop', self.lineage.PUBLISHER_TIMER)
             exclusion.drain_publisher()
             with exclusion.hold(owner):
                 for relative in PARTICIPANT_LOCKS:
@@ -178,22 +241,56 @@ class Backend:
                         except BlockingIOError:
                             require(time.monotonic() < deadline, 'Private operational participant did not drain.')
                             time.sleep(0.1)
-                try:
-                    yield
-                except BaseException:
-                    self.stop(); self.assert_stopped(); raise
+                yield
+        except BaseException as error:
+            primary, primary_traceback = error, error.__traceback__
+            # Retain now, before any restoration fault could replace its cause.
+            try:
+                self.record_failure(error, 'publication_exclusion')
+            except BaseException:
+                pass
+            attempt_restore('stop_private_surfaces', lambda: (self.stop(), self.assert_stopped()))
         finally:
             for fd in reversed(descriptors):
-                os.close(fd)
-            self.lineage.systemctl('start', self.lineage.PUBLISHER_TIMER)
-            exclusion.clear_timer_pause(owner)
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                watchdog.wait(timeout=20)
-            if prior:
-                participants.action('start', tuple(prior), directory=self.state)
-            self.identity.private_write(self.state / 'timers-restored.json', {'restored': prior})
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                timer_watchdog.wait(timeout=20)
+                attempt_restore('close_participant_lock', lambda fd=fd: os.close(fd))
+            publisher_restored = True
+            if publisher_pause_attempted:
+                publisher_restored = attempt_restore('start_publisher_timer', lambda:
+                    self.lineage.systemctl('start', self.lineage.PUBLISHER_TIMER))
+                def verify_publisher():
+                    require(self.lineage.unit_state(self.lineage.PUBLISHER_TIMER, ('ActiveState', 'UnitFileState')) ==
+                            {'ActiveState': 'active', 'UnitFileState': 'enabled'}, 'Publisher timer restoration is unverified.')
+                publisher_restored = attempt_restore('verify_publisher_timer', verify_publisher) and publisher_restored
+                if publisher_restored:
+                    attempt_restore('clear_publisher_pause', lambda: exclusion.clear_timer_pause(owner))
+            if timer_record_attempted:
+                # One failed start cannot prevent the other prior active timers
+                # recovering. Previously inactive timers must remain inactive.
+                for timer in participants.TIMERS:
+                    operation = 'start' if timer in prior else 'stop'
+                    attempt_restore('restore_' + timer, lambda timer=timer, operation=operation:
+                        participants.action(operation, (timer,), directory=self.state))
+                def verify_timers():
+                    observed = {timer: self.driver.b.output(['systemctl', 'show', timer,
+                        '--property=ActiveState', '--value']) for timer in participants.TIMERS}
+                    require(observed == {timer: 'active' if timer in prior else 'inactive'
+                        for timer in participants.TIMERS}, 'Exact prior operational timer state is unverified.')
+                timers_restored = attempt_restore('verify_operational_timers', verify_timers)
+                if timers_restored and publisher_restored and not restoration_failures:
+                    attempt_restore('retain_restored_timers', lambda:
+                        self.identity.private_write(self.state / 'timers-restored.json',
+                            {'restored': prior, 'exact_prior_states_verified': True}))
+            if restoration_failures:
+                attempt_restore('retain_restoration_failures', lambda:
+                    self.identity.private_write(self.state / 'timer-restoration-failures.json',
+                        {'complete': False, 'failures': restoration_failures}))
+            for process in (watchdog, timer_watchdog):
+                if process is not None:
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        attempt_restore('wait_bounded_recovery_process', lambda process=process: process.wait(timeout=20))
+        if primary is not None:
+            raise primary.with_traceback(primary_traceback)
+        require(not restoration_failures, 'Participant restoration failed; inspect protected original evidence.')
 
     def stop(self):
         self.word.systemd('stop', self.helper)
@@ -256,7 +353,7 @@ class Backend:
     def advance_source(self, target):
         self.live_source(target)
         subprocess.run(['git', 'merge', '--ff-only', target], cwd=ROOT, check=True, timeout=90,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         require(self.driver.b.git('rev-parse', 'HEAD') == target
                 and not self.driver.b.git('status', '--porcelain', '--untracked-files=no'), 'Source advance was not exact.')
 
@@ -266,13 +363,13 @@ class Backend:
     def migrate(self, leaf):
         require(leaf == p.LEAF, 'Only the declared forward leaf may be applied.')
         subprocess.run(self.driver.b.management('migrate', 'core', leaf, '--noinput'), cwd=APP,
-                       check=True, timeout=900, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                       check=True, timeout=900, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # Normal post_migrate publication is part of the captured synthetic
         # contract, including only exact new permission/content-type identities.
         subprocess.run(self.driver.b.management('migrate', '--noinput'), cwd=APP,
-                       check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                       check=True, timeout=120, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         subprocess.run(self.driver.b.management('check'), cwd=APP, check=True, timeout=120,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def retain_transition(self, before, after):
         self.identity.private_write(self.state / 'stopped-after.json', after)

@@ -1,9 +1,14 @@
 """Provider/DB/host-free fault controls for the new preserving installation door."""
 import copy
+from contextlib import ExitStack, nullcontext
 import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +16,7 @@ from ops import v1_private_install_adapter as a
 from ops import v1_private_install_preparation as p
 from ops import v1_install_catalog as catalog
 from ops import v1_install_participants as participants
+from ops import v1_private_install_runtime as runtime
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -109,13 +115,18 @@ class PrivateV1InstallAdapterTests(unittest.TestCase):
         case = self
         class Backend:
             schema_owner = 'quillmd_owner'
-            def __init__(self): self.events, self.applied = [], False
+            def __init__(self): self.events, self.applied, self.errors, self.checkpoints = [], False, [], []
             def event(self, name):
                 self.events.append(name)
                 if name == fail: raise RuntimeError('retained simulated original failure')
             def validate_live(self, *args): self.event('live source/PR/CI/state validation')
             def create_unused_evidence(self, *args): self.event('unused evidence')
-            def checkpoint(self, result): self.event('checkpoint:' + result.get('stage', 'unknown'))
+            def checkpoint(self, result):
+                self.checkpoints.append(copy.deepcopy(result))
+                self.event('checkpoint:' + result.get('stage', 'unknown'))
+            def record_failure(self, error, scope):
+                self.errors.append((scope, error))
+                return {'kind': type(error).__name__, 'sealed_original_sha256': p.sha(str(error).encode())}
             def exclude_publication(self):
                 backend = self
                 class Exclusion:
@@ -152,6 +163,193 @@ class PrivateV1InstallAdapterTests(unittest.TestCase):
         self.assertNotIn('reviewed static/environment delta', backend.events)
         self.assertNotIn('bounded structural doctor/admin/worker verification', backend.events)
         self.assertEqual(backend.events.count('ff exact source'), 1)
+        self.assertEqual(str(backend.errors[0][1]), 'retained simulated original failure')
+        self.assertEqual(backend.checkpoints[-1]['failure_evidence']['sealed_original_sha256'],
+                         p.sha(b'retained simulated original failure'))
+        self.assertFalse(backend.checkpoints[-1]['complete'])
+
+    def runtime_backend(self, directory):
+        backend = object.__new__(runtime.Backend)
+        backend.state = Path(directory)
+        backend.declaration = {'target': 'a' * 40}
+        backend.source = ROOT
+        backend.failure = 0
+        from ops.backup_restore import write_private
+        backend.identity = SimpleNamespace(private_write=lambda path, value:
+            write_private(path, json.dumps(value, sort_keys=True).encode()))
+        return backend
+
+    def test_protected_original_failure_retains_cause_exit_stdout_stderr_and_seals_summary(self):
+        credential = 'synthetic-test-secret-never-print'
+        with tempfile.TemporaryDirectory() as directory:
+            backend = self.runtime_backend(directory)
+            try:
+                raise subprocess.CalledProcessError(37, ['fixed-migrate', credential],
+                    output=b'first retained migration step\n', stderr=(credential + '\noriginal migration refusal\n').encode())
+            except subprocess.CalledProcessError as error:
+                proof = backend.record_failure(error, 'activation')
+            self.assertEqual(proof['returncode'], 37)
+            self.assertNotIn(credential, json.dumps(proof))
+            for name, expected in (('stdout', b'first retained migration step\n'),
+                                   ('stderr', (credential + '\noriginal migration refusal\n').encode())):
+                record = proof['material'][name]
+                self.assertEqual((Path(directory) / record['relative']).read_bytes(), expected)
+                self.assertEqual(record['sha256'], p.sha(expected)); self.assertFalse(record['truncated'])
+                self.assertEqual((Path(directory) / record['relative']).stat().st_mode & 0o777, 0o600)
+            trace = (Path(directory) / proof['material']['traceback']['relative']).read_text()
+            self.assertIn('CalledProcessError', trace); self.assertIn('37', trace)
+            self.assertIn(credential, trace)
+            raw = b'large retained stderr' * 30
+            with patch.object(runtime, 'FAILURE_MATERIAL_LIMIT', 17):
+                oversized = backend.record_failure(subprocess.CalledProcessError(9, ['fixed'], stderr=raw), 'failure_stop')
+            record = oversized['material']['stderr']
+            self.assertTrue(record['truncated']); self.assertEqual(record['bytes'], len(raw))
+            self.assertEqual(record['sha256'], p.sha(raw)); self.assertEqual(record['retained_bytes'], 17)
+
+    def test_actual_migration_failure_output_is_captured_instead_of_discarded(self):
+        backend = object.__new__(runtime.Backend)
+        backend.driver = SimpleNamespace(b=SimpleNamespace(management=lambda *args: ['fixed-managed', *args]))
+        with patch.object(runtime.subprocess, 'run', side_effect=subprocess.CalledProcessError(
+                11, ['fixed-managed'], output=b'original stdout', stderr=b'original stderr')) as runner:
+            with self.assertRaises(subprocess.CalledProcessError) as caught:
+                backend.migrate(p.LEAF)
+        self.assertEqual(caught.exception.returncode, 11)
+        self.assertEqual(caught.exception.stdout, b'original stdout')
+        self.assertEqual(caught.exception.stderr, b'original stderr')
+        self.assertEqual(runner.call_args.kwargs['stdout'], subprocess.PIPE)
+        self.assertEqual(runner.call_args.kwargs['stderr'], subprocess.PIPE)
+
+    def test_activation_generic_error_keeps_original_child_exit_and_secondary_stop_failure_separately(self):
+        with tempfile.TemporaryDirectory() as directory:
+            backend = self.backend()
+            recorder = self.runtime_backend(directory)
+            backend.record_failure = recorder.record_failure
+            def migrate(leaf):
+                raise subprocess.CalledProcessError(37, ['fixed-managed-migrate'],
+                    output=b'original migration stdout\n', stderr=b'retained simulated original failure\n')
+            backend.migrate = migrate
+            original_stop = backend.stop
+            stop_count = 0
+            def stop():
+                nonlocal stop_count
+                stop_count += 1
+                if stop_count == 2:
+                    raise subprocess.CalledProcessError(73, ['fixed-stop'], stderr=b'separate original stop failure\n')
+                original_stop()
+            backend.stop = stop
+            with self.assertRaisesRegex(RuntimeError, 'inspect retained original evidence'):
+                a.activate(backend, self.declaration, self.schema_bytes, self.sources, self.evidence, self.catalog_bytes)
+            final = backend.checkpoints[-1]
+            self.assertFalse(final['complete']); self.assertFalse(final['failure_services_stopped'])
+            self.assertEqual(final['failure_evidence']['returncode'], 37)
+            self.assertEqual(final['stop_failure_evidence']['returncode'], 73)
+            first = final['failure_evidence']['material']['stderr']['relative']
+            second = final['stop_failure_evidence']['material']['stderr']['relative']
+            self.assertNotEqual(first, second)
+            self.assertEqual((Path(directory) / first).read_bytes(), b'retained simulated original failure\n')
+            self.assertEqual((Path(directory) / second).read_bytes(), b'separate original stop failure\n')
+
+    def exclusion_case(self, *, fault=None, publisher_active=True, restoration_fault=False, body_error=False):
+        """Exercise the actual runtime with inert transport/spawn/lock methods."""
+        from ops import activation_exclusion as exclusion
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        backend = self.runtime_backend(directory.name)
+        prior = {participants.TIMERS[0]: 'active', participants.TIMERS[1]: 'inactive', participants.TIMERS[2]: 'active'}
+        states, actions, saved = dict(prior), [], []
+        publisher = {'ActiveState': 'active' if publisher_active else 'inactive', 'UnitFileState': 'enabled'}
+        backend.driver = SimpleNamespace(b=SimpleNamespace(output=lambda command: states[command[2]]))
+        def unit_state(*args): return dict(publisher)
+        def systemctl(operation, timer):
+            actions.append((operation, timer))
+            publisher['ActiveState'] = 'active' if operation == 'start' else 'inactive'
+            if fault == 'publisher_stop' and operation == 'stop':
+                raise RuntimeError('retained original publisher partial stop')
+        backend.lineage = SimpleNamespace(unit_state=unit_state, systemctl=systemctl,
+            PUBLISHER_TIMER='quillmd-fresh-operations-publisher.timer')
+        backend.stop = lambda: actions.append(('stop', 'fixed-private-surfaces'))
+        backend.assert_stopped = lambda: None
+        original_write = backend.identity.private_write
+        def writer(path, value):
+            saved.append((path.name, copy.deepcopy(value)))
+            original_write(path, value)
+            if fault == 'pause_write' and path.name == 'timer-pause.json':
+                raise RuntimeError('retained original partial marker write')
+        backend.identity.private_write = writer
+        def action(operation, units, **kwargs):
+            actions.append((operation, tuple(units)))
+            for timer in units:
+                if restoration_fault and operation == 'start' and timer == participants.TIMERS[0]:
+                    raise RuntimeError('retained original first timer restoration refusal')
+                states[timer] = 'active' if operation == 'start' else 'inactive'
+                if fault == 'timers_stop' and len(units) == 3:
+                    raise RuntimeError('retained original partial timer stop')
+        watchdog = SimpleNamespace(wait=lambda **kwargs: None)
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(sys.modules, {'ops.install_operations_publisher': SimpleNamespace(
+                scope=lambda: None, published_row=lambda: {'revision': 1})}))
+            stack.enter_context(patch.object(runtime, 'PARTICIPANT_LOCKS', ()))
+            stack.enter_context(patch.object(exclusion, 'bind_runtime'))
+            stack.enter_context(patch.object(exclusion, 'drain_publisher'))
+            stack.enter_context(patch.object(exclusion, 'hold', return_value=nullcontext()))
+            stack.enter_context(patch.object(exclusion, 'note_timer_paused', side_effect=(
+                RuntimeError('retained original publisher marker failure') if fault == 'publisher_marker' else None)))
+            stack.enter_context(patch.object(exclusion, 'clear_timer_pause'))
+            stack.enter_context(patch.object(exclusion, 'spawn_bootstrap_watchdog', side_effect=(
+                RuntimeError('retained original publisher spawn failure') if fault == 'publisher_spawn' else None),
+                return_value=watchdog))
+            stack.enter_context(patch.object(participants, 'start_identity', return_value='123'))
+            stack.enter_context(patch.object(participants, 'spawn', side_effect=(
+                RuntimeError('retained original participant spawn failure') if fault == 'timer_spawn' else None),
+                return_value=watchdog))
+            stack.enter_context(patch.object(participants, 'action', side_effect=action))
+            error = None
+            try:
+                with backend.exclude_publication():
+                    actions.append(('entered', 'body'))
+                    if body_error:
+                        raise RuntimeError('retained original body migration refusal')
+            except BaseException as caught:
+                error = caught
+        return {'error': error, 'prior': prior, 'states': states, 'actions': actions,
+                'publisher': publisher, 'saved': saved, 'directory': Path(directory.name)}
+
+    def test_inactive_publisher_refuses_before_any_pause_and_leaves_exact_prior_timers(self):
+        result = self.exclusion_case(publisher_active=False)
+        self.assertIsInstance(result['error'], ValueError)
+        self.assertEqual(result['actions'], []); self.assertEqual(result['saved'], [])
+        self.assertEqual(result['states'], result['prior'])
+
+    def test_every_partial_pause_failure_restores_prior_states_synchronously_while_owner_alive(self):
+        for fault in ('pause_write', 'timer_spawn', 'timers_stop', 'publisher_marker', 'publisher_spawn', 'publisher_stop'):
+            with self.subTest(fault=fault):
+                result = self.exclusion_case(fault=fault)
+                self.assertIsInstance(result['error'], RuntimeError)
+                self.assertIn('retained original', str(result['error']))
+                self.assertEqual(result['states'], result['prior'])
+                self.assertEqual(result['publisher']['ActiveState'], 'active')
+                self.assertIn('timers-restored.json', [name for name, _ in result['saved']])
+                self.assertNotIn(('entered', 'body'), result['actions'])
+
+    def test_restore_failure_attempts_other_timers_preserves_first_cause_and_never_claims_complete(self):
+        result = self.exclusion_case(restoration_fault=True, body_error=True)
+        self.assertEqual(str(result['error']), 'retained original body migration refusal')
+        self.assertIn(('start', (participants.TIMERS[2],)), result['actions'])
+        self.assertEqual(result['states'][participants.TIMERS[2]], 'active')
+        self.assertEqual(result['states'][participants.TIMERS[1]], 'inactive')
+        self.assertNotIn('timers-restored.json', [name for name, _ in result['saved']])
+        self.assertIn('timer-restoration-failures.json', [name for name, _ in result['saved']])
+        traces = [path.read_text() for path in result['directory'].glob('*traceback.bin')]
+        self.assertTrue(any('retained original body migration refusal' in raw for raw in traces))
+        self.assertTrue(any('retained original first timer restoration refusal' in raw for raw in traces))
+
+    def test_success_restores_prior_states_and_failure_of_restoration_cannot_be_green(self):
+        result = self.exclusion_case()
+        self.assertIsNone(result['error']); self.assertEqual(result['states'], result['prior'])
+        self.assertIn('timers-restored.json', [name for name, _ in result['saved']])
+        result = self.exclusion_case(restoration_fault=True)
+        self.assertIsInstance(result['error'], ValueError)
+        self.assertNotIn('timers-restored.json', [name for name, _ in result['saved']])
 
     def test_participant_recovery_is_fixed_scoped_and_retains_managed_helper_lifecycle(self):
         record = {'target': 'a'*40, 'pid': 123, 'start': '456', 'prior_active': list(participants.TIMERS)}
@@ -181,6 +379,21 @@ class PrivateV1InstallAdapterTests(unittest.TestCase):
         with patch.object(module, 'git', side_effect=['a'*40, '']), patch.object(module, 'source_file', return_value=prepared):
             with self.assertRaisesRegex(ValueError, 'prepared, not frozen'):
                 module.validate_source('a'*40, 'docs/foundation/mutations/prepared.json')
+
+    def test_catalog_receipt_is_hash_named_private_evidence_and_cannot_read_an_arbitrary_secret_path(self):
+        spec = importlib.util.spec_from_file_location('v1_install_catalog_receipt', ROOT / 'scripts/activate-v1-private-install.py')
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        from ops import backup_restore
+        identity = {'sha256': p.sha(self.catalog_bytes)}
+        with patch.object(backup_restore, 'read_private', return_value=self.catalog_bytes) as reader:
+            self.assertEqual(module.catalog_file(identity), self.catalog_bytes)
+            self.assertEqual(reader.call_args.args[0], module.CATALOG_EVIDENCE / (identity['sha256'] + '.json'))
+            for record in (None, {}, {'sha256': 'a' * 40},
+                           {**identity, 'path': '/opt/meddoc-pro/rebuild/.env'}):
+                with self.subTest(record=record), self.assertRaises(ValueError): module.catalog_file(record)
+            self.assertEqual(reader.call_count, 1)
+            with patch.object(backup_restore, 'read_private', return_value=b'changed retained evidence'):
+                with self.assertRaises(ValueError): module.catalog_file(identity)
 
     def test_normal_merged_declaration_uses_ancestor_exact_blob_without_an_impossible_self_sha(self):
         spec = importlib.util.spec_from_file_location('v1_install_normal_declaration', ROOT / 'scripts/activate-v1-private-install.py')

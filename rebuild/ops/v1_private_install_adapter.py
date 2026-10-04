@@ -164,9 +164,22 @@ def activate(backend, declaration, schema_bytes, source_bytes, evidence, catalog
         return outcome
     except BaseException as error:
         outcome.update(failure_kind=type(error).__name__, complete=False)
+        # The user-facing error is deliberately generic. Its original cause,
+        # traceback and child output must already exist in protected evidence;
+        # a phase/type-only checkpoint cannot explain a failed migration.
+        try:
+            outcome['failure_evidence'] = backend.record_failure(error, 'activation')
+            outcome['failure_evidence_retained'] = True
+        except BaseException as retention_error:
+            outcome.update(failure_evidence_retained=False,
+                           retention_failure_kind=type(retention_error).__name__)
         try:
             backend.stop(); backend.assert_stopped(); outcome['failure_services_stopped'] = True
         except BaseException as stop_error:
             outcome.update(failure_services_stopped=False, stop_failure_kind=type(stop_error).__name__)
+            try:
+                outcome['stop_failure_evidence'] = backend.record_failure(stop_error, 'failure_stop')
+            except BaseException:
+                outcome['stop_failure_evidence_retained'] = False
         backend.checkpoint(outcome)
         raise RuntimeError('Private activation stopped; inspect retained original evidence before a forward repair.') from None

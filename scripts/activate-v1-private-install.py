@@ -19,6 +19,7 @@ sys.dont_write_bytecode = True
 SOURCE = Path(__file__).resolve().parents[1]
 ROOT = Path('/opt/meddoc-pro')
 SELF = 'scripts/activate-v1-private-install.py'
+CATALOG_EVIDENCE = ROOT / 'rebuild/.runtime/v1-private-install-catalog'
 sys.path.insert(0, str(SOURCE / 'rebuild'))
 from ops import v1_private_install_preparation as p
 from ops import v1_private_install_adapter as adapter
@@ -42,6 +43,18 @@ def source_file(relative, target):
     raw = actual.read_bytes()
     p.require(subprocess.check_output(['git', 'show', target + ':' + relative], cwd=SOURCE, timeout=90) == raw,
               'Tracked candidate source bytes changed.')
+    return raw
+
+
+def catalog_file(record):
+    # Raw database catalog evidence is retained outside Git. The declaration
+    # names only its SHA, not an arbitrary private path or a production secret.
+    p.require(isinstance(record, dict) and set(record) == {'sha256'}
+              and isinstance(record['sha256'], str) and re.fullmatch('[a-f0-9]{64}', record['sha256']),
+              'Frozen synthetic PostgreSQL catalog evidence identity is absent.')
+    from ops.backup_restore import read_private
+    raw = read_private(CATALOG_EVIDENCE / (record['sha256'] + '.json'), 2 * 1024 * 1024)
+    p.require(p.sha(raw) == record['sha256'], 'Frozen PostgreSQL receipt changed.')
     return raw
 
 
@@ -71,8 +84,7 @@ def validate_source(target, relative):
         'schema_sha256': p.sha(schema), 'source_sha256': {name: p.sha(value) for name, value in sources.items()},
         'data_mode': 'synthetic', 'payment_mode': 'test', 'public_maintenance': True, 'cpt_enabled': False}
     p.require(frozen.get('catalog_contract'), 'Frozen synthetic PostgreSQL catalog contract is absent.')
-    catalog = source_file(frozen['catalog_contract']['path'], target)
-    p.require(p.sha(catalog) == frozen['catalog_contract']['sha256'], 'Frozen PostgreSQL receipt changed.')
+    catalog = catalog_file(frozen['catalog_contract'])
     adapter.validate_catalog_contract(catalog, sources, schema)
     # Prospective technical evidence is created after this commit's CI/provider/
     # Word gates. It cannot be committed into its own target SHA. This fixed

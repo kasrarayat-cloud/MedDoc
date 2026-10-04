@@ -1,0 +1,80 @@
+{
+  "actual_source_commit": "6529553296997429902443691fbeb902a6ad4c4f",
+  "after_tables": 60,
+  "before_tables": 36,
+  "database_catalog_count": 0,
+  "database_destroyed": true,
+  "elapsed_seconds": 7.911691548000817,
+  "exit_code": 0,
+  "format": "quillmd-v1-postgresql-contract-capture-receipt-v1",
+  "full_catalog_items": {
+    "after": {
+      "functions": 28,
+      "triggers": 111
+    },
+    "before": {
+      "functions": 5,
+      "triggers": 9
+    }
+  },
+  "installed_mutation_performed": false,
+  "owned_database": "quillmd_qa_sol_installcontract1004",
+  "provider_calls": 0,
+  "qualification_limit": "Actual empty synthetic schema/metadata contract capture only. Prior populated historical-row/download rehearsal remains separate; no installed transition, backup drill, offsite renewal or product acceptance is claimed.",
+  "raw_contract": {
+    "bytes": 575490,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/schema-contract-capture-20261004/captured.json",
+    "retained_outside_repository": true,
+    "sha256": "d2163c5fb2b35d5caf6355f7500772a50c1d818e742339f662ad383a2f1bf0b6"
+  },
+  "raw_result": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/schema-contract-capture-20261004/result.json",
+    "sha256": "e8a70a0c6ba4ca5c447edc6e9c0ce3acb44894518613c847cefd13b120b174f3"
+  },
+  "remaining_connections": 0,
+  "schema_sha256": "a8ab83af5b6f79634fb893f3e6fe14fdc64cb95fb1bf0b64c359419847f59f69",
+  "source_sha256": {
+    "rebuild/core/migrations/0001_initial.py": "8b18a901ddfcacf2718024d91750cf50be03e132569927f9d93445a4adf0bc26",
+    "rebuild/core/migrations/0002_job_payer.py": "6937439b5cce26ce8041c1fb5f1307a4fbd82f1666d87b50328029d01763c850",
+    "rebuild/core/migrations/0003_immutable_records.py": "454a3ebb31305a95438a12945ef47c2952025a8833f4b6351a4ab3426e5c2ad0",
+    "rebuild/core/migrations/0004_job_config.py": "8009f1b7d4d1fd2f8fe800d113c7027c178c716bd47314bfa19f1b676432be21",
+    "rebuild/core/migrations/0005_providerreceipt.py": "3554c7198e10f030dc9e36761b0d88eb0ffaf3ae8a374eb1fa0b7b33507f000b",
+    "rebuild/core/migrations/0006_receipt_immutable.py": "664d620f5682770f42364cb69fd4e70deaa8cf2b9453fe6f13549718277bd184",
+    "rebuild/core/migrations/0007_job_result_path_job_result_sha256.py": "89a8dec663f20466c6cf8efbf9e55a14a43dace7871704de38c57f062ccb22ec",
+    "rebuild/core/migrations/0008_payment_event_evidence.py": "cb6548a14f7699feba6a691704a81bb239ba096cbb51b66a493d80185e205ef6",
+    "rebuild/core/migrations/0009_provider_identifiers.py": "964b2ff0ffffa12526035fc69705d79305020eaedb472ea7399c0569af44b663",
+    "rebuild/core/migrations/0010_canonical_provider_settlement.py": "17ac79c2aab38e18c45a06670721a2d980393ce226d09d9b46ac9665cca82403",
+    "rebuild/core/migrations/0011_template_clinical_review.py": "708ecd99271d4e8b2919fdb18853cb9f5ec0a32e774675a7a54a1cde507e2927",
+    "rebuild/core/migrations/0012_billing_policy.py": "2eb5c932625717cef3e687c5f8ecac90adc55537f8919a28aea2df44abb192e4",
+    "rebuild/core/migrations/0013_recording_charge_limit.py": "424b7b1255b98f4b86fac89d6b1ea604027a534b58d13aebd2084beadb26789e",
+    "rebuild/core/migrations/0014_encounter_service_date.py": "2119a159682ea0da03523f80e6dd38f7ac0aab16733101ea6d2a60eb3deda01c",
+    "rebuild/core/migrations/0015_reconciliation_evidence_guard.py": "c749bb07a9325059b34a995b77d121ee065f8e07227f029520fa0dcdfec59e62",
+    "rebuild/core/migrations/0016_user_session_version.py": "b69b2382c4136e0ed553a939f0c51267cb61154c2cc53a842afb96e04d8ef67e",
+    "rebuild/core/migrations/0017_reconciliation_evidence_kind.py": "82453d071e34d737d84a3bf6a1b9caae56197214fec7f3c748125efec5ff7bcb",
+    "rebuild/core/migrations/0018_servicehealth.py": "f1382977ec80fda51f39bdc6ae329efcce0c7398ee0d864ceefbd74507267f9c",
+    "rebuild/core/migrations/0019_clinicinvitation.py": "aa92ae3550b051f34e9a7ecfbd26931ed9e3570bcb52138348cd7241129ffac8",
+    "rebuild/core/migrations/0020_payment_livemode.py": "56f29d3fe71f6652973b305272fdbac850fd5398130dba4ffbf7e87ad1a777d4",
+    "rebuild/core/migrations/0021_word_v3_mapping_review.py": "408c2210c3b244356b6d387c826287a0a8b63ce49730299e008142f9ba725be2",
+    "rebuild/core/migrations/0022_mapping_job_scope.py": "676524cdd12693c58ba56b06644c0b197c5ae6bd69ec6909a87b66185cc9e549",
+    "rebuild/core/migrations/0023_retention_preservation.py": "958487f6c3e4adeb1059a6aa5b5324962fe1acc62c680be7572b254c9a928240",
+    "rebuild/core/migrations/0024_preserved_file.py": "21babc41e8c119cf9bbe6ed57f0cf118c26639cd56e3b520616d9c44f7994f7c",
+    "rebuild/core/migrations/0025_preservation_guards.py": "33a8d1e3b6d20ff73cc0c1fecb91344ec67a738425c9607352d8549db95da268",
+    "rebuild/core/migrations/0026_preservation_scope_identity.py": "8c6c7a516e7e9da34aa10d495659313fac4947e7f0d499a9b2901742b94a3a44",
+    "rebuild/core/migrations/0027_generation_batches.py": "911a9c4f846a5441cd672d99571a6fd1389005b35aec4161a9a3bbe6b84d9d9c",
+    "rebuild/core/migrations/0028_disposition_preparation.py": "a29506a90269672983ee79da6d19adb802e2c5bc944486d3fff1b6ce50a6d379",
+    "rebuild/core/migrations/0029_merge_batch_disposition.py": "f8910d3e3ab81cd81b0d43db61dfcebd5bb8b09aa473b41281107f3f64879a82",
+    "rebuild/core/migrations/0030_empty_draft_disposition.py": "ac0610f2112577addc1ddd8dca15c69a65a22df5489dceb349e70a76740fa5c7",
+    "rebuild/core/migrations/0031_previous_release_mapping_writes.py": "585af52ce4faf98e41f5c364dd9e841d016e97f538c9ebdef5d35a1884a57766",
+    "rebuild/core/migrations/0032_restore_hold_replay_admission.py": "ab50b3c3b5d57bea681c1f304f8771a0e19522373d852787703d19d26f1fa428",
+    "rebuild/core/migrations/0033_redaction_tombstone.py": "a60c7bd76fd61087b0dd9c9643cca3fb4d89e0e0f4c6cc8a24bf1feb733e4213",
+    "rebuild/core/migrations/0034_coding_ledger.py": "e0e936770284f2fbbf25c0382435b07ce5b9ea2ed7e80eb256c76d3225469aeb",
+    "rebuild/core/migrations/0035_import_manifest.py": "627bb0430cfa942a92e38f97609b3dd2d80212683f1e0a6ff48428f97cb697bf",
+    "rebuild/core/migrations/0036_transcript_review.py": "ea0a01cb6bc512759d3961638a5a6a1348d7c15d456d49a85ba7ebaddafbce97",
+    "rebuild/core/migrations/0037_transcript_redaction_boundary.py": "a238cb5412eea595995a31c4f2bc95ad62e72219ce53fcb0447678072ff1271f",
+    "rebuild/core/models.py": "7d28a39627e51cba320f5d11c502aac827a19dca1fd41f4218eb4ba8dc7baaec",
+    "rebuild/ops/database_roles.py": "685f589ef0f1e085824369057e3bfd207591eaf743f3a4688b0a16f6d64ee8fe",
+    "rebuild/ops/integrity_contract.py": "493821a60d963c531f794bcdbd2d2dfa70b01eab7afd553f39ef23e99b7090c3",
+    "rebuild/ops/v1_install_catalog.py": "6974c3a200ab496439026a98e314ced7184aa529ebcf6cbbf8b814889184f92a"
+  },
+  "source_unchanged": true
+}
