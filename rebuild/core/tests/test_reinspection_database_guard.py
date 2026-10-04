@@ -61,6 +61,12 @@ class ReinspectionFixture:
         self.assertEqual(len(self.inspection['fields']), 1)
         self.original_template, self.original_version = self.version('preserved original')
         self.release_encounter = MigrationLoader(connection).project_state(PREVIOUS).apps.get_model('core', 'Encounter')
+        self.archive('actual-inspection.json', inspection=self.inspection,
+                     original_sha256=hashlib.sha256(self.original).hexdigest())
+        if root := os.environ.get('QUILLMD_WORD_ARTIFACTS'):
+            original = Path(root) / 'reinspection-database-guard' / self._testMethodName / 'original.docx'
+            with original.open('xb') as stream: stream.write(self.original)
+            original.chmod(0o600)
 
     def version(self, name, *, marker=False, contract=''):
         original_path = Path(self.directory.name) / (name.replace(' ', '-') + '.docx')
@@ -233,4 +239,3 @@ class ReinspectionMigrationReversal(ReinspectionFixture, TransactionTestCase):
         MigrationExecutor(connection).migrate([CURRENT])
         self.assertIn("import_manifest ? 'reinspection'", encounter_body())
         self.assertEqual(Encounter.objects.filter(pk=draft.pk).values().get(), before)
-
