@@ -1,0 +1,108 @@
+{
+  "scope": "Limited offline Word input/mapping/writer/controller seam compatibility across D01 layout and template review changes",
+  "provider_actual_source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "offline_comparison_source": "c8f3f4705565d7ab4da9e98d594c4b143583472b",
+  "case_ids": [
+    "002",
+    "003",
+    "004",
+    "005",
+    "006",
+    "007",
+    "008",
+    "009",
+    "010",
+    "011",
+    "012",
+    "013",
+    "014",
+    "015",
+    "017",
+    "019"
+  ],
+  "cases": 16,
+  "case_classification": "002\u2013015 fourteen typed notes,017reviewedSOAPvoice,019reviewedcustom-formvoice;rawtranscription016/018excludedfromexportproof",
+  "actual_provider_runs_on_new_source": 0,
+  "fresh_fields_equal_saved_source_mapping": 16,
+  "pure_export_bytes_equal_actual_cached_paid_exports": 16,
+  "controller_export_bytes_equal_actual_cached_paid_exports": 16,
+  "service_v3_layout_repair_calls_old_and_new": 0,
+  "service_non_v3_positive_control_layout_calls_each": 1,
+  "controller_evidence": "Workerhandoff mocked; exactpurewriteroutputs inserted into original_source+request checked workspace. This proves service branch boundary only, not actualsandbox/application/provider replay.",
+  "engine_fingerprints": {
+    "paid": {
+      "v3": "ce385128ac1133cf9879388ff01100333fc77ab7bd4a33b346aef4f44e007a40",
+      "legacy": "0beb70fe42fa6398271c0390979885718265128f45fc307003801c7064dc4736"
+    },
+    "comparison": {
+      "v3": "7a85f7e4501acb402c24b9672b2a4a8a542779ad7cf6cbcc17e72f1aa80af299",
+      "legacy": "3fddf9bd3c7f6d6283a3cd0203cd9ffea0cfe8f0e02ee0c11fefdc5525967e99"
+    },
+    "full_fingerprint_equal": false,
+    "required_behavior": "Historical versions retain exact old identity; newgeneration/export requires fresh original reinspection and explicit newmapping review. Stored historicaldownload doesnotexecute currentprocessor."
+  },
+  "modules": {
+    "rebuild/documents/service.py": {
+      "paid": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5",
+      "fresh": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5"
+    },
+    "rebuild/documents/word_v3.py": {
+      "paid": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27",
+      "fresh": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27"
+    },
+    "rebuild/documents/layout.py": {
+      "paid": "832fce0d7b1e7b863dacb01fabb1b8c2a7972c891ca297e14951b4f576337443",
+      "fresh": "400998e21476dd9725c18eb75570bb3495910dc44308be835cb4867fba1a7bd5"
+    },
+    "rebuild/core/v3_mapping.py": {
+      "paid": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "fresh": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51"
+    },
+    "rebuild/core/import_binding.py": {
+      "paid": "1fb50ff996071f8125f701c7675a3e0bd211d0110ee17405b3d379ba7716b6bb",
+      "fresh": "d1dc63785444249baa48652831be08dbd774f88d618e2b70c6c15f0eeb016f23"
+    },
+    "rebuild/core/models.py": {
+      "paid": "7d28a39627e51cba320f5d11c502aac827a19dca1fd41f4218eb4ba8dc7baaec",
+      "fresh": "03cd2bcbfd109676de24664379cbaa2ca8a4460595cad3e1d2564a273d3153dc"
+    },
+    "rebuild/core/views.py": {
+      "paid": "35143326a5827f8c287067b0dae0e110249477c359dfe0e72113ad0a4622bb42",
+      "fresh": "cd6c8811acd8b33d6973de4ac92d3402c6d1dbb4f346d62764d5d06cea754899"
+    }
+  },
+  "source_children": [
+    {
+      "source_commit": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+      "label": "old-5bf",
+      "exit_status": 0,
+      "timed_out": false,
+      "child_reaped": true,
+      "elapsed_seconds": 8.832563887001015,
+      "source_clean": true
+    },
+    {
+      "source_commit": "c8f3f4705565d7ab4da9e98d594c4b143583472b",
+      "label": "new-c8",
+      "exit_status": 0,
+      "timed_out": false,
+      "child_reaped": true,
+      "elapsed_seconds": 8.683393773993885,
+      "source_clean": true
+    }
+  ],
+  "network_denied": true,
+  "new_database_renderer_provider_calls": 0,
+  "artifact_seal": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/provider-layout-transfer-20261004/artifact-seal.json",
+  "artifact_seal_sha256": "d568bad915c097da1fb96a641d108fc0590b206b43c707d1b0f1afe78643572b",
+  "artifact_file_count": 111,
+  "old_result_sha256": "4071ca90a0bd32167465a6f06c62a14108ed6a5078fcfec1592ba7690be87dd2",
+  "comparison_result_sha256": "fed5a4493569b2760468fa10e3f7ef91ae891c24d01e7351ce9285075351e4b2",
+  "limits": [
+    "Actualproviderrequests/responses remain from5bf only",
+    "No blanket transfer of clinical generation,admission,pricing,billing,voiceserviceorwholeWordqualification",
+    "FuturefinalC must compare exact source hashes/dependencies and run applicable integrationgates",
+    "No nativeMicrosoftWord appearance claim",
+    "No whole54/60or18/20acceptance score"
+  ]
+}
