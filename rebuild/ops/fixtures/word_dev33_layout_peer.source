@@ -1,0 +1,73 @@
+"""Read-only binding of a started task renderer to the normal QA client."""
+import os
+from pathlib import Path
+import socket
+import stat
+import struct
+
+
+def require(value, message):
+    if not value:
+        raise ValueError(message)
+
+
+def process_identity(pid):
+    require(isinstance(pid, int) and not isinstance(pid, bool) and pid > 0, 'Invalid renderer PID.')
+    path = Path('/proc') / str(pid)
+    fields = (path / 'stat').read_text().rsplit(')', 1)[1].split()
+    return {'pid': pid, 'uid': path.stat().st_uid, 'start_ticks': int(fields[19])}
+
+
+def validate_peer(record, observed, socket_uid):
+    require(len(observed) == 3, 'Incomplete OS peer identity.')
+    pid, uid, gid = observed
+    require(pid == record['pid'], 'Socket peer is not the recorded renderer process.')
+    require(uid == record['uid'] == socket_uid, 'Socket peer UID differs from the recorded renderer.')
+    return {'pid': pid, 'uid': uid, 'gid': gid, 'start_ticks': record['start_ticks']}
+
+
+def validate_recorded(record, current):
+    require(all(record[key] == current[key] for key in ('pid', 'uid', 'start_ticks')),
+            'Recorded renderer exited or its PID/owner changed.')
+
+
+def bind_server(server, endpoint):
+    """Authenticate one local peer; no document, database or provider request."""
+    require(server.poll() is None, 'Renderer exited before QA configuration binding.')
+    record = process_identity(server.pid)
+    require(record['uid'] == os.getuid(), 'Started renderer and normal QA client have different owners.')
+    require(endpoint.is_absolute() and not endpoint.is_symlink(), 'Untrusted renderer socket path.')
+    meta = endpoint.lstat()
+    require(stat.S_ISSOCK(meta.st_mode), 'Renderer endpoint is not a socket.')
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+        stream.settimeout(5)
+        stream.connect(str(endpoint))
+        observed = struct.unpack('3i', stream.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        peer = validate_peer(record, observed, meta.st_uid)
+    # EOF causes the existing server to refuse an incomplete frame. It never
+    # reaches qualification/rendering and creates no document/charge evidence.
+    validate_recorded(record, process_identity(server.pid))
+    require(server.poll() is None, 'Renderer exited during peer binding.')
+    return {**peer, 'socket': str(endpoint), 'socket_uid': meta.st_uid,
+            'os_peer_authenticated': True, 'document_requests': 0, 'provider_calls': 0}
+
+
+def verify_bound(plan):
+    record = plan['layout_server_identity']
+    require(record.get('os_peer_authenticated') is True, 'No recorded OS peer binding.')
+    require(plan['layout_service_uid'] == str(record['uid']) and plan['layout_socket'] == record['socket'],
+            'Inner QA UID/socket differs from the recorded renderer.')
+    validate_recorded(record, process_identity(record['pid']))
+    endpoint = Path(record['socket'])
+    require(not endpoint.is_symlink(), 'Recorded socket changed to a symlink.')
+    meta = endpoint.lstat()
+    require(stat.S_ISSOCK(meta.st_mode) and meta.st_uid == record['uid'], 'Recorded renderer socket owner/type changed.')
+
+
+def verify_inner(plan, settings):
+    verify_bound(plan)
+    require(settings.QUILLMD_LAYOUT_SOCKET == plan['layout_socket']
+            and str(settings.QUILLMD_LAYOUT_SERVICE_UID) == plan['layout_service_uid'],
+            'Applied inner QA UID/socket differs from the authenticated renderer.')
+    return {'socket': settings.QUILLMD_LAYOUT_SOCKET, 'uid': str(settings.QUILLMD_LAYOUT_SERVICE_UID),
+            'server_identity': plan['layout_server_identity'], 'provider_calls': 0}

@@ -15,14 +15,17 @@ THRESHOLDS = {'overall_required': 54, 'overall_denominator': 60,
               'holdout_required': 18, 'holdout_denominator': 20, 'family_fraction': .75}
 MANIFEST_SHA = '3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33'
 RIGHTS_SHA = '5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7'
-PREPARED_SHA = 'e1ca082b8c7ddff09a054cf9f581ef6bbbbb4c35b693380b1bc698ef90822d39'
+VERSION = 'dev33-supported-layout-peer-v2'
+ORIGINAL_PREPARED_SHA = 'e1ca082b8c7ddff09a054cf9f581ef6bbbbb4c35b693380b1bc698ef90822d39'
+PREPARED_SHA = 'e109770ddec753bf537c046a2473dbb3270c200b70983ecffde5c9c9cacba49a'
+PEER_SHA = '05c157aacd0c717ca9835bc8b8482f8c100101e7be3f6a3aa46d49cd145e8a23'
 CHECKER_SHA = 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e'
 DRIVERS = {
-    'v3': {'run_dev_application_gate_v2.py': '829ef477bd7761741587b89d382840394f83dc914eb624da4b753d317ab7027b',
-           'dev_application_gate_v2.py': 'a996c18cd4ee0b7373a1a2eac8d86070dd96e46e5d51710a86aac5f86fe654e0',
+    'v3': {'run_dev_application_gate_v2.py': '17d06e2a843374d6e12e141f24d38d409ed8b7174bc7ace4d2a8682bc8b2b8d9',
+           'dev_application_gate_v2.py': 'f6888ff50a5c83059dc34a08433d99b50237350b89adea98e9360b329abca840',
            'fixed_render_checker.py': CHECKER_SHA},
-    'native': {'run_dev_application_gate_native_v1.py': '98db3731cdb4121fa384d11f0d044dd3c3881740148121ee70a1ee52d83a5a54',
-               'dev_application_gate_native_v1.py': 'fef4adee73037e0bc5d941caaa4d4589d0b8a192429fc92243f28ed93faa14ed',
+    'native': {'run_dev_application_gate_native_v1.py': 'b88f5c30276247c23a18a66accc0782fa706be73c21416fc46d22bec5d8f3169',
+               'dev_application_gate_native_v1.py': 'd179b9dac6e780d4bcf5120fdb0f9ebe14695db28d0a7278780943de9e7c8f18',
                'fixed_render_checker.py': CHECKER_SHA},
 }
 FIXED_PROFILES = ('empty', 'ordinary', 'long')
@@ -46,7 +49,17 @@ def integer(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def validate_derivative(prepared, original):
+    added = {'plan_version', 'original_prepared_plan', 'supported_layout_driver_sources', 'layout_peer_helper_sha256'}
+    require(set(prepared) == set(original) | added and all(prepared[k] == v for k, v in original.items()),
+            'Original membership/GT/scorer/profile/threshold preparation changed.')
+
+
 def validate_metadata(prepared, manifest, rights):
+    require(prepared.get('plan_version') == VERSION and prepared.get('original_prepared_plan') == {
+        'path': 'docs/rebuild/v1/word-dev33-final-plan-prepared-20261004.json', 'sha256': ORIGINAL_PREPARED_SHA},
+        'No exact original preparation reference.')
+    require(prepared.get('layout_peer_helper_sha256') == PEER_SHA, 'Undeclared layout peer binding.')
     require(prepared['thresholds'] == THRESHOLDS, 'Prepared thresholds changed.')
     require(len(manifest['sets']['dev']) == 40 and len(manifest['sets']['holdout']) == 20,
             'Original denominator changed.')
@@ -83,6 +96,10 @@ def validate_seal(prepared, seal, source_inventory):
     require(seal.get('manifest_sha256') == MANIFEST_SHA and seal.get('rights_sha256') == RIGHTS_SHA
             and seal.get('prepared_plan_sha256') == PREPARED_SHA, 'Frozen metadata bytes changed.')
     require(seal.get('drivers') == DRIVERS, 'Undeclared processor/harness identity.')
+    require(seal.get('driver_sources') == {name: row['path'] for name, row in prepared['supported_layout_driver_sources'].items()},
+            'Supported layout driver locations differ from the prospective preparation.')
+    require(seal.get('plan_version') == VERSION and seal.get('layout_peer_helper_sha256') == PEER_SHA,
+            'Missing supported layout peer/version seal.')
     require(seal.get('raw_capture_required') is True, 'No independently pinned raw capture contract.')
     require(seal.get('helpers') == prepared['unchanged_helpers'], 'Scorer or profile helper changed.')
     require(bool(source_inventory) and seal.get('source_hashes') == source_inventory,
@@ -382,6 +399,9 @@ def main(argv=None):
             'Missing final-source metadata execution inputs.')
     require(not args.output.exists(), 'Output already exists; never overwrite prior evidence.')
     prepared = json.loads(read_raw(args.prepared_plan, PREPARED_SHA))
+    original = json.loads(read_raw(args.source / prepared['original_prepared_plan']['path'], ORIGINAL_PREPARED_SHA))
+    validate_derivative(prepared, original)
+    read_raw(args.source / 'rebuild/ops/fixtures/word_dev33_layout_peer.source', PEER_SHA)
     rights = json.loads(read_raw(args.rights_ledger, RIGHTS_SHA))
     manifest = json.loads(read_raw(args.source / 'docs/rebuild/v1/word-corpus-manifest.json', MANIFEST_SHA))
     seal = json.loads(read_raw(args.seal, args.seal_sha256))

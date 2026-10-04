@@ -25,8 +25,8 @@ WRAPPER_SHA = '1b82afabddd679b6acb3e69076a7812b245f859b9d82364c949e19e1f5412378'
 ADAPTER_NAME = 'rebuild/ops/fixtures/word_dev33_mixed_consolidation.source'
 SELF_NAME = 'rebuild/ops/fixtures/word_dev33_packet_supervisor.source'
 INNER_DRIVERS = {
-    'run_dev_application_gate_v2.py': '829ef477bd7761741587b89d382840394f83dc914eb624da4b753d317ab7027b',
-    'run_dev_application_gate_native_v1.py': '98db3731cdb4121fa384d11f0d044dd3c3881740148121ee70a1ee52d83a5a54',
+    'run_dev_application_gate_v2.py': '17d06e2a843374d6e12e141f24d38d409ed8b7174bc7ace4d2a8682bc8b2b8d9',
+    'run_dev_application_gate_native_v1.py': 'b88f5c30276247c23a18a66accc0782fa706be73c21416fc46d22bec5d8f3169',
 }
 ACTIVE_OUTPUT = None
 
@@ -176,6 +176,10 @@ def configuration(args):
     require(digest(WRAPPER) == WRAPPER_SHA, 'Normal protected QA wrapper changed.')
     adapter = load_literal(source / ADAPTER_NAME)
     prepared = json.loads(adapter.read_raw(args.prepared_plan, adapter.PREPARED_SHA))
+    original = json.loads(adapter.read_raw(source / prepared['original_prepared_plan']['path'], adapter.ORIGINAL_PREPARED_SHA))
+    adapter.validate_derivative(prepared, original)
+    require(digest(source / 'rebuild/ops/fixtures/word_dev33_layout_peer.source') == adapter.PEER_SHA,
+            'Reviewed layout peer helper changed.')
     require(re.fullmatch('[0-9a-f]{64}', args.seal_sha256) is not None, 'Invalid independent seal hash.')
     seal = json.loads(adapter.read_raw(args.seal, args.seal_sha256))
     validate_supervisor_seal(seal)

@@ -17,7 +17,7 @@ exec(compile(LITERAL.read_bytes(), str(LITERAL), 'exec'), adapter.__dict__)
 
 class MixedNativeV3(unittest.TestCase):
     def setUp(self):
-        self.prepared = json.loads((ROOT / 'docs/rebuild/v1/word-dev33-final-plan-prepared-20261004.json').read_text())
+        self.prepared = json.loads((ROOT / 'docs/rebuild/v1/word-dev33-supported-layout-plan-prepared-20261004.json').read_text())
         self.manifest = json.loads((ROOT / 'docs/rebuild/v1/word-corpus-manifest.json').read_text())
         self.records = {r['identity']: r for r in self.prepared['records']}
         self.rights = {'records': [
@@ -26,9 +26,11 @@ class MixedNativeV3(unittest.TestCase):
             for r in self.manifest['sets']['dev']]}
         self.inventory = {'rebuild/core/views.py': '1' * 64, 'rebuild/documents/word_v3.py': '2' * 64}
         self.seal = {'source_commit': 'a' * 40, 'frozen_for_word_acceptance': True,
+                     'plan_version': adapter.VERSION, 'layout_peer_helper_sha256': adapter.PEER_SHA,
                      'sealed_before_execution': True, 'thresholds': adapter.THRESHOLDS, 'provider_calls': 0,
                      'manifest_sha256': adapter.MANIFEST_SHA, 'rights_sha256': adapter.RIGHTS_SHA,
                      'prepared_plan_sha256': adapter.PREPARED_SHA, 'drivers': copy.deepcopy(adapter.DRIVERS),
+                     'driver_sources': {n: r['path'] for n, r in self.prepared['supported_layout_driver_sources'].items()},
                      'helpers': self.prepared['unchanged_helpers'], 'source_hashes': self.inventory,
                      'raw_capture_required': True,
                      'packet_memberships': {p['packet']: p['identities'] for p in self.prepared['packets']}}

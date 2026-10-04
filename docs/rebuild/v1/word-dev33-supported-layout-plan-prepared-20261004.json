@@ -1,0 +1,2111 @@
+{
+  "state": "PREPARED_METADATA_ONLY_NO_APPLICATION_EXECUTION",
+  "final_source_commit": null,
+  "final_source_worktree": null,
+  "frozen_for_word_acceptance": false,
+  "execution_authorized_by_this_file": false,
+  "prepared_at_utc": "2026-10-04",
+  "provider_calls": 0,
+  "corpus_manifest_sha256": "3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33",
+  "rights_ledger_sha256": "5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7",
+  "drivers": {
+    "run_dev_application_gate_v2.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_dev_application_gate_v2.py",
+      "sha256": "38b02636093e8c8997da15a02973f8f9d67501ced3c9347b5d9a66a26ac6b1ac"
+    },
+    "dev_application_gate_v2.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev_application_gate_v2.py",
+      "sha256": "a996c18cd4ee0b7373a1a2eac8d86070dd96e46e5d51710a86aac5f86fe654e0"
+    },
+    "run_dev_application_gate_native_v1.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_dev_application_gate_native_v1.py",
+      "sha256": "4f0dcbb9917b8ef4133c1d2d3b2604d9ee372094b99464d086a1f177e138d9e3"
+    },
+    "dev_application_gate_native_v1.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev_application_gate_native_v1.py",
+      "sha256": "fef4adee73037e0bc5d941caaa4d4589d0b8a192429fc92243f28ed93faa14ed"
+    },
+    "fixed_render_checker.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/fixed_render_checker.py",
+      "sha256": "ab0cb64fb4133cadb3f1672323751d30e950712d0443724b8e3440a609d9024d"
+    },
+    "consolidate_original_word_gate.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/consolidate_original_word_gate.py",
+      "sha256": "4f0f5764b61e45f709088d21bbfa7658b54c42c5995be0e13ad338a8f7e511ec"
+    }
+  },
+  "unchanged_helpers": {
+    "score.py": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+    "final_eval.py": "97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a",
+    "fill_eval.py": "7c74e1d3a46a0252d0b79169ac7cf0905222e7d741ee8061130bc37a2bf2a848",
+    "render_eval.py": "265ff7ad137889717a2f93554c8926f93f4cccd76b8c120eeda50bd5bf8f8a76",
+    "v2/answering.py": "75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4",
+    "v2/ticked.py": "e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79"
+  },
+  "thresholds": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  },
+  "family_gates": {
+    "F1": {
+      "denominator": 27,
+      "required": 21,
+      "successes": null
+    },
+    "F2": {
+      "denominator": 40,
+      "required": 30,
+      "successes": null
+    },
+    "F3": {
+      "denominator": 25,
+      "required": 19,
+      "successes": null
+    },
+    "F4": {
+      "denominator": 35,
+      "required": 27,
+      "successes": null
+    },
+    "F5": {
+      "denominator": 52,
+      "required": 39,
+      "successes": null
+    },
+    "F6": {
+      "denominator": 36,
+      "required": 27,
+      "successes": null
+    },
+    "F7": {
+      "denominator": 15,
+      "required": 12,
+      "successes": null
+    },
+    "F8": {
+      "denominator": 8,
+      "required": 6,
+      "successes": null
+    },
+    "F9": {
+      "denominator": 23,
+      "required": 18,
+      "successes": null
+    },
+    "F10": {
+      "denominator": 40,
+      "required": 30,
+      "successes": null
+    }
+  },
+  "dev_denominator": 40,
+  "eligible_dev_count": 33,
+  "held_dev_count": 7,
+  "eligible_dev": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D07",
+    "D08",
+    "D09",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D15",
+    "D16",
+    "D17",
+    "D18",
+    "D21",
+    "D22",
+    "D26",
+    "D27",
+    "D28",
+    "D29",
+    "D30",
+    "D31",
+    "D33",
+    "D34",
+    "D35",
+    "D36",
+    "D37",
+    "D38",
+    "D39",
+    "D40"
+  ],
+  "prior_selected_six_still_replayed_on_final_source": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D07"
+  ],
+  "remaining_27_dev": [
+    "D08",
+    "D09",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D15",
+    "D16",
+    "D17",
+    "D18",
+    "D21",
+    "D22",
+    "D26",
+    "D27",
+    "D28",
+    "D29",
+    "D30",
+    "D31",
+    "D33",
+    "D34",
+    "D35",
+    "D36",
+    "D37",
+    "D38",
+    "D39",
+    "D40"
+  ],
+  "held_dev": [
+    {
+      "identity": "D06",
+      "sha256": "8c13e2d1c71c3890f38d0866ddff759e99891ea2a9df6fdfeb79a627ff1fed61",
+      "status": "HELD_FOR_FILLED_REPLAY_LOGO_EXCEPTION",
+      "held_counts_in_original_denominator": true,
+      "automatic_success": false
+    },
+    {
+      "identity": "D19",
+      "sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d",
+      "status": "HELD_FOR_FILLED_REPLAY_WHOLE_ORIGINAL_EMBEDDED_RIGHTS_UNASSESSED",
+      "held_counts_in_original_denominator": true,
+      "automatic_success": false
+    },
+    {
+      "identity": "D20",
+      "sha256": "d35cb2a6f54ea38f2beff2e7a0417741d6d6745230b653ed24599d6300ede711",
+      "status": "HELD_FOR_FILLED_REPLAY_THIRDPARTY_ASSET_SCOPE",
+      "held_counts_in_original_denominator": true,
+      "automatic_success": false
+    },
+    {
+      "identity": "D23",
+      "sha256": "9e0857330b9ebf641fd0518ee4e45d6dbeeb45c4d75dd26cb02ecc42b1c656dc",
+      "status": "HELD_EXACT_GOVERNMENT_PRODUCTION_SCOPE_UNPROVEN",
+      "held_counts_in_original_denominator": true,
+      "automatic_success": false
+    },
+    {
+      "identity": "D24",
+      "sha256": "20a7df595e0ffbc15dbf5800d15d558ee5a355fed7abb31acb44eaf0c741435c",
+      "status": "HELD_EXACT_GOVERNMENT_PRODUCTION_SCOPE_UNPROVEN",
+      "held_counts_in_original_denominator": true,
+      "automatic_success": false
+    },
+    {
+      "identity": "D25",
+      "sha256": "017d29aeeb6953bf3d22f337844091593dc2b1f535ab61bcdd0e0812feb1430b",
+      "status": "HELD_EXACT_GOVERNMENT_PRODUCTION_SCOPE_UNPROVEN",
+      "held_counts_in_original_denominator": true,
+      "automatic_success": false
+    },
+    {
+      "identity": "D32",
+      "sha256": "46a80892ef0d8fe5a3620c25e1f79ea4bea46250ed7affd8f38ed79520329b87",
+      "status": "HELD_FOR_FILLED_REPLAY_LOGO_EXCEPTION",
+      "held_counts_in_original_denominator": true,
+      "automatic_success": false
+    }
+  ],
+  "held_owner_handoff": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/seven-held-originals-owner-handoff-20261004.json",
+    "sha256": "447f8f474f84d1e60fb8cc9b2ba4d92df2b09c8f64aba9384ec3d83274308ef8"
+  },
+  "holdout_count": 20,
+  "holdout_content_opened_by_preparation": false,
+  "holdout_results": "Not evaluated by DEV plan; original 20 members and historical exposure stay unchanged.",
+  "maximum_overall_with_all_33_dev_and_20_holdout_successes": 53,
+  "gate_pass": false,
+  "native_word_inspection": false,
+  "clinical_generation_usefulness": "Not assessed by mechanical fixed writer profiles.",
+  "score_separation": [
+    "strict first-pass mapping",
+    "fixed mechanical/render protocol",
+    "supplemental full-answer visibility",
+    "explicit omission/admission refusals",
+    "clinician correction/manual recovery",
+    "clinical generation usefulness",
+    "historical exposed holdout",
+    "new independent qualification"
+  ],
+  "packets": [
+    {
+      "packet": "P01",
+      "identities": [
+        "D01",
+        "D02"
+      ],
+      "adapter": "run_dev_application_gate_native_v1.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p01_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P02",
+      "identities": [
+        "D03",
+        "D04",
+        "D05"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p02_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P03",
+      "identities": [
+        "D07",
+        "D08",
+        "D09"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p03_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P04",
+      "identities": [
+        "D10"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p04_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P05",
+      "identities": [
+        "D11"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p05_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P06",
+      "identities": [
+        "D12",
+        "D13",
+        "D14"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p06_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P07",
+      "identities": [
+        "D15",
+        "D16"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p07_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P08",
+      "identities": [
+        "D17",
+        "D18",
+        "D21"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p08_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P09",
+      "identities": [
+        "D22",
+        "D26"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p09_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P10",
+      "identities": [
+        "D27"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p10_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P11",
+      "identities": [
+        "D28"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p11_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P12",
+      "identities": [
+        "D29"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p12_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P13",
+      "identities": [
+        "D30",
+        "D31"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p13_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P14",
+      "identities": [
+        "D33",
+        "D34"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p14_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P15",
+      "identities": [
+        "D35"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p15_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P16",
+      "identities": [
+        "D36",
+        "D37"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p16_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    },
+    {
+      "packet": "P17",
+      "identities": [
+        "D38",
+        "D39",
+        "D40"
+      ],
+      "adapter": "run_dev_application_gate_v2.py",
+      "normal_qa_database_template": "quillmd_qa_sol_ops_dev33p17_<PID>",
+      "database_role": "quillmd_qa",
+      "host": "127.0.0.1",
+      "port": 55731,
+      "application_child_deadline_seconds": 900,
+      "existing_driver_total_deadline_seconds": 1200,
+      "outer_supervisor_deadline_seconds": 1260,
+      "outer_reap_bound_seconds": 20,
+      "read_only_catalogue_deadline_seconds": 5,
+      "renderer_start_deadline_seconds": 15,
+      "fixed_render_checker_deadline_seconds": 90,
+      "concurrency": 1,
+      "maximum_originals": 3,
+      "provider_calls": 0,
+      "status": "PREPARED_NOT_EXECUTED"
+    }
+  ],
+  "records": [
+    {
+      "identity": "D01",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D01-c1852a492221.docx",
+      "original_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+      "original_bytes": 52884,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D01-c1852a492221.json",
+      "groundtruth_sha256": "1e6430bc3a97581a2d0066afd2cd2c0621633808540ed1e16d7e26630de45d91",
+      "fixed_answer_area_denominator": 92,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D01-c1852a492221.annotator.json",
+      "annotator_sha256": "fafabe96e6d238368450d42fccf17cd1ad2c411048b63844d87e87c4d852569d",
+      "rights_status": "SUPPORTED_BY_STANDING_OWNER_FIXTURE_AUTHORIZATION",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F2",
+        "F4",
+        "F5",
+        "F8",
+        "F10"
+      ],
+      "lineage": "owner-wm-iov",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": false,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [
+        "native-ordinary",
+        "native-long"
+      ],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "Actual selected native processor; unchanged fixed profiles and native manual recovery reported separately."
+    },
+    {
+      "identity": "D02",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D02-8ae1e2b0ebee.docx",
+      "original_sha256": "8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a",
+      "original_bytes": 38393,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D02-8ae1e2b0ebee.json",
+      "groundtruth_sha256": "014033a136487f5e2cec88b97905dab14bdf2182aaed629f656c5f39ce4df3e2",
+      "fixed_answer_area_denominator": 24,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D02-8ae1e2b0ebee.annotator.json",
+      "annotator_sha256": "8f6962ae1639ac11d700611a12c71b4a3a063d91455289696d1c4d681828372e",
+      "rights_status": "SUPPORTED_BY_STANDING_OWNER_FIXTURE_AUTHORIZATION",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F5",
+        "F6",
+        "F10"
+      ],
+      "lineage": "owner-colonoscopy",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": false,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [
+        "native-ordinary",
+        "native-long"
+      ],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "Actual selected native processor; retain fixed contiguous-PDF failures and separate full-answer/footer trace."
+    },
+    {
+      "identity": "D03",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D03-29dfcdd8a5da.docx",
+      "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+      "original_bytes": 29510,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D03-29dfcdd8a5da.json",
+      "groundtruth_sha256": "172ad655015aaa9eb02d6c099e5424f7e09d80807966f9640c9bfe928bf05618",
+      "fixed_answer_area_denominator": 88,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D03-29dfcdd8a5da.annotator.json",
+      "annotator_sha256": "82e3bf150da5081c45f7a43313f6e0338d0beccd3ca94367b41ef0313b4a49e4",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F8",
+        "F9"
+      ],
+      "lineage": "zenodo-4756701",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": false,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D04",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D04-cebb55cd7345.docx",
+      "original_sha256": "cebb55cd73453bdb6c8caf0fc040861daf9b074bf3cca278b6243e98e02da175",
+      "original_bytes": 19982,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D04-cebb55cd7345.json",
+      "groundtruth_sha256": "6c2d8e1a968ca460ee78b5c5ad4b9e76f8d07a8b5fd5871b422f8a850927773d",
+      "fixed_answer_area_denominator": 27,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D04-cebb55cd7345.annotator.json",
+      "annotator_sha256": "6315e6d12137a0e305615333814ede504c1d0987f560cadb2cfb31cbfdd09956",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F5",
+        "F6"
+      ],
+      "lineage": "zenodo-8004749",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": false,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D05",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D05-ab006eeb434e.docx",
+      "original_sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a",
+      "original_bytes": 49413,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D05-ab006eeb434e.json",
+      "groundtruth_sha256": "c6e61e91631ba85ec88826a1e2341dcf656147a734385f4c3302ed9c8fdb3bba",
+      "fixed_answer_area_denominator": 6,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D05-ab006eeb434e.annotator.json",
+      "annotator_sha256": "bbd3e141d462ab051d50db9863263999dff5c17164d90b449857c86b8fabcd8f",
+      "rights_status": "SUPPORTED_BY_NIDCR_PUBLISHER_DECLARATION",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "lineage": "NIDCR Clinical Research Tools & Templates",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": false,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D07",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D07-f43d08e3b436.docx",
+      "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+      "original_bytes": 46379,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D07-f43d08e3b436.json",
+      "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+      "fixed_answer_area_denominator": 28,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D07-f43d08e3b436.annotator.json",
+      "annotator_sha256": "1157e0d284fe1b00ce8e450d5db267ce8fbb77d0014bf5c40a56a63a5620fb72",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Rehabilitation Treatment",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": false,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D08",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D08-9eeac252e6d2.docx",
+      "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+      "original_bytes": 38679,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D08-9eeac252e6d2.json",
+      "groundtruth_sha256": "6c89ff905ede4e25ec132569e9280663859b9d93ce06a31f0885f34d362b09f5",
+      "fixed_answer_area_denominator": 41,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D08-9eeac252e6d2.annotator.json",
+      "annotator_sha256": "acc6c224da2b6d2ff62d596d7c32d6e5df708b7ad1339c3b1b80444958741fc8",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Acute Admission/Discharge",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D09",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D09-b04f37b4ff08.docx",
+      "original_sha256": "b04f37b4ff081529644b1d16c225bf4603c1749e392d8327ed0eb3943019822a",
+      "original_bytes": 37558,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D09-b04f37b4ff08.json",
+      "groundtruth_sha256": "4b5aa4b6bfa5da9f651324cd5c9c1fd42b3c3d76ca28a41a84b79da243436ebb",
+      "fixed_answer_area_denominator": 47,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D09-b04f37b4ff08.annotator.json",
+      "annotator_sha256": "f541d2d7d80817e4ca9617c6d62e81d4ec8ae0ca8383311af9a69c6688ddefb2",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Physical Exam",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D10",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D10-b54cc9e77067.docx",
+      "original_sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+      "original_bytes": 45415,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D10-b54cc9e77067.json",
+      "groundtruth_sha256": "47145449ca9d46858f169d21f8c09dc77017fa28fe04028f41b0270d984ec67b",
+      "fixed_answer_area_denominator": 198,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D10-b54cc9e77067.annotator.json",
+      "annotator_sha256": "882ae1033f664232d519e83c48b869c664f5b5f519739fbadf5dc4e05d76893e",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Physical Exam",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "198-area fixed automatic gate remains separate from historical manual numeric recovery."
+    },
+    {
+      "identity": "D11",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D11-500efd5985a7.docx",
+      "original_sha256": "500efd5985a715277144cfaa42d8dbe72ee748fa11bb43a6215ed944b0bc352d",
+      "original_bytes": 59016,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D11-500efd5985a7.json",
+      "groundtruth_sha256": "77de01f3fd2704090dce2055500f5e3d6502e9be46caedd1e8864eaa5b3baa5b",
+      "fixed_answer_area_denominator": 559,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D11-500efd5985a7.annotator.json",
+      "annotator_sha256": "066c88c51277b80754d69e9cf319d4c576ed25b2349218467ba665abe8d5ad7a",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Laboratory Tests",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "559-area fixed ground truth; singleton to bound expensive physical validation."
+    },
+    {
+      "identity": "D12",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D12-934bf431af0b.docx",
+      "original_sha256": "934bf431af0b1486f5f809d83a14a61c6e6721342e1e4c377153e1df640a3604",
+      "original_bytes": 25591,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D12-934bf431af0b.json",
+      "groundtruth_sha256": "cadabc7b98d3f81f8485406cad4a42f269826ef4544986a2bbf69a5139ea0bbb",
+      "fixed_answer_area_denominator": 19,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D12-934bf431af0b.annotator.json",
+      "annotator_sha256": "980757afb784e40f57e8bc944084122008e6c3067127b6fbc388bc5593977f8a",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F5",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Electrocardiogram",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D13",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D13-75b75da8559d.docx",
+      "original_sha256": "75b75da8559db2a5849343d6809e3171c254a538870e0da40b0a15d367160a92",
+      "original_bytes": 31829,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D13-75b75da8559d.json",
+      "groundtruth_sha256": "965b6128c8df156373ff06c8170c945c51fcd3b73c922657525b48d081ebe4c7",
+      "fixed_answer_area_denominator": 11,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D13-75b75da8559d.annotator.json",
+      "annotator_sha256": "e56b58f2d653da15f07c9a92f6c16568614378ecfa74130638bf532d2144b232",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F5",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Risk Factor Questionnaire - Physical Activity and Sleep",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D14",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D14-5089ad547ee0.docx",
+      "original_sha256": "5089ad547ee0d0527f687bec1e8f26a35f5204e68e7c50b8bd8ae296983a2a50",
+      "original_bytes": 32097,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D14-5089ad547ee0.json",
+      "groundtruth_sha256": "c81115ac968bda2f545cfc41863f2d8a09503724610fffebf5a33f2c4c5301db",
+      "fixed_answer_area_denominator": 55,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D14-5089ad547ee0.annotator.json",
+      "annotator_sha256": "0592c946993b61bc873396246d250151cdae1a7ab21fcc8b53fe61468d11b6f7",
+      "rights_status": "SUPPORTED_BY_NIH_NINDS_PUBLISHER_DECLARATIONS",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "lineage": "NINDS CDE CRF module / Lower Extremity Orthopedic Surgical Procedures - Hip",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D15",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D15-19efe830ee0d.docx",
+      "original_sha256": "19efe830ee0d049cae32236fe0db8bdfa1cfe5f17ab80f5a37cd66c7593663c2",
+      "original_bytes": 52640,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D15-19efe830ee0d.json",
+      "groundtruth_sha256": "88de4fb2691ca0d6bda816bfc90728afdc9269a07a6da69e01aaaf7d7cb62566",
+      "fixed_answer_area_denominator": 70,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D15-19efe830ee0d.annotator.json",
+      "annotator_sha256": "d09c5350e74449afb351d64ea97ed686738c735d1ec610ca7be7071ca7aff262",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator.",
+        "CC BY-SA4.0 remains attached. No proprietary relicensing; any later sharing must satisfy its ShareAlike terms. Internal synthetic modifications do not erase the grant."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "lineage": "zenodo-20125281-ecraid-icf",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D16",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D16-51c6e400e89d.docx",
+      "original_sha256": "51c6e400e89d631bf81959418c9cc5cc9631bfb3ac741a3bdce5d8f9a1e0273f",
+      "original_bytes": 14741,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D16-51c6e400e89d.json",
+      "groundtruth_sha256": "834c6c09b07c194bf8da3b776e7a753c2227b306fbcf3d3762f282c5574c483e",
+      "fixed_answer_area_denominator": 55,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D16-51c6e400e89d.annotator.json",
+      "annotator_sha256": "c9891aba64ec41df2141d16f2da6da227eb20ac46300731567363daccad73bbd",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F5",
+        "F6"
+      ],
+      "lineage": "zenodo-13901089",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D17",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D17-92b3e2ed55db.docx",
+      "original_sha256": "92b3e2ed55db0bba14bc20bdb5b27ad5253337075c1b042d0362663a7a16154a",
+      "original_bytes": 22462,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D17-92b3e2ed55db.json",
+      "groundtruth_sha256": "e98acdf85e48974858f325686ed7810076874001cdf2739cd5d91c32d9ee0562",
+      "fixed_answer_area_denominator": 21,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D17-92b3e2ed55db.annotator.json",
+      "annotator_sha256": "55cdf49764ddd9ef2b80879ff01adf42a6df07c26a36359c956d4deac13a6d68",
+      "rights_status": "SUPPORTED_BY_EXACT_PUBLISHER_OGL_V3",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F4",
+        "F5"
+      ],
+      "lineage": "laa-health-professional-evidence-letters",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D18",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D18-73fe91e5501b.docx",
+      "original_sha256": "73fe91e5501bad3fe7e5ad413f49934006965b8b2e1d2612f88e1daf78ac9f46",
+      "original_bytes": 13360,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D18-73fe91e5501b.json",
+      "groundtruth_sha256": "89bdb455aa1c75d5f6b2ba59c46a3a73a5da00dd0a1fb72d195fab9bd50f3c81",
+      "fixed_answer_area_denominator": 21,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D18-73fe91e5501b.annotator.json",
+      "annotator_sha256": "0518130bac2fe80a9e98dc6b2f9a1164d595fe877022b4ca6531e63976ebc25a",
+      "rights_status": "SUPPORTED_BY_EXACT_PUBLISHER_OGL_V3",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F4"
+      ],
+      "lineage": "laa-health-professional-evidence-letters",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D21",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D21-d1c0e1234bae.docx",
+      "original_sha256": "d1c0e1234baeb32039bac32c1ba1f207d044da816df91ddb5e6d81e87125fcba",
+      "original_bytes": 62968,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D21-d1c0e1234bae.json",
+      "groundtruth_sha256": "03658e0ca8bd86939a1e910fa5981568bf69a159309a0814dfb0be16bcf269c6",
+      "fixed_answer_area_denominator": 52,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D21-d1c0e1234bae.annotator.json",
+      "annotator_sha256": "f9361021d23a30e235b5fdc642f4cfb8f9167238d16ebe18be15e7266c18e5a0",
+      "rights_status": "SUPPORTED_BY_NIH_PUBLISHER_DECLARATION",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6"
+      ],
+      "lineage": "NIH IRB (OHSRP) consent template family",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D22",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D22-e858648b9d5c.docx",
+      "original_sha256": "e858648b9d5c52c920e64bfd8fe7cb925505ebddaefc320003f88a5d2e7ea020",
+      "original_bytes": 53286,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D22-e858648b9d5c.json",
+      "groundtruth_sha256": "08c9924a2fba73ae0abb5fc315c261e929a9a1ce9a39502d0efc27662105b8d2",
+      "fixed_answer_area_denominator": 35,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D22-e858648b9d5c.annotator.json",
+      "annotator_sha256": "15c5b5b7ae4e7a70c13654656ad88075e1bfc26fa86f430969c4120eb39295ad",
+      "rights_status": "SUPPORTED_BY_NIH_PUBLISHER_DECLARATION",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6"
+      ],
+      "lineage": "NIH IRB (OHSRP) consent template family",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D26",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D26-0e247607a738.docx",
+      "original_sha256": "0e247607a7388575f78b7be00bb172362830f7577178364bac2252a85a0454fb",
+      "original_bytes": 57267,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D26-0e247607a738.json",
+      "groundtruth_sha256": "b2b7d3851bc098c1456e25fd6fd08fd584394ebd1e3c39e210044713cafc422f",
+      "fixed_answer_area_denominator": 10,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D26-0e247607a738.annotator.json",
+      "annotator_sha256": "0dfb5681e4dd0298eaa307757dc035e02ec565b3986fb1696dc2803ec60d7e3c",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F5",
+        "F6",
+        "F7"
+      ],
+      "lineage": "zenodo-7457938-smatb-templates",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D27",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D27-bc002ff4594e.docx",
+      "original_sha256": "bc002ff4594eb374f1748c8e80a66dfa432bc1432d98cd4e218a06d3515d0c66",
+      "original_bytes": 65580,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D27-bc002ff4594e.json",
+      "groundtruth_sha256": "2404c2f54a4f6070e3fdd423eea1a667c5b3c5117933490805ac055e794ff72d",
+      "fixed_answer_area_denominator": 44,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D27-bc002ff4594e.annotator.json",
+      "annotator_sha256": "1ed15861e11d9a8699f1221879b8335b4f70f34a4de8f83dc060c0ccdaa590eb",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F5",
+        "F6",
+        "F7",
+        "F9"
+      ],
+      "lineage": "zenodo-7457938-smatb-templates",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "Source-bound renderer quarantine remains enforced; admission refusal is retained failure, not renderer success."
+    },
+    {
+      "identity": "D28",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D28-479946b2185f.docx",
+      "original_sha256": "479946b2185f8d259b3de72375aa6ba941841f67ba2d676f61d714ddb9fc9786",
+      "original_bytes": 115702,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D28-479946b2185f.json",
+      "groundtruth_sha256": "e125d005262e91c90de36b44458d25b1baddd117baa9049bd753a0a4d88b85d9",
+      "fixed_answer_area_denominator": 227,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D28-479946b2185f.annotator.json",
+      "annotator_sha256": "52b62e0f0b576150e6a9e041a8e1f49313b80beff3ef04d11f026b35027f66f1",
+      "rights_status": "SUPPORTED_FOR_PRIVATE_NO_FEE_REPLAY_BY_SAMHSA_DECLARATION",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator.",
+        "Do not reproduce/distribute this publication or its filled derivative for a fee; no fee-based use is authorized by this review."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6"
+      ],
+      "lineage": "SAMHSA CMHS NOMs client-level tool",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "227-area fixed historical ground truth retained; explicit omissions/global-rule limits remain failures."
+    },
+    {
+      "identity": "D29",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D29-e01fb51a1ce2.docx",
+      "original_sha256": "e01fb51a1ce2c1194f307916641590e7a8bd25657c69bb0892c8a4e4078ba1d8",
+      "original_bytes": 70019,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D29-e01fb51a1ce2.json",
+      "groundtruth_sha256": "7044cf3e066eb782f4b339ac8f3488f2a02e0f71e9632547de43ab8e2067dcf1",
+      "fixed_answer_area_denominator": 125,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D29-e01fb51a1ce2.annotator.json",
+      "annotator_sha256": "beb244340ddefa37aab27b2981aba417a65eaa40208825a6792e008537ec51c2",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator.",
+        "Preserve the repository license identifier cc-by as recorded; do not invent a version number."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F5",
+        "F6"
+      ],
+      "lineage": "zenodo-3738912-tbpoc",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "125-area fixed ground truth retained; body omissions/holds and separately writable header/footer destinations remain distinct."
+    },
+    {
+      "identity": "D30",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D30-fdeafbee872f.docx",
+      "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+      "original_bytes": 88646,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D30-fdeafbee872f.json",
+      "groundtruth_sha256": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+      "fixed_answer_area_denominator": 62,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D30-fdeafbee872f.annotator.json",
+      "annotator_sha256": "888a639e5ae4d834e4cbc19738ecb5eb843ebbd29995e6a838f63185cdb0dcd9",
+      "rights_status": "SUPPORTED_BY_EXACT_PUBLISHER_OGL_V3",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F6"
+      ],
+      "lineage": "hmpps-mhcs-restricted-patient-forms",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "62-area fixed automatic gate remains separate from historical manual eight-option A20 recovery."
+    },
+    {
+      "identity": "D31",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D31-f730aa53671a.docx",
+      "original_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+      "original_bytes": 93612,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D31-f730aa53671a.json",
+      "groundtruth_sha256": "e86962a18fea61c1718f0086ce75d4af318082766a60e2c47f9e073cdd18387a",
+      "fixed_answer_area_denominator": 51,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D31-f730aa53671a.annotator.json",
+      "annotator_sha256": "10a2012cf80350f520b3eacdfb90546bd9051237b6bcb9ba40116efa17eda13e",
+      "rights_status": "SUPPORTED_BY_EXACT_PUBLISHER_OGL_V3",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "lineage": "hmpps-mhcs-restricted-patient-forms",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D33",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D33-45e292c57ec8.docx",
+      "original_sha256": "45e292c57ec851c457297f421d3c0c844b61f7bef07aa0ed9af8f4c7b5cbac0c",
+      "original_bytes": 153629,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D33-45e292c57ec8.json",
+      "groundtruth_sha256": "1362d00bb1060ff84cc5decff89d1756531b035f3bba79033389acd0c9ad2fa7",
+      "fixed_answer_area_denominator": 11,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D33-45e292c57ec8.annotator.json",
+      "annotator_sha256": "fc7751c1f21b878665c8205cdef87cf4066ed1312000ef2e1793a49747c8a245",
+      "rights_status": "SUPPORTED_BY_NCI_EXPLICIT_TEXT_REUSE_POLICY",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F7"
+      ],
+      "lineage": "NCI consent (ICD) template family (DCP variants)",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D34",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D34-35feb7a7ab69.docx",
+      "original_sha256": "35feb7a7ab6997b9f786ced2d30dd6460bf75c731c2c86990aaf3830c61879b0",
+      "original_bytes": 164598,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D34-35feb7a7ab69.json",
+      "groundtruth_sha256": "aff76f9e8240bce4af9b99cf0fcb721185218f99e89c460a055d83ff49ecc9e7",
+      "fixed_answer_area_denominator": 14,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D34-35feb7a7ab69.annotator.json",
+      "annotator_sha256": "d54ffdcd48dcab4e274bd88a8556b6dbd0eba2f149ac44a88316c6950fc0c4d2",
+      "rights_status": "SUPPORTED_BY_NCI_EXPLICIT_TEXT_REUSE_POLICY",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F7"
+      ],
+      "lineage": "NCI consent (ICD) template family (DCP variants)",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D35",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D35-cf9b240f3893.docx",
+      "original_sha256": "cf9b240f3893f97bf168c7cd3ac808bb720b3bf0f65b168c9671c6827ca1a4b7",
+      "original_bytes": 83589,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D35-cf9b240f3893.json",
+      "groundtruth_sha256": "e9095af8f2baca4954a66fd0ed1b9ad12d1374d6e47d2ce44aed5dac57ac9455",
+      "fixed_answer_area_denominator": 78,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D35-cf9b240f3893.annotator.json",
+      "annotator_sha256": "a7fc6a9a10c7b9be96765ffe15548c0a3720d97993cc195a2e153048b80ebe74",
+      "rights_status": "SUPPORTED_BY_NCI_EXPLICIT_TEXT_REUSE_POLICY",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F9"
+      ],
+      "lineage": "NCI DCP SAE report form",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": "Source-bound renderer quarantine remains enforced; admission refusal is retained failure, not renderer success."
+    },
+    {
+      "identity": "D36",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D36-01b700ed8dd7.docx",
+      "original_sha256": "01b700ed8dd72eb46647f209f1608ceecfd7406fa34859a3b122eb497371fdf9",
+      "original_bytes": 75739,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D36-01b700ed8dd7.json",
+      "groundtruth_sha256": "27b9c291fbaa8dcb02342d20e90a1e17bb7111ff2354e419ffd5da0f72857b91",
+      "fixed_answer_area_denominator": 13,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D36-01b700ed8dd7.annotator.json",
+      "annotator_sha256": "f8bc4fe3da3a251f9084cd0956499701bdb08fef69b35c1ff69527e0cf01a760",
+      "rights_status": "SUPPORTED_BY_NCI_EXPLICIT_TEXT_REUSE_POLICY",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F7"
+      ],
+      "lineage": "NCI consent (ICD) template family (CTEP)",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D37",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D37-01326e0d4d17.docx",
+      "original_sha256": "01326e0d4d17d211cfda2757c34455b6bd132fb3bfc8b23f989e4a9635eef500",
+      "original_bytes": 107156,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D37-01326e0d4d17.json",
+      "groundtruth_sha256": "bf44a8b36d873bc40dab112806a7c506a053d998a47e610ca441600470c22f30",
+      "fixed_answer_area_denominator": 11,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D37-01326e0d4d17.annotator.json",
+      "annotator_sha256": "d4916d4389c77d14e8961c5314e674116dd6f4df4e58c2eac147950e6f75b13a",
+      "rights_status": "SUPPORTED_BY_NCI_EXPLICIT_TEXT_REUSE_POLICY",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F10",
+        "F4",
+        "F5",
+        "F6",
+        "F7"
+      ],
+      "lineage": "NCI consent (ICD) template family (CTEP)",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D38",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D38-83769a3b2c6b.docx",
+      "original_sha256": "83769a3b2c6bc3920f4a37e7881b354e11107cdf079f1090e6865bf8cb6a1301",
+      "original_bytes": 18585,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D38-83769a3b2c6b.json",
+      "groundtruth_sha256": "b79baf0379aabb05949cf880c72167ca21a574fccbeed346905ae388661e14f4",
+      "fixed_answer_area_denominator": 60,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D38-83769a3b2c6b.annotator.json",
+      "annotator_sha256": "1e39b747c32dbb5fb72270f5a2d3ebc9f114ab1da0a75833d1cc8343a5d028d5",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F5",
+        "F6"
+      ],
+      "lineage": "zenodo-10614582",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D39",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D39-17e6d154693c.docx",
+      "original_sha256": "17e6d154693c4c7c41b31f20fd16dfb9560ff6e343cbc03af32b3b231ecc02cb",
+      "original_bytes": 15831,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D39-17e6d154693c.json",
+      "groundtruth_sha256": "58fe7342f81310a0ba67c06b32a7ba23781db4683ebe24090b9e57f131d776c1",
+      "fixed_answer_area_denominator": 60,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D39-17e6d154693c.annotator.json",
+      "annotator_sha256": "f526ee854f153b6c1a604b6fb4152e20d123b282d9585d4584b5d4bfe8e8d6eb",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F5"
+      ],
+      "lineage": "zenodo-proforma-creator-582b52",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    },
+    {
+      "identity": "D40",
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D40-e24dc2605ffe.docx",
+      "original_sha256": "e24dc2605ffece80b31b1d8fb5fb35c6a1a8596fd6105c180b937648f903b6f4",
+      "original_bytes": 16067,
+      "format_evidence": "DOCX",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D40-e24dc2605ffe.json",
+      "groundtruth_sha256": "0f7ca31ea6179dc4495cc7cc0c431522bcb0f6c8c4ecd89d2578d95466dee4e3",
+      "fixed_answer_area_denominator": 38,
+      "annotator": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/groundtruth/D40-e24dc2605ffe.annotator.json",
+      "annotator_sha256": "df12200656d54fa2231e4cd776c2897980c82baf2eeba8a74a21ec9d9512878c",
+      "rights_status": "SUPPORTED_BY_EXACT_REPOSITORY_CC_GRANT",
+      "offline_filled_copy_replay_supported": true,
+      "provider_upload_supported": false,
+      "rights_conditions": [
+        "Preserve original bytes and all historical records/results. Write any future synthetic artifacts separately.",
+        "Keep replay internal/offline; no provider upload, public template redistribution, clinical use or endorsement.",
+        "Retain source attribution/license, mark synthetic changes, and do not report a reduced acceptance denominator."
+      ],
+      "families": [
+        "F1",
+        "F5"
+      ],
+      "lineage": "zenodo-proforma-creator-582b52",
+      "previously_exposed": true,
+      "new_unseen_claim": false,
+      "remaining_27_partition_member": true,
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "profile_field_values": "Deferred until actual unchanged initial mapping on final source S; use unchanged answering.plan and answers_for.",
+      "supplemental_manual_profiles": [],
+      "automatic_mapping_corrections_permitted": 0,
+      "automatic_answer_corrections_permitted": 0,
+      "result_on_final_source": null,
+      "special_boundary": null
+    }
+  ],
+  "prospective_preparation_required": [
+    "Root final coherent source S/full SHA/read-only clean worktree and exact tracked-source inventory.",
+    "Root serial DB/renderer resource grant; no run follows merely from this metadata.",
+    "Task-owned byte-sealed driver copies with only output/DB/socket/dependency-path ownership bindings; unchanged original drivers retained.",
+    "Retained PDFium4.30.0 dependency directory bound explicitly before checker; no repeat missing-module instrument failure.",
+    "Prospectively sealed metadata-only union admits only declared native/V3 driver identities; original consolidator refuses mixed harness hashes and stays unchanged.",
+    "Every child/outer/reader exit retained; database normal/test absence, renderer/container/socket/PID teardown and source-before/after verified before next packet.",
+    "No favorable retry selection: one declared final-source result per original; initial failures and supplemental/manual traces remain append-only."
+  ],
+  "manual_fidelity_reuse": {
+    "D10": {
+      "source_commit": "1b844504a42e02232df9151b6015990a27ace77a",
+      "receipt": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/checkpoint-word-after-actual-D10-1b844504-20261004.json",
+      "receipt_sha256": "09c0d672e7260db9b1037cabcc1ce385019f26e9177e44df7730b817b418364c",
+      "export_sha256": "52b9ff085392b3bac348225f86a094164ef8801d785c7a2bd39fb3d0cde50c90",
+      "automatic_correct": 183,
+      "manual_correct": 186,
+      "denominator": 198,
+      "strict": false
+    },
+    "D30": {
+      "source_commit": "7ccdcb6e75241685e90519774b909ecbd5b1e827",
+      "receipt": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/root-d30-manual-7ccdcb6e-prospective-freeze.json",
+      "receipt_sha256": "93e2324c7266c4943ac2bfb1e77264afd46366a3d77bdbcdcd1048a2e01c7dbb",
+      "export_sha256": "fdf4dbe9327f7d2cab8dafc4981d76d9701a69ab423e8ae9d774fe6a76bd498c",
+      "automatic_correct": 61,
+      "manual_correct": 62,
+      "denominator": 62,
+      "strict_automatic": false
+    },
+    "final_source_reuse_adjudication": null,
+    "rule": "Historical archived file/package fidelity stays valid for those exact exports. Transfer to source S only after exact route/writer/dependency/config/harness comparison and affected regression evidence; changed dependencies require specific adjudication or affected refresh. No manual recovery gets automatic credit. Do not repeat archived manual drills merely to create a new report."
+  },
+  "plan_version": "dev33-supported-layout-peer-v2",
+  "original_prepared_plan": {
+    "path": "docs/rebuild/v1/word-dev33-final-plan-prepared-20261004.json",
+    "sha256": "e1ca082b8c7ddff09a054cf9f581ef6bbbbb4c35b693380b1bc698ef90822d39"
+  },
+  "supported_layout_driver_sources": {
+    "run_dev_application_gate_v2.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/run_dev_application_gate_v2.py",
+      "sha256": "17d06e2a843374d6e12e141f24d38d409ed8b7174bc7ace4d2a8682bc8b2b8d9"
+    },
+    "dev_application_gate_v2.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/dev_application_gate_v2.py",
+      "sha256": "f6888ff50a5c83059dc34a08433d99b50237350b89adea98e9360b329abca840"
+    },
+    "run_dev_application_gate_native_v1.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/run_dev_application_gate_native_v1.py",
+      "sha256": "b88f5c30276247c23a18a66accc0782fa706be73c21416fc46d22bec5d8f3169"
+    },
+    "dev_application_gate_native_v1.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/dev_application_gate_native_v1.py",
+      "sha256": "d179b9dac6e780d4bcf5120fdb0f9ebe14695db28d0a7278780943de9e7c8f18"
+    },
+    "fixed_render_checker.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v2/fixed_render_checker.py",
+      "sha256": "a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e"
+    }
+  },
+  "layout_peer_helper_sha256": "05c157aacd0c717ca9835bc8b8482f8c100101e7be3f6a3aa46d49cd145e8a23"
+}
