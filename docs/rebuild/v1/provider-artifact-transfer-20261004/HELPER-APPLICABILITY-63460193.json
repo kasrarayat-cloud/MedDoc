@@ -1,0 +1,537 @@
+{
+  "C_tracked_files": 5820,
+  "QA_calls": 0,
+  "all16_direct_bytes_and_paid_manifest_and_report_equal": true,
+  "applicability": "Exact10-path e4d7 delta onto C; own older writer full tree is NOT claimed C-equivalent.",
+  "candidate": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "changes": [
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "73d974477abc8e01b976583f553ee15600822c2b",
+        "type": "blob"
+      },
+      "new_sha256": "398cd9575d20e7f48e7bf236c9e5bbfc867a44c1f8215c03062f00cd8fd165af",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/RESULTS-63460193.md"
+    },
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "2b682d543f38051fd3214d0e2c5d25a34fb3c44f",
+        "type": "blob"
+      },
+      "new_sha256": "8f270d71cb8c8646a1b88e86f8a859a09ef443faab85e22d1ae5c4bc6c4a92cf",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/actual-process-evidence-63460193.json"
+    },
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "eaabcdedf2a42a688b2546b13946e4287f074b82",
+        "type": "blob"
+      },
+      "new_sha256": "2b98d79fd77deca57a64ba987d9e7a7b270ed95fd307aac2b32b159ca505a5bc",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/all16-actual-transfer.json"
+    },
+    {
+      "C_preimage": {
+        "mode": "100644",
+        "oid": "c97736d26dd577612afa3d5cfc6d682a74a5c9bf",
+        "type": "blob"
+      },
+      "action": "modify",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "80e928b0f1fdc53f2fece1a0b0232594b3aef84f",
+        "type": "blob"
+      },
+      "new_sha256": "5babeb26fa4e4519c84c85857c7b51f6a300c87512f64cab6da898f1f250d352",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/cached_provider_transfer.py"
+    },
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "82af81492c59f8f248cbfd36a46c6b5b1e6c228f",
+        "type": "blob"
+      },
+      "new_sha256": "af0e3f4b7fe46ed3af3aa61f957dc88e600471c201b13bbca0bc92cb1d3ce2a0",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/correction-manifest.json"
+    },
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "5a9e1461c0b2d665e454ed16aa1e5b4fe28d1c8d",
+        "type": "blob"
+      },
+      "new_sha256": "0b6fe7b28b34601b349334b59e4132237ac8b5418d0434f8cd9b9207104a2638",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/correction.patch"
+    },
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "7406b6f224776362ead0e109ee9c0ec0c7a7beb2",
+        "type": "blob"
+      },
+      "new_sha256": "b502eddf3cac6827e1655ea91c3588dcb3022c3b83dbcbffef569d3a62402a84",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/corrective-source-proof.json"
+    },
+    {
+      "C_preimage": {
+        "mode": "100644",
+        "oid": "33e5c1abfe574e480111cf2fa7fbea6b6e114d0b",
+        "type": "blob"
+      },
+      "action": "modify",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "9842f783010828fd42e8bde08d6aa417bbc5cc21",
+        "type": "blob"
+      },
+      "new_sha256": "15e3786442656b925045e1c54d1824ac82a008dcb3f0774fe7ef28558a426106",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/test_transfer_preparation.py"
+    },
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "19559ec0d70e8354dbbf68901506cf8ed9098e3a",
+        "type": "blob"
+      },
+      "new_sha256": "39acce72464a9554cced5eecc5c0f5317698ec2e87388390aaa16d0a6812f628",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/typed-aggregate-first-instrument.json"
+    },
+    {
+      "C_preimage": null,
+      "action": "add",
+      "new_git_entry": {
+        "mode": "100644",
+        "oid": "514cec6a7b34605b3a031ccf4ca5d80795ded2f9",
+        "type": "blob"
+      },
+      "new_sha256": "615a6cd82dc638e1cf20d6bf80ba6381a05ac9686bd6e303bcfb1d593362a73e",
+      "path": "docs/rebuild/v1/provider-artifact-transfer-20261004/typed14-actual-aggregate.json"
+    }
+  ],
+  "corrective_patch_commit": "e4d7ebf40c870d4bd6bde0257936915234d8f103",
+  "elapsed_seconds": 1.813712517003296,
+  "exact_input_count": 4,
+  "export_count": 16,
+  "exports": [
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures/002",
+      "attempt": 2,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37355,
+      "export_sha256": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+      "paid_manifest_export_sha256": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+      "paid_manifest_sha256": "31a95c1689d574a1d249f6fc81fe47cbeca22542e668c897986ab08da12d0afc",
+      "readback_passed": true,
+      "readback_sha256": "b9f8c04c70e14794a23fa672d0d918f263454c9c793915ad816192861eb7a835",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures/003",
+      "attempt": 3,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37072,
+      "export_sha256": "394ebf28b891bbdde3487f04875b9f11539e0ebf2e36f2f805c725b3b0c2454a",
+      "paid_manifest_export_sha256": "394ebf28b891bbdde3487f04875b9f11539e0ebf2e36f2f805c725b3b0c2454a",
+      "paid_manifest_sha256": "266894b66e94886f7e54b08b798b34ff9b048b390d46571cee7e1043f97221a2",
+      "readback_passed": true,
+      "readback_sha256": "f17e3342e0c8e5d9819d55344a4886cc2eeac3d462d3b7d50bbea96d3d6c5e19",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures/004",
+      "attempt": 4,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37010,
+      "export_sha256": "34f13d96b2586a7494ef37141b663ba69aa93d015f4e182fad27cd55c6195ea3",
+      "paid_manifest_export_sha256": "34f13d96b2586a7494ef37141b663ba69aa93d015f4e182fad27cd55c6195ea3",
+      "paid_manifest_sha256": "c6e6b244b8740c4b339436b30da3211273705bd695f274c03bfc9f6f49612846",
+      "readback_passed": true,
+      "readback_sha256": "448c47058ce2c24acbc939a04516ac8f82bdd94676fa864f857dfa0dcff429cf",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures/005",
+      "attempt": 5,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37356,
+      "export_sha256": "ba9a94e751d5602f37311edd841e0a9a831a62b5456360680ab42b97b62953e2",
+      "paid_manifest_export_sha256": "ba9a94e751d5602f37311edd841e0a9a831a62b5456360680ab42b97b62953e2",
+      "paid_manifest_sha256": "adc0647e697c9d6c6efe575602b2052ef2d722f5f043d05b268d46f8e0423c36",
+      "readback_passed": true,
+      "readback_sha256": "45afd5e1108f4223afcc9d69aff73788da639670a1d5d954d2d651505c4d2362",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures/006",
+      "attempt": 6,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37298,
+      "export_sha256": "bc967100f1cdcaec1a3f7f590bdf22f27194fe4e1da6840a74ef3d7b768832fd",
+      "paid_manifest_export_sha256": "bc967100f1cdcaec1a3f7f590bdf22f27194fe4e1da6840a74ef3d7b768832fd",
+      "paid_manifest_sha256": "81ba1ef8499a3223e69a5adb4ca815866ab90ddb2741ac30b35ef5fcfcedc497",
+      "readback_passed": true,
+      "readback_sha256": "3363e4e2a27eb9f3b91815654fc5cb7e8f05be1a72955a30d3a44c1897ad3098",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures/007",
+      "attempt": 7,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37235,
+      "export_sha256": "0c22eb73d58085d9bdc4efe37fda9871df28aa29b551891dc8202fc5e9f9ea96",
+      "paid_manifest_export_sha256": "0c22eb73d58085d9bdc4efe37fda9871df28aa29b551891dc8202fc5e9f9ea96",
+      "paid_manifest_sha256": "95adedc186b2240b0fbc6f9bbb649c9942f1db2cc803cfedf973ba5856684520",
+      "readback_passed": true,
+      "readback_sha256": "876f123d9c1e0f971017307a62e14c7c071f85bd0caead380e3a8f1405f49143",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-first-r1/captures/008",
+      "attempt": 8,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 34806,
+      "export_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "paid_manifest_export_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "paid_manifest_sha256": "e2835f4aa33b40dc41473bfb902d63345c522672fb3f5b1152d7bb2aff1771ce",
+      "readback_passed": true,
+      "readback_sha256": "9ceefea60349e65049c5e7f5f6ff49aed07f4581ddbc7501e7444e7db884ef5c",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures/009",
+      "attempt": 9,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 36931,
+      "export_sha256": "eee0e36455df97ef0f1a56688ee44bdc1eb476440ddd484792e417af5c4a646e",
+      "paid_manifest_export_sha256": "eee0e36455df97ef0f1a56688ee44bdc1eb476440ddd484792e417af5c4a646e",
+      "paid_manifest_sha256": "f0598baf27cc7e3856cdbedddd6484523194549aa66ea8069a89868ee7fd73b4",
+      "readback_passed": true,
+      "readback_sha256": "035eb6c502e4793ea738857abeb39e99894da85378ba301bdbe6d5b7feb8ce57",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures/010",
+      "attempt": 10,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 36914,
+      "export_sha256": "d9788f468ba421df479dd076ff470f3eb87febd045596449bebb1c9572197a90",
+      "paid_manifest_export_sha256": "d9788f468ba421df479dd076ff470f3eb87febd045596449bebb1c9572197a90",
+      "paid_manifest_sha256": "dea443337999672eb18af5556247e2b3529e2f6bf3b7d7a5bff4a86bbfd2ddac",
+      "readback_passed": true,
+      "readback_sha256": "9fc08cec6feb8d9519544eb7217a63695c60225ec0d4fedca48192fcc71c435f",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures/011",
+      "attempt": 11,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37031,
+      "export_sha256": "87dce7987580f043d87ad25aa73fa994a06a8b6c6ca3f8341994573ca0db6969",
+      "paid_manifest_export_sha256": "87dce7987580f043d87ad25aa73fa994a06a8b6c6ca3f8341994573ca0db6969",
+      "paid_manifest_sha256": "b9ca4775ea3ae9a2abbb93374d62c24731a165271763cc753df34497dec44573",
+      "readback_passed": true,
+      "readback_sha256": "b7a889611acfff8bc0ea48c7049d7097832606011f42b1ca045fdc1ea0c9cb66",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures/012",
+      "attempt": 12,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37075,
+      "export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "paid_manifest_export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "paid_manifest_sha256": "d368e776c782994c94c3892c41f39416ddbdfc3659b4115a55fc01636c7110c8",
+      "readback_passed": true,
+      "readback_sha256": "d95b78afe20291525ef83e59e4dbbaef14c7ae46cb58167bf87de3565e2431d5",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures/013",
+      "attempt": 13,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37075,
+      "export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "paid_manifest_export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "paid_manifest_sha256": "0ee2d47d0c5b3db66ca8ca6dcdd0772b23c816ee085135a5d7c2f7e02ffb812a",
+      "readback_passed": true,
+      "readback_sha256": "d95b78afe20291525ef83e59e4dbbaef14c7ae46cb58167bf87de3565e2431d5",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures/014",
+      "attempt": 14,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 34544,
+      "export_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+      "paid_manifest_export_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+      "paid_manifest_sha256": "55af5819ccef7b1bf6f66fc4bdcbc55ba56155b0a56c553da8d6a3584297ad64",
+      "readback_passed": true,
+      "readback_sha256": "b6ce18f0e16b23eb4c8f01a61201610aaa0c6abc0df6ca66cc2b9c40c153e4fa",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-typed-second-r1/captures/015",
+      "attempt": 15,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 34539,
+      "export_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+      "paid_manifest_export_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+      "paid_manifest_sha256": "a49f38cca46984972cc04d2c65a2b7216ebb32115ad8d4ab6d6d9eb5f85a46d4",
+      "readback_passed": true,
+      "readback_sha256": "b6ce18f0e16b23eb4c8f01a61201610aaa0c6abc0df6ca66cc2b9c40c153e4fa",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/captures/017",
+      "attempt": 17,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37002,
+      "export_sha256": "5ef3a23c32a69023ea5c0eaccf7a7701fd037bf518fc19b6e837b3354c7ccd86",
+      "paid_manifest_export_sha256": "5ef3a23c32a69023ea5c0eaccf7a7701fd037bf518fc19b6e837b3354c7ccd86",
+      "paid_manifest_sha256": "9e490e0d2002383c0409e4bb7882e161a5c1caa9e6f55371b2a5beac6ca5f869",
+      "readback_passed": true,
+      "readback_sha256": "465b9510aaafc105f2563978b2fa9aa064e9a6d95244bf3c64c103711dd2add8",
+      "report_hash_equal": true
+    },
+    {
+      "actual_capture": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-63460193-voice-r2/captures/019",
+      "attempt": 19,
+      "bytes_equal_paid_export": true,
+      "current_export_bytes": 37328,
+      "export_sha256": "dea0c9a75dca84696d90458d5235842fa15e9893535a92c7901d7e209b35ce46",
+      "paid_manifest_export_sha256": "dea0c9a75dca84696d90458d5235842fa15e9893535a92c7901d7e209b35ce46",
+      "paid_manifest_sha256": "0055fd8ca2f6ad230c80ec1118fc2f18124654ed1b846871fca11a05c62d3122",
+      "readback_passed": true,
+      "readback_sha256": "3426a42ac8564cd485cec29d349912927ad7225591ea6994767fb1780962eeed",
+      "report_hash_equal": true
+    }
+  ],
+  "no_non_doc_change": true,
+  "paid_ledger_mutations": 0,
+  "patch_parent": "ae571043115b234da86fa6fea6f139781a49d701",
+  "preimages_exact_C": true,
+  "priced_AST_count": 15,
+  "priced_bindings": [
+    {
+      "C_bytes_sha256": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/v3_field_relations.py",
+      "sha256": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/generation_batch.py",
+      "sha256": "3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/batch_jobs.py",
+      "sha256": "b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/generation.py",
+      "sha256": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/ordinary_source_scope.py",
+      "sha256": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/reviewed_source.py",
+      "sha256": "8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/reviewed_procedure_source.py",
+      "sha256": "aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/source_scope.py",
+      "sha256": "5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/v3_actors.py",
+      "sha256": "bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/v3_syntax.py",
+      "sha256": "d38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/v3_literal_facts.py",
+      "sha256": "5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/reviewed_speaker.py",
+      "sha256": "4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/transcript_context.py",
+      "sha256": "e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/v3_destination.py",
+      "sha256": "b8ff1dff5825ef66c86c43d3db21fd9e7b9b8468179205ebac01899e347809ef",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_bytes_sha256": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "C_plus_patch_unchanged": true,
+      "paid_AST_equal": true,
+      "path": "rebuild/core/v3_mapping.py",
+      "sha256": "34cae0324aa323299cea26e035c560d32a5aeda23fc25e435234ab73c2e5c87c",
+      "type": "whole_module_AST"
+    },
+    {
+      "C_plus_patch_unchanged": true,
+      "paid_bytes_equal": true,
+      "path": "rebuild/core/v3_syntax_model.json",
+      "sha256": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+      "type": "exact_bytes"
+    },
+    {
+      "C_plus_patch_unchanged": true,
+      "paid_bytes_equal": true,
+      "path": "rebuild/requirements.txt",
+      "sha256": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+      "type": "exact_bytes"
+    },
+    {
+      "C_plus_patch_unchanged": true,
+      "paid_bytes_equal": true,
+      "path": "rebuild/requirements-production.lock",
+      "sha256": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+      "type": "exact_bytes"
+    },
+    {
+      "C_plus_patch_unchanged": true,
+      "paid_bytes_equal": true,
+      "path": "rebuild/requirements-production.manifest.json",
+      "sha256": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade",
+      "type": "exact_bytes"
+    }
+  ],
+  "provider_calls": 0,
+  "receipt": {
+    "actual_replay_sha256": "5a5560b7e4a6b804b3d1cb9a73968a270ce3b6f334b1d9c35aecdb294a01b86a",
+    "actual_retained_replay": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/receipt-current-481b65ad/result.json",
+    "both_commits_C_ancestors": true,
+    "cases": [
+      {
+        "answer_status": "supported",
+        "export_sha256": "23fb4501bdce6714c3ad193610eaa71457f28691611e3e72b3f2db8c94716f7c",
+        "final_decisions": [],
+        "folder": "ordinary-source-auto-y3yxtpwr",
+        "notes": "Signed consent received on: 2026-09-30\nUnrelated note: Synthetic review",
+        "original_sha256": "02a12d4c7e4512800d32abb85138e4b7f85c6f8f80e0c08fce434f3a7281460d",
+        "page_status": "supported",
+        "text": "2026-09-30",
+        "untargeted_zip_parts_equal": true
+      },
+      {
+        "answer_status": "supported",
+        "export_sha256": "59d564f0373da0a3026d53b2aedcfceb3b308e4a026cd0535e08208232aebaa8",
+        "final_decisions": [],
+        "folder": "ordinary-source-auto-ru9nbiwf",
+        "notes": "Signed consent was received on: 2026-09-30\nUnrelated note: Synthetic review",
+        "original_sha256": "b6075c33e1215b4d912c817c090be49710c05180810603e027d5736cfdc4149b",
+        "page_status": "supported",
+        "text": "2026-09-30",
+        "untargeted_zip_parts_equal": true
+      }
+    ],
+    "current_function_bindings": [
+      {
+        "AST_sha256": "17d0eae0873bb28fd25a07834a4ce4e6e35f75b0e1873921a216208f6c62510d",
+        "C_equal_actual_receipt_replay": true,
+        "function": "completed_receipt_question"
+      },
+      {
+        "AST_sha256": "3e75523c09e6d6a95f9ce7b09e0b76d9868a959ce4cb5f6b4d681d61471dc22e",
+        "C_equal_actual_receipt_replay": true,
+        "function": "receipt_date_warnings"
+      }
+    ],
+    "first_failure": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/notes/elliptic-receipt-0b4ccfd5-first.json",
+    "first_failure_sha256": "bd1f15b77b2294fbc9d7429010b878b544cd6deee92014b8896c1300fc92f72b",
+    "first_status": "conflict",
+    "first_text": "",
+    "held_candidate": "2026-09-30",
+    "integration_commit": "15f87bb2e7a487225711fa52c8092e279767ad01",
+    "original_notes": "Signed consent received on: 2026-09-30\nUnrelated note: Synthetic review",
+    "repair_commit": "1708cbb88e984a54014eab1cd35900ff15ee1261",
+    "safety_limit": "Historical76-method and17-control evidence/addendum retained;14applicable controls passed,3unsupported allegations withdrawn. C08 remains held.",
+    "source_limit": "Retained actual pure fixture/export replay on481b; no new C receipt route test or native Word/provider claim.",
+    "status": "original engineering overhold closed; no new clarification"
+  },
+  "scope": "Read-only git/blob/AST/archived artifact proof, not execution of a new C build or CI.",
+  "service_calls": 0,
+  "tracked_rebuild_application_files_unchanged": 751,
+  "unchanged_existing_tracked_files": 5818
+}
