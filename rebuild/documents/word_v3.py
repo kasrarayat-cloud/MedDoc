@@ -7720,6 +7720,20 @@ class Detector:
                     or self.box_units(caption) or wraps_structure(caption.el) or len(printed.strip()) > MAX_MAPPING_LABEL
                     or self.column_header(cell.parent, col, row, complete=True) != printed.strip()):
                 continue
+            if not re.fullmatch(r'[^:;.!?\r\n]+:', printed.strip()):
+                # Several clauses/captions in this one cell do not appoint one
+                # unambiguous temporal question. Keep the complete source and
+                # expose the omission rather than borrowing the first caption.
+                clauses = [printed, *re.split(r'(?<=[.;!?])\s*|[:\r\n]+', printed)]
+                human = any(self.checkbox_source_action(clause.strip(), governing=True)
+                            or signing_place(clause) for clause in clauses if clause.strip())
+                for paragraph in paragraphs[:2]:
+                    self.coverage_issue(paragraph, 'unmapped_answer',
+                        'The date/time format has competing printed captions or clauses. Review the complete '
+                        'source question and its exact answer area; no temporal ownership was inferred.')
+                    if human:
+                        self.protected_regions.add(paragraph.id)
+                continue
             sources = [caption, *paragraphs]
             if (not all(self.tab_source_visible(p) and not self.region_hidden(p.el) for p in sources)
                     or any(n.tag in (q('w:hyperlink'), q('w:drawing'), q('w:pict'), q('w:object'), TXBX)

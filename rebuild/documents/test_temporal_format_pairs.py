@@ -80,6 +80,28 @@ class TemporalFormatPairs(unittest.TestCase):
                    'fingerprint':w.fingerprint(s.el),'contract':'v3','target':{'type':'span','start':0,'end':10,'shape':'format_hint'}}}
                 with self.assertRaises(w.V3Failure):w.fill(raw,[f],{'forged':'Dr Synthetic Finalizer'})
 
+    def test_compound_caption_keeps_partial_coverage_and_complete_human_clauses_protected(self):
+        for caption in ('Date and time collected; I approve this document:',
+                        'Date and time collected.I approve this document:',
+                        'Date and time collected. I approve this document:',
+                        'Date and time collected: Witness name:',
+                        'Date and time collected: I approve this document:',
+                        'Date and time collected:\nI approve this document:'):
+            with self.subTest(caption=caption):
+                raw=data(form(caption));r=w.inspect(raw);self.assertEqual(pairs(r),[])
+                issues=[x for x in r['coverage_issues'] if x['slot'].startswith('b/tbl[0]/tr[1]/tc[1]/p[')]
+                # The newline caption cannot qualify even the immediate column
+                # header and remains outside this compiler's finite source scope.
+                if '\n' not in caption:self.assertTrue(issues)
+                if 'I approve' not in caption:continue
+                index=w.SlotIndex(w.open_package(raw))
+                for i,end in ((0,10),(1,8)):
+                    slot=index.by_id['word/document.xml#b/tbl[0]/tr[1]/tc[1]/p[%d]'%i]
+                    f={'key':'forged','kind':'text','label':'Clinical value','context':'',
+                       'locator':{'contract':'v3','part':slot.part,'slot':slot.path,'fingerprint':w.fingerprint(slot.el),
+                                  'target':{'type':'span','start':0,'end':end,'shape':'format_hint'}}}
+                    with self.assertRaises(w.V3Failure):w.fill(raw,[f],{'forged':'Dr Synthetic Finalizer'})
+
     def test_partial_reordered_and_extra_questions_are_not_complete_pairs(self):
         for date,time,tail in [('MM/DD/YYYY extra',':(HH:MM)',None),('MM/DD/YYYY','HH:MM pending',None),
                               (':(HH:MM)','MM/DD/YYYY',None),('MM/DD/YYYY',':(HH:MM)','Symptoms: ______'),
