@@ -762,8 +762,22 @@ class V3PrintedTicks(V3Fixture, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.template, version = self.uploaded(data=prechecked_form_bytes(), name="Synthetic checklist")
+        self.checklist_original = prechecked_form_bytes()
+        self.template, version = self.uploaded(data=self.checklist_original, name="Synthetic checklist")
+        consent = self.by_label(version)["Consent obtained"]
+        self.assertTrue(consent["write_protected"])
+        response = self.client.post(f"/templates/{self.template.pk}/", {
+            "action": "v3_confirm", "mapping_version": version.pk, "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 400, "the original human action requires explicit coverage review")
+        self.assertFalse(MappingConfirmation.objects.filter(version=version).exists())
+        issues = version.import_manifest["coverage"]["selected_engine_issues"]
+        self.assertTrue(issues)
+        response = self.client.post(f"/templates/{self.template.pk}/", {
+            "action": "v3_coverage", "mapping_version": version.pk,
+            **{"exclude_" + issue["id"]: "on" for issue in issues}})
+        self.assertEqual(response.status_code, 302)
         self.version = self.confirm(self.template)
+        self.assertEqual(private_path(self.template.original_path).read_bytes(), self.checklist_original)
         self.by = self.by_label(self.version)
         self.assertEqual(self.new_encounter(self.version, notes="Indication: synthetic").status_code, 302)
         self.encounter = Encounter.objects.get()
@@ -794,15 +808,15 @@ class V3PrintedTicks(V3Fixture, TestCase):
         self.save({"Indication": "synthetic"})
         exported = self.finalized_export()
         text = part_text(exported)
-        self.assertIn("Consent obtained ☐", text)
+        self.assertIn("Consent obtained ☒", text, "review does not authorize changing a human-owned consent act")
         self.assertIn("Hypertension ☐", text)
         self.assertIn("Smoker?  ☐ Yes  ☒ No", text, "an unanswered choice keeps what the form prints")
         with ZipFile(io.BytesIO(exported)) as z:
             root = etree.fromstring(z.read("word/document.xml"))
         self.assertEqual([c.get("{http://schemas.microsoft.com/office/word/2010/wordml}val")
-                          for c in root.iter("{http://schemas.microsoft.com/office/word/2010/wordml}checked")], ["0"])
+                          for c in root.iter("{http://schemas.microsoft.com/office/word/2010/wordml}checked")], ["1"])
         page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
-        self.assertEqual(page.count("Box exported unticked."), 2)
+        self.assertEqual(page.count("Box exported unticked."), 1)
         self.assertIn("No option chosen; the form keeps what it prints: No ticked.", page)
 
     def test_a_chosen_option_unticks_the_printed_one(self):
@@ -810,7 +824,7 @@ class V3PrintedTicks(V3Fixture, TestCase):
         text = part_text(self.finalized_export())
         self.assertIn("Smoker?  ☒ Yes  ☐ No", text)
         self.assertIn("Hypertension ☒", text)
-        self.assertIn("Consent obtained ☐", text)
+        self.assertIn("Consent obtained ☒", text)
 
 
 @override_settings(**V3)
@@ -1110,6 +1124,7 @@ class V3CheckboxNeedsABox(V3Fixture, TestCase):
     def setUp(self):
         super().setUp()
         self.template, version = self.uploaded(data=consent_control_form_bytes(), name="Synthetic consent")
+        self.original_fields = version.fields
         self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
                                                              **{"remove_" + f["key"]: "on" for f in version.fields}})
         self.version = self.latest(self.template)
@@ -1123,10 +1138,10 @@ class V3CheckboxNeedsABox(V3Fixture, TestCase):
         self.assertEqual(self.latest(self.template).pk, self.version.pk)
 
     def test_a_stored_checkbox_on_a_text_control_is_never_confirmed(self):
-        from documents import locate_fields
-        from core.views import v3_original
-        field = locate_fields(v3_original(self.template), [{"slot": "word/document.xml#b/p[1]/sdt[0]", "kind": "text",
-                                                           "label": "Consent obtained"}])["fields"][0]
+        # A current locate operation correctly refuses this human-owned source.
+        # Reconstruct the corrupt historical mapping from the unchanged import,
+        # without requiring the new writer to authorize it first.
+        field = next(f for f in self.original_fields if f["label"] == "Consent obtained")
         field = {**field, "kind": "checkbox", "options": ["Consent obtained"]}   # the shape locate stored before R7
         stale = TemplateVersion.objects.create(template=self.template, number=self.version.number + 1, fields=[field],
                                                contract="v3", corrections={"base_version": self.version.number}, created_by=self.user,
@@ -1136,6 +1151,29 @@ class V3CheckboxNeedsABox(V3Fixture, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("checkbox fields point at a place that is not a box: Consent obtained.", response.context["v3_error"])
         self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
+
+    def test_an_ordinary_text_control_takes_text_but_a_historical_checkbox_mapping_is_refused(self):
+        from documents import locate_fields
+        from core.views import v3_original
+        doc = Document()
+        doc.add_paragraph("Synthetic clinical intake")
+        doc.add_paragraph("Symptoms: ")._p.append(_sdt("rich", placeholder="Click or tap here to enter text."))
+        buffer = io.BytesIO(); doc.save(buffer)
+        raw = buffer.getvalue()
+        template, version = self.uploaded(data=raw, name="Synthetic ordinary text control")
+        field = locate_fields(v3_original(template), [{"slot": "word/document.xml#b/p[1]/sdt[0]", "kind": "text",
+                                                      "label": "Symptoms"}])["fields"][0]
+        self.assertEqual(field["kind"], "text")
+        self.assertFalse(field.get("write_protected"))
+        corrupt = {**field, "kind": "checkbox", "options": ["Symptoms"]}
+        stale = TemplateVersion.objects.create(template=template, number=2, fields=[corrupt], contract="v3",
+            created_by=self.user, **import_metadata(version, [corrupt]))
+        response = self.client.post(f"/templates/{template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
+                                                                  "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("checkbox fields point at a place that is not a box: Symptoms.", response.context["v3_error"])
+        self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
+        self.assertEqual(private_path(template.original_path).read_bytes(), raw)
 
 
 def left_effusion_form_bytes():
