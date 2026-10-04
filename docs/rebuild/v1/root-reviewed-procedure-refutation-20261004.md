@@ -2,7 +2,7 @@
 
 Frozen implementation `9b5d55e050ecfe73f34b496f516061c1849128a5` is **not integrated or qualified**. Provider preparation is paused. The existing PR remains a draft.
 
-Root independently preserved60 full-wire controls through validation, page governance and finalization. Actual exit1 in34.485seconds; source unchanged; no provider or database calls. One ordinary medication positive remains unnecessarily held: `A 30-year-old woman presents with headaches. She takes ibuprofen as needed. She denies bleeding.` Three initial flags with a separately attributed family event later in the note require adjudication and are not confirmed wrong-patient findings.
+Root independently preserved60 full-wire controls through validation, page governance and finalization. Actual exit1 in34.485seconds; source unchanged; no provider or database calls. One ordinary medication positive remains unnecessarily held: `A 30-year-old woman presents with headaches. She takes ibuprofen as needed. She denies bleeding.` Three initial flags with a separately attributed family event later in the note are withdrawn instrument expectations: they do not explicitly assign the preceding values to that person. The original60-control exit1 and raw flags remain retained; this is not a regraded passing qualification. Adjudication JSON SHA256 `6609d8f49dea171ea9fa2067de8171acbbf91b87728b57d826666831aa0b22e3`.
 
 A second24-control pass demonstrates nine concrete unsafe releases. Each of the following previously subjectless procedure values remains supported when followed by an explicit statement assigning **the report itself** to another person:
 
