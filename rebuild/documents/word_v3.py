@@ -1749,18 +1749,20 @@ class Detector:
         blank line or one question cannot establish this hierarchy. Actual XML
         siblings, rather than a paragraph-only view across tables, own the scope.
         """
-        if slot.kind != 'p' or not self.tab_source_visible(slot):
+        if slot.kind != 'p':
             return False
         text, pieces = self.ptext(slot.el)
         if (not text or text != text.strip() or not text.endswith(':')
                 or text.count(':') != 1 or len(text.split()) > MAX_LABEL_WORDS
-                or re.match(r'^[-\u2022]\s', text) or self.list_info(slot.el) is not None
-                or self.blank_spans(text, pieces) or '\x00' in text or BOX in text or CHECKED in text
-                or self.checkbox_source_action(text, governing=True)):
+                or re.match(r'^[-\u2022]\s', text)
+                or '\x00' in text or BOX in text or CHECKED in text):
             return False
         runs = [r for r in slot.el.iter(R) if any((n.text or '').strip() for n in r.iter(T))]
         if not runs or any((u := r.find('./' + q('w:rPr') + '/' + q('w:u'))) is None
                            or u.get(q('w:val'), 'single') not in ('single', 'double') for r in runs):
+            return False
+        if (not self.tab_source_visible(slot) or self.list_info(slot.el) is not None
+                or self.blank_spans(text, pieces) or self.checkbox_source_action(text, governing=True)):
             return False
         children = []
         node = slot.el.getnext()
@@ -11488,6 +11490,13 @@ def locate(data: bytes, targets: list) -> list:
         annotate_printed(detector.index, field)
         # The place's printed authorship/review requirement, read exactly as for the engine's own fields.
         source_policy.annotate(detector, [field])
+        fixed_subheadings = [{'place': place, 'start': None, 'end': None}
+                             for place in detector.fixed_subheading_slots]
+        reader = _PlaceReader(detector.index)
+        if any(reader.touches(place, region) for place in reader.of(field) for region in fixed_subheadings):
+            fail("This place is a fixed underlined group heading, not an answer. "
+                 "Reinspect the original and choose one of its separate answer lines. Nothing was added.",
+                 "invalid_mapping")
         # ⚠️ A ROLE PLACE TAKES ONLY WHAT IT ALLOWS, whoever chooses it: a clinician's add or a model's proposal on a
         # signing, initials, consent or protected place is refused unless it is a Signature or Initials field.
         roles = destination_roles_of(package) if roles is None else roles

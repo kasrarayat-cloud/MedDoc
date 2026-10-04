@@ -1,0 +1,9 @@
+# Manual fixed-caption admission — 2026-10-04
+
+The finished first source correctly refused exporting into a proven fixed underlined group caption, but its manual compiler still accepted a new field there. Exact D16 p24 target, returned manual field and later export refusal are archived; there was no wrong output and no application job or charge reachability claim.
+
+The manual compiler now checks its newly constructed physical place against the immutable original's proven fixed-caption places and refuses with `invalid_mapping` before returning a new mapping. The message directs the clinician to choose a separate answer line. Manual subordinate fields and genuine parent fields with their own answer gaps remain usable. Historical and forged stored caption writers continue to refuse at export.
+
+The same fixed-caption predicate checks visibility, list membership, drawn blanks and human source acts after cheap text and direct-underline prerequisites. No condition is removed; no style or visibility cache is added. This avoids this new rule walking style ancestry on ordinary paragraphs that cannot satisfy its format proof. The existing e15 CPU/style-catalogue problem remains a separate assigned engineering issue.
+
+Eight focused methods pass on the exact new source with a bounded real child exit and unchanged source hash. The exact original D16 full inspector result and two-child completed DOCX are byte-identical to the prior finished source; all three exact fixed caption manual targets now refuse. The34-method broader affected pass belongs to the preceding fffeee source, and is retained as such rather than cited as a new-source execution. No application, provider, DB, renderer, fixed scorer, GT or acceptance gate was changed. Independent finished-diff refutation and coherent application replay remain required.

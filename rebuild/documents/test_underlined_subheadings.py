@@ -85,6 +85,25 @@ class UnderlinedSubheadings(unittest.TestCase):
                         w.fill(original, [field], {'old_caption': 'Synthetic heading answer'})
                     self.assertEqual(w.fill(original, [field], {}), original)
 
+    def test_source_fixed_caption_cannot_be_added_as_a_new_manual_answer(self):
+        for cell in (False, True):
+            original = form(in_cell=cell)
+            _, detector = slots(original)
+            heading = next(s for s in detector.index.slots if s.id in detector.fixed_subheading_slots)
+            for kind in ('text', 'long_text'):
+                with self.subTest(cell=cell, kind=kind):
+                    with self.assertRaisesRegex(w.V3Failure, 'fixed underlined group heading.*Nothing was added') as denied:
+                        w.locate(original, [dict(slot=heading.id, kind=kind, label='Synthetic ordinary answer')])
+                    self.assertEqual(denied.exception.code, 'invalid_mapping')
+
+    def test_manual_subordinate_and_genuine_parent_answers_remain_usable(self):
+        for original, prefix in ((form(), '- First observation:'), (form(gap='  '), 'Before treatment:')):
+            _, detector = slots(original)
+            slot = next(s for s in detector.index.slots if s.kind == 'p' and w.text_of(s.el).startswith(prefix))
+            fields = w.locate(original, [dict(slot=slot.id, kind='text', label='Clinician reviewed value')])
+            exported = w.fill(original, fields, {fields[0]['key']: 'Explicit manual value'})
+            self.assertIn('Explicit manual value', w.text_of(w.open_package(exported).tree('word/document.xml')))
+
     def test_genuine_underlined_fields_and_parent_answers_are_not_excluded(self):
         for kwargs in ({'children': ()}, {'children': ('- First observation:  ',)},
                        {'gap': '  '}, {'gap': '\t'}, {'gap': ' ____'},

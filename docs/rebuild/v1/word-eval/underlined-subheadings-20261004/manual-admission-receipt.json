@@ -1,0 +1,62 @@
+{
+  "base": "fffeee3bf6432085615ee4fd368dfa24d9fc9890",
+  "word_sha256": "e9a7c5184ca341963196bbb325e25287af46cf5bba538a38a57c0d8da84c7868",
+  "test_sha256": "be45fd68d56468445daffe59356c224797af754f04998767df316e27b6fa9a6b",
+  "runtime": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d16-fixed-caption-manual-probe-20261004",
+  "seal_sha256": "8df5ac8118ecebd0d450e8d97246bf7e6947787154608b00f8b9215de369f2ac",
+  "files": 15,
+  "bytes": 784729,
+  "original_before": {
+    "locate": "accepted",
+    "fill": "refused",
+    "code": "mapping_mismatch",
+    "reason": "This mapping writes into a fixed underlined group heading, not an answer. Reinspect the original and review its separate answer lines before exporting.",
+    "application_job_charge_reachability": "UNVERIFIED",
+    "source_sha256": "684a3c40c42398fb2f4cc2aaaa1c35c93fe4cd6d4de4650eb5a45bba1a50cfad"
+  },
+  "focused_after": {
+    "pid": 3257060,
+    "exit": 0,
+    "wall_s": 9.490383087992086,
+    "timed_out": false,
+    "reaped": true,
+    "source_before": "e9a7c5184ca341963196bbb325e25287af46cf5bba538a38a57c0d8da84c7868",
+    "source_after": "e9a7c5184ca341963196bbb325e25287af46cf5bba538a38a57c0d8da84c7868"
+  },
+  "original_after": {
+    "source_sha256": "e9a7c5184ca341963196bbb325e25287af46cf5bba538a38a57c0d8da84c7868",
+    "mapping_full_json_equal_to_fffeee": true,
+    "two_child_export_byte_equal_to_fffeee": true,
+    "two_child_export_sha256": "e5bcb259ee5d400fcf31ae2390565b120f45083aaa9b25a0c0df01358f1fa205",
+    "manual_caption_refusals": [
+      {
+        "slot": "word/document.xml#b/p[24]",
+        "code": "invalid_mapping",
+        "reason": "This place is a fixed underlined group heading, not an answer. Reinspect the original and choose one of its separate answer lines. Nothing was added."
+      },
+      {
+        "slot": "word/document.xml#b/p[28]",
+        "code": "invalid_mapping",
+        "reason": "This place is a fixed underlined group heading, not an answer. Reinspect the original and choose one of its separate answer lines. Nothing was added."
+      },
+      {
+        "slot": "word/document.xml#b/p[47]",
+        "code": "invalid_mapping",
+        "reason": "This place is a fixed underlined group heading, not an answer. Reinspect the original and choose one of its separate answer lines. Nothing was added."
+      }
+    ],
+    "provider_db_renderer": 0,
+    "app_reachability": "No application route performed; raw manual compiler refusals verified",
+    "gate_claim": false
+  },
+  "original_after_process": {
+    "pid": 3259057,
+    "exit": 0,
+    "wall_s": 0.5936918700026581,
+    "timed_out": false,
+    "reaped": true
+  },
+  "broader_affected_reference": "34 methods passed on fffeee previous fullsource before independent-check ordering/manual-admission correction; not claimed as exact current-source run",
+  "new_provider_db_renderer": 0,
+  "new_whole_application_gate": false
+}
