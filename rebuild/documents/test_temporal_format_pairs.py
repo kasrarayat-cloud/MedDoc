@@ -155,6 +155,22 @@ class TemporalFormatPairs(unittest.TestCase):
                     f['locator'].update(slot=s.path,fingerprint=w.fingerprint(s.el),target={'type':'cell_replace'})
                 with self.assertRaises(w.V3Failure):w.fill(raw,[f],{f['key']:'Synthetic wrong answer'})
 
+    def test_repeated_temporal_paragraph_writer_never_overwrites_an_answer(self):
+        raw=data(form());r=w.inspect(raw);date,time=pairs(r)
+        for source_key,shared_object in ((False,False),(True,False),(True,True)):
+            duplicate=date if shared_object else deepcopy(date)
+            if not source_key:duplicate['key']='second-date-writer'
+            fields=[date,duplicate,time]
+            cases=[{date['key']:'04/10/2026'}]
+            if not source_key:cases.append({date['key']:'04/10/2026',duplicate['key']:'05/10/2026 EXTRA'})
+            for answers in cases:
+                with self.subTest(source_key=source_key,shared_object=shared_object,answers=answers),self.assertRaises(w.V3Failure)as error:
+                    w.fill(raw,fields,answers)
+                self.assertEqual(error.exception.code,'mapping_mismatch')
+            self.assertEqual(w.fill(raw,fields,{}),raw)
+        out=w.fill(raw,r['fields'],{date['key']:'04/10/2026',time['key']:'14:35'})
+        self.assertEqual([p.text for p in Document(io.BytesIO(out)).tables[0].cell(1,1).paragraphs[:2]],['04/10/2026','14:35'])
+
     def test_different_original_cannot_reuse_the_old_pair(self):
         first=data(form());f=pairs(w.inspect(first));second=data(form('Date and time received:'))
         with self.assertRaises(w.V3Failure):w.fill(second,f,{f[0]['key']:'10/04/2026'})

@@ -9838,6 +9838,12 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     or field.get('source_questions') != area.source_questions):
                 fail('The date/time answer does not match its complete original format and aligned caption. '
                      'Review this exact mapping again.', 'mapping_mismatch')
+            writers = [other for other in fields
+                       if (other.get('locator') or {}).get('target', {}).get('type') != 'none'
+                       and any(reader.touches(place, region) for place in reader.of(other))]
+            if len(writers) != 1:
+                fail('This complete date/time paragraph has more than one mapped writer. Remove the repeated '
+                     'or overlapping field and review each physical destination once.', 'mapping_mismatch')
         for area in adjacent_answers:
             region = {'place': area.slot.id, 'start': area.target['start'],
                       'end': area.target['start'] + 1 if area.target.get('shape') == 'after_label' else area.target['end']}
