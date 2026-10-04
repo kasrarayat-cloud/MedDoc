@@ -2392,6 +2392,7 @@ class Detector:
         self.rule_checkboxes(leftovers=True)
         self.rule_unclassified_response_lists()
         self.rule_lines_below_label()
+        self.rule_temporal_format_pairs()
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
@@ -7680,6 +7681,64 @@ class Detector:
                 kept.append((start, end, kind))
         return kept
 
+    def rule_temporal_format_pairs(self):
+        """Two complete format paragraphs under their own aligned temporal caption.
+
+        Native clock controls can already own the surrounding cell, and their
+        preceding time hint can already be claimed as a label. Neither owns the
+        distinct date/time paragraph's ink. Do not change the existing clock
+        mapping or infer a field from a partial hint or neighboring caption.
+        """
+        date_format = re.compile(r'(?:MM/DD/YYYY|DD/MM/YYYY)', re.I)
+        time_format = re.compile(r':?\(HH:MM\)', re.I)
+        for cell in (s for s in self.index.slots if s.kind == 'tc' and s.part == 'word/document.xml'):
+            if cell.info['span'] != 1 or cell.info['vmerge']:
+                continue
+            paragraphs = self.own_paragraphs(cell)
+            if (len(paragraphs) not in (2, 3) or len(paragraphs) != len(cell.children)
+                    or not date_format.fullmatch(self.ptext(paragraphs[0].el)[0].strip())
+                    or not time_format.fullmatch(self.ptext(paragraphs[1].el)[0].strip())):
+                continue
+            if len(paragraphs) == 3:
+                units = self.box_units(paragraphs[2])
+                if (len(units) != 3 or units[0][2].strip()
+                        or [option_text(u[1]).casefold() for u in units] != ['am', 'pm', '24-hr clock']):
+                    continue
+            row, col = cell.info['row'], cell.info['col']
+            above = [c for c in self.grid(cell.parent).get(row - 1, [])
+                     if c.info['col'] <= col < c.info['col'] + c.info['span']]
+            if len(above) != 1:
+                continue
+            header = above[0]
+            captions = self.own_paragraphs(header)
+            if (header.info['col'] != col or header.info['span'] != 1 or header.info['vmerge']
+                    or len(captions) != 1 or len(header.children) != 1):
+                continue
+            caption = captions[0]; printed, pieces = self.ptext(caption.el)
+            if (not printed.strip().endswith(':') or not DATE_LABEL.search(printed)
+                    or not TIME_LABEL.search(printed) or self.blank_spans(printed, pieces)
+                    or self.box_units(caption) or wraps_structure(caption.el) or len(printed.strip()) > MAX_MAPPING_LABEL
+                    or self.column_header(cell.parent, col, row, complete=True) != printed.strip()):
+                continue
+            sources = [caption, *paragraphs]
+            if (not all(self.tab_source_visible(p) and not self.region_hidden(p.el) for p in sources)
+                    or any(n.tag in (q('w:hyperlink'), q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                           for p in sources for n in p.el.iter())
+                    or any(wraps_structure(p.el) for p in paragraphs[:2])
+                    or any(area.slot is p or p in area.extra_slots for area in self.areas for p in paragraphs[:2])):
+                continue
+            context = self.context_for(caption, complete=True)
+            if len(context) > MAX_MAPPING_CONTEXT:
+                continue
+            refs = [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)} for p in sources]
+            for kind, paragraph in zip(('date', 'time'), paragraphs[:2]):
+                text, _ = self.ptext(paragraph.el)
+                relation = {'relation': 'temporal_format_hint', 'question': printed.strip(),
+                            'format': text, 'component': kind, 'sources': refs}
+                self.add(Area(kind, clean_label(printed) + ' — ' + kind.capitalize(), paragraph,
+                    {'type': 'span', 'start': 0, 'end': len(text), 'shape': 'format_hint'},
+                    context=context, complete_source=True, label_slot=caption, source_questions=[relation]))
+
     def rule_paragraph_fields(self):
         pending, pending_last = None, None     # a multi-line answer area and its last line
         for slot in [s for s in self.index.slots if s.kind == "p"]:
@@ -9540,6 +9599,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                                                 'scalar_alternative_source')]
     adjacent_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
+    temporal_answers = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'temporal_format_hint' for relation in area.source_questions)]
     requested_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'parenthetical_write_request' for relation in area.source_questions)]
     nested_choices = [area for area in source_detector.areas if any(
@@ -9734,6 +9795,18 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     or field.get('source_questions') != area.source_questions):
                 fail('The complete printed write request and answer area changed. Review its exact mapping again.',
                      'mapping_mismatch')
+        for area in temporal_answers:
+            # Each paragraph contains one complete format, so an insertion at
+            # either boundary is also this destination, not another question.
+            region = {'place': area.slot.id, 'start': None, 'end': None}
+            if not any(reader.touches(place, region) for place in reader.of(field)):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or field.get('kind') != area.kind
+                    or field.get('label') != area.label or field.get('context') != area.context
+                    or field.get('source_questions') != area.source_questions):
+                fail('The date/time answer does not match its complete original format and aligned caption. '
+                     'Review this exact mapping again.', 'mapping_mismatch')
         for area in adjacent_answers:
             region = {'place': area.slot.id, 'start': area.target['start'],
                       'end': area.target['start'] + 1 if area.target.get('shape') == 'after_label' else area.target['end']}
@@ -9856,7 +9929,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy", "temporal_format_hint") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -9889,7 +9962,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 owns = (any(original_branch_mapping(field, area) for area in relation_areas)
                         or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy', 'temporal_format_hint') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas))
