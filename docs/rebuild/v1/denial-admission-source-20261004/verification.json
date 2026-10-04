@@ -1,0 +1,30 @@
+{
+  "snapshot": "8556f410af73d3c5ac89c0ed57d529c6b6801ada",
+  "pure_cases": 5,
+  "exit_code": 0,
+  "deadline_seconds": 60,
+  "source_unchanged": true,
+  "source_sha256": {
+    "rebuild/documents/word_v3.py": "51fe70859d49841f4a0ac95723e81066620ca3def0d6d07f052085293159b5f1",
+    "rebuild/documents/engine.py": "f4a5ee0e2e02c6b17e39fd110bb9058de7622066c5f37724a3761a1ce29f2e01",
+    "rebuild/documents/service.py": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5",
+    "rebuild/core/import_binding.py": "1fb50ff996071f8125f701c7675a3e0bd211d0110ee17405b3d379ba7716b6bb",
+    "rebuild/core/jobs.py": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1",
+    "rebuild/core/views.py": "dfb7861ad6731dc2cb065950a176efebe12860707ffeeedb9378eb81d515ef18",
+    "rebuild/core/tests/test_denial_heading_governance.py": "57d95369ee236b1d342b971ef0843fb7a51736d64c5aa7eaf56736a80ffb665a",
+    "rebuild/core/tests/test_workflow.py": "40add918ea54ab255dda28d7aabb76893b9451388b6343fedcf9cb14187480c5"
+  },
+  "raw_evidence_directory": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/denial-current-source-20261004",
+  "raw_sha256": {
+    "probe.log": "562900ec469503963dc12a09bcaa96579172073ebef6e2f2320c16de28fbcc2e",
+    "probe.py": "799e9697f8a6010b64194f7f158a9853790fc08886f0050c98467808a26b4030",
+    "result.json": "73c2340e2cb1e731c8110ea3c16de806f47514879149532f96cace97465bbc7f",
+    "source-before.json": "439ed59fa03b3d5c8ed822f802f76b536ccdf088056bef2e4e0126e68d34ce69"
+  },
+  "original_retained_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "workflow27_outcomes": "pending",
+  "test_fixture_correction_justified": false
+}
