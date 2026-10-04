@@ -1900,6 +1900,24 @@
       "passing_methods": 4,
       "DB_absence_verified": true,
       "outcomes": "Corrected policy class passes established finalizer positives and unknown/patient/witness/manager negatives. Runtime guard unchanged; original generic print-name failure retained."
+    },
+    {
+      "source_commit": "c9f5ff8e7c731bae630e7f24d9620ddd9378fff0",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-remaining-route-c9f5ff8e",
+      "tests": 8,
+      "failures": 0,
+      "exit_status": 0,
+      "elapsed_test_seconds": 34.072,
+      "selectors": [
+        "RepairV3Usefulness/R1-05",
+        "SalvageV3/RR1-10",
+        "DocumentStatusFixture/6"
+      ],
+      "receipt_sha256": "31a87401746b0af5d0b2078c585d2243c809698dc196bdc730a5401b8e89d8b6",
+      "adjudication_sha256": "035e7698d3c139086b6b8424af3a1747f570a36f2624886119adbcacbdfc7973",
+      "qualification": "R105 original source and notes, valid Sonnet5.5 ordinary-v4 request contract, first supported Plan Rest., exact protected Consent preserved. RR110 both signer paragraphs unchanged. Three actual final exports archived before assertions/teardown. No provider.",
+      "instrument_annotation": "Original receipt selectors field was stale wrapper metadata; adjudication binds the executed command, script, eight-method log and source without altering original receipt.",
+      "test_database_absent": true
     }
   ]
 }

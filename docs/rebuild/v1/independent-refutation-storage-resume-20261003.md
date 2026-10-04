@@ -154,3 +154,27 @@ module, with the independently maintained selector contract updated as well.
 - `root-soap-speaker-refutation-caedf1d4f59a/result.json`: `7890891d382823ee3e94dc711e97253a095882aaf1cc64c5b8250ece06a63fb3`
 - `root-numeric-signing-refutation-27e3bbc3-source-complete/result.json`: `99b4cae763962b2528731f0767d8afaeef01b318ede8213332ddc72ed442c54e`
 - `root-numeric-explicit-witness-refutation-27e3bbc3/result.json`: `3ee2a9a46fb78755a7ab044b45f102d0cf550c297320a79cec22324f89fa1df5`
+
+## Repaired persisted route and export result — 2026-10-04
+
+Clean c9f5ff8e executes the original R105 and RR110 routes plus six fixture-wire
+controls: eight methods pass in 34.072 seconds, real exit 0. R105's unchanged
+form and notes run with the application's qualified Sonnet 5.5 ordinary-v4
+configuration. Its first automatic Plan is supported `Rest.` with exact source
+evidence; no manual answer replacement occurs. The human Consent destination
+stays protected and unchanged. Both RR110 participant signing paragraphs also
+stay unchanged. Three actual final exports were archived by the POST callback
+before assertions and test teardown; the database is independently absent.
+
+The retained default-profile failure and qualified before-repair wire failure
+remain historical evidence. The fixture classification repair changes neither
+validators nor signing ownership. Twenty-one independent actual-fixture wire
+controls on finished 444443e6 pass with zero unsafe releases or false holds.
+
+The outer receipt's selector annotation was copied from an older wrapper. Its
+executed command, capture script, actual eight-method log and exit agree; a
+separate adjudication corrects the annotation without rewriting that original
+receipt. This affected packet closes these route failures, not full CI or the
+whole-document 54/60 and 18/20 acceptance gates.
+
+- `root-remaining-route-c9f5ff8e/adjudication.json`: `035e7698d3c139086b6b8424af3a1747f570a36f2624886119adbcacbdfc7973`
