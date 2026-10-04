@@ -17,7 +17,11 @@ jobs:
   python-checks:
     name: Fresh Python (${{ matrix.lane }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Exact 7907ae5a manifests covered 3538 disjoint core methods (1769 each).
+    # core-1 still completed methods immediately before the former 30-minute
+    # deadline, with at least 372 selected methods unfinished. Keep the full
+    # partition and aggregate gates; allow a bounded hour for this workload.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

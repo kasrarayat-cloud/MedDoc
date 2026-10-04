@@ -245,3 +245,29 @@ catalog rehearsal and preparation remain separate from installation authority.
 
 - `root-install-adapter-refutation-65295532/result.json`: `d2be1d4c58c91bf9a4383ac903ff39b534f6d10214e8f33c9f032da9a1db090b`
 - `root-install-adapter-refutation-e10ba561/result.json`: `bc476282213a9dd6f772d7897d8341eba6cd5e2fce93eb1779ea5a6a65c1bfbb`
+
+## Original-proven native coordinates — 2026-10-04
+
+Finished 8f1c3271 exports the exact original paragraph extent of nonempty
+inline SDT/legacy form-field controls. An independent root packet compares
+6,090 paragraph intervals against the immutable-original XML: 3,588 overlap
+and 2,502 disjoint controls agree, with zero wrong results. Sixty-six whole
+ancestor/native exclusions remain refused; 18 fabricated mapping-offset
+controls use original coordinates. Original inputs are retained. Unknown,
+block and zero-length extents keep the conservative whole-slot representation.
+
+Six synthetic paragraph/table/merged/mixed/underlined/signing-neighbor forms
+produce identical mappings, statuses and complete DOCX bytes on 7907ae5a and
+8f1c3271. All complete answers and untargeted paragraph sequences are retained.
+These checks use no database, renderer or provider. The first root instrument
+used an unsupported test-helper argument and failed before product comparison;
+its source and actual failure are retained separately. The repaired instrument
+changes no application guard or expected corpus result.
+
+This closes the source-coordinate counterexample, not the missing-field or
+whole-document acceptance gaps. Actual original-corpus upload-to-export
+qualification remains required on the integrated candidate.
+
+- `root-inline-native-8f1-independent-regions/result.json`: `fc0fced37cd27725c6b2dccdd31a5a6044c4a77509905bd8ecb0eeae7d4e5037`
+
+- `root-word-export-continuity-7907-to-8f1/result.json`: `ef623b535360c3d0f23d78f0a81da4ad308dc5d85667df00dc47e08e7358f60b`
