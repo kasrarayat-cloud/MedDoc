@@ -1,0 +1,12 @@
+{
+  "raw_base": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/final-word-source-lenses-20261004",
+  "hashes": {
+    "manager-closeout-receipt.json": "f0172b751f45e43ba8dec21762d99429359b62bfa2ed696bb15e03f3c9547578",
+    "manager_retained_trace.py": "2d49641fde98b00e29d472970e4060a0927125a27b55f1fb3b4029ec25835115",
+    "manager-retained-S2-exit.json": "37269d42a1e818d2d8f1072ef37b0aeea382a10392ea02aadb745043aa54bcd9",
+    "manager-retained-S2.log": "e6d52c782b58cc27197ae85303b2c06f9a26f4aa75e46cdbf3c0162abeded8af",
+    "manager-retained-S2/result.json": "ca96d21af00ae5493932eaab00e9dbc3b56b1d7d4ced8ed58b6c57b808548241"
+  },
+  "DB_render_provider_calls": 0,
+  "cleanup_bytes": 0
+}

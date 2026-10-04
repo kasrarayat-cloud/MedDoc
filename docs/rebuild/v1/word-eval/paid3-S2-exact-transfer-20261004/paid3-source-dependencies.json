@@ -1,0 +1,327 @@
+{
+  "old_source": "04fb7603282dc47eda98058c6d790f407951acba",
+  "S2_source": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+  "watched_files": {
+    "docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/grade_app_path.py": {
+      "paid_sha256": "a03685f5df649dc6c63cbe4fb11500257c02e93406f0444802395b320adaf1d1",
+      "S2_sha256": "a03685f5df649dc6c63cbe4fb11500257c02e93406f0444802395b320adaf1d1",
+      "byte_equal": true
+    },
+    "docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/measure_baseline.py": {
+      "paid_sha256": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
+      "S2_sha256": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
+      "byte_equal": true
+    },
+    "docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/app_path_steps.py": {
+      "paid_sha256": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+      "S2_sha256": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+      "byte_equal": true
+    },
+    "docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/offline_replay.py": {
+      "paid_sha256": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
+      "S2_sha256": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
+      "byte_equal": true
+    },
+    "rebuild/core/audio.py": {
+      "paid_sha256": "226133e568a285201b809f4917a80de3ba5e567c3fa445acfa5f6aa84fbf0ee2",
+      "S2_sha256": "226133e568a285201b809f4917a80de3ba5e567c3fa445acfa5f6aa84fbf0ee2",
+      "byte_equal": true
+    },
+    "rebuild/core/batch_jobs.py": {
+      "paid_sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+      "S2_sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+      "byte_equal": true
+    },
+    "rebuild/core/billing.py": {
+      "paid_sha256": "7d408d239a71aa131d0f971edadc12ec808a3f5877154f37804756aec4db2810",
+      "S2_sha256": "7d408d239a71aa131d0f971edadc12ec808a3f5877154f37804756aec4db2810",
+      "byte_equal": true
+    },
+    "rebuild/core/destination_roles.py": {
+      "paid_sha256": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418",
+      "S2_sha256": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418",
+      "byte_equal": true
+    },
+    "rebuild/core/generation.py": {
+      "paid_sha256": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "S2_sha256": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "byte_equal": true
+    },
+    "rebuild/core/generation_batch.py": {
+      "paid_sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+      "S2_sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+      "byte_equal": true
+    },
+    "rebuild/core/jobs.py": {
+      "paid_sha256": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1",
+      "S2_sha256": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1",
+      "byte_equal": true
+    },
+    "rebuild/core/management/commands/audit_billing.py": {
+      "paid_sha256": "890362cf8c3f54b4cbe10c13192ca256a67b355aa61af1b25500d006654b94a5",
+      "S2_sha256": "890362cf8c3f54b4cbe10c13192ca256a67b355aa61af1b25500d006654b94a5",
+      "byte_equal": true
+    },
+    "rebuild/core/mapping_assistance.py": {
+      "paid_sha256": "0fa8575c205574ee98aa966db79186e97feb815046042a7e7ad69eeaf21501a9",
+      "S2_sha256": "0fa8575c205574ee98aa966db79186e97feb815046042a7e7ad69eeaf21501a9",
+      "byte_equal": true
+    },
+    "rebuild/core/mapping_jobs.py": {
+      "paid_sha256": "ed043fe30712241398a4631cb3d78c8ce8a199f5e4f928a59cac7f77795df941",
+      "S2_sha256": "ed043fe30712241398a4631cb3d78c8ce8a199f5e4f928a59cac7f77795df941",
+      "byte_equal": true
+    },
+    "rebuild/core/mapping_wire.py": {
+      "paid_sha256": "454523a384d8c969d1f642578bd62e42a979f5030e6f868de781596e4120987e",
+      "S2_sha256": "454523a384d8c969d1f642578bd62e42a979f5030e6f868de781596e4120987e",
+      "byte_equal": true
+    },
+    "rebuild/core/media.py": {
+      "paid_sha256": "47ea2c41c2627ee237ad4d32263415c6c9c6443fa7b5419e846b40688a518376",
+      "S2_sha256": "47ea2c41c2627ee237ad4d32263415c6c9c6443fa7b5419e846b40688a518376",
+      "byte_equal": true
+    },
+    "rebuild/core/middleware.py": {
+      "paid_sha256": "35f987f92bba9d5ddb56c46e137f971617677b882fd50997138b4b994f5bd965",
+      "S2_sha256": "35f987f92bba9d5ddb56c46e137f971617677b882fd50997138b4b994f5bd965",
+      "byte_equal": true
+    },
+    "rebuild/core/models.py": {
+      "paid_sha256": "7d28a39627e51cba320f5d11c502aac827a19dca1fd41f4218eb4ba8dc7baaec",
+      "S2_sha256": "7d28a39627e51cba320f5d11c502aac827a19dca1fd41f4218eb4ba8dc7baaec",
+      "byte_equal": true
+    },
+    "rebuild/core/ordinary_source_scope.py": {
+      "paid_sha256": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "S2_sha256": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "byte_equal": true
+    },
+    "rebuild/core/reviewed_procedure_source.py": {
+      "paid_sha256": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "S2_sha256": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "byte_equal": true
+    },
+    "rebuild/core/reviewed_source.py": {
+      "paid_sha256": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "S2_sha256": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "byte_equal": true
+    },
+    "rebuild/core/reviewed_speaker.py": {
+      "paid_sha256": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "S2_sha256": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "byte_equal": true
+    },
+    "rebuild/core/security.py": {
+      "paid_sha256": "4942edea280f2d3d29c6696c46a0915380579120ac739075bf22c6080bfa39b7",
+      "S2_sha256": "4942edea280f2d3d29c6696c46a0915380579120ac739075bf22c6080bfa39b7",
+      "byte_equal": true
+    },
+    "rebuild/core/soap_document.py": {
+      "paid_sha256": "77c625e74f50afc666a3b3800c1282295cb602efcd9afe0a2ddbf59a87e18e7b",
+      "S2_sha256": "77c625e74f50afc666a3b3800c1282295cb602efcd9afe0a2ddbf59a87e18e7b",
+      "byte_equal": true
+    },
+    "rebuild/core/soap_views.py": {
+      "paid_sha256": "56c1158002e99e5dd67899f89e32e40c9b95b400c249788f209c484e0d94c012",
+      "S2_sha256": "56c1158002e99e5dd67899f89e32e40c9b95b400c249788f209c484e0d94c012",
+      "byte_equal": true
+    },
+    "rebuild/core/source_scope.py": {
+      "paid_sha256": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "S2_sha256": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "byte_equal": true
+    },
+    "rebuild/core/tab_review.py": {
+      "paid_sha256": "e9c280571fb93dc3f5932692c926f2253957409c602a2478fd199bce5592789d",
+      "S2_sha256": "e9c280571fb93dc3f5932692c926f2253957409c602a2478fd199bce5592789d",
+      "byte_equal": true
+    },
+    "rebuild/core/transcript_context.py": {
+      "paid_sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "S2_sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "byte_equal": true
+    },
+    "rebuild/core/v3_actors.py": {
+      "paid_sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "S2_sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "byte_equal": true
+    },
+    "rebuild/core/v3_destination.py": {
+      "paid_sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "S2_sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "byte_equal": true
+    },
+    "rebuild/core/v3_field_relations.py": {
+      "paid_sha256": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "S2_sha256": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "byte_equal": true
+    },
+    "rebuild/core/v3_literal_facts.py": {
+      "paid_sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "S2_sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "byte_equal": true
+    },
+    "rebuild/core/v3_mapping.py": {
+      "paid_sha256": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "S2_sha256": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "byte_equal": true
+    },
+    "rebuild/core/v3_syntax.py": {
+      "paid_sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "S2_sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "byte_equal": true
+    },
+    "rebuild/core/views.py": {
+      "paid_sha256": "35143326a5827f8c287067b0dae0e110249477c359dfe0e72113ad0a4622bb42",
+      "S2_sha256": "35143326a5827f8c287067b0dae0e110249477c359dfe0e72113ad0a4622bb42",
+      "byte_equal": true
+    },
+    "rebuild/documents/engine.py": {
+      "paid_sha256": "f4a5ee0e2e02c6b17e39fd110bb9058de7622066c5f37724a3761a1ce29f2e01",
+      "S2_sha256": "f4a5ee0e2e02c6b17e39fd110bb9058de7622066c5f37724a3761a1ce29f2e01",
+      "byte_equal": true
+    },
+    "rebuild/documents/layout.py": {
+      "paid_sha256": "832fce0d7b1e7b863dacb01fabb1b8c2a7972c891ca297e14951b4f576337443",
+      "S2_sha256": "832fce0d7b1e7b863dacb01fabb1b8c2a7972c891ca297e14951b4f576337443",
+      "byte_equal": true
+    },
+    "rebuild/documents/service.py": {
+      "paid_sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5",
+      "S2_sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5",
+      "byte_equal": true
+    },
+    "rebuild/documents/word_v3.py": {
+      "paid_sha256": "4c51ad1331da0ceace4424c79be9ad5ed775a426809347e0f38125ca68889995",
+      "S2_sha256": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27",
+      "byte_equal": false
+    },
+    "rebuild/documents/worker.py": {
+      "paid_sha256": "02ecda54235dab8f7891a42408792672d66535dca09e742b305b608abf1e7420",
+      "S2_sha256": "02ecda54235dab8f7891a42408792672d66535dca09e742b305b608abf1e7420",
+      "byte_equal": true
+    },
+    "rebuild/ops/fixtures/builtin-soap-voice-v1.json": {
+      "paid_sha256": "fa7692791c91bed18261e0301e636e12c9d606853c8612a48a244438e34860ad",
+      "S2_sha256": "fa7692791c91bed18261e0301e636e12c9d606853c8612a48a244438e34860ad",
+      "byte_equal": true
+    },
+    "rebuild/ops/fixtures/frozen-notes-consent-review-v1.json": {
+      "paid_sha256": "64aaa64aabc46ab5954df14e442025f96210707703254bda1589be9dfe3086a5",
+      "S2_sha256": "64aaa64aabc46ab5954df14e442025f96210707703254bda1589be9dfe3086a5",
+      "byte_equal": true
+    },
+    "rebuild/ops/fixtures/ordinary-batch-101-v1.docx": {
+      "paid_sha256": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+      "S2_sha256": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+      "byte_equal": true
+    },
+    "rebuild/ops/fixtures/ordinary-batch-101-v1.json": {
+      "paid_sha256": "32a57c72f26096c5ce6f76a7ccaec7654b0a9a06ada879b14b84c7cd2b191672",
+      "S2_sha256": "32a57c72f26096c5ce6f76a7ccaec7654b0a9a06ada879b14b84c7cd2b191672",
+      "byte_equal": true
+    },
+    "rebuild/ops/fixtures/reviewed-synthetic-voice-v1.json": {
+      "paid_sha256": "81153aa063ca4020204e5028eaabf611d549f294b949d913137da89c7621c7d6",
+      "S2_sha256": "81153aa063ca4020204e5028eaabf611d549f294b949d913137da89c7621c7d6",
+      "byte_equal": true
+    },
+    "rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json": {
+      "paid_sha256": "64fed2b82500f1bc9f8533eb28da27c75abfbacb3b2c91d6c7184846df6a3381",
+      "S2_sha256": "64fed2b82500f1bc9f8533eb28da27c75abfbacb3b2c91d6c7184846df6a3381",
+      "byte_equal": true
+    },
+    "rebuild/ops/provider_campaign.py": {
+      "paid_sha256": "71e2140499cf0ae4dd675fb5d7d84f635f517d0ae403dd6eb8141d393272f953",
+      "S2_sha256": "71e2140499cf0ae4dd675fb5d7d84f635f517d0ae403dd6eb8141d393272f953",
+      "byte_equal": true
+    },
+    "rebuild/ops/sonnet5_qa.py": {
+      "paid_sha256": "efe1877ae74d45eeaadd8c3258f54d1885bc3539fdef2378bdf30500df8d11f8",
+      "S2_sha256": "efe1877ae74d45eeaadd8c3258f54d1885bc3539fdef2378bdf30500df8d11f8",
+      "byte_equal": true
+    },
+    "rebuild/ops/sonnet5_stages.py": {
+      "paid_sha256": "3147cfdeec40d0972b52bcda65c1633545b477faa17f403ec4f9ebb6f165617d",
+      "S2_sha256": "3147cfdeec40d0972b52bcda65c1633545b477faa17f403ec4f9ebb6f165617d",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa.py": {
+      "paid_sha256": "0379d9e70aad529b4fa3cbd57d2984fee0089a7d1ebadb7931aba35db56e4fd6",
+      "S2_sha256": "0379d9e70aad529b4fa3cbd57d2984fee0089a7d1ebadb7931aba35db56e4fd6",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa_batch.py": {
+      "paid_sha256": "21a7939c01f3ace9459dae8580c06125725a69c2b0bff52cc4b8ec7560f6fa24",
+      "S2_sha256": "21a7939c01f3ace9459dae8580c06125725a69c2b0bff52cc4b8ec7560f6fa24",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa_notes_review.py": {
+      "paid_sha256": "21a57ee9eb3566c05b4939a68f5b479e4864d6051b451ff05191cbd1e047d82b",
+      "S2_sha256": "21a57ee9eb3566c05b4939a68f5b479e4864d6051b451ff05191cbd1e047d82b",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa_signing.py": {
+      "paid_sha256": "dd577a709242de2974b7ef0c0f8bf99c382b4dede9fe101b1d4c98977b6f2fbb",
+      "S2_sha256": "dd577a709242de2974b7ef0c0f8bf99c382b4dede9fe101b1d4c98977b6f2fbb",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa_soap_form.py": {
+      "paid_sha256": "69f5d2afd2c32bd6eff79c8b4165aedca3b6dfb6df32c3dc74aa0bfd8c49a9bb",
+      "S2_sha256": "69f5d2afd2c32bd6eff79c8b4165aedca3b6dfb6df32c3dc74aa0bfd8c49a9bb",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa_transcription.py": {
+      "paid_sha256": "0909f21b6866e3d0a76ec381f6ae6c98b079daf7cc43eef3df5430c6acde9d31",
+      "S2_sha256": "0909f21b6866e3d0a76ec381f6ae6c98b079daf7cc43eef3df5430c6acde9d31",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa_voice_forms.py": {
+      "paid_sha256": "68e4b8b37f89cde34304bd62fd6738055b872ef560b1c247837f624c29a86c51",
+      "S2_sha256": "68e4b8b37f89cde34304bd62fd6738055b872ef560b1c247837f624c29a86c51",
+      "byte_equal": true
+    },
+    "rebuild/ops/standing_qa_voice_review.py": {
+      "paid_sha256": "8f236bb78b2ffe61b9c35cf94b3e169bdece08abab5a182083ebbfed3846c27c",
+      "S2_sha256": "8f236bb78b2ffe61b9c35cf94b3e169bdece08abab5a182083ebbfed3846c27c",
+      "byte_equal": true
+    },
+    "rebuild/quillmd/settings.py": {
+      "paid_sha256": "a9d22a57bd0102038b71701626248adc5ca5da94ab0e023d84e642ee5a3147a7",
+      "S2_sha256": "a9d22a57bd0102038b71701626248adc5ca5da94ab0e023d84e642ee5a3147a7",
+      "byte_equal": true
+    },
+    "rebuild/quillmd/urls.py": {
+      "paid_sha256": "33d0c0e0958613120fbf8d2a0ba2957ca82bb3550acf5762ae2d81f642a4c6b9",
+      "S2_sha256": "33d0c0e0958613120fbf8d2a0ba2957ca82bb3550acf5762ae2d81f642a4c6b9",
+      "byte_equal": true
+    }
+  },
+  "watched_file_count": 59,
+  "14_complete_module_byte_and_AST_unchanged": true,
+  "configuration_and_transport_unchanged": {
+    "rebuild/quillmd/settings.py": "a9d22a57bd0102038b71701626248adc5ca5da94ab0e023d84e642ee5a3147a7",
+    "rebuild/quillmd/application_profile.py": "b051d6faadd682ab38b8f2dff9f80a59266ad32f614ed80dc232a5e8bbde6721",
+    "rebuild/ops/provider_campaign.py": "71e2140499cf0ae4dd675fb5d7d84f635f517d0ae403dd6eb8141d393272f953"
+  },
+  "changed_runtime_owned_module": "rebuild/documents/word_v3.py",
+  "tracked_diff": [
+    "docs/rebuild/v1/d30-a20-source-diagnosis-20261004.json",
+    "docs/rebuild/v1/d30-a20-source-diagnosis-20261004.md",
+    "docs/rebuild/v1/standing3-independent-accounting-20261004.json",
+    "docs/rebuild/v1/standing3-independent-accounting-20261004.md",
+    "docs/rebuild/v1/word-dev33-final-plan-prepared-20261004.md",
+    "docs/rebuild/v1/word-eval/d10-automatic-ruled-20261004/artifact-seal.json",
+    "docs/rebuild/v1/word-eval/d10-automatic-ruled-20261004/checkpoint.json",
+    "docs/rebuild/v1/word-eval/d10-automatic-ruled-20261004/claims.md",
+    "docs/rebuild/v1/word-eval/d10-automatic-ruled-20261004/receipt.json",
+    "rebuild/documents/test_ruled_paragraph_recovery.py",
+    "rebuild/documents/word_v3.py",
+    "rebuild/ops/fixtures/word_dev33_packet_supervisor.source",
+    "rebuild/ops/tests/test_word_dev33_packet_supervisor.py"
+  ],
+  "protected_keys_credentials_or_runtime_settings_not_read": true,
+  "DB_render_provider_calls": 0,
+  "initial_instrument_error": "First inventory run used accounting report path on old04fb, where later docs do not exist; FileNotFoundError before any inventory output. Corrected report pointer is S2; old/new runtime bytes remain independently verified."
+}

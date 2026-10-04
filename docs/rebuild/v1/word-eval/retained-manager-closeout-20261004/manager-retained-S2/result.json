@@ -1,0 +1,107 @@
+{
+  "source_commit": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+  "retained_original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/core-word-9c15c45952f9-1791076014635128282/qa/word-artifacts/manager-reserved-statement/original.docx",
+  "original_sha256": "a4119ea0d08f90172602621c16494ad7291130fcd85ba88f4700ff74d81ff0c8",
+  "fresh_fields": [
+    {
+      "key": "v3_1",
+      "label": "This section is for the line manager to add comments",
+      "kind": "long_text",
+      "context": "This section is for the line manager to add comments",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      },
+      "write_protected": true,
+      "review_reason": "This answer area is reserved for another author's comments. Ordinary clinician notes do not establish that author's statement; complete it through the explicit human workflow."
+    },
+    {
+      "key": "v3_2",
+      "label": "Plan",
+      "kind": "long_text",
+      "context": "Plan",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    }
+  ],
+  "legacy_fields": [
+    {
+      "key": "cell_0",
+      "label": "This section is for the line manager to add comments",
+      "kind": "text",
+      "locator": {
+        "cell": 0
+      }
+    },
+    {
+      "key": "cell_1",
+      "label": "Plan",
+      "kind": "text",
+      "locator": {
+        "cell": 1
+      }
+    }
+  ],
+  "legacy_role_report": {
+    "legacy_roles": {
+      "cell_0": {
+        "printed_label": "This section is for the line manager to add comments",
+        "role": ""
+      },
+      "cell_1": {
+        "printed_label": "Plan",
+        "role": ""
+      }
+    },
+    "legacy_unresolved_actions": [
+      {
+        "key": "cell_0",
+        "printed_label": "This section is for the line manager to add comments",
+        "place": [
+          "word/document.xml#b/tbl[0]/tr[0]/tc[1]",
+          null,
+          null
+        ],
+        "source": "human_document_action",
+        "original_role_place": "word/document.xml#b/tbl[0]/tr[0]/tc[1]",
+        "reason": "This answer area is reserved for another author's comments. Ordinary clinician notes do not establish that author's statement; complete it through the explicit human workflow."
+      }
+    ]
+  },
+  "forged_field": {
+    "key": "v3_1",
+    "label": "Clinical value",
+    "kind": "text",
+    "context": "This section is for the line manager to add comments",
+    "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+    }
+  },
+  "refusal": {
+    "type": "V3Failure",
+    "code": "protected_signing_area",
+    "message": "This place is protected on the original form and remains unchanged; no answer can be written there."
+  },
+  "ordinary_export_sha256": "a1bebdf7ec65deaa22a6029b424bfecff1f700fc1b30854c68c2020425b4cdfd",
+  "manager_answer_unchanged": true,
+  "Plan_answer_complete": true,
+  "scope": "One exact retained application manager original, current physical/legacy source guard; no DB, generation, corpus, provider, or native Word claim."
+}

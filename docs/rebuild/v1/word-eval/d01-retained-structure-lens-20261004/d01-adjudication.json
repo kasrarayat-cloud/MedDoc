@@ -1,0 +1,906 @@
+{
+  "source_commit": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+  "original_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+  "export_sha256": "368cc103e724f4a75d364957a112ba70e74891281e5491ae39abca4e1c90e1f2",
+  "archive": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-final-plan-prepared-20261004/dev-native-application-481b65adb8ff-1791113822219658957/D01",
+  "original_table_rows": [
+    28
+  ],
+  "export_table_rows": [
+    14,
+    14
+  ],
+  "source_row_14_reader_error": "workflow.py:167\u2013168 selects first output table and row14, which does not exist.",
+  "production_cause": [
+    "rebuild/documents/service.py:205\u2013206",
+    "rebuild/documents/layout.py:127\u2013132"
+  ],
+  "mapped_cell_answers": [
+    {
+      "key": "measurement_1_1",
+      "source_row": 1,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 1,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_1_2",
+      "source_row": 1,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 1,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_2_1",
+      "source_row": 2,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 2,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_2_2",
+      "source_row": 2,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 2,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_3_1",
+      "source_row": 3,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 3,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_3_2",
+      "source_row": 3,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 3,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_4_1",
+      "source_row": 4,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 4,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_4_2",
+      "source_row": 4,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 4,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_5_1",
+      "source_row": 5,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 5,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_5_2",
+      "source_row": 5,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 5,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_6_1",
+      "source_row": 6,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 6,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_6_2",
+      "source_row": 6,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 6,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_7_1",
+      "source_row": 7,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 7,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_7_2",
+      "source_row": 7,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 7,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_8_1",
+      "source_row": 8,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 8,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_8_2",
+      "source_row": 8,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 8,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_9_1",
+      "source_row": 9,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 9,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_9_2",
+      "source_row": 9,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 9,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_10_1",
+      "source_row": 10,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 10,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_10_2",
+      "source_row": 10,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 10,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_11_1",
+      "source_row": 11,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 11,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_11_2",
+      "source_row": 11,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 11,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "location_11",
+      "source_row": 11,
+      "source_column": 0,
+      "output_table": 0,
+      "output_row": 11,
+      "source_text_sha256": "d2ed0ffde983d0452cf2ad50ed2b83b8f78546599cd3d45e1163ff5c529c924d",
+      "actual_text_sha256": "8d465f11bfdbf01b13f2da758a358ead239f91833300f2a73f83ee1f16be4cc0",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_12_1",
+      "source_row": 12,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 12,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_12_2",
+      "source_row": 12,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 12,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "location_12",
+      "source_row": 12,
+      "source_column": 0,
+      "output_table": 0,
+      "output_row": 12,
+      "source_text_sha256": "d2ed0ffde983d0452cf2ad50ed2b83b8f78546599cd3d45e1163ff5c529c924d",
+      "actual_text_sha256": "2e6bddbce40fb70e47fa9a99de7fd5f3bb59fc2d52923928d9cef71176b770c0",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_13_1",
+      "source_row": 13,
+      "source_column": 1,
+      "output_table": 0,
+      "output_row": 13,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_13_2",
+      "source_row": 13,
+      "source_column": 2,
+      "output_table": 0,
+      "output_row": 13,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "location_13",
+      "source_row": 13,
+      "source_column": 0,
+      "output_table": 0,
+      "output_row": 13,
+      "source_text_sha256": "d2ed0ffde983d0452cf2ad50ed2b83b8f78546599cd3d45e1163ff5c529c924d",
+      "actual_text_sha256": "f45d1904a65a16815a415627d6a911007b9bc8167b6a3a3e2bcdbdcc18084b3a",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_15_1",
+      "source_row": 15,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 1,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_15_2",
+      "source_row": 15,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 1,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_16_1",
+      "source_row": 16,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 2,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_16_2",
+      "source_row": 16,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 2,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_17_1",
+      "source_row": 17,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 3,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_17_2",
+      "source_row": 17,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 3,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_18_1",
+      "source_row": 18,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 4,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_18_2",
+      "source_row": 18,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 4,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_19_1",
+      "source_row": 19,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 5,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_19_2",
+      "source_row": 19,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 5,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_20_1",
+      "source_row": 20,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 6,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_20_2",
+      "source_row": 20,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 6,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_21_1",
+      "source_row": 21,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 7,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_21_2",
+      "source_row": 21,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 7,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_22_1",
+      "source_row": 22,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 8,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_22_2",
+      "source_row": 22,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 8,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_23_1",
+      "source_row": 23,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 9,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_23_2",
+      "source_row": 23,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 9,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_24_1",
+      "source_row": 24,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 10,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_24_2",
+      "source_row": 24,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 10,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_25_1",
+      "source_row": 25,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 11,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_25_2",
+      "source_row": 25,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 11,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "location_25",
+      "source_row": 25,
+      "source_column": 0,
+      "output_table": 1,
+      "output_row": 11,
+      "source_text_sha256": "d2ed0ffde983d0452cf2ad50ed2b83b8f78546599cd3d45e1163ff5c529c924d",
+      "actual_text_sha256": "840667f2d7d37144d2f476c4db538637d419590df279960df16810de8ce946a9",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_26_1",
+      "source_row": 26,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 12,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_26_2",
+      "source_row": 26,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 12,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "location_26",
+      "source_row": 26,
+      "source_column": 0,
+      "output_table": 1,
+      "output_row": 12,
+      "source_text_sha256": "d2ed0ffde983d0452cf2ad50ed2b83b8f78546599cd3d45e1163ff5c529c924d",
+      "actual_text_sha256": "e0d59fc80c82b1debe5f953fadc0f7f1f0330fc923c130943e1a4dab57f53238",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_27_1",
+      "source_row": 27,
+      "source_column": 1,
+      "output_table": 1,
+      "output_row": 13,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "3135d2d71bff77be4838a7102bbac5b87af7fd0b9aef3d416f963a5afbb19061",
+      "complete_answer": true
+    },
+    {
+      "key": "measurement_27_2",
+      "source_row": 27,
+      "source_column": 2,
+      "output_table": 1,
+      "output_row": 13,
+      "source_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actual_text_sha256": "26d228663f13a88592a12d16cf9587caab0388b262d6d9f126ed62f9333aca94",
+      "complete_answer": true
+    },
+    {
+      "key": "location_27",
+      "source_row": 27,
+      "source_column": 0,
+      "output_table": 1,
+      "output_row": 13,
+      "source_text_sha256": "d2ed0ffde983d0452cf2ad50ed2b83b8f78546599cd3d45e1163ff5c529c924d",
+      "actual_text_sha256": "878feabfbd30930af70ffc081f8d11c49ed2fbf6578dab791566f20ef9ea4b86",
+      "complete_answer": true
+    }
+  ],
+  "unchanged_cells": [
+    {
+      "row": 0,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 0,
+      "column": 1,
+      "visible_text_equal": true
+    },
+    {
+      "row": 0,
+      "column": 2,
+      "visible_text_equal": true
+    },
+    {
+      "row": 1,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 2,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 3,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 4,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 5,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 6,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 7,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 8,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 9,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 10,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 14,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 14,
+      "column": 1,
+      "visible_text_equal": true
+    },
+    {
+      "row": 14,
+      "column": 2,
+      "visible_text_equal": true
+    },
+    {
+      "row": 15,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 16,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 17,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 18,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 19,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 20,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 21,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 22,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 23,
+      "column": 0,
+      "visible_text_equal": true
+    },
+    {
+      "row": 24,
+      "column": 0,
+      "visible_text_equal": true
+    }
+  ],
+  "sdt_answers": [
+    {
+      "key": "sdt_1519045110",
+      "source_id": "1519045110",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_1475334564",
+      "source_id": "1475334564",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_469715844",
+      "source_id": "469715844",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-1477830258",
+      "source_id": "-1477830258",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-388341802",
+      "source_id": "-388341802",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_143014188",
+      "source_id": "143014188",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-1124008635",
+      "source_id": "-1124008635",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_269290727",
+      "source_id": "269290727",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_722175654",
+      "source_id": "722175654",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-770853925",
+      "source_id": "-770853925",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-49312682",
+      "source_id": "-49312682",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_2005853103",
+      "source_id": "2005853103",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-1316494373",
+      "source_id": "-1316494373",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_429781496",
+      "source_id": "429781496",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-1287346867",
+      "source_id": "-1287346867",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-346030703",
+      "source_id": "-346030703",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_599910328",
+      "source_id": "599910328",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_1706206184",
+      "source_id": "1706206184",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_1093284141",
+      "source_id": "1093284141",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-505521617",
+      "source_id": "-505521617",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_519430350",
+      "source_id": "519430350",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-1268837810",
+      "source_id": "-1268837810",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-892962961",
+      "source_id": "-892962961",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-213273323",
+      "source_id": "-213273323",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-170105994",
+      "source_id": "-170105994",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_2001841928",
+      "source_id": "2001841928",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_605543147",
+      "source_id": "605543147",
+      "complete_answer": true
+    },
+    {
+      "key": "sdt_-1029175652",
+      "source_id": "-1029175652",
+      "complete_answer": true
+    }
+  ],
+  "zip_member_names_equal": false,
+  "changed_parts": [
+    "docProps/app.xml",
+    "_rels/.rels",
+    "word/styles.xml",
+    "word/glossary/_rels/document.xml.rels",
+    "word/glossary/styles.xml",
+    "word/header1.xml",
+    "word/glossary/webSettings.xml",
+    "word/_rels/header1.xml.rels",
+    "word/_rels/header2.xml.rels",
+    "word/document.xml",
+    "word/_rels/document.xml.rels",
+    "word/glossary/fontTable.xml",
+    "word/numbering.xml",
+    "word/glossary/settings.xml",
+    "word/fontTable.xml",
+    "word/header2.xml",
+    "word/webSettings.xml",
+    "word/glossary/document.xml",
+    "[Content_Types].xml",
+    "word/settings.xml",
+    "docProps/core.xml"
+  ],
+  "missing_parts": [
+    "word/endnotes.xml",
+    "word/footnotes.xml"
+  ],
+  "added_parts": [],
+  "criterion_status": "Fixed original single-table structure criterion remains failed. Complete mapped-cell readback does not change scoring or award automatic success.",
+  "visual_or_native_word": "unverified",
+  "DB_render_provider_calls": 0
+}

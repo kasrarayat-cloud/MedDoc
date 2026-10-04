@@ -1,0 +1,13 @@
+{
+  "command": [
+    "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+    "-B",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/final-word-source-lenses-20261004/paid3_transfer_child.py",
+    "/opt/meddoc-pro/.worktrees/v1-qualified-candidate-481b65ad",
+    "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/final-word-source-lenses-20261004/paid3-sourceS2"
+  ],
+  "bound_seconds": 60,
+  "actual_exit": 0,
+  "elapsed_seconds": 3.8282993419998093
+}
