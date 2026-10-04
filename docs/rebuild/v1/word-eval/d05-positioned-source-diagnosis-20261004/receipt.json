@@ -1,0 +1,533 @@
+{
+  "source_word_sha256": "b186946772679acd1bbcacecba0719497c0d79d574aea5f09022f454f1ff0a1b",
+  "original_sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a",
+  "revision_rows": [
+    {
+      "row": 0,
+      "row_kind": "divider",
+      "cells": [
+        {
+          "slot": "b/tbl[1]/tr[0]/tc[0]",
+          "col": 0,
+          "span": 2,
+          "text": "Version",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Version",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[0]/tc[1]",
+          "col": 2,
+          "span": 1,
+          "text": "",
+          "empty": true,
+          "paragraphs": [
+            {
+              "text": "",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "row": 1,
+      "row_kind": "label",
+      "cells": [
+        {
+          "slot": "b/tbl[1]/tr[1]/tc[0]",
+          "col": 0,
+          "span": 1,
+          "text": "Number",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Number",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[1]/tc[1]",
+          "col": 1,
+          "span": 1,
+          "text": "Date",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Date",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[1]/tc[2]",
+          "col": 2,
+          "span": 1,
+          "text": "Summary of Revisions Made:",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Summary of Revisions Made:",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "row": 2,
+      "row_kind": "label",
+      "cells": [
+        {
+          "slot": "b/tbl[1]/tr[2]/tc[0]",
+          "col": 0,
+          "span": 1,
+          "text": "1.0",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "1.0",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[2]/tc[1]",
+          "col": 1,
+          "span": 1,
+          "text": "22Feb2010",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "22Feb2010",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[2]/tc[2]",
+          "col": 2,
+          "span": 1,
+          "text": "First approved version",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "First approved version",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "row": 3,
+      "row_kind": "label",
+      "cells": [
+        {
+          "slot": "b/tbl[1]/tr[3]/tc[0]",
+          "col": 0,
+          "span": 1,
+          "text": "2.0",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "2.0",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[3]/tc[1]",
+          "col": 1,
+          "span": 1,
+          "text": "02Mar2010",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "02Mar2010",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[3]/tc[2]",
+          "col": 2,
+          "span": 1,
+          "text": "Removed automatic page numbering",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Removed automatic page numbering",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "row": 4,
+      "row_kind": "label",
+      "cells": [
+        {
+          "slot": "b/tbl[1]/tr[4]/tc[0]",
+          "col": 0,
+          "span": 1,
+          "text": "3.0",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "3.0",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[4]/tc[1]",
+          "col": 1,
+          "span": 1,
+          "text": "04Jan2012",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "04Jan2012",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[4]/tc[2]",
+          "col": 2,
+          "span": 1,
+          "text": "Added Tool Summary Sheet; no revisions to the log",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Added Tool Summary Sheet; no revisions to the log",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "row": 5,
+      "row_kind": "label",
+      "cells": [
+        {
+          "slot": "b/tbl[1]/tr[5]/tc[0]",
+          "col": 0,
+          "span": 1,
+          "text": "4.0",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "4.0",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[5]/tc[1]",
+          "col": 1,
+          "span": 1,
+          "text": "14Mar2012",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "14Mar2012",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[5]/tc[2]",
+          "col": 2,
+          "span": 1,
+          "text": "Revised Tool Summary Sheet and added check box to footer",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Revised Tool Summary Sheet and added check box to footer",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "row": 6,
+      "row_kind": "label",
+      "cells": [
+        {
+          "slot": "b/tbl[1]/tr[6]/tc[0]",
+          "col": 0,
+          "span": 1,
+          "text": "5.0",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "5.0",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[6]/tc[1]",
+          "col": 1,
+          "span": 1,
+          "text": "09Nov2021",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "09Nov2021",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "b/tbl[1]/tr[6]/tc[2]",
+          "col": 2,
+          "span": 1,
+          "text": "Updated logo and changed site number to site name.",
+          "empty": false,
+          "paragraphs": [
+            {
+              "text": "Updated logo and changed site number to site name.",
+              "heading": false,
+              "styles": [
+                "BodyText",
+                "Strong",
+                "Strong"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "positioned_tables": [
+    {
+      "part": "word/document.xml",
+      "slot": "b/tbl[3]",
+      "attributes": {
+        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}leftFromText": "187",
+        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rightFromText": "187",
+        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}vertAnchor": "text",
+        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}horzAnchor": "margin",
+        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblpX": "-552",
+        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblpY": "59"
+      }
+    }
+  ],
+  "body_fields": [
+    {
+      "label": "Version",
+      "slot": "b/tbl[1]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "protected": true,
+      "reason": "This source part contains positioned tables. Growth in neighboring flowing areas can overlap those fixed placements; answer growth in this whole part remains unqualified."
+    },
+    {
+      "label": "Summary of Revisions Made",
+      "slot": "b/tbl[1]/tr[1]/tc[2]/p[0]",
+      "target": {
+        "type": "span",
+        "start": 26,
+        "end": 26,
+        "shape": "after_label"
+      },
+      "protected": true,
+      "reason": "This source part contains positioned tables. Growth in neighboring flowing areas can overlap those fixed placements; answer growth in this whole part remains unqualified."
+    },
+    {
+      "label": "Investigator Name",
+      "slot": "b/tbl[2]/tr[0]/tc[0]/p[0]",
+      "target": {
+        "type": "span",
+        "start": 18,
+        "end": 18,
+        "shape": "after_label"
+      },
+      "protected": true,
+      "reason": "This source part contains positioned tables. Growth in neighboring flowing areas can overlap those fixed placements; answer growth in this whole part remains unqualified."
+    },
+    {
+      "label": "Protocol",
+      "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]",
+      "target": {
+        "type": "span",
+        "start": 9,
+        "end": 9,
+        "shape": "after_label"
+      },
+      "protected": true,
+      "reason": "This source part contains positioned tables. Growth in neighboring flowing areas can overlap those fixed placements; answer growth in this whole part remains unqualified."
+    },
+    {
+      "label": "Site Name",
+      "slot": "b/tbl[2]/tr[0]/tc[2]/p[0]",
+      "target": {
+        "type": "span",
+        "start": 10,
+        "end": 10,
+        "shape": "after_label"
+      },
+      "protected": true,
+      "reason": "This source part contains positioned tables. Growth in neighboring flowing areas can overlap those fixed placements; answer growth in this whole part remains unqualified."
+    },
+    {
+      "label": "Site Screening and Enrollment Log",
+      "slot": "b/tbl[3]/tr[1]/tc[0]",
+      "target": {
+        "type": "table_rows",
+        "table": "b/tbl[3]",
+        "rows": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "columns": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "protected": true,
+      "reason": "This source part contains positioned tables. Growth in neighboring flowing areas can overlap those fixed placements; answer growth in this whole part remains unqualified."
+    }
+  ],
+  "footer": [
+    {
+      "slot": "hf/p[0]",
+      "text": "Version 5.0 \u2013 2021-11-09\t\t\t\t \t Page _______"
+    },
+    {
+      "slot": "hf/p[1]",
+      "text": "Check if final page of log: \u2610"
+    }
+  ],
+  "findings": [
+    "Version is an actual empty table cell beside the printed caption; it is not proved to be a phantom.",
+    "Summary of Revisions Made is a colon caption in a completely filled history table. No explicit repeated-header marking exists; all history paragraphs also use Strong character style. The original alone has not yet proved an automatic header exclusion.",
+    "The actual body write protection is positioned-table geometry across this part, not a human signing role. Current ordinary and long application refusals are retained; no layout admission or scoring threshold is bypassed.",
+    "Footer page-number blank and final-page checkbox are real mapped answer destinations; no removal is justified by the fixed groundtruth."
+  ],
+  "provider_calls": 0,
+  "db_calls": 0,
+  "render_calls": 0,
+  "source_only": true
+}

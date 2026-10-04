@@ -1,0 +1,84 @@
+{
+  "source_commit": "1459595edd4551dc4eb9427ccc89da9bda87604f",
+  "actual_child_test_exit": 0,
+  "actual_outer_exit": 1,
+  "child_methods": 1,
+  "child_seconds": 20.35,
+  "outer_seconds": 40.401,
+  "mapping": {
+    "n": 88,
+    "ok": 45,
+    "missed": 32,
+    "wrong": 11,
+    "extras": 2,
+    "strict": false
+  },
+  "manual_mapping_corrections": 0,
+  "provider_calls": 0,
+  "full_automatic_success": false,
+  "first_save_blocker": "\"Food/beverage\": \"Fasting/skipping meals Chocolate\" is not one of the printed options (Fasting/skipping meals, Chocolate, Caffeine, Nitrates, MSG, Aged cheese, Alcohol beverages, Wine [, Red, White ],, Other). Choose one of them or leave it unanswered. Nothing was saved.",
+  "profiles": {
+    "empty": {
+      "passed": false,
+      "mechanical_passed": false,
+      "fixed_protocol_passed": false,
+      "failures": [
+        "Fixed independent original-destination choice reader failed"
+      ],
+      "fixed_failures": [
+        "Fixed independent original-destination choice reader failed"
+      ]
+    },
+    "ordinary": {
+      "passed": false,
+      "mechanical_passed": null,
+      "fixed_protocol_passed": null,
+      "failures": [
+        "Actual explicit answer review refused"
+      ],
+      "fixed_failures": null
+    },
+    "long": {
+      "passed": false,
+      "mechanical_passed": null,
+      "fixed_protocol_passed": null,
+      "failures": [
+        "Actual explicit answer review refused"
+      ],
+      "fixed_failures": null
+    }
+  },
+  "empty_export_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "teardown": {
+    "worker_exit": 0,
+    "renderer_exit": -2,
+    "socket_removed": true,
+    "timed_out": false
+  },
+  "database_after": {
+    "verified": true,
+    "requested_database": "quillmd_qa_sol_word_dev1526623",
+    "checked_names": [
+      "quillmd_qa_sol_word_dev1526623",
+      "test_quillmd_qa_sol_word_dev1526623"
+    ],
+    "present": [],
+    "all_absent": true,
+    "provider_calls": 0
+  },
+  "actual_container_count_after": 0,
+  "checked_pids_absent": [
+    1526623,
+    1527382
+  ],
+  "source_and_harness_prepost_identical": true,
+  "fixed_gates": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  },
+  "evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-application-1459595edd45-1791100874115053945",
+  "all_cases_previously_exposed": true
+}
