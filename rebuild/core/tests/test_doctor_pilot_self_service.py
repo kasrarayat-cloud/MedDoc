@@ -236,8 +236,12 @@ class PilotSafeguards(SyntheticFixture, TestCase):
         self.assertEqual(self.client.get(f'/encounters/{self.encounter.pk}/export/').status_code, 409)
 
     def test_the_qualified_form_never_offers_or_accepts_leave_blank(self):
+        from core.import_binding import for_mapping
         version = TemplateVersion.objects.create(template=self.template, number=2, fields=self.encounter.template_version.fields,
-                                                 document_backend={'backend': 'synthetic-qualified'}, review_requirements=[], created_by=self.user)
+                                                 document_backend={'backend': 'synthetic-qualified'}, review_requirements=[],
+                                                 import_manifest=for_mapping(self.encounter.template_version.import_manifest,
+                                                                             self.encounter.template_version.fields),
+                                                 created_by=self.user)
         self.encounter.template_version = version; self.encounter.answers = {}
         self.encounter.save(update_fields=['template_version', 'answers'])
         with patch('core.views.wm_resolve', side_effect=DocumentError('Synthetic boundary; no Word runtime.')):

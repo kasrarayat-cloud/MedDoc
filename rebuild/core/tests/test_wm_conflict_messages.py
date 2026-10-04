@@ -135,8 +135,10 @@ class ThePageListsEachConflictAndTheCookieCarriesNone(SyntheticFixture, TestCase
         override = override_settings(MEDIA_ROOT=Path(directory.name)); override.enable(); self.addCleanup(override.disable)
         self.user, _, self.department, self.patient, self.template, self.encounter, blob = self.make_scope('wm-conflicts')
         path = private_path(self.template.original_path); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(blob)
+        from core.import_binding import for_mapping
         version = TemplateVersion.objects.create(template=self.template, number=2, fields=FIELDS, review_requirements=REQUIREMENTS,
                                                  document_backend={'backend': 'synthetic-qualified', 'mapping_digest': 'd' * 64},
+                                                 import_manifest=for_mapping(self.encounter.template_version.import_manifest, FIELDS),
                                                  created_by=self.user)
         self.encounter.template_version = version; self.encounter.answers = {}
         self.encounter.save(update_fields=['template_version', 'answers'])

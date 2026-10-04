@@ -70,7 +70,7 @@ class ProviderDedupRefutation(SyntheticFixture, TestCase):
         second = self.job("worker-second", second_encounter)
         response = SimpleNamespace(id="msg_same", stop_reason="end_turn",
             content=[SimpleNamespace(type="text", text=json.dumps({"fields": [
-                {"key": "symptoms", "quotes": ["no chest pain"], "conflict": False}]}))],
+                {"key": self.scope[5].template_version.fields[0]['key'], "quotes": ["no chest pain"], "conflict": False}]}))],
             model_dump=lambda **kwargs: {"id": "msg_same"})
         replies = [({"anthropic_response": response, "notes": self.scope[5].notes,
                      "fields": self.scope[5].template_version.fields},
@@ -79,7 +79,9 @@ class ProviderDedupRefutation(SyntheticFixture, TestCase):
                                              ("anthropic:synthetic-model-b", "req_second")]]
         # Live jobs run in a live deployment: a job queued live is refused unsent when the deployment is not live
         # (core.generation.refuse_switched_mode), which is the operator's stop and not what this test is about.
-        with tempfile.TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=Path(directory), AI_MODE="live"), \
+        # Keep the source original in the same owned media root used at admission.
+        # Changing MEDIA_ROOT here would refuse both jobs before either mocked call.
+        with override_settings(AI_MODE="live"), \
                 patch("core.jobs.generation.generate", side_effect=replies) as provider:
             self.assertTrue(run_one())
             self.assertTrue(run_one())

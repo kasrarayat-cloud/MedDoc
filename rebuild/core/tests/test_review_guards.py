@@ -25,7 +25,7 @@ from django.utils import timezone
 from core import coding as coding_module, views, wm_review
 from core.jobs import run_one
 from core.security import private_path
-from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, Job, Membership, TemplateVersion, User
+from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, Job, Membership, Template, TemplateVersion, User
 from core.wm_review import BACKEND, ORIGINAL_SHA256
 from .test_security import SyntheticFixture
 from . import test_workflow
@@ -917,10 +917,27 @@ class OfflineWordForm(SyntheticFixture, TestCase):
         self.user, _, self.department, self.patient, self.template, self.encounter, _ = self.make_scope('wm-guards')
         User.objects.filter(pk=self.user.pk).update(first_name='SYNTHETIC', last_name='Clinician A')
         self.user.refresh_from_db()
-        self.template.sha256 = ORIGINAL_SHA256; self.template.save(update_fields=['sha256'])
+        # This old WM review/resolver fixture represents a historical mapping,
+        # not a current upload or processor qualification. Its immutable source
+        # is the actual tracked blank from inception; the imported scope above
+        # and its provenance remain untouched.
+        imported_template = self.template
+        imported_version = self.encounter.template_version
+        original = (Path(__file__).resolve().parents[3] / 'WM IOV Template.docx').read_bytes()
+        self.assertEqual(hashlib.sha256(original).hexdigest(), ORIGINAL_SHA256)
+        path = private_path('originals/wm-guards-historical.docx')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('xb') as stream: stream.write(original)
+        self.template = Template.objects.create(department=self.department,
+            name='Historical mocked WM review', format='docx', original_name='WM IOV Template.docx',
+            original_path='originals/wm-guards-historical.docx', sha256=ORIGINAL_SHA256, created_by=self.user)
         self.version = TemplateVersion.objects.create(
-            template=self.template, number=2, fields=FIELDS, review_requirements=REQUIREMENTS, created_by=self.user,
+            template=self.template, number=1, fields=FIELDS, review_requirements=REQUIREMENTS, created_by=self.user,
             document_backend={'backend': BACKEND, 'source_sha256': ORIGINAL_SHA256, 'mapping_digest': 'a' * 64})
+        self.assertEqual(self.version.import_manifest, {})  # historical record, never fabricated upload evidence
+        self.assertEqual(imported_template.sha256, imported_version.import_manifest['source_sha256'])
+        self.assertEqual(hashlib.sha256(private_path(imported_template.original_path).read_bytes()).hexdigest(),
+                         imported_template.sha256)
         answers = {}
         for field in FIELDS:
             line = field['label'] + ': ' + VALUES[field['key']]

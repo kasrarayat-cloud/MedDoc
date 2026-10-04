@@ -141,10 +141,12 @@ class ASignatureQuestionKeepsItsSignatureLabel(BoundaryFixture, TestCase):
         self.assertFalse(latest.document_backend)
         fields = [dict(field) for field in latest.fields]
         fields[0]['label'] = 'Electronically signed by'
+        from core.import_binding import for_mapping
         self.version = TemplateVersion.objects.create(
             template=latest.template, number=latest.number + 1, fields=fields,
             review_requirements=latest.review_requirements,
-            document_backend=latest.document_backend, created_by=self.user)
+            document_backend=latest.document_backend,
+            import_manifest=for_mapping(latest.import_manifest, fields), created_by=self.user)
         self.key = fields[0]['key']
 
     def rename(self, label):

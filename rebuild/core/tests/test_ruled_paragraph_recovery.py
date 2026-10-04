@@ -42,6 +42,24 @@ class RuledParagraphWorkflow(V3Fixture, TestCase):
         retain('first-import', first)
         response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': first.pk,
             'slot': 'word/document.xml#b/p[4]', 'label': 'Impression', 'kind': 'long_text'})
+        # The unchanged original now has an automatic full-area owner. Keep the
+        # first duplicate refusal, then exercise explicit manual recovery by
+        # removing that owner through the actual mapping-correction route.
+        self.assertEqual(response.status_code, 400, response.content.decode())
+        self.assertContains(response, 'That place already belongs to a field', status_code=400)
+        self.assertEqual(self.latest(template).pk, first.pk)
+        automatic = next(f for f in first.fields if f['locator'].get('slot') == 'b/p[4]')
+        self.assertEqual(automatic.get('origin', 'automatic'), 'automatic')
+        self.assertEqual(automatic['locator']['target']['type'], 'ruled_paragraphs')
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': first.pk,
+            'remove_' + automatic['key']: 'on'})
+        self.assertEqual(response.status_code, 302, response.content.decode())
+        without_automatic = self.latest(template)
+        retain('automatic-owner-explicitly-removed', without_automatic)
+        self.assertNotIn(automatic['key'], {f['key'] for f in without_automatic.fields})
+        self.assertEqual(first.fields, template.versions.get(pk=first.pk).fields)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': without_automatic.pk,
+            'slot': 'word/document.xml#b/p[4]', 'label': 'Impression', 'kind': 'long_text'})
         self.assertEqual(response.status_code, 302, response.content.decode())
         mapped = self.latest(template); narrative = next(f for f in mapped.fields if f['label'] == 'Impression')
         retain('manual-mapping', mapped)

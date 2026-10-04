@@ -174,8 +174,23 @@ class AuthorizationAndPayerRefutation(TestCase):
         from core.jobs import run_one
         reserve(self.job, Decimal("0.2"))
         result = ({}, Decimal("0.125"), {"input_tokens": 100}, {"input_per_million": "1250"}, "synthetic-provider", "known_file_write_failure", False)
-        with patch("core.jobs.generation.generate", return_value=result), patch("pathlib.Path.open", side_effect=OSError("synthetic receipt storage full")):
+        original = private_path(self.job.encounter.template_version.template.original_path).read_bytes()
+        open_file = Path.open
+        failed_writes = []
+        def receipt_storage_full(path, *args, **kwargs):
+            mode = args[0] if args else kwargs.get('mode', 'r')
+            if path.parent == Path(self.directory.name) / 'receipts' and mode == 'xb':
+                failed_writes.append(path)
+                raise OSError("synthetic receipt storage full")
+            return open_file(path, *args, **kwargs)
+        # The original must remain readable before the provider call. Inject
+        # only the retained clinical-receipt write failure this control claims.
+        with patch("core.jobs.generation.generate", return_value=result) as provider, \
+                patch("pathlib.Path.open", new=receipt_storage_full):
             run_one()
+        provider.assert_called_once()
+        self.assertEqual(len(failed_writes), 1)
+        self.assertEqual(private_path(self.job.encounter.template_version.template.original_path).read_bytes(), original)
         receipt = ProviderReceipt.objects.filter(job=self.job).first()
         self.assertIsNotNone(receipt, "Known provider cost must survive failure to store clinical result bytes")
         self.assertEqual(receipt.actual_cost, Decimal("0.125"))
