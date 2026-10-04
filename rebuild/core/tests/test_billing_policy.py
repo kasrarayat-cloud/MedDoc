@@ -69,8 +69,7 @@ class DiscountConfiguration(SimpleTestCase):
 class PolicyFixture(SyntheticFixture):
     client_class = SurfaceClient
     def setUp(self):
-        self.directory=tempfile.TemporaryDirectory();self.addCleanup(self.directory.cleanup)
-        override=override_settings(MEDIA_ROOT=Path(self.directory.name));override.enable();self.addCleanup(override.disable)
+        self.directory=self.isolate_media()
         self.scope=self.make_scope('policy')
         self.user=self.scope[0];self.encounter=self.scope[5]
         self.promo=Wallet.objects.get(user=self.user,kind='promo');self.paid=Wallet.objects.get(user=self.user,kind='paid')
@@ -95,7 +94,7 @@ class ConfiguredEstimateDiscount(PolicyFixture,TestCase):
     def test_discount_rate_reduces_the_configured_estimate_and_is_recorded_for_audit(self):
         response=SimpleNamespace(id='msg_discount',_request_id='req_discount',
             usage=SimpleNamespace(input_tokens=100,output_tokens=10,cache_read_input_tokens=0,cache_creation_input_tokens=0),
-            stop_reason='end_turn',content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':'symptoms','quotes':['no chest pain'],'conflict':False}]}))],
+            stop_reason='end_turn',content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':self.encounter.template_version.fields[0]['key'],'quotes':['no chest pain'],'conflict':False}]}))],
             model_dump=lambda **kwargs:{'id':'msg_discount'})
         with patch.dict(os.environ,{'QUILLMD_PROVIDER_DISCOUNT_RATE':'0.2'}),patch('anthropic.Anthropic') as client:
             client.return_value.messages.create.return_value=response
@@ -156,7 +155,7 @@ class AbsorbedPlatformFailure(PolicyFixture,TestCase):
         job=enqueue(draft,self.user)
         def result(*args,**kwargs):
             User.objects.filter(pk=self.user.pk).update(is_active=False)
-            return ({'symptoms':{'text':'unapproved output','status':'supported'}},Decimal('0'),{},{},'synthetic-fixture','',True)
+            return ({original.template_version.fields[0]['key']:{'text':'unapproved output','status':'supported'}},Decimal('0'),{},{},'synthetic-fixture','',True)
         with patch('core.jobs.generation.generate',side_effect=result):run_one()
         job.refresh_from_db();self.assertEqual(job.state,'failed')
         self.assertTrue(Usage.objects.filter(job=job,simulated=True).exists())

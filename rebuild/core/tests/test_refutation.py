@@ -17,7 +17,8 @@ from django.utils import timezone
 from core.billing import reserve, settle, welcome_credit
 from core.generation import Selection, Selections, validate_selections
 from core.models import Department, Encounter, Job, Membership, Organization, Patient, Template, TemplateVersion, User, Usage, Wallet, Reservation, CodeSet, Code, CodeSuggestion, ProviderReceipt
-from core.security import membership
+from core.security import membership, private_path
+from core.tests import synthetic_original
 from core.tests.audio_fixtures import wav_bytes
 
 
@@ -79,8 +80,10 @@ class AuthorizationAndPayerRefutation(TestCase):
         self.org = Organization.objects.create(name="Synthetic refutation organization")
         self.department = Department.objects.create(name="X-ray", organization=self.org)
         Membership.objects.create(user=self.user, department=self.department, role="clinician")
-        template = Template.objects.create(department=self.department, name="Synthetic", format="docx", original_name="synthetic.docx", original_path="unused.docx", sha256="0" * 64, created_by=self.user)
-        mapping = TemplateVersion.objects.create(template=template, number=1, fields=[], created_by=self.user)
+        info = synthetic_original.inspection()
+        synthetic_original.persist(private_path('originals/refute.docx'))
+        template = Template.objects.create(department=self.department, name="Synthetic", format="docx", original_name="synthetic.docx", original_path="originals/refute.docx", sha256=info['sha256'], created_by=self.user)
+        mapping = TemplateVersion.objects.create(template=template, number=1, fields=info['fields'], import_manifest=info['import_manifest'], created_by=self.user)
         patient = Patient.objects.create(department=self.department, display_name="Synthetic patient", reference="refute", created_by=self.user)
         encounter = Encounter.objects.create(department=self.department, patient=patient, template_version=mapping, created_by=self.user, service_date=timezone.localdate(), notes="Synthetic notes")
         self.job = Job.objects.create(encounter=encounter, user=self.user, request_key="refute:1")

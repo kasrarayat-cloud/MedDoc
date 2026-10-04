@@ -491,7 +491,7 @@ class Sonnet55Outcomes(OutcomeFixture, TestCase):
     """Through enqueue + run_one with the real SDK: what the document and the books look like after each outcome."""
 
     def run_real(self, encounter, reply):
-        wire = Wire(reply)
+        wire = Wire(self.source_reply(encounter, reply))
         with wire.patched():
             job = enqueue(encounter, self.user)
             self.assertTrue(run_one())
@@ -575,7 +575,7 @@ class Sonnet55Outcomes(OutcomeFixture, TestCase):
         self.assertEqual(job.config['pricing_version'], SONNET_55_ADAPTIVE_HIGH)
         hold = sum(Reservation.objects.filter(job=job).values_list('amount', flat=True), Decimal(0))
         self.assertGreaterEqual(hold, Decimal(16000) * 10 / 1000000 * Decimal('1.5'))
-        wire = Wire(message55(text(SELECTED), ident='msg_queued'))
+        wire = Wire(self.source_reply(encounter, message55(text(SELECTED), ident='msg_queued')))
         with wire.patched():                                         # settings now say disabled / medium
             self.assertTrue(run_one())
         assert_sonnet_55_request(self, wire.json(), thinking=ADAPTIVE, effort='high', max_tokens=16000)

@@ -655,15 +655,33 @@ class OutcomeFixture(SyntheticFixture):
     """Private media, the pinned price environment and one synthetic scope; shared with test_sonnet5_settlement.py."""
 
     def setUp(self):
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        media = override_settings(MEDIA_ROOT=Path(directory.name))
-        media.enable()
-        self.addCleanup(media.disable)
+        self.isolate_media()
         env = patch.dict(os.environ, PRICE_ENV)
         env.start()
         self.addCleanup(env.stop)
         self.user, _, _, _, _, self.encounter, _ = self.make_scope('sonnet5')
+
+    def source_reply(self, encounter, reply):
+        """Only the old positive fake's key follows the real inspected original.
+
+        Historical pure FIELDS/SELECTED, malformed/refused bodies, model, usage
+        and completion evidence remain unchanged.
+        """
+        from copy import deepcopy
+        reply = deepcopy(reply)
+        blocks = reply.get('content', []) if isinstance(reply, dict) else reply.content
+        for block in blocks:
+            raw = block.get('text') if isinstance(block, dict) else getattr(block, 'text', None)
+            if raw != SELECTED:
+                continue
+            body = json.loads(raw)
+            body['fields'][0]['key'] = encounter.template_version.fields[0]['key']
+            value = json.dumps(body)
+            if isinstance(block, dict):
+                block['text'] = value
+            else:
+                block.text = value
+        return reply
 
     def fresh_encounter(self):
         original = self.encounter
@@ -682,7 +700,7 @@ class OutcomeFixture(SyntheticFixture):
 
     def run_job(self, encounter, reply):
         with patch('anthropic.Anthropic') as client:
-            client.return_value.messages.create.return_value = reply
+            client.return_value.messages.create.return_value = self.source_reply(encounter, reply)
             job = enqueue(encounter, self.user)
             self.assertTrue(run_one())
             sent = client.return_value.messages.create.call_args.kwargs
@@ -702,7 +720,7 @@ class Sonnet5Outcomes(OutcomeFixture, TestCase):
             THINKING, text(SELECTED), ident='msg_thinking', usage={'output_tokens_details': {'thinking_tokens': 9}}))
         self.assertEqual((plain.state, thought.state), ('succeeded', 'succeeded'))
         self.assertEqual(thinking_encounter.answers, plain_encounter.answers)
-        self.assertEqual(thinking_encounter.answers['symptoms']['text'], 'no chest pain')
+        self.assertEqual(thinking_encounter.answers[self.encounter.template_version.fields[0]['key']]['text'], 'no chest pain')
         self.assertEqual(thinking_encounter.status, 'review')
         self.assertEqual(sent['thinking'], {'type': 'disabled'})
         self.assertEqual(sent['output_config']['effort'], 'medium')
@@ -750,7 +768,7 @@ class Sonnet5Outcomes(OutcomeFixture, TestCase):
         self.assertEqual(job.config['request_profile']['thinking'], {'type': 'adaptive', 'display': 'omitted'})
         hold = sum(Reservation.objects.filter(job=job).values_list('amount', flat=True), Decimal(0))
         with patch('anthropic.Anthropic') as client:                   # settings now say disabled / medium
-            client.return_value.messages.create.return_value = message(text(SELECTED), ident='msg_queued')
+            client.return_value.messages.create.return_value = self.source_reply(encounter, message(text(SELECTED), ident='msg_queued'))
             self.assertTrue(run_one())
             sent = client.return_value.messages.create.call_args.kwargs
         self.assertEqual(sent['thinking'], {'type': 'adaptive', 'display': 'omitted'})

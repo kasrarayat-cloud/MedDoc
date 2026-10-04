@@ -244,7 +244,8 @@ class PilotSafeguards(SyntheticFixture, TestCase):
             page = self.client.get(f'/encounters/{self.encounter.pk}/')
             self.assertNotContains(page, 'name="blank_')
             revision = self.encounter.revision
-            response = self.client.post(f'/encounters/{self.encounter.pk}/save/', {'revision': revision, 'answer_symptoms': '', 'blank_symptoms': 'on'})
+            key = self.encounter.template_version.fields[0]['key']
+            response = self.client.post(f'/encounters/{self.encounter.pk}/save/', {'revision': revision, 'answer_'+key: '', 'blank_'+key: 'on'})
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'cannot be marked', status_code=400)
         self.encounter.refresh_from_db()
@@ -324,7 +325,8 @@ class PilotVoice(BoundaryFixture, TestCase):
     def test_a_document_change_is_named_as_the_reason_not_an_expired_price(self):
         quote = self.quote_signed_ago(0)
         # Answers saved in another window move the revision without touching the notes.
-        saved = self.client.post(self.url + 'save/', {'revision': self.encounter.revision, 'answer_symptoms': 'Fictional answer only'})
+        key = self.encounter.template_version.fields[0]['key']
+        saved = self.client.post(self.url + 'save/', {'revision': self.encounter.revision, 'answer_'+key: 'Fictional answer only'})
         self.assertEqual(saved.status_code, 302)
         self.encounter.refresh_from_db()
         response = self.send(quote)

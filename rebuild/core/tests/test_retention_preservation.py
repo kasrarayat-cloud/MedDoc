@@ -30,12 +30,11 @@ ISOLATED=dict(ADMIN_SITE=False,QUILLMD_PREVIEW_AUTH_ENABLED=False,
 class Fixture(SyntheticFixture):
     client_class = SurfaceClient
     def setup_records(self):
+        self.temp=self.isolate_media()
         self.scope=self.make_scope('hold');self.other=self.make_scope('unheld')
         self.encounter=self.scope[5]
         self.admin=User.objects.create_user(username='custodian',email='custodian@synthetic.invalid',verified_at=timezone.now(),is_staff=True)
         self.second=User.objects.create_user(username='custodian2',email='custodian2@synthetic.invalid',verified_at=timezone.now(),is_staff=True)
-        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
-        self.override=override_settings(MEDIA_ROOT=Path(self.temp.name));self.override.enable();self.addCleanup(self.override.disable)
 
     def hold(self,scope='patient',target=None):
         target=target if target is not None else (None if scope=='global' else self.scope[3].pk)

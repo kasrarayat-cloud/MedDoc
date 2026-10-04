@@ -173,12 +173,16 @@ class ConfigurationStatusNamesTheModel(TestCase):
                                         'confirmed):')
                     section = [line.strip() for line in lines[start + 1:lines.index('Media tools:')]]
                     mirror = [f"{row['name']}: {row['value']}" for row in rows.get('language_model', [])]
-                    # 7 settings + request profile + pricing_version + live language-model jobs, and outside live mode the
+                    # 7 settings + request profile + ordinary contract + pricing_version + live language-model jobs, and outside live mode the
                     # 'provider requests' line.
-                    self.assertEqual(len(section), 10 if overrides['AI_MODE'] == 'live' else 11)
+                    self.assertEqual(len(section), (11 if overrides['AI_MODE'] == 'live' else 12) if discount == '0'
+                                     else (10 if overrides['AI_MODE'] == 'live' else 11))
                     self.assertEqual(mirror, section)
                     self.assertNotIn('canary', repr(rows))
                     by_name = {row['name']: row for row in rows.get('language_model', [])}
+                    if discount == '0':
+                        self.assertIn('ordinary field contract', by_name)
+                        self.assertTrue(by_name['ordinary field contract']['value'].startswith('not configured'))
                     profile = by_name.get('request profile', {})
                     if label in ('invalid effort', 'unlisted claude id') or discount == 'x':
                         self.assertEqual(profile.get('severity'), 'error')
