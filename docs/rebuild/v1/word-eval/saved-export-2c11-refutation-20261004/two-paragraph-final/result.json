@@ -1,0 +1,43 @@
+{
+  "commit": "2c11e951cc2e864fc387d77ff784ea33b21f2d14",
+  "source_sha256": "dc846052fb3aa06e145f44c51749bceebfb698803bd484f9656513e112c98138",
+  "original_sha256": "0da788d8e64393a03ed4bfa7fd823e7f0288241c266f21ee9fb5c84d6e58b99e",
+  "honest_sha256": "5b22d4f1141d55ccbabf87d1b938965ded4c53245f567f812f121ec99d877c3a",
+  "cases": [
+    {
+      "case": "hidden-all-answer-runs",
+      "export_sha256": "58c941ac301f1d5f180646dd2f4f1c22dee5b3b86b13ddf402c0661464e59b79",
+      "all_answer_runs_explicitly_hidden": true,
+      "frozen_pass": false,
+      "corrected_pass": true,
+      "read_back_pass": true,
+      "corrections": [
+        "v3_1"
+      ],
+      "runs": 2,
+      "exact_read_text": true
+    },
+    {
+      "case": "visible-answer-runs",
+      "export_sha256": "09869f223b7bea6a56551bfc29afbf8def2f0b77763656cb1dbccc9657258470",
+      "all_answer_runs_explicitly_hidden": false,
+      "frozen_pass": false,
+      "corrected_pass": true,
+      "read_back_pass": true,
+      "corrections": [
+        "v3_1"
+      ],
+      "runs": 2,
+      "exact_read_text": true
+    }
+  ],
+  "finding": "Explicitly hidden multiline answer is accepted by the new correction. Both answer runs carry w:rPr/w:vanish w:val=1; exact text readers count their XML text despite the hidden formatting. Frozen criterion was false and new workflow_success true.",
+  "FILE_LINES": [
+    "rebuild/ops/sonnet5_stages.py:604\u2013610",
+    "rebuild/ops/sonnet5_stages.py:614\u2013616",
+    "rebuild/documents/word_v3.py:10421\u201310429"
+  ],
+  "network_DB_render_provider_calls": 0,
+  "native_Word": "not executed; hidden-formatting property directly established in valid OOXML",
+  "source_clean_after": true
+}
