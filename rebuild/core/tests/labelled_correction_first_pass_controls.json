@@ -1,0 +1,304 @@
+{
+  "kind": "Retained exposed synthetic provider wire, never unseen",
+  "cases": [
+    {
+      "attempt": 26,
+      "notes": "Patient presents with a rash on both forearms.\nAllergies: penicillin. Sorry, I mean amoxicillin.\nSmoker: No.",
+      "fields": [
+        {
+          "context": "Skin clinic record",
+          "key": "v3_1",
+          "kind": "text",
+          "label": "Chief complaint",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          }
+        },
+        {
+          "context": "Skin clinic record",
+          "key": "v3_2",
+          "kind": "text",
+          "label": "Allergies",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          }
+        },
+        {
+          "context": "Skin clinic record > Smoker",
+          "key": "v3_3",
+          "kind": "choice",
+          "label": "Smoker",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "b17e68f7d5a37a55497deee326a5faf89ff0c5994985d79a53796a6540e2f77d",
+            "part": "word/document.xml",
+            "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs",
+            "target": {
+              "boxes": [
+                {
+                  "glyph": 0,
+                  "kind": "glyph",
+                  "part": "word/document.xml",
+                  "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs"
+                },
+                {
+                  "glyph": 1,
+                  "kind": "glyph",
+                  "part": "word/document.xml",
+                  "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs"
+                }
+              ],
+              "type": "checkboxes"
+            }
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "model_body": {
+        "fields": [
+          {
+            "key": "v3_1",
+            "unit_ids": [
+              1
+            ],
+            "conflict": false,
+            "option_ids": [],
+            "context": {
+              "answer": [
+                1
+              ],
+              "qualifier": [],
+              "contrary": [],
+              "unresolved": [],
+              "independent": [
+                2,
+                3
+              ]
+            }
+          },
+          {
+            "key": "v3_2",
+            "unit_ids": [
+              2
+            ],
+            "conflict": false,
+            "option_ids": [],
+            "context": {
+              "answer": [
+                2
+              ],
+              "qualifier": [],
+              "contrary": [],
+              "unresolved": [],
+              "independent": [
+                1,
+                3
+              ]
+            }
+          },
+          {
+            "key": "v3_3",
+            "unit_ids": [
+              3
+            ],
+            "conflict": false,
+            "option_ids": [
+              "v3_3:1"
+            ],
+            "context": {
+              "answer": [
+                3
+              ],
+              "qualifier": [],
+              "contrary": [],
+              "unresolved": [],
+              "independent": [
+                1,
+                2
+              ]
+            }
+          }
+        ]
+      },
+      "original_statuses": {
+        "v3_1": "conflict",
+        "v3_2": "conflict",
+        "v3_3": "supported"
+      },
+      "sha256": {
+        "request.json": "30b1e902094c3843b419440651e7f9faf2af3f5f1eb48bcc616570915a5e5167",
+        "provider-result.json": "78be9c32e9122f2facf608c7c09cb019792861e4076b79c34e97970e0649ad31",
+        "case/mapping.json": "c35928c313c04360c17d20c6c2ee58ded1b4acb41032b456c148d80021a24949",
+        "case/notes.txt": "3ac4a214cb543a9dcd3d7994c929b0fd4252541b61c90d5f8407bc7cd898253e",
+        "answers-adopted.json": "6065439192cc699d82c3067006293a8bd144cc0c5ca8b4cb2cffcbd3443c380f"
+      }
+    },
+    {
+      "attempt": 27,
+      "notes": "Patient presents with a rash on both forearms.\n\nAllergies: penicillin.\nSorry, I mean amoxicillin.\n\nSmoker: No.",
+      "fields": [
+        {
+          "context": "Skin clinic record",
+          "key": "v3_1",
+          "kind": "text",
+          "label": "Chief complaint",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          }
+        },
+        {
+          "context": "Skin clinic record",
+          "key": "v3_2",
+          "kind": "text",
+          "label": "Allergies",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          }
+        },
+        {
+          "context": "Skin clinic record > Smoker",
+          "key": "v3_3",
+          "kind": "choice",
+          "label": "Smoker",
+          "locator": {
+            "contract": "v3",
+            "fingerprint": "b17e68f7d5a37a55497deee326a5faf89ff0c5994985d79a53796a6540e2f77d",
+            "part": "word/document.xml",
+            "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs",
+            "target": {
+              "boxes": [
+                {
+                  "glyph": 0,
+                  "kind": "glyph",
+                  "part": "word/document.xml",
+                  "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs"
+                },
+                {
+                  "glyph": 1,
+                  "kind": "glyph",
+                  "part": "word/document.xml",
+                  "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs"
+                }
+              ],
+              "type": "checkboxes"
+            }
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "model_body": {
+        "fields": [
+          {
+            "key": "v3_1",
+            "unit_ids": [
+              1
+            ],
+            "conflict": false,
+            "option_ids": [],
+            "context": {
+              "answer": [
+                1
+              ],
+              "qualifier": [],
+              "contrary": [],
+              "unresolved": [],
+              "independent": [
+                2,
+                3,
+                4
+              ]
+            }
+          },
+          {
+            "key": "v3_2",
+            "unit_ids": [
+              2,
+              3
+            ],
+            "conflict": false,
+            "option_ids": [],
+            "context": {
+              "answer": [
+                3
+              ],
+              "qualifier": [
+                2
+              ],
+              "contrary": [],
+              "unresolved": [],
+              "independent": [
+                1,
+                4
+              ]
+            }
+          },
+          {
+            "key": "v3_3",
+            "unit_ids": [
+              4
+            ],
+            "conflict": false,
+            "option_ids": [
+              "v3_3:1"
+            ],
+            "context": {
+              "answer": [
+                4
+              ],
+              "qualifier": [],
+              "contrary": [],
+              "unresolved": [],
+              "independent": [
+                1,
+                2,
+                3
+              ]
+            }
+          }
+        ]
+      },
+      "original_statuses": {
+        "v3_1": "conflict",
+        "v3_2": "conflict",
+        "v3_3": "supported"
+      },
+      "sha256": {
+        "request.json": "d846e7593c7c3be6bce89b529dfa45b5a351653acd1a960c9ac3ffa6ae6cb8a9",
+        "provider-result.json": "73c83f13c07dc9e2cc0d40e81dc6e3bd4ced5c2330af40a3728e8d90bae9f5dc",
+        "case/mapping.json": "c35928c313c04360c17d20c6c2ee58ded1b4acb41032b456c148d80021a24949",
+        "case/notes.txt": "e54755563b294d9dd45b35ebe4d0c45b3cd966ad9980c7cc89178df04ffb0da0",
+        "answers-adopted.json": "7cadf9ff9eb384609adc7e3c97e5895cf3aa208809b3d1192f02c13ea3a80c69"
+      }
+    }
+  ]
+}

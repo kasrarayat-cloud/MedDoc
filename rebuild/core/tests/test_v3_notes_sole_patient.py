@@ -313,7 +313,12 @@ class BareBackwardRepair(Floors, SimpleTestCase):
                       'Patient presents with a rash on both forearms.\n\nAllergies: penicillin.\nSorry, I mean amoxicillin.\n\nSmoker: No.'):
             with self.subTest(notes=notes):
                 self.assert_filled(notes, fields, {'v3_3': ['Smoker: No.']}, {'v3_3': 'No'}, choices=no)
-                self.assert_held(notes, fields, {'v3_1': ['Patient presents with a rash on both forearms.']}, 'v3_1')
+                # Retain this historical selector and exact N11/N12 sources.
+                # The correction explicitly repairs Allergies; the earlier
+                # explicit-patient rash has a distinct bounded topic. The old
+                # blanket-before hold is retained in the raw failure evidence.
+                claim = 'Patient presents with a rash on both forearms.'
+                self.assert_filled(notes, fields, {'v3_1': [claim]}, {'v3_1': claim})
         # a repair of the line before: held; a forward pointer, a repair that is not a known thing, one after an
         # unlabelled line: note-wide as before
         for notes in ('Allergies: penicillin.\nSmoker: No.\nSorry, I mean amoxicillin.',

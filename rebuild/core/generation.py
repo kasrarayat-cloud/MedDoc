@@ -2102,10 +2102,10 @@ def v3_repair_apart(reading, answer_ids, repaired_ids):
 
 def v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, field_key, answer_text):
     """The note's corrections that govern an answer (`judged_context`): every one, note-wide, as before - except, for an
-    answer whose ordinary relation record is valid, a bare backward repair (`v3_bare_repairs`) written wholly BEFORE
-    every line of the answer when the answer is POSITIVELY about another topic (`v3_repair_apart`: 'Allergies:
-    penicillin. Sorry, I mean amoxicillin.' above 'Smoker: No.'). It still governs everything before it, its own line,
-    and any later line that may repeat what it withdrew; every other correction is unchanged."""
+    answer whose ordinary relation record is valid, a bare backward repair (`v3_bare_repairs`) when the answer is
+    POSITIVELY about another topic (`v3_repair_apart`: 'Allergies: penicillin. Sorry, I mean amoxicillin.' above
+    'Smoker: No.'). An earlier answer additionally requires explicit patient subjects and no backward source
+    invalidation. Its own line, a shared topic, an inferred actor and every other correction remain held."""
     corrections = list(scope['corrections'])
     reading = scope.get('preceding')
     if not corrections or ordinary_relation is None or not reading:
@@ -2123,8 +2123,18 @@ def v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, fi
     answer_ids = set(v3_evidence_units(reading, evidence))
     if len(answer_ids) != len(evidence):
         return corrections
-    return [unit for unit in corrections if not (unit['id'] in bare and unit['end'] <= start
-                                                 and v3_repair_apart(reading, answer_ids, bare[unit['id']]))]
+    # A repair of a positively named labelled value does not retract an
+    # independently documented patient assertion about another topic. The old
+    # after-only rule unnecessarily held an earlier presenting complaint.
+    # Every selected assertion must already name the patient explicitly; a
+    # pronoun/nominal/inherited actor cannot gain ownership at this boundary.
+    from .source_scope import _date_scope_backward_dependency
+    selected = list(v3_evidence_units(reading, evidence).values())
+    explicit_answer = bool(all(reading['patients'].get(uid) for uid in answer_ids)
+        and not _date_scope_backward_dependency(reading, selected))
+    return [unit for unit in corrections if not (unit['id'] in bare
+        and (unit['end'] <= start or explicit_answer)
+        and v3_repair_apart(reading, answer_ids, bare[unit['id']]))]
 
 
 def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_units=None, v3_parsed=None):
