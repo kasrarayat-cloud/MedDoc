@@ -1690,7 +1690,10 @@ def date_correction_governors(governance, label, evidence, ordinary_relation, fi
         if doc is None:continue
         roots=[t for t in doc if t.dep_=='ROOT']
         if len(roots)!=1:continue
-        root=roots[0];subjects=[t for t in root.children if t.dep_=='nsubj']
+        root=roots[0]
+        corrections=[t for t in doc if t.i==0 and a._lemma(t)=='correction' and t.head==root]
+        if len(corrections)!=1:continue
+        subjects=[t for t in root.children if t.dep_=='nsubj' and t not in corrections]
         if (a._lemma(root)!='be' or root.tag_!='VBD' or len(subjects)!=1
                 or subjects[0].pos_!='NOUN' or a._lemma(subjects[0])!='date'):continue
         subject=set(subjects[0].subtree)
@@ -1698,8 +1701,6 @@ def date_correction_governors(governance, label, evidence, ordinary_relation, fi
         attributes=[t for t in root.children if t.dep_=='attr']
         if len(attributes)!=1 or any(t.pos_!='NUM' for t in attributes[0].subtree if not t.is_punct):continue
         allowed=subject|set(attributes[0].subtree)|{root}
-        corrections=[t for t in doc if t.i==0 and a._lemma(t)=='correction' and t.head==root]
-        if len(corrections)!=1:continue
         allowed.add(corrections[0])
         if any(t not in allowed and not t.is_punct for t in doc):continue
         if any(t.pos_ in ('PRON','PROPN') or a.names_person(t) or a.names_carer(t) or a.this_patient(t)

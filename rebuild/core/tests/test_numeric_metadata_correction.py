@@ -157,3 +157,16 @@ class NumericMetadataCorrection(SimpleTestCase):
                 '"The earlier findings were wrong."', 'Was the earlier procedure date wrong?'):
             with self.subTest(source=source):
                 self.check('No polyps were seen. '+source+' Correction: procedure date was 09/21/2026.',False)
+
+    def test_exact_root_iso_examination_subject_and_negative_iso_controls(self):
+        for separator in (' ', '\n'):
+            with self.subTest(separator=separator):
+                self.check('No polyps were seen.'+separator+'Correction: examination date was 2026-09-22.',True)
+        for change in ('examination date was 2026-02-30.', 'examination date was 2026-09-22?',
+                'examination date was possibly 2026-09-22.', 'examination date was not 2026-09-22.',
+                "her father's examination date was 2026-09-22.", 'my examination date was 2026-09-22.',
+                'examination date will be 2026-09-22.'):
+            with self.subTest(change=change):
+                self.check('No polyps were seen. Correction: '+change,False)
+        self.check('No polyps were seen. The earlier findings were wrong. '
+                   'Correction: examination date was 2026-09-22.',False)
