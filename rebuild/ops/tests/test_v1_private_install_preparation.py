@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 class PrivateV1PreparationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.schema_bytes = (ROOT / 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract.json').read_bytes()
+        cls.schema_bytes = (ROOT / p.SCHEMA_PATH).read_bytes()
         cls.schema = json.loads(cls.schema_bytes)
         paths = p.REQUIRED_SOURCE | {
             'rebuild/core/migrations/' + name + '.py'
@@ -35,7 +35,7 @@ class PrivateV1PreparationTests(unittest.TestCase):
         self.assertEqual(result['private_units'], [])
         self.assertFalse(result['execution_authorized'])
         self.assertFalse(result['installed_mutation_performed'])
-        self.assertEqual(len(result['forward_migrations']), 19)
+        self.assertEqual(len(result['forward_migrations']), 20)
         for changes in ({'ai_mode': 'live'}, {'isolated_state': False},
                         {'source_refutation': {'target': self.target, 'complete': True, 'clinical_unsafe': 1, 'word_unsafe': 0}}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
@@ -70,7 +70,7 @@ class PrivateV1PreparationTests(unittest.TestCase):
                         {'payment_mode': 'live'}, {'public_maintenance': False}, {'cpt_enabled': True}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 p.source_contract({**self.declaration, **changes}, self.schema_bytes, self.sources)
-        for name in ('0001_initial', '0037_transcript_redaction_boundary'):
+        for name in ('0001_initial', '0037_transcript_redaction_boundary', '0038_reinspection_confirmation_guard'):
             path = 'rebuild/core/migrations/' + name + '.py'
             sources = {**self.sources, path: self.sources[path] + b'\n# altered\n'}
             declaration = copy.deepcopy(self.declaration)
@@ -102,6 +102,24 @@ class PrivateV1PreparationTests(unittest.TestCase):
         evidence = self.installed_evidence(); evidence.pop('exact_merged_pr')
         with self.assertRaises(ValueError):
             p.plan(self.declaration, self.schema_bytes, self.sources, evidence, destination='installed_qualified_v1')
+
+    def test_exact_twenty_member_graph_refuses_self_consistent_missing_or_foreign_source(self):
+        p.source_contract(self.declaration, self.schema_bytes, self.sources)
+        guard = 'rebuild/core/migrations/0038_reinspection_confirmation_guard.py'
+        self.assertIn(guard, self.sources)
+        self.assertEqual(self.schema['candidate_core_migration'], p.LEAF)
+        mutations = [({key: raw for key, raw in self.sources.items() if key != guard}),
+                     {**self.sources, 'rebuild/core/migrations/0039_unreviewed.py': b'# foreign source'}]
+        for sources in mutations:
+            declaration = copy.deepcopy(self.declaration)
+            declaration['source_sha256'] = {path: p.sha(raw) for path, raw in sources.items()}
+            with self.subTest(paths=sorted(set(sources) ^ set(self.sources))), self.assertRaisesRegex(
+                    ValueError, 'undeclared migration'):
+                p.source_contract(declaration, self.schema_bytes, sources)
+        old = (ROOT / 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract.json').read_bytes()
+        declaration = {**self.declaration, 'schema_sha256': p.sha(old)}
+        with self.assertRaisesRegex(ValueError, 'Reviewed schema source changed'):
+            p.source_contract(declaration, old, self.sources)
 
     def inventories(self):
         digest = p.sha(b'synthetic historical rows')

@@ -89,7 +89,7 @@ class PrivateV1InstallAdapterTests(unittest.TestCase):
         a.verify_migration_plan(self.migration_plan(False), self.schema, applied=False)
         a.verify_migration_plan(self.migration_plan(True), self.schema, applied=True)
         for raw, applied in ((self.migration_plan(False) + '\n[ ] auth.unreviewed', False),
-                             (self.migration_plan(False).replace('[ ] core.0037_', '[X] core.0037_'), False),
+                             (self.migration_plan(False).replace('[ ] core.0038_', '[X] core.0038_'), False),
                              (self.migration_plan(False), True)):
             with self.subTest(raw=raw[-80:]), self.assertRaises(ValueError):
                 a.verify_migration_plan(raw, self.schema, applied=applied)

@@ -27,7 +27,7 @@ def literal(name, variable):
 
 
 class ReinspectionMigrationSource(unittest.TestCase):
-    def test_new_capture_is_explicit_twenty_member_source_while_old_installer_remains_held(self):
+    def test_capture_and_renewed_preparation_bind_the_exact_twenty_member_source(self):
         repository = ROOT.parent
         raw = (repository / capture_v1_install_schema.SCHEMA).read_bytes()
         schema = json.loads(raw)
@@ -44,11 +44,12 @@ class ReinspectionMigrationSource(unittest.TestCase):
                          old['forward_migration_sha256'])
         self.assertEqual(schema['forward_migration_sha256'][NAME],
                          hashlib.sha256((ROOT / 'core/migrations' / (NAME + '.py')).read_bytes()).hexdigest())
-        self.assertEqual(preparation.LEAF, '0037_transcript_redaction_boundary')
-        self.assertEqual(preparation.SCHEMA_SHA256, 'a8ab83af5b6f79634fb893f3e6fe14fdc64cb95fb1bf0b64c359419847f59f69')
+        self.assertEqual(preparation.LEAF, NAME)
+        self.assertEqual(preparation.SCHEMA_SHA256, capture_v1_install_schema.SCHEMA_SHA256)
+        self.assertEqual((repository / preparation.SCHEMA_PATH).read_bytes(), raw)
 
     def test_catalog_capture_refuses_a_newer_foreign_or_ambiguous_leaf_before_migration(self):
-        for nodes in ([('core', NAME)], [('core', NAME), ('core', preparation.LEAF)],
+        for nodes in ([('core', '0037_transcript_redaction_boundary')], [('core', NAME), ('core', '0037_transcript_redaction_boundary')],
                       [], [('auth', '0001_initial')]):
             graph = SimpleNamespace(leaf_nodes=lambda: nodes)
             with self.subTest(nodes=nodes), self.assertRaisesRegex(ValueError, 'Actual core migration leaf differs'):
@@ -118,7 +119,7 @@ class ReinspectionMigrationSource(unittest.TestCase):
             'target': 'a' * 40, 'schema_sha256': preparation.SCHEMA_SHA256,
             'source_sha256': {name: preparation.sha(raw) for name, raw in sources.items()},
             'data_mode': 'synthetic', 'payment_mode': 'test', 'public_maintenance': True, 'cpt_enabled': False}
-        with self.assertRaisesRegex(ValueError, 'undeclared migration'):
+        with self.assertRaisesRegex(ValueError, 'Reviewed schema source changed'):
             preparation.source_contract(declaration, schema_bytes, sources)
         self.assertEqual(len(schema['forward_migration_sha256']), 19)
         self.assertEqual(schema['candidate_core_migration'], '0037_transcript_redaction_boundary')
@@ -142,4 +143,36 @@ class ReinspectionMigrationSource(unittest.TestCase):
             'source_sha256': receipt['source_sha256'], 'before': {}, 'after': {},
             'new_permissions': [], 'new_content_types': []}
         with self.assertRaisesRegex(ValueError, 'different source bytes'):
+            adapter.validate_catalog_contract(json.dumps(simulated).encode(), sources, schema_bytes)
+
+    def test_renewed_capture_receipt_binds_current_catalog_sources_and_retains_the_old_identity(self):
+        repository = ROOT.parent
+        directory = repository / 'docs/rebuild/v1/private-synthetic-install-preparation-20261004'
+        current = json.loads((directory / 'postgresql-catalog-capture-0038.json').read_bytes())
+        previous = json.loads((directory / 'postgresql-catalog-capture.json').read_bytes())
+        schema_bytes = (repository / preparation.SCHEMA_PATH).read_bytes()
+        schema = json.loads(schema_bytes)
+        paths = adapter.CATALOG_SOURCES | {
+            'rebuild/core/migrations/' + name + '.py'
+            for name in {**schema['baseline_prefix_sha256'], **schema['forward_migration_sha256']}}
+        sources = {path: (repository / path).read_bytes() for path in paths}
+        self.assertEqual(len(paths), 42)
+        self.assertEqual(current['source_sha256'], {path: preparation.sha(raw) for path, raw in sources.items()})
+        self.assertEqual(current['schema_sha256'], preparation.sha(schema_bytes))
+        self.assertEqual(current['forward_migration_count'], 20)
+        self.assertEqual(current['full_catalog_items']['after'], {'functions': 28, 'triggers': 111})
+        self.assertEqual((current['actual_child_exit'], current['actual_outer_exit']), (0, 0))
+        self.assertTrue(current['database_destroyed'])
+        self.assertEqual(current['database_catalog_count'], 0)
+        self.assertEqual(current['remaining_connections'], 0)
+        self.assertNotEqual(current['schema_sha256'], previous['schema_sha256'])
+        self.assertNotEqual(current['raw_contract']['sha256'], previous['raw_contract']['sha256'])
+        # This deliberately incomplete envelope exercises the old identity
+        # refusal only. A receipt and this test never replace reading the raw
+        # complete catalog through the normal installer.
+        simulated = {'format': 'quillmd-v1-postgresql-upgrade-contract-v1',
+            'baseline': preparation.BASELINE, 'schema_sha256': previous['schema_sha256'],
+            'source_sha256': previous['source_sha256'], 'before': {}, 'after': {},
+            'new_permissions': [], 'new_content_types': []}
+        with self.assertRaisesRegex(ValueError, 'Catalog contract identity differs'):
             adapter.validate_catalog_contract(json.dumps(simulated).encode(), sources, schema_bytes)

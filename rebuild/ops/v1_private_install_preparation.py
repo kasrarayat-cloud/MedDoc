@@ -13,8 +13,9 @@ import re
 
 BASELINE = 'dedac1625032e32c7a149e6771be22e26c307eb1'
 BASELINE_NODE = '0018_servicehealth'
-LEAF = '0037_transcript_redaction_boundary'
-SCHEMA_SHA256 = 'a8ab83af5b6f79634fb893f3e6fe14fdc64cb95fb1bf0b64c359419847f59f69'
+LEAF = '0038_reinspection_confirmation_guard'
+SCHEMA_PATH = 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract-0038.json'
+SCHEMA_SHA256 = '47e45ec7ff94ce89cfa3ce8f3fbc514fa05eddb5e88e480d1ed58fa26706da96'
 WORKFLOWS = frozenset({'CI', 'secrets-scan'})
 MODEL = 'claude-sonnet-5-5'
 CONTRACT = 'ordinary-field-relations-v4'
@@ -55,7 +56,7 @@ def source_contract(declaration, schema_bytes, source_bytes):
             and declaration['schema_sha256'] == SCHEMA_SHA256, 'Reviewed schema source changed.')
     schema = json.loads(schema_bytes)
     require((schema['baseline_core_migration'], schema['candidate_core_migration']) == (BASELINE_NODE, LEAF)
-            and schema['removed_core_tables'] == [] and len(schema['forward_migration_sha256']) == 19,
+            and schema['removed_core_tables'] == [] and len(schema['forward_migration_sha256']) == 20,
             'Reviewed forward migration graph differs.')
     sources = declaration['source_sha256']
     require(isinstance(sources, dict) and isinstance(source_bytes, dict)
@@ -132,7 +133,7 @@ def plan(declaration, schema_bytes, source_bytes, evidence, *, destination):
                   'coordinate_existing_publication_and_alert_participants', 'drain_and_resolve_jobs_and_reservations',
                   'stop_only_declared_private_surfaces', 'capture_stopped_rows_files_schema_environment_static_and_recovery',
                   'retain_prior_source_environment_and_static', 'advance_shared_main_to_exact_merged_candidate',
-                  'apply_exact_nineteen_forward_migrations', 'verify_every_old_column_and_file_and_declared_new_schema',
+                  'apply_exact_twenty_forward_migrations', 'verify_every_old_column_and_file_and_declared_new_schema',
                   'prepare_reviewed_ordinary_model_environment', 'install_source_bound_static_keep_historical_assets',
                   'restart_and_verify_exact_doctor_admin_worker_and_synthetic_workflows')
     return {'format': 'quillmd-private-v1-preparation-v1', 'target': target, 'baseline': BASELINE,

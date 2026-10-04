@@ -1,4 +1,4 @@
-"""The preserving 0018→0037 lifecycle used by the normal private installer.
+"""The preserving 0018→0038 lifecycle used by the normal private installer.
 
 Only the explicitly supplied backend can perform actions. The command-line door
 constructs its fixed reviewed backend after live source/PR/CI and product gates;

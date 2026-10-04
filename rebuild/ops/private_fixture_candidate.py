@@ -30,7 +30,7 @@ HELPERS = {
     'netwatch.py': '45749a850892b98e2bae15cb1c02c1cec914e64c01998bcef5677fda555878f7',
     'create_qa_database.py': 'fe655ed822151089af5b46ed92af747c23f850dc783a3ac46d4bf7a5774e4425',
 }
-SCHEMA_PATH = 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract.json'
+SCHEMA_PATH = preparation.SCHEMA_PATH
 WORD_RUNTIME = '/opt/meddoc-pro/rebuild/.runtime/v1-product-20260930/int/browser/word-build/runtime'
 WORD_MANIFEST = '/opt/meddoc-pro/rebuild/.runtime/v1-product-20260930/int/browser/word-build/runtime-manifest.json'
 WORD_SHA256 = '2a1e4477144207bed04d3f3d38cb3b276cdaf7e450ef7d622f1ee63cd4e0d756'
