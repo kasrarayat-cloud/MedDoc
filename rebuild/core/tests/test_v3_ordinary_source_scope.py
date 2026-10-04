@@ -60,13 +60,15 @@ class OrdinarySourceScope(SimpleTestCase):
         self.check(ANCHOR+' '+MED+' '+denial+' '+ALLERGY+' '+EXAM, 'v3_5', [ALLERGY], 'supported')
         self.check(ANCHOR+' '+MED+' '+denial+' '+ALLERGY+' '+EXAM, 'v3_7', [EXAM], 'supported')
         self.check(ANCHOR+' She takes warfarin. She denies any bleeding.', 'v3_4', ['She takes warfarin.'], 'supported')
+        self.check(ANCHOR+' '+MED+' She denies bleeding.', 'v3_4', [MED], 'supported')
         self.check(ANCHOR+' '+PLAN+' '+FOLLOW+' She is a nonsmoker.', 'v3_9', [PLAN, FOLLOW], 'supported')
 
     def test_actual_opposition_allergy_reaction_and_medication_ending_still_hold(self):
         for tail in ('She takes no medicines.', 'She is on no treatment.', 'She has stopped all treatment.',
                      'She denies taking ibuprofen.', 'She switched from ibuprofen to an unknown medicine.',
                      'She is not anticoagulated.', 'The earlier medication entry was wrong.',
-                     'She denies any medication changes.', 'She stopped last year.'):
+                     'She denies any medication changes.', 'She stopped last year.',
+                     'She denies stopping ibuprofen.', 'She denies replacing ibuprofen with warfarin.'):
             with self.subTest(tail=tail): self.check(ANCHOR+' '+MED+' '+tail, 'v3_4', [MED])
         for tail in ('She is allergic to penicillin.', 'She has a drug reaction.', 'She has anaphylaxis.',
                      'Allergies: penicillin.', 'The previous allergy entry was incorrect.',

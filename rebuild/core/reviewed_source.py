@@ -6,6 +6,65 @@ another person, a quotation or a clinical qualifier into the encounter patient.
 """
 
 
+def backward_attribution(reading, selected, docs):
+    """A later pointer assigning its referenced source to another bearer.
+
+    The pointer's grammatical role supplies the backward edge, not the mere
+    presence of a family member elsewhere in the transcript. A person inside
+    that finite predicate's object/possessor cannot be supplied by the earlier
+    default-patient review. Uncertain or open attribution remains a dependency.
+    """
+    from . import generation as g, v3_actors as a
+    import re
+    chosen = {u['id'] for u in selected}
+    first = min((u['start'] for u in selected), default=None)
+    if first is None:
+        return False
+    for unit, doc in zip(reading['units'], docs):
+        if unit['id'] in chosen or unit['start'] <= first:
+            continue
+        if doc is None:
+            return True
+        for target in doc:
+            if target.pos_ not in ('NOUN', 'PRON') or target.dep_ not in ('nsubj', 'nsubjpass'):
+                continue
+            if a.names_person(target) or a.names_carer(target) or a.this_patient(target):
+                continue
+            pointer = any('Dem' in t.morph.get('PronType') or 'Def' in t.morph.get('Definite')
+                or re.fullmatch(g.SCOPE_POINTERS, t.text, re.I) for t in target.subtree)
+            predicate = target.head
+            if not pointer or predicate.pos_ not in ('AUX', 'VERB'):
+                continue
+            theme = set(target.subtree)
+            bearers = [t for t in predicate.subtree if t not in theme
+                and t.dep_ in ('dobj', 'pobj', 'attr', 'poss')
+                and (a.this_patient(t) or a.names_person(t) or a.names_carer(t) or t.pos_ in ('PROPN', 'PRON'))
+                and not any(ancestor.dep_ == 'agent' for ancestor in t.ancestors)]
+            # "Prepared by the clinician" names an author in the passive
+            # agent, whereas a source predicate excluding its current patient
+            # or appointing another visit cannot confirm this source's bearer.
+            temporal = any(t.pos_ != 'ADP' and ({a._lemma(t), a._fold(t.text)} & a.SOLE_FIELD_TIME)
+                for t in predicate.subtree)
+            patient = any(a.this_patient(t) for t in bearers)
+            if temporal or patient and a._negates(predicate):
+                return True
+            if not bearers:
+                continue
+            closed = bool(predicate.dep_ == 'ROOT'
+                and any('Fin' in t.morph.get('VerbForm') for t in (predicate, *predicate.children))
+                and '?' not in doc.text and not any(t.tag_ == 'MD'
+                    or a._fold(t.text) in a.SOLE_UNCERTAIN
+                    or t.dep_ in ('advcl', 'relcl', 'ccomp', 'xcomp', 'conj') for t in predicate.subtree))
+            if (closed and a._negates(predicate) and not patient
+                    and sum(t.dep_ == 'neg' for t in predicate.subtree) == 1
+                    and not any(t.dep_ == 'advmod' for t in predicate.subtree)):
+                continue
+            if closed and patient and all(a.this_patient(t) for t in bearers):
+                continue
+            return True
+    return False
+
+
 def complete_ids(reading, field, ordered):
     from . import generation as g, v3_syntax, v3_actors as a
     if not reading.get('_transcript_review_proof') or field.get('kind') not in ('text', 'long_text'):
@@ -17,6 +76,8 @@ def complete_ids(reading, field, ordered):
     docs = v3_syntax.docs(u['quote'] for u in units)
     labels = v3_syntax.docs([field['label']])
     if docs is None or labels is None:
+        return set()
+    if backward_attribution(reading, ordered, docs):
         return set()
     # An abstract clinical annotation entered in error retracts its source.
     # A bounded numeric correction (for example the earlier pain score) is not

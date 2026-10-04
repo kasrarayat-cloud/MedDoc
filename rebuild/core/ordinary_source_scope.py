@@ -100,14 +100,20 @@ def effective(reading, unit, chosen, label):
         root = next((t for t in doc if t.dep_ == 'ROOT'), None)
         # A noun such as the direct argument "visual changes" is not a
         # medication-change predicate. Read operators by their actual roles.
+        def nominal_argument(t):
+            return bool(t.pos_ == 'NOUN' and t.dep_ in ('dobj', 'conj')
+                or t.pos_ == 'VERB' and t.tag_ == 'VBG' and t.head == root
+                and t.dep_ in ('dobj', 'xcomp')
+                and not any(c.dep_ not in ('det', 'amod', 'punct') for c in t.children))
         direct_denial = bool(root is not None and theirs['classes'] and theirs['classes'] <= a.SOLE_CLINICAL
             and not theirs['unknown'] and not theirs['uncertain'] and 'global' not in theirs['reach']
             and root.pos_ == 'VERB' and a._lemma(root) == 'deny'
-            and any(t.dep_ == 'dobj' for t in root.children)
-            and not any(t.dep_ in ('ccomp', 'xcomp', 'advcl', 'relcl')
+            and any(t.dep_ == 'dobj' or nominal_argument(t) for t in root.children)
+            and not any(t.dep_ in ('ccomp', 'advcl', 'relcl')
+                or t.dep_ == 'xcomp' and not nominal_argument(t)
                 or t.dep_ == 'conj' and t.pos_ in ('VERB', 'AUX') or t.tag_ == 'MD' for t in doc)
             and all(a._lemma(t) in a.SOLE_NEGATION | {'or'}
-                or t.pos_ == 'NOUN' and t.dep_ in ('dobj', 'conj')
+                or nominal_argument(t)
                 for t in doc if a._lemma(t) in a.SOLE_OPERATORS['class'])
             and not any(a.SOLE_CLASSES.get(a._lemma(t), frozenset()) - a.SOLE_CLINICAL
                 for t in doc if t.pos_ == 'NOUN'))

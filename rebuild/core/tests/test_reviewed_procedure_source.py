@@ -110,6 +110,32 @@ class ReviewedProcedureSource(SimpleTestCase):
                    overrides={('v3_9', 'Less than one milliliter.'): 'qualifier'})
         self.check('Less than one milliliter.', 'v3_9', ['Less than one milliliter.'])
 
+    def test_backward_pointed_report_cannot_acquire_another_person(self):
+        for key, source in (('v3_4', EXTENT), ('v3_6', FINDINGS), ('v3_11', RECOMMENDATION)):
+            for tail in ('This report belongs to her mother.',
+                         "This report is from her mother's colonoscopy.",
+                         'This report describes the doctor.',
+                         'The report belongs to her mother.',
+                         'This report belongs to Alex.',
+                         'Does this report belong to her mother?',
+                         'This report may belong to her mother.',
+                         'This report is not from the current patient.',
+                         'The report is not from the current patient.',
+                         'This report describes the patient next year.',
+                         'This report belongs not only to her mother.'):
+                with self.subTest(key=key, tail=tail): self.check(source+' '+tail, key, [source])
+            for tail in ('This report belongs to the patient.',
+                         'The report belongs to the current patient.',
+                         "This report is from the patient's colonoscopy.",
+                         'This report describes the current patient.',
+                         'Her mother underwent colonoscopy.',
+                         'Another report belongs to her mother.',
+                         'An insurance report describes the doctor.',
+                         'This report was prepared by the clinician.',
+                         'This report does not belong to her mother.'):
+                with self.subTest(key=key, tail=tail):
+                    self.check(source+' '+tail, key, [source], 'supported')
+
     def test_original_destination_actor_time_and_wrong_field_are_not_supplied_by_review(self):
         for key, source in (('v3_4', EXTENT), ('v3_6', FINDINGS), ('v3_11', RECOMMENDATION)):
             for context in ('Family history > Mother', 'Other patient > Findings',
