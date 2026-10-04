@@ -871,6 +871,52 @@ class ExportReadBackTests(unittest.TestCase):
         self.assertIn('outside the written fields', self.problems(reading))
         self.assertEqual(result['visible_break_readback_corrections'], {})
 
+    def test_hidden_scalar_ink_refuses_and_explicit_visible_ink_passes(self):
+        import io
+        from zipfile import ZipFile
+        from lxml import etree
+        from documents import word_v3 as w
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        baseline = self.honest(original, fields, saved)
+        field = next(f for f in fields if f['key'] == 'v3_9')
+        for tag, value, visible in [('vanish', '1', False), ('vanish', None, False),
+                                    ('webHidden', 'true', False), ('specVanish', '1', False),
+                                    ('vanish', '0', True), ('vanish', 'false', True), ('vanish', 'off', True)]:
+            with self.subTest(tag=tag, value=value):
+                package = w.open_package(baseline)
+                index = w.SlotIndex(package)
+                refs = [field['locator'], *field['locator'].get('extra', [])]
+                altered = 0
+                for ref in refs:
+                    anchor = index.by_id[ref['part'] + '#' + ref['slot']]
+                    for run in anchor.el.iter(w.R):
+                        if not w.text_of(run):
+                            continue
+                        properties = run.find(w.q('w:rPr'))
+                        if properties is None:
+                            properties = etree.Element(w.q('w:rPr'))
+                            run.insert(0, properties)
+                        hidden = etree.SubElement(properties, w.q('w:' + tag))
+                        if value is not None:
+                            hidden.set(w.q('w:val'), value)
+                        altered += 1
+                self.assertGreater(altered, 0)
+                stream = io.BytesIO()
+                with ZipFile(io.BytesIO(baseline)) as source, ZipFile(stream, 'w') as out:
+                    for item in source.infolist():
+                        raw = source.read(item.filename)
+                        if item.filename == 'word/document.xml':
+                            raw = etree.tostring(package.tree(item.filename), xml_declaration=True,
+                                                 encoding='UTF-8', standalone=True)
+                        out.writestr(item, raw)
+                result, reading = st.saved_export_verification(original, stream.getvalue(), fields, saved)
+                self.assertEqual(result['workflow_success'], visible)
+                self.assertEqual(reading['passed'], visible)
+                if not visible:
+                    self.assertIn('v3_9', self.problems(reading))
+                    self.assertNotIn('v3_9', result['visible_break_readback_corrections'])
+
 
 def positional(body):
     """The engine's wire (contract v4) of a body written keyed (field key -> entry, context unit ID -> relation), test

@@ -42,3 +42,35 @@ are below the existing storage-resume evidence root. No new export was created.
 Independent finished-diff refutation and fresh prospective qualification are
 required before claiming acceptance. Installed/demonstration services remain
 unchanged.
+
+## Finished-diff counterexample and visibility correction — 12:16 UTC
+
+Independent refutation demonstrated an actual false green: adding enabled
+`w:vanish` to the exact paid16 Plan answer runs left the XML value intact but
+hid it from normal display. Root independently confirmed acceptance of wrong
+export `3921318552f2618302ef2fed0163d4af433b97aeabb67a599f378e043e46e129`.
+The original counterexample, alternate two-paragraph control, failed exits and
+all files remain retained in the specialist seal. [Microsoft's Vanish
+documentation](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.vanish?view=openxml-3.0.1)
+establishes its normal-display effect; native Word display was not measured.
+
+The correction checks written destinations using the existing complete style
+visibility resolver, including paragraph/character/table ancestry and document
+defaults. Inline controls include their containing paragraph; cell/SDT targets
+include descendant paragraphs. Enabled or unresolved hidden formatting refuses
+readback before a multiline false negative can be corrected. This is a
+conservative supported-visibility rule, not a new general Word rendering claim.
+
+All18 affected methods pass, actual exit0 in19.530130796003505 seconds;
+stderrSHA256 `cf439e848dd47e7713ea4fc793a8736e6689c213e1e1b123997bd0563b0a87df`.
+The preceding47 errors came from passing a SlotIndex to a constructor expecting
+its Package; original output is preserved. Seven new direct visibility controls
+cover enabled, omitted-value and explicitly disabled hide properties.
+
+Root then replayed both exact genuine exports with no provider/database call:
+the original intact paid export passes and the wrong hidden export refuses.
+ResultSHA256 `b36ce2ae16e3348ed53ea396cebe53edc4ce05cd10bc5be9a3557add3f57af07`
+is retained in `root-paid16-hidden-corrected-replay/`. Current checker sourceSHA
+`2277cf606eadeaefd2ab36935e36d41b2202cda10eef592e3375321bc2677fc9`.
+Fresh independent refutation is still required. No campaign is reopened or
+original failure regraded.

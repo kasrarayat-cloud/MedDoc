@@ -507,6 +507,28 @@ def export_read_back(original, exported, fields, answers):
         problem('export', f'the export cannot be opened for reading back ({type(error).__name__})')
         return {'passed': False, 'problems': problems, 'fields': {}, 'outside_written_fields': {}}
     written, owned = set(), {}              # (written destination slot ids; box paragraph id -> owned glyph ordinals)
+    visibility = w.Detector(after.package)
+    visibility_cache = {}
+
+    def visible_destination(ref):
+        identity = f'{ref.get("part")}#{ref.get("slot")}'
+        if identity.endswith('/glyphs'):
+            identity = identity.rsplit('/', 1)[0]
+        if identity in visibility_cache:
+            return visibility_cache[identity]
+        anchor = after.by_id.get(identity)
+        if anchor is None:
+            visibility_cache[identity] = False
+            return False
+        # Inline controls inherit their containing run/paragraph formatting.
+        # For cells/SDTs, inspect each descendant paragraph's own style chain.
+        while anchor.parent is not None and anchor.kind not in ('p', 'tc'):
+            anchor = anchor.parent
+        descendants = [slot for slot in after.slots
+                       if slot.id == anchor.id or slot.id.startswith(anchor.id + '/') and slot.kind == 'p']
+        result = bool(descendants) and all(visibility.tab_source_visible(slot) for slot in descendants)
+        visibility_cache[identity] = result
+        return result
 
     def ident(ref):
         return f'{ref.get("part")}#{ref.get("slot")}'
@@ -521,6 +543,10 @@ def export_read_back(original, exported, fields, answers):
         if f.get('write_protected') and answered:
             problem(key, 'a human-owned destination cannot have an automatic saved answer')
         try:
+            if sets:
+                targets = refs + list(target.get('boxes') or [])
+                if not all(visible_destination(ref) for ref in targets):
+                    problem(key, 'the written destination has hidden or unresolved visibility')
             if kind in OPTION_KINDS:
                 for box in target.get('boxes') or []:
                     paragraph = f'{box.get("part")}#{str(box.get("slot") or "").rsplit("/", 1)[0]}'
