@@ -7742,9 +7742,28 @@ def destination_roles(data: bytes, fields=None) -> dict:
 
 
 def writing_places(data, fields):
-    """The stored v3 writer's exact destinations, including glyph offsets and copies."""
+    """The stored v3 writer's exact destinations, read only from this original.
+
+    Consumers compare these sandbox-derived coordinates without parsing the
+    original themselves. An inline native control therefore carries its exact
+    containing-paragraph extent, as a glyph does. Unknown, block and empty
+    extents retain the conservative whole-slot representation.
+    """
     reader = _PlaceReader(SlotIndex(open_package(data)))
-    return {field['key']: reader.of(field) for field in fields}
+    places = {}
+    for field in fields:
+        resolved = []
+        for pid, start, end in reader.of(field):
+            slot = reader.index.by_id.get(pid)
+            if start is None and end is None and slot is not None and slot.kind in ('sdt', 'ff') \
+                    and slot.parent is not None:
+                extent = reader.inline(slot.parent.id, pid)
+                if extent is not None and extent[0] < extent[1]:
+                    resolved.append((slot.parent.id, *extent))
+                    continue
+            resolved.append((pid, start, end))
+        places[field['key']] = resolved
+    return places
 
 
 def reconcile_layout_coverage(data, fields, issues, qualified):

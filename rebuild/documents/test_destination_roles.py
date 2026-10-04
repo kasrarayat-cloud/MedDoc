@@ -845,3 +845,128 @@ class RepairLogColumns(unittest.TestCase):
                 out = xml(w.fill(blob, engine, {rows['key']: [row]}))
                 for value in row:
                     self.assertIn(value, out)
+
+
+class ExportedWritingCoordinates(unittest.TestCase):
+    """Coverage consumers have the original's coordinates, not its XML index.
+
+    Inline native boxes and an unrelated write-in share a paragraph. A source-
+    proven extent permits the disjoint exclusion without granting a whole
+    paragraph, a table, or an unknown control permission to receive an answer.
+    """
+
+    def form(self, native, container='body', label='Symptoms'):
+        from .test_word_v3 import _sdt, ff_field
+        doc = Document()
+        if container == 'table':
+            p = doc.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0]
+        elif container == 'header':
+            p = doc.sections[0].header.paragraphs[0]
+        else:
+            p = doc.add_paragraph()
+        p.add_run(label + ': ')
+        for number, option in enumerate(('Yes', 'No')):
+            if native == 'sdt': p._p.append(_sdt('checkbox'))
+            else: ff_field(p, 'checkbox', name='Box' + str(number))
+            p.add_run(' ' + option + ' ')
+        p.add_run('Other: ______')
+        raw = data(doc)
+        index = w.SlotIndex(w.open_package(raw))
+        controls = [slot for slot in index.slots if slot.kind == native]
+        paragraph = controls[0].parent
+        field = {'key': 'native', 'kind': 'choice', 'label': label,
+                 'locator': {'part': paragraph.part, 'slot': paragraph.path,
+                             'target': {'type': 'checkboxes', 'boxes': [
+                                 {'kind': native, 'part': slot.part, 'slot': slot.path} for slot in controls]}}}
+        return raw, index, field
+
+    def empty_reader(self):
+        from types import SimpleNamespace
+        return w._PlaceReader(SimpleNamespace(by_id={}))
+
+    def test_disjoint_write_in_is_proven_in_each_original_container(self):
+        for native in ('sdt', 'ff'):
+            for container in ('body', 'table', 'header'):
+                with self.subTest(native=native, container=container):
+                    raw, index, field = self.form(native, container)
+                    p = next(slot for slot in index.slots if slot.kind == native).parent
+                    text = w.paragraph_text(p.el)[0]
+                    start = text.index('______')
+                    excluded = {'place': p.id, 'start': start, 'end': start + 6}
+                    original = w._PlaceReader(index)
+                    raw_places = original.of(field)
+                    # Retain the original false refusal as the negative instrument control.
+                    self.assertTrue(any(self.empty_reader().touches(place, excluded) for place in raw_places))
+                    proven = w.writing_places(raw, [field])['native']
+                    expected = [(p.id, *original.inline(p.id, place[0])) for place in raw_places]
+                    self.assertEqual(proven, expected)
+                    self.assertFalse(any(self.empty_reader().touches(place, excluded) for place in proven))
+
+    def test_overlapping_control_and_whole_parent_exclusions_still_refuse(self):
+        for native in ('sdt', 'ff'):
+            raw, index, field = self.form(native, 'table')
+            places = w.writing_places(raw, [field])['native']
+            p = next(slot for slot in index.slots if slot.kind == native).parent
+            regions = [{'place': p.id, 'start': places[0][1], 'end': places[0][2]},
+                       {'place': p.id, 'start': None, 'end': None},
+                       {'place': p.parent.id, 'start': None, 'end': None},
+                       {'place': p.parent.parent.id, 'start': None, 'end': None}]
+            for region in regions:
+                with self.subTest(native=native, region=region):
+                    self.assertTrue(any(self.empty_reader().touches(place, region) for place in places))
+
+    def test_unknown_and_block_native_controls_keep_whole_slot_fallback(self):
+        from .test_word_v3 import _sdt
+        doc = Document()
+        inner = OxmlElement('w:p')
+        inner.append(OxmlElement('w:r'))
+        doc.element.body.insert(0, _sdt('rich', nested=inner))
+        raw = data(doc)
+        index = w.SlotIndex(w.open_package(raw))
+        control = next(slot for slot in index.slots if slot.kind == 'sdt')
+        paths = (control.path, 'b/p[50]/sdt[0]')
+        for path in paths:
+            field = {'key': 'native', 'locator': {'part': 'word/document.xml', 'slot': path,
+                     'target': {'type': 'sdt'}}}
+            self.assertEqual(w.writing_places(raw, [field])['native'], [(BODY + path, None, None)])
+        zero = self.form('sdt')[0]
+        # A fabricated control offset is never consumed from the mapping.
+        field = {'key': 'forged', 'locator': {'part': 'word/document.xml', 'slot': 'b/p[90]/sdt[0]',
+                 'target': {'type': 'sdt', 'start': 0, 'end': 0}}}
+        self.assertEqual(w.writing_places(zero, [field])['forged'], [(BODY + 'b/p[90]/sdt[0]', None, None)])
+
+    def test_same_process_different_originals_recomputes_native_offsets(self):
+        results = []
+        for label in ('Symptoms', 'A longer ordinary clinical question', 'Symptoms'):
+            raw, index, field = self.form('sdt', label=label)
+            before = raw
+            results.append(w.writing_places(raw, [field])['native'])
+            self.assertEqual(raw, before)
+            p = next(slot for slot in index.slots if slot.kind == 'sdt').parent
+            self.assertEqual(results[-1][0], (p.id, len(label) + 2, len(label) + 3))
+        self.assertEqual(results[0], results[2])
+        self.assertNotEqual(results[0], results[1])
+
+    def test_coordinate_read_has_no_effect_on_export_bytes_or_physical_roles(self):
+        from .test_word_v3 import _sdt, ff_field
+        for native in ('sdt', 'ff'):
+            for label, source_act in (('Symptoms', ''), ('Witness name',
+                    'I certify that I witnessed the patient sign this consent form.')):
+                with self.subTest(native=native, label=label):
+                    doc = Document()
+                    if source_act: doc.add_paragraph(source_act)
+                    p = doc.add_paragraph(label + ': ')
+                    if native == 'sdt': p._p.append(_sdt('checkbox'))
+                    else: ff_field(p, 'checkbox')
+                    raw = data(doc); fields = w.inspect(raw)['fields']
+                    field = next(f for f in fields if f['locator']['target'].get('type') == 'checkboxes')
+                    forged = {**field, 'kind': 'checkbox', 'label': 'Clinical observation'}
+                    forged.pop('write_protected', None)
+                    if source_act:
+                        with self.assertRaises(w.V3Failure): w.fill(raw, [forged], {forged['key']: True})
+                        w.writing_places(raw, [forged])
+                        with self.assertRaises(w.V3Failure): w.fill(raw, [forged], {forged['key']: True})
+                    else:
+                        before = w.fill(raw, fields, {field['key']: True})
+                        w.writing_places(raw, fields)
+                        self.assertEqual(w.fill(raw, fields, {field['key']: True}), before)
