@@ -225,14 +225,17 @@ def nominal_denial_atoms(reading, unit):
     return clinical_atoms(reading, unit)
 
 
-def clinical_denial_apart(reading, denial, other):
+def clinical_denial_apart(reading, denial, other, chosen=frozenset()):
     """The named denial and another clinical statement are provably distinct.
 
     The only qualified disjoint pairs are headache versus visual change,
     nausea or weakness. Association with a headache is not their equivalence;
     a source naming both topics, a general pain denial or a possible synonym
-    gets no exception. Full relation, source ownership and every other floor
-    remain necessary before and after this comparison.
+    gets no exception. Both sides of a clinical pair must be represented in
+    the selected source: the complete denial and a statement with the exact
+    other named topic. Otherwise a model's erroneous 'independent' relation
+    could discard one half of the clinical history. Full relation, source
+    ownership and every other floor remain necessary.
     """
     denied = nominal_denial_atoms(reading, denial)
     if not denied:
@@ -254,7 +257,9 @@ def clinical_denial_apart(reading, denial, other):
     if role.get('negative_allergy') and sole.get('classes') == {'allergy'}:
         return True
     stated = clinical_atoms(reading, other)
-    if not stated:
+    if (not stated or denial['id'] not in chosen
+            or not any(unit['id'] in chosen and clinical_atoms(reading, unit) == stated
+                       for unit in reading['units'])):
         return False
     separate = frozenset({'visual change', 'nausea', 'weakness'})
     return all((left == 'headache' and right in separate)

@@ -109,14 +109,22 @@ class NominalDenialDisjointness(SimpleTestCase):
         relate(body, 'v3_2', 3, 'qualifier')
         self.check(CASE['notes'], [HISTORY], 'conflict', wire=body)
 
+    def test_omitted_denial_stays_held_even_when_model_calls_it_independent(self):
+        self.check(CASE['notes'], [HISTORY], 'conflict')
+
+    def test_omitted_history_stays_held_even_when_model_calls_it_independent(self):
+        self.check(CASE['notes'], [DENIAL], 'conflict')
+
     def test_cached_syntax_for_another_source_cannot_supply_disjointness(self):
         from core import ordinary_source_scope as scope, v3_syntax as syntax
         reading = scope.apply(g.governance_for(CASE['notes'], CASE['fields'])[-1]['preceding'])
         denial = next(u for u in reading['units'] if u['quote'] == DENIAL)
         opener = reading['units'][0]
-        self.assertTrue(scope.clinical_denial_apart(reading, denial, opener))
+        history = next(u for u in reading['units'] if u['quote'] == HISTORY)
+        chosen = {denial['id'], history['id']}
+        self.assertTrue(scope.clinical_denial_apart(reading, denial, opener, chosen))
         for uid, stale in ((denial['id'], 'She denies headaches.'),
                            (opener['id'], 'The patient has nausea.')):
             polluted = {**reading, '_ordinary_scope_docs': dict(reading['_ordinary_scope_docs'])}
             polluted['_ordinary_scope_docs'][uid] = syntax.docs([stale])[0]
-            self.assertFalse(scope.clinical_denial_apart(polluted, denial, opener))
+            self.assertFalse(scope.clinical_denial_apart(polluted, denial, opener, chosen))

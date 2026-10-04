@@ -512,8 +512,8 @@ def sole_independent(reading, unit, chosen, label):
         # insulin.', 'Chief complaint: diarrhoea.' beside 'She has no diarrhea.') - or, for a clinical or allergy denial,
         # carrying a word that may describe the state it denies ('The knee is swollen.' beside 'There is no swelling.').
         # The model's 'independent' for that line is not believed: nothing in the note shows it apart.
-        distinct_denial = clinical_denial_apart(reading, unit, other)
-        other_distinct_denial = clinical_denial_apart(reading, other, unit)
+        distinct_denial = clinical_denial_apart(reading, unit, other, chosen)
+        other_distinct_denial = clinical_denial_apart(reading, other, unit, chosen)
         if (bears and (theirs['classes'] & bears or (denies and theirs['descriptive'] and bears & SOLE_CLINICAL))
                 and not distinct_denial):
             return False
