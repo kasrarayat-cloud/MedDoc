@@ -284,3 +284,54 @@ filesystem633927315456 bytes total and312932876288 available at13:27:52 UTC,
 checkpoint20261004T133236Z hashes all four writers' current states and dirty
 patches; its SHA256 is5f95c54748a8739ec61bf0a908a65dce00d1415d7ad665b7a3362e2107634100.
 The unidentified platform-blocked action remains stopped and unreconstructed.
+
+
+## Preserved draft recovery and current evidence — 2026-10-04 14:40 UTC
+
+Integration at `23a4e6bfefe4e9b0d74dfcc7a0ccff0cac6cf3f7` is clean and
+remains unpushed beyond7907. Installed dedac and demonstration789 remain
+unchanged; current exact CI and whole Word gates are still pending.
+
+The original destination-swap counterexample is repaired. Six independent
+root controls on eda1 passed (36.110 test seconds,46.638 outer,exit0), including
+forged physical/source destinations, manual-origin laundering, stable review
+recorrection, retry preserving old drafts, and a valid text-to-long-text manual
+field correction. One affected forward0038 legacy guard method also passed on
+23a4 (14.475 outer,exit0). Each owned normal/test database was directly absent
+before/after; children reaped and source unchanged. Original failures remain
+retained, including the earlier root binary-archive limitation. These results
+do not count toward54/60 or18/20.
+
+Fresh reinspection now preserves the old original/mappings while requiring a
+new exact-version review. The note-only recovery route is integrated: it copies
+exact saved notes, patient and service date into a new draft on the confirmed
+linked form; prior answers, code decisions, transcript context, jobs and charges
+are not copied. Six actual mounted checks yielded five passes and one test
+instrument error before the admin assertion (missing class-level OTP method).
+The first run, persisted captures and true exit1 remain preserved. An actual MFA
+fixture repair and two affected route checks are pending; no completed recovery
+qualification is claimed yet.
+
+The forward0038 SQL changes only the existing encounter confirmation predicate
+to cover a key-present reinspection marker. Ten PostgreSQL guard methods and
+one populated preservation proof passed in the specialist scope. Thirteen
+independent finite migration/reversal controls found no demonstrated defect;
+those thirteen are not a PostgreSQL proof. The complete fresh0038 catalog and
+strict twenty-migration installation contract renewal remain required.
+
+Prospective provider campaign4 completed all19 paid attempts on exact5bf, with
+zero open/unknown outcomes. Fourteen typed-note cases produced35/36 desired
+supported answers, one unnecessary hold,40/40 expected holds,zero unsafe
+answers and fourteen faithful mechanical exports. Two reviewed synthetic audio
+flows produced13 useful answers and two expected holds, with seven transcript
+edits retained separately; C08 stays held. Cumulative195 attempts have calculated
+exposure$2.147100264000, not invoice reconciliation. Human microphone and native
+Microsoft Word acceptance remain unverified. Limited16 cached Word transfer
+proves mapping/pureexport bytes only, with changed engine fingerprints recorded;
+it does not relabel the paid source or transfer all application admission.
+
+Actual October4 local backup is complete and healthy; B2 policy expired
+September23, so today's offsite attempt refused. The old accepted alert has no
+inbox/delivery/outside-host proof. Valid September27 restore evidence is reused.
+Root ext4 has633927315456 total bytes and311204896768 available at14:35 UTC
+(49% used). No filesystem change or deliberate cleanup occurred.
