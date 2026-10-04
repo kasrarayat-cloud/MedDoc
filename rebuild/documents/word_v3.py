@@ -6990,8 +6990,8 @@ class Detector:
             relation["instructions"] = instructions
         return question, prompt, context, protection, relation, sources
 
-    @staticmethod
-    def question_box_authorship(text):
+    @classmethod
+    def question_box_authorship(cls, text):
         # Complete prospective authorship frames appoint the author, without
         # inferring a job title or enumerating ways they might write comments.
         # An active section assignment has an author + infinitive predicate;
@@ -7004,8 +7004,20 @@ class Detector:
         # author whatever the particular writing verb or answer subject is.
         # Medication/status captions have neither this area subject nor that
         # complete agentive relationship.
-        active = (r"^\s*this (?:section|area|space|box|field) is (?:reserved\s+)?for\s+"
-                  r"[^:;?!\r\n]+?\s+to\s+[^.;:?!\r\n]+?\s*[:.]?\s*$")
+        active = re.fullmatch(r"\s*this (?:section|area|space|box|field) is (?:reserved\s+)?for\s+"
+                  r"(?P<author>[^:;?!\r\n]+?)\s+to\s+(?P<predicate>[^.;:?!\r\n]+?)\s*[:.]?\s*", text, re.I)
+        # An explicit generic clinician recording an ordinary observation or
+        # a document's receipt is the form's data-entry operator, not another
+        # person's authored statement. Require the complete record argument
+        # to have the established ordinary initial/receipt reading and no act
+        # clause. Named/reserved authors and response/approval objects stay
+        # held; a reviewed label cannot supply this source relationship.
+        if active and re.fullmatch(r'the\s+clinician', active['author'], re.I):
+            recorded = re.fullmatch(r'record\s+(.+)', active['predicate'], re.I)
+            if (recorded and (cls.ordinary_source_kind([recorded[1]], 'initials')
+                              or cls.ordinary_source_kind([recorded[1]], 'signature'))
+                    and not cls.temporal_source_action(recorded[1])):
+                active = None
         passive = (r"^\s*" + response + r"\s+to\s+be\s+[^.;:?!\r\n]+?\s+by\s+"
                    r"[^:;?!\r\n]+?\s*[:.]?\s*$")
         # An explicit subject obligated to write this response is its author;
@@ -7018,7 +7030,7 @@ class Detector:
         # clinical obligation to include/avoid something is not a writer.
         writing = prospective and (re.match(r'write\b', prospective['predicate'], re.I)
                                     or ENTER_HINT.match(prospective['predicate'] + ' ' + prospective['object']))
-        return re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I) or writing
+        return active or re.fullmatch(passive, text, re.I) or writing
 
     def manual_numeric_parts(self, chosen):
         """Visible, empty, plain numeric parts available for explicit human mapping only."""

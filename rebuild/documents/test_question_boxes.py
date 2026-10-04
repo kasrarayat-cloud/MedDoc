@@ -1198,25 +1198,62 @@ class IndependentNestedQuestionCells(unittest.TestCase):
                     if slot.kind=='p' and not slot.path.endswith(('/p[1]','/p[2]')):
                         self.assertEqual(etree.tostring(slot.el),etree.tostring(after.by_id[slot.id].el))
 
-    def test_held_scalar_alternatives_have_precise_coverage_and_do_not_remove_dates(self):
+    def test_proved_scalar_alternatives_preserve_dates_and_complete_original_controls(self):
         raw=self.form(control='ff');result=w.inspect(raw);fields=result['fields']
         dates=[field for field in fields if field['label']in ('Start date','End date')]
         self.assertEqual(len(dates),2)
         self.assertEqual([field['kind']for field in dates],['date','date'])
-        issues=[issue for issue in result['coverage_issues']if issue['code']=='nested_options']
-        self.assertEqual(len(issues),2)
-        self.assertTrue(all(issue['slot'].endswith('/p[1]')for issue in issues))
+        alternatives=[field for field in fields if any(r.get('relation')=='scalar_checkbox_alternative'
+                       for r in field.get('source_questions',[]))]
+        self.assertEqual(len(alternatives),2)
+        self.assertFalse([issue for issue in result['coverage_issues']if issue['code']=='nested_options'])
         raw_index=w.SlotIndex(w.open_package(raw));reader=w._PlaceReader(raw_index)
-        for field in fields:
-            for place in reader.of(field):
-                for issue in issues:
-                    region={'place':issue['part']+'#'+issue['slot'],'start':None,'end':None}
-                    self.assertFalse(reader.touches(place,region))
+        for field in alternatives:
+            relation=field['source_questions'][0]
+            self.assertEqual((field['kind'],field['label'],field['options']),('checkbox','Or Unknown',['Or Unknown']))
+            scalar=next(f for f in dates if f['locator']['part']==relation['scalar']['part']
+                        and f['locator']['slot']==relation['scalar']['slot'])
+            self.assertEqual(relation['scalar_target'],scalar['locator']['target'])
+            self.assertEqual((relation['scalar_kind'],relation['scalar_label']),('date',scalar['label']))
+            self.assertEqual(relation['original_checked'],False)
+            self.assertEqual(w.constrained_option_states(raw_index,field),[False])
+            identity=field['locator']['part']+'#'+field['locator']['slot']
+            self.assertTrue(identity.endswith('/p[1]/ff[0]'))
+            region={'place':identity,'start':None,'end':None}
+            self.assertTrue(all(not reader.touches(place,region)for place in reader.of(scalar)))
         out=w.fill(raw,fields,{dates[0]['key']:'2026-10-01',dates[1]['key']:'2026-10-02'})
         after=w.SlotIndex(w.open_package(out))
-        for issue in issues:
-            identity=issue['part']+'#'+issue['slot']
+        for field in alternatives:
+            identity=field['locator']['part']+'#'+field['locator']['slot']
             self.assertEqual(etree.tostring(raw_index.by_id[identity].el),etree.tostring(after.by_id[identity].el))
+            paragraph=raw_index.by_id[identity].parent
+            self.assertEqual(etree.tostring(paragraph.el),etree.tostring(after.by_id[paragraph.id].el))
+            self.assertEqual(w.constrained_option_states(after,field),[False])
+        for field,value in zip(dates,('2026-10-01','2026-10-02')):
+            self.assertEqual(w.constrained_scalar_value(raw_index,after,field,True),value)
+
+    def test_unproved_scalar_alternatives_keep_source_coverage_and_conflicts_refuse(self):
+        raw=self.form(control='ff');mapping=w.inspect(raw)
+        alternatives=[f for f in mapping['fields']if any(r.get('relation')=='scalar_checkbox_alternative'
+                      for r in f.get('source_questions',[]))]
+        alternative=alternatives[0];relation=alternative['source_questions'][0]
+        scalar=next(f for f in mapping['fields']if f['locator']['slot']==relation['scalar']['slot'])
+        with self.assertRaises(w.V3Failure)as error:
+            w.fill(raw,mapping['fields'],{scalar['key']:'2026-10-01',alternative['key']:True})
+        self.assertEqual(error.exception.code,'conflicting_alternative_answers')
+        for mode in ('competing-question','malformed-native-state'):
+            doc=Document(io.BytesIO(raw));cell=doc.tables[0].cell(0,0).tables[0].cell(1,0)
+            if mode=='competing-question':cell.add_paragraph('Another date: ______')
+            else:
+                native=cell.paragraphs[1]._p.find('.//'+w.q('w:checkBox'))
+                invalid=OxmlElement('w:checked');invalid.set(w.q('w:val'),'not-a-state');native.append(invalid)
+            changed=data(doc);info=w.inspect(changed)
+            prefix='b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[1]/tc[0]'
+            self.assertFalse([f for f in info['fields']if f['locator']['slot'].startswith(prefix)
+                             and any(r.get('relation')=='scalar_checkbox_alternative'for r in f.get('source_questions',[]))])
+            self.assertTrue(any(i['slot'].startswith(prefix)and i['code']in('scalar_alternative_source','nested_options')
+                                for i in info['coverage_issues']))
+            self.assertEqual(w.fill(changed,info['fields'],{}),changed)
 
     def test_incomplete_local_partition_keeps_unresolved_grid_coverage(self):
         for adverse in ('competing_question','marked_spacer','mixed_options','hidden_question','header_instead_of_question'):
