@@ -1112,6 +1112,59 @@ class TerminalChoiceWriteIns(unittest.TestCase):
                 self.assertEqual(word_v3.fill(raw,result['fields'],{}),raw)
 
 
+class NumberedOptionSkipInstructions(unittest.TestCase):
+    def form(self, suffix='[GO TO 3.]', question='Symptoms present?'):
+        doc = Document()
+        doc.add_paragraph(question)
+        for text in ('Yes', 'No ' + suffix, 'Refused ' + suffix):
+            doc.add_paragraph('☐ ' + text)
+        doc.add_paragraph('Separate answer: ______')
+        return data(doc)
+
+    def test_numbered_skip_keeps_guidance_and_selects_only_its_original_box(self):
+        raw = self.form()
+        fields = word_v3.inspect(raw)['fields']
+        choice = next(f for f in fields if f['kind'] == 'choice')
+        self.assertEqual(choice['options'], ['Yes', 'No', 'Refused'])
+        self.assertEqual(word_v3.printed_options(choice), ['Yes', 'No [GO TO 3.]', 'Refused [GO TO 3.]'])
+        out = word_v3.fill(raw, fields, {choice['key']: 'No'})
+        self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)), choice),
+                         [False, True, False])
+        before, after = Document(io.BytesIO(raw)), Document(io.BytesIO(out))
+        self.assertEqual([p.text.replace('☒', '☐') for p in after.paragraphs], [p.text for p in before.paragraphs])
+        self.assertEqual(word_v3.fill(raw, fields, {}), raw)
+
+    def test_other_brackets_or_additional_writes_do_not_gain_short_option_aliases(self):
+        for suffix in ('[GO TO 0.]', '[GO TO 3 OR 4.]', '[GO TO 3.] Detail: _____', '[SIGN HERE]',
+                       '[GO TO 3.] ☐ Other', '[GO TO 3.] I approve this document.'):
+            with self.subTest(suffix=suffix):
+                raw = self.form(suffix)
+                fields = word_v3.inspect(raw)['fields']
+                self.assertFalse([f for f in fields if f.get('options') == ['Yes', 'No', 'Refused']])
+                self.assertEqual(word_v3.fill(raw, fields, {}), raw)
+
+    def test_source_relation_and_human_ownership_remain_bound(self):
+        raw = self.form()
+        choice = next(f for f in word_v3.inspect(raw)['fields'] if f['kind'] == 'choice')
+        for change in ('relation', 'printed', 'box'):
+            forged = deepcopy(choice)
+            if change == 'relation':
+                forged.pop('source_questions')
+            elif change == 'printed':
+                forged['locator']['target']['printed'] = ['Yes', 'No', 'Refused']
+            else:
+                forged['locator']['target']['boxes'].reverse()
+            with self.assertRaises(word_v3.V3Failure):
+                word_v3.fill(raw, [forged], {forged['key']: 'No'})
+        protected = self.form(question='Witness attestation: I witnessed the patient sign this consent form.')
+        protected_fields = word_v3.inspect(protected)['fields']
+        self.assertEqual(word_v3.fill(protected, protected_fields, {}), protected)
+        for field in protected_fields:
+            if field.get('options') == ['Yes', 'No', 'Refused']:
+                with self.assertRaises(word_v3.V3Failure):
+                    word_v3.fill(protected, [field], {field['key']: 'No'})
+
+
 class PrintedOptionBranchInstructions(unittest.TestCase):
     def form(self, option='Yes → If yes, focus on the following questions.', *, native=False):
         doc=Document();p=doc.add_paragraph('Symptoms present? ')

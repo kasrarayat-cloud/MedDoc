@@ -3527,32 +3527,45 @@ class Detector:
                    for source in printed)
 
     def option_branch_source(self, unit):
-        """A printed arrow + repeated Yes/No condition separates one instruction.
+        """A repeated Yes/No condition or exact numbered skip separates guidance.
 
         The complete source remains part of the mapping. Only this physically
-        adjacent, matching condition has a shorter option value; there is no
+        adjacent, matching frame has a shorter option value; there is no
         global alias for Yes or any arbitrary option prefix.
         """
         frame = re.fullmatch(r'\s*(Yes|No)\s*→\s*(if\s+(yes|no),)\s*(.+?)\s*', unit[1], re.I | re.S)
-        if not frame:
+        skip = re.fullmatch(r'\s*(Yes|No|Refused)\s+(\[GO\s+TO\s+[1-9][0-9]{0,3}\.?\])\s*',
+                            unit[1], re.I)
+        if not frame and not skip:
             return None
         ref = unit[0]
         slot = self.index.by_id.get(ref['part'] + '#' + ref['slot'])
         paragraph = self.host_paragraph(slot) if slot is not None else None
         if paragraph is None:
             return None
-        instruction = frame[4]
+        caption = frame[1] if frame else skip[1]
+        condition = frame[2] if frame else skip[2]
+        instruction = frame[4] if frame else skip[2]
         acts = [self.checkbox_source_action(clause, governing=True)
                 for clause in [instruction, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', instruction)]]
         protection = next((act for act in acts if act), '')
         text, pieces = self.ptext(paragraph.el)
-        qualified = (frame[1].casefold() == frame[3].casefold() and '→' not in instruction
+        spans = self.blank_spans(text, pieces)
+        # A single option's literal numbered skip is source guidance. Keep its
+        # exact text and control in the existing branch relation; only the local
+        # Yes/No/Refused answer value is shorter. Other bracketed words, multiple
+        # boxes, write-ins and arbitrary prefixes cannot establish this frame.
+        source_blank_safe = (not spans if frame else
+                             len(self.box_units(paragraph)) == 1
+                             and all(kind == 'bracket' and text[start:end] == instruction
+                                     for start, end, kind in spans))
+        qualified = ((frame is None or frame[1].casefold() == frame[3].casefold()) and '→' not in instruction
                      and not re.search(r'[?\r\n\x00]', instruction) and ':' not in instruction.rstrip(':')
-                     and not self.blank_spans(text, pieces)
+                     and source_blank_safe
                      and self.tab_source_visible(paragraph)
                      and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
                                  for n in paragraph.el.iter()) and not protection)
-        return {'caption': frame[1], 'condition': frame[2], 'instruction': instruction,
+        return {'caption': caption, 'condition': condition, 'instruction': instruction,
                 'printed': option_text(unit[1]), 'control': dict(ref), 'qualified': qualified,
                 'protection': protection,
                 'source': {'part': paragraph.part, 'slot': paragraph.path,
