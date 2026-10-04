@@ -124,6 +124,22 @@ class DocumentRelations(unittest.TestCase):
         self.assertEqual(field['source_questions'][0]['question'], '19. Other (specify)')
         self.assertTrue(info['coverage_issues'])
         self.assertFalse([f for f in info['fields'] if f['label'] == 'Mental status'])
+        self.assertFalse([issue for issue in info['coverage_issues'] if issue['slot'] == 'b/tbl[0]/tr[0]/tc[0]'])
+        self.assertTrue([issue for issue in info['coverage_issues'] if issue['slot'] == 'b/tbl[0]/tr[0]/tc[0]/p[3]'])
+        output = w.fill(raw, [field], {field['key']: 'Independent finding'})
+        before = w.SlotIndex(w.open_package(raw)); after = w.SlotIndex(w.open_package(output))
+        row_id = 'word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[3]'
+        self.assertEqual(w.fingerprint(before.by_id[row_id].el), w.fingerprint(after.by_id[row_id].el))
+
+    def test_an_unresolved_second_request_keeps_the_whole_coded_cell_held(self):
+        from .test_word_v3 import ff_field
+        doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+        cell.text = 'Other (specify)'; cell.add_paragraph(); cell.add_paragraph('Describe another finding:')
+        cell.add_paragraph('Mental status\tNormal\tAbnormal')
+        row = cell.add_paragraph('\t1 '); ff_field(row, 'checkbox', name='Check1')
+        row.add_run('\t2 '); ff_field(row, 'checkbox', name='Check2')
+        info = w.inspect(data(doc))
+        self.assertTrue([issue for issue in info['coverage_issues'] if issue['slot'] == 'b/tbl[0]/tr[0]/tc[0]'])
 
     def test_existing_filled_hidden_or_status_qualified_cells_are_not_empty_requested_answers(self):
         for variant in ('filled', 'hidden', 'status', 'trailing', 'unknown_style'):

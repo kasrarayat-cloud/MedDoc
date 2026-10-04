@@ -3972,7 +3972,28 @@ class Detector:
             if reason:
                 self.notes.append("Coded column sequence at " + cell.id + ": " + reason + " Printed source: "
                                   + " | ".join(self.ptext(p.el)[0] for p in cell.children if p.kind == "p"))
-                self.coverage_issue(cell, 'unmapped_answer', self.notes[-1])
+                # A separately proved request before the header owns only its
+                # caption/plain blanks. The refused coded controls still need
+                # exclusions of their own; excluding the whole cell would also
+                # exclude that independent supported answer.
+                requests = [area for area in self.areas if self.host_cell(area.slot) is cell and any(
+                    ref.get('relation') == 'parenthetical_write_request' for ref in area.source_questions)]
+                header = next((p for p in cell.children if p.kind == 'p' and self.literal_column_header(p)), None)
+                owned = {id(p.el) for area in requests for p in [area.slot, *area.extra_slots, area.label_slot] if p is not None}
+                prefix = [p for p in cell.children if header is not None and p.seq < header.seq]
+                separate = (reason == 'A printed title requests its own answer.' and requests and header is not None
+                            and all(p.kind == 'p' and (id(p.el) in owned or self.plain_spacing_paragraph(p, unused_tab_stops=True))
+                                    for p in prefix))
+                if separate:
+                    earlier = [issue for issue in self.coverage_issues if issue['part'] == cell.part
+                               and issue['slot'] == cell.path and issue['code'] == 'tab_column_withdrawal']
+                    self.coverage_issues[:] = [issue for issue in self.coverage_issues if issue not in earlier]
+                    for prior in earlier:
+                        for row in rows:
+                            self.coverage_issue(row, prior['code'], prior['detail'] +
+                                ' The independent prefix request is mapped separately; this exact coded row remains unsupported.')
+                for unresolved in rows if separate else [cell]:
+                    self.coverage_issue(unresolved, 'unmapped_answer', self.notes[-1])
                 # Its text lines are held, as a refused tab-column source's are: no weaker rule re-reads its title or
                 # header as a question of their own words. Its rows go on to the checkbox rule, which notes each one.
                 for paragraph in (s for s in cell.children if s.kind == "p" and self.text_only_line(s)):
