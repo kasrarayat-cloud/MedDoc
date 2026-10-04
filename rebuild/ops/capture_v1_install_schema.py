@@ -14,10 +14,10 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-# Prospective capture only. The normal installer keeps its separately reviewed
-# 0037/nineteen pin until this new raw PostgreSQL contract is actually validated.
-SCHEMA = 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract-0038.PREPARED.json'
-SCHEMA_SHA256 = '47e45ec7ff94ce89cfa3ce8f3fbc514fa05eddb5e88e480d1ed58fa26706da96'
+# Prospective capture only. The normal installer retains its previous source
+# pin until the new backward-guard source receives an actual catalog capture.
+SCHEMA = 'docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract-0038-reverse-guard.PREPARED.json'
+SCHEMA_SHA256 = '8be79bb31d92f109b4112e751d1ac2d8e38050c631585a66e2c47b4970e829ac'
 LEAF = '0038_reinspection_confirmation_guard'
 FORWARD_MIGRATIONS = 20
 DATABASE = 'quillmd_qa_sol_installcontract38_1004'
