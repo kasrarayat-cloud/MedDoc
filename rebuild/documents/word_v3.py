@@ -7004,7 +7004,7 @@ class Detector:
         # author whatever the particular writing verb or answer subject is.
         # Medication/status captions have neither this area subject nor that
         # complete agentive relationship.
-        active = re.fullmatch(r"\s*this (?:section|area|space|box|field) is (?:reserved\s+)?for\s+"
+        active = re.fullmatch(r"\s*this (?:section|area|space|box|field) is (?P<reserved>reserved\s+)?for\s+"
                   r"(?P<author>[^:;?!\r\n]+?)\s+to\s+(?P<predicate>[^.;:?!\r\n]+?)\s*[:.]?\s*", text, re.I)
         # An explicit generic clinician recording an ordinary observation or
         # a document's receipt is the form's data-entry operator, not another
@@ -7012,7 +7012,7 @@ class Detector:
         # to have the established ordinary initial/receipt reading and no act
         # clause. Named/reserved authors and response/approval objects stay
         # held; a reviewed label cannot supply this source relationship.
-        if active and re.fullmatch(r'the\s+clinician', active['author'], re.I):
+        if active and not active['reserved'] and re.fullmatch(r'the\s+clinician', active['author'], re.I):
             recorded = re.fullmatch(r'record\s+(.+)', active['predicate'], re.I)
             if (recorded and (cls.ordinary_source_kind([recorded[1]], 'initials')
                               or cls.ordinary_source_kind([recorded[1]], 'signature'))
@@ -7890,7 +7890,15 @@ class Detector:
             if self.fixed_link_introduction(slot):
                 continue
             end = m.end()
-            if any(s <= m.start() < e or s <= end - 1 < e for s, e, _ in blanks):
+            label_ink = m.start(1) + len(m.group(1)) - len(m.group(1).lstrip())
+            # The next caption's regex can include the preceding answer's
+            # plain-space gap. Only printed caption ink overlaps that answer;
+            # its leading whitespace is not part of the question. A unit
+            # after the previous gap still belongs to that previous answer,
+            # so do not newly reinterpret a unit-prefixed run as a caption.
+            if (any(s <= label_ink < e or s <= end - 1 < e for s, e, _ in blanks)
+                    or any(s <= m.start() < e for s, e, _ in blanks)
+                    and self.ANSWER_UNIT.match(text[label_ink:end - 1])):
                 continue
             rest = text[end:]
             gap = self.ANSWER_GAP.match(rest).group(0)
@@ -9597,6 +9605,50 @@ def option_position(options, value):
     return hits[0] if len(hits) == 1 else None
 
 
+def paired_colon_areas(detector, identity):
+    """Complete ordinary insertion spans sharing one original plain paragraph.
+
+    This is the existing paragraph compiler's exact result, not a second caption
+    grammar or authority derived from a stored field. Mixed controls, drawn
+    blanks and protected acts remain outside this finite reading.
+    """
+    slot = detector.index.by_id.get(identity)
+    if slot is None or slot.kind != 'p':
+        return []
+    areas = [area for area in detector.areas if area.slot.id == identity]
+    if len(areas) < 2 or any(area.target.get('type') != 'span'
+            or area.target.get('shape') != 'after_label' or area.protection
+            or area.extra_slots or area.source_questions or area.options for area in areas):
+        return []
+    source, pieces = paragraph_text(slot.el)
+    if ('\x00' in source or any(piece.kind not in ('t', 'tab', 'br') for piece in pieces)
+            or not detector.tab_source_visible(slot) or detector.region_hidden(slot.el)):
+        return []
+    areas = sorted(areas, key=lambda area: area.target['start'])
+    previous = -1
+    for area in areas:
+        start, end = area.target.get('start'), area.target.get('end')
+        if (type(start) is not int or type(end) is not int
+                or not 0 < start <= end <= len(source) or start <= previous
+                or source[start - 1] != ':' or source[start:end].strip()
+                or hyperlink_write(pieces, start, start)):
+            return []
+        previous = end
+    return areas
+
+
+def exact_paired_colon_field(field, area):
+    """Original physical and semantic binding; keys and manual origin grant nothing."""
+    loc = field.get('locator') or {}
+    return (loc.get('part') == area.slot.part and loc.get('slot') == area.slot.path
+            and loc.get('fingerprint') == fingerprint(area.slot.el)
+            and not loc.get('extra') and not loc.get('target', {}).get('copies')
+            and loc.get('target') == area.target and field.get('kind') == area.kind
+            and field.get('label') == area.label and field.get('context') == area.context
+            and field.get('options', []) == area.options
+            and field.get('source_questions', []) == area.source_questions)
+
+
 def _options_chosen(field, answer):
     """The option positions an answer selects, validated against the field's stored option labels."""
     options = field.get("options") or []
@@ -9707,6 +9759,22 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 and field.get('label') == area.label and field.get('context') == area.context
                 and field.get('options', []) == area.options
                 and field.get('source_questions', []) == area.source_questions)
+
+    for identity in {area.slot.id for area in source_detector.areas
+                     if area.target.get('shape') == 'after_label'}:
+        paired = paired_colon_areas(source_detector, identity)
+        if not paired:
+            continue
+        region = {'place': identity, 'start': None, 'end': None}
+        writers = [field for field in fields
+                   if (field.get('locator') or {}).get('target', {}).get('type') != 'none'
+                   and any(reader.touches(place, region) for place in reader.of(field))]
+        if not any(answers.get(field['key']) not in (None, '', []) for field in writers):
+            continue
+        if (any(not any(exact_paired_colon_field(field, area) for area in paired) for field in writers)
+                or any(sum(exact_paired_colon_field(field, area) for field in writers) > 1 for area in paired)):
+            fail('These printed captions require their distinct original answer spans. Remove the repeated '
+                 'or overlapping writer and review each physical destination once.', 'mapping_mismatch')
 
     for area in hierarchy_choices:
         relation = area.source_questions[0]
@@ -10486,7 +10554,51 @@ def _adjacent_glyph_prefix(original, before, field, source, current, start):
     return owned and ''.join(normalized) == source[:start]
 
 
-def constrained_scalar_value(original, final, field, written):
+def _paired_colon_value(original, final, before, after, field, source_detector):
+    """Read simultaneous insertions only between uniquely retained original ink.
+
+    Each complete caption, gap and unit remains literal. A repeated boundary
+    inside an answer is ambiguous and is held, rather than selecting the first
+    occurrence. The detector is compiled from this exact immutable input and is
+    reused only by the current effective_values invocation.
+    """
+    detector = source_detector() if callable(source_detector) else source_detector
+    if detector is None:
+        detector = Detector(original.package, layout_proposal=True)
+        detector.detect()
+    if detector.package is not original.package:
+        return None
+    paired = paired_colon_areas(detector, before.id)
+    matches = [i for i, area in enumerate(paired) if exact_paired_colon_field(field, area)]
+    if len(matches) != 1:
+        return None
+    visibility = Detector(final.package)
+    current, pieces = paragraph_text(after.el)
+    if ('\x00' in current or any(piece.kind not in ('t', 'tab', 'br') for piece in pieces)
+            or not visibility.tab_source_visible(after) or visibility.region_hidden(after.el)):
+        return None
+    source = paragraph_text(before.el)[0]
+    points = [area.target['start'] for area in paired]
+    fixed = [source[:points[0]], *[source[a:b] for a, b in zip(points, points[1:])], source[points[-1]:]]
+    if not current.startswith(fixed[0]) or not current.endswith(fixed[-1]):
+        return None
+    cursor = len(fixed[0]); values = []
+    for ink in fixed[1:-1]:
+        # The entire original inter-answer ink identifies this boundary. Do
+        # not accept a removed caption, duplicate caption inside an answer or
+        # an earlier occurrence outside its physical order.
+        position = current.find(ink)
+        if not ink or position < cursor or current.find(ink, position + 1) != -1:
+            return None
+        values.append(current[cursor:position]); cursor = position + len(ink)
+    last = len(current) - len(fixed[-1])
+    if last < cursor:
+        return None
+    values.append(current[cursor:last])
+    return values[matches[0]]
+
+
+def constrained_scalar_value(original, final, field, written, *, _source_detector=None):
     """Visible value in a bounded scalar destination, or None when it is ambiguous.
 
     Read native controls and whole plain cells/paragraphs directly. A span is
@@ -10573,8 +10685,12 @@ def constrained_scalar_value(original, final, field, written):
             original, before, field, source, current, start)
         if ("\x00" in source or "\x00" in current or not prefix_matches or
                 not current.endswith(suffix) or len(current) < len(prefix) + len(suffix)):
-            return None
-        value = current[len(prefix):len(current) - len(suffix) if suffix else len(current)]
+            value = (_paired_colon_value(original, final, before, after, field, _source_detector)
+                     if target.get('shape') == 'after_label' else None)
+            if value is None:
+                return None
+        else:
+            value = current[len(prefix):len(current) - len(suffix) if suffix else len(current)]
     else:
         return None
     return "" if not written and is_blank_text(value) else value.strip()
@@ -10594,6 +10710,7 @@ def effective_values(data, fields, answers, *, _written=None):
     if any(not isinstance(k, str) or not k for k in keys) or len(keys) != len(set(keys)) or not set(answers) <= set(keys):
         fail("Constrained option identities are invalid.", "invalid_mapping")
     index = SlotIndex(open_package(data))
+    detector = None
     if _written is None:
         detector = Detector(index.package, layout_proposal=True)
         detector.detect()
@@ -10611,11 +10728,20 @@ def effective_values(data, fields, answers, *, _written=None):
     # never a request parameter; callers still reach fill's renderer guard.
     output = fill(data, fields, answers) if _written is None else _written
     final = SlotIndex(open_package(output))
+    def source_detector():
+        # Lazy and invocation-local. Recompile only if simultaneous insertion
+        # readback requires it; never derive authority from the mutable output.
+        nonlocal detector
+        if detector is None:
+            detector = Detector(index.package, layout_proposal=True)
+            detector.detect()
+        return detector
     result = {}
     for field in fields:
         loc = field["locator"]; target = loc["target"]
         option = field["kind"] in ("choice", "multi_choice", "checkbox")
-        state = constrained_option_states(final, field) if option else constrained_scalar_value(index, final, field, field["key"] in answers)
+        state = constrained_option_states(final, field) if option else constrained_scalar_value(
+            index, final, field, field["key"] in answers, _source_detector=source_detector)
         for copy in target.get("copies", []):
             # These readers resolve their own copied anchor. Absolute checkbox
             # destinations do not establish an independent copy relationship.
@@ -10623,7 +10749,8 @@ def effective_values(data, fields, answers, *, _written=None):
                 state = [None] * max(1, len(field.get("options") or []))
                 break
             variant = {**field, "locator": {**loc, **copy}}
-            copied = constrained_option_states(final, variant) if option else constrained_scalar_value(index, final, variant, field["key"] in answers)
+            copied = constrained_option_states(final, variant) if option else constrained_scalar_value(
+                index, final, variant, field["key"] in answers, _source_detector=source_detector)
             if copied != state:
                 state = [None] * max(1, len(field.get("options") or [])) if option else None
                 break
