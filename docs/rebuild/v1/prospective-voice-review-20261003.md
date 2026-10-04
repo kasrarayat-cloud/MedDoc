@@ -29,5 +29,13 @@ The first affected offline packet passed19 methods in6.708 seconds, exit0:
 explicit source reconstruction and changed-ASR refusal; unchanged ambiguity;
 declaration parsing; prospective campaign binding; duplicate/input controls;
 historical patient-context and raw-transcript defaults. No database, provider
-or credential access occurred. The complete runner regression and actual
-persisted reviewed-transcript flow remain required before paid qualification.
+or credential access occurred. The complete137-method standing/freeze/review
+offline regression then passed in43.139 seconds, exit0. The actual persisted
+review packet passed8 methods in9.480 seconds, exit0, and destroyed its separate
+QA database: the two new changed/unchanged-ASR controls plus six existing review
+methods imported by the test instrument. That duplicate TestCase discovery is
+removed before the full CI shard gate; no application behavior or inputs change.
+The new controls verify exact edited notes, retained raw provider bytes, separate
+edit evidence, immutable source-context proof and one transcription charge; an
+unexpected ASR creates no review/adoption/generation. Provider qualification
+remains separate and pending.

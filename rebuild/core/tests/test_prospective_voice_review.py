@@ -11,14 +11,17 @@ from core.models import AuditEvent, Job, TranscriptReview, Usage
 from core.security import private_path
 from core.tests.test_billing_boundary import BoundaryFixture
 from core.tests.test_billing_policy import STORAGES
-from core.tests.test_transcript_context import ReviewVersion
 from ops import provider_campaign as pc, standing_qa as st, standing_qa_transcription as tr
 from ops import standing_qa_voice_review as vr
 
 
 @override_settings(AI_MODE='fixture', ADMIN_SITE=False, STORAGES=STORAGES)
 class ActualProspectiveVoiceReview(BoundaryFixture, TestCase):
-    transcript = ReviewVersion.transcript
+    def transcript(self, text):
+        # A module-level TestCase import is rediscovered by unittest and would
+        # duplicate its IDs in the complete CI shard population.
+        from core.tests.test_transcript_context import ReviewVersion
+        return ReviewVersion.transcript(self, text)
 
     def setUp(self):
         super().setUp()
