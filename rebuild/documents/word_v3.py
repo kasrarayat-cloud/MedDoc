@@ -1691,6 +1691,11 @@ class Detector:
         self._numbering = None
         self._col_lists = {}
         self._pure = {}
+        # Only this detector's immutable source package owns these style readings.
+        # Physical paragraph/run visibility still reads its actual XML each time.
+        self._style_index = None
+        self._style_defaults = None
+        self._style_chains = {}
         self._form_wide = None
         self._form_wide_nodes = []        # keeps the guidance paragraphs alive: their ids key the scope reading
         self._named_guidance = None       # immutable original's captions, physical owners and named instructions
@@ -3639,8 +3644,7 @@ class Detector:
             if ref is not None:
                 name = ref.get(q("w:val"))
             else:
-                defaults = [s for s in styles.findall(q("w:style")) if s.get(q("w:type")) == kind
-                            and s.get(q("w:default")) in ("1", "true", "on")] if styles is not None else []
+                defaults = self.default_source_styles(kind)
                 if len(defaults) > 1:
                     return None
                 name = defaults[0].get(q("w:styleId")) if defaults else None
@@ -3724,8 +3728,7 @@ class Detector:
             if refs:
                 name = refs[0].get(q("w:val"))
             else:
-                defaults = [s for s in styles.findall(q("w:style")) if s.get(q("w:type")) == kind
-                            and s.get(q("w:default")) in ("1", "true", "on")] if styles is not None else []
+                defaults = self.default_source_styles(kind)
                 if len(defaults) > 1:
                     return False
                 if not defaults:
@@ -6381,9 +6384,7 @@ class Detector:
         if refs:
             name = refs[0].get(q("w:val"))
         else:
-            defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
-                        if s.get(q("w:type")) == "table" and s.get(q("w:default")) in ("1", "true", "on")] \
-                if "word/styles.xml" in self.package.names else []
+            defaults = self.default_source_styles("table")
             if len(defaults) > 1:
                 return None
             name = defaults[0].get(q("w:styleId")) if defaults else None
@@ -7059,25 +7060,54 @@ class Detector:
         own = [x for x in items if not grouped(x.info["col"])]
         return clean_label(self.cell_text((own or items)[0])) if items else ""
 
+    def source_style_index(self):
+        """Read this immutable source's catalogue once, retaining every duplicate."""
+        if self._style_index is None:
+            index, defaults = {}, {}
+            if "word/styles.xml" in self.package.names:
+                styles = self.package.tree("word/styles.xml").findall(q("w:style"))
+                identity, category, implicit = q("w:styleId"), q("w:type"), q("w:default")
+                for style in styles:
+                    kind = style.get(category)
+                    index.setdefault((style.get(identity), kind), []).append(style)
+                    if style.get(implicit) in ("1", "true", "on"):
+                        defaults.setdefault(kind, []).append(style)
+            self._style_index = {key: tuple(nodes) for key, nodes in index.items()}
+            self._style_defaults = {key: tuple(nodes) for key, nodes in defaults.items()}
+        return self._style_index
+
+    def default_source_styles(self, kind):
+        self.source_style_index()
+        return self._style_defaults.get(kind, ())
+
     def question_box_style_chain(self, name, kind):
+        key = (name, kind)
+        if key in self._style_chains:
+            chain, problem = self._style_chains[key]
+            return list(chain), problem
+
+        def finish(chain, problem):
+            self._style_chains[key] = (tuple(chain), problem)
+            # A caller cannot change another reading's cached ancestry list.
+            return list(chain), problem
+
         chain, seen = [], set()
         if not name:
-            return [], "The style ancestry is not uniquely defined."
+            return finish([], "The style ancestry is not uniquely defined.")
         while name:
             if name in seen or len(chain) >= 32 or "word/styles.xml" not in self.package.names:
-                return [], "The style ancestry is cyclic or unavailable."
+                return finish([], "The style ancestry is cyclic or unavailable.")
             seen.add(name)
-            matches = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
-                       if s.get(q("w:styleId")) == name and s.get(q("w:type")) == kind]
+            matches = self.source_style_index().get((name, kind), ())
             if len(matches) != 1:
-                return [], "The style ancestry is not uniquely defined."
+                return finish([], "The style ancestry is not uniquely defined.")
             style = matches[0]
             chain.append(style)
             base = style.find(q("w:basedOn"))
             name = base.get(q("w:val")) if base is not None else ""
             if base is not None and not name:
-                return [], "The style ancestry is not uniquely defined."
-        return chain, ""
+                return finish([], "The style ancestry is not uniquely defined.")
+        return finish(chain, "")
 
     def question_box_paragraph(self, node):
         """Resolve only this rule's physical break and heading scope, including style ancestry."""
@@ -7814,9 +7844,7 @@ class Detector:
             if refs:
                 name = refs[0].get(q("w:val"))
             else:
-                defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
-                            if s.get(q("w:type")) == kind and s.get(q("w:default")) in ("1", "true", "on")] \
-                    if "word/styles.xml" in self.package.names else []
+                defaults = self.default_source_styles(kind)
                 if len(defaults) > 1:
                     return False
                 if not defaults:
