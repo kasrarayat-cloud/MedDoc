@@ -1,4 +1,4 @@
-"""Source-bound manual recovery of complete ruled narrative; no automatic score claim."""
+"""Complete original-source ruled narrative detection and historical recovery."""
 from copy import deepcopy
 import io
 import unittest
@@ -52,7 +52,11 @@ class RuledParagraphRecovery(unittest.TestCase):
         self.assertEqual({ref['slot'] for ref in relation['instructions']}, {'b/p[2]', 'b/p[3]'})
         self.assertIn('differential diagnoses', field['context'])
         self.assertEqual(w.fill(raw, [field], {}), raw)
-        self.assertFalse(any(f['locator']['target']['type'] == 'ruled_paragraphs' for f in w.inspect(raw)['fields']))
+        automatic = [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'ruled_paragraphs']
+        self.assertEqual(len(automatic), 1)
+        self.assertNotIn('origin', automatic[0])
+        self.assertEqual(automatic[0]['locator'], field['locator'])
+        self.assertEqual(automatic[0]['source_questions'], field['source_questions'])
 
     def test_long_answer_is_complete_once_and_original_structure_and_other_parts_are_preserved(self):
         raw = source(); field = located(raw)
@@ -113,3 +117,95 @@ class RuledParagraphRecovery(unittest.TestCase):
     def test_actual_signing_caption_cannot_be_relabelled_as_a_ruled_clinical_answer(self):
         doc = Document(io.BytesIO(source())); doc.paragraphs[1].text = 'Patient signature:'
         with self.assertRaises(w.V3Failure): located(saved(doc))
+
+    def test_automatic_complete_answer_and_historical_manual_answer_export_identically(self):
+        raw = source()
+        automatic, = [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'ruled_paragraphs']
+        manual = located(raw)
+        answer = '\n'.join('Synthetic complete sentence %02d.' % n for n in range(21))
+        automatic_export = w.fill(raw, [automatic], {automatic['key']: answer})
+        manual_export = w.fill(raw, [manual], {manual['key']: answer})
+        self.assertEqual(automatic_export, manual_export)
+        self.assertEqual(w.effective_values(raw, [automatic], {automatic['key']: answer})[automatic['key']], answer)
+        self.assertEqual(w.fill(raw, [automatic], {}), raw)
+
+    def test_complete_human_clause_guidance_heading_and_continuous_act_refuse_automatic_and_forged_old_mapping(self):
+        original = source()
+        old = located(original)
+        for variant in ('caption', 'guidance', 'heading', 'continuous_act', 'assigned_author', 'approval_clause'):
+            with self.subTest(variant=variant):
+                doc = Document(io.BytesIO(original))
+                if variant == 'caption': doc.paragraphs[1].text = 'Date Alex Reed should sign:'
+                elif variant == 'guidance': doc.paragraphs[2].text = '[Witness must enter the following:]'
+                elif variant == 'heading': doc.paragraphs[0].text = 'Witness attestation'
+                elif variant == 'continuous_act': doc.paragraphs[0].text = 'I certify that I witnessed the patient sign this consent form.'
+                elif variant == 'assigned_author': doc.paragraphs[1].text = 'This area is for Dr. Alex Reed to enter the answer:'
+                else: doc.paragraphs[2].text = '[Describe findings;I approve this document.]'
+                raw = saved(doc)
+                mapping = w.inspect(raw)
+                self.assertFalse(any(f['locator']['target']['type'] == 'ruled_paragraphs' for f in mapping['fields']))
+                self.assertTrue(any(i['code'] == 'unmapped_answer' for i in mapping['coverage_issues']))
+                with self.assertRaises(w.V3Failure): located(raw)
+                with self.assertRaises(w.V3Failure): w.fill(raw, [old], {old['key']: 'Dr Synthetic Finalizer'})
+
+    def test_automatic_partial_group_is_excluded_and_old_reordered_or_partial_writer_refuses(self):
+        original = source()
+        automatic, = [f for f in w.inspect(original)['fields'] if f['locator']['target']['type'] == 'ruled_paragraphs']
+        for variant in ('late_stop', 'late_ink', 'different_neighbor', 'reordered', 'partial'):
+            with self.subTest(variant=variant):
+                field = deepcopy(automatic)
+                if variant in ('reordered', 'partial'):
+                    if variant == 'reordered': field['locator']['extra'].reverse()
+                    else: field['locator']['extra'].pop()
+                    with self.assertRaises(w.V3Failure): w.fill(original, [field], {field['key']: 'Synthetic answer'})
+                    continue
+                doc = Document(io.BytesIO(original))
+                if variant == 'late_stop': doc.paragraphs[26]._p.find('.//' + qn('w:tab')).set(qn('w:pos'), '7000')
+                elif variant == 'late_ink': doc.paragraphs[26].add_run('Existing entry')
+                else:
+                    doc.paragraphs[16].text = 'Other question: ______'
+                raw = saved(doc)
+                mapping = w.inspect(raw)
+                self.assertFalse(any(f['locator']['target']['type'] == 'ruled_paragraphs' for f in mapping['fields']))
+                self.assertTrue(any(i['code'] == 'unmapped_answer' for i in mapping['coverage_issues']))
+                with self.assertRaises(w.V3Failure): w.fill(raw, [field], {field['key']: 'Synthetic answer'})
+
+    def test_ordinary_initial_signed_receipt_and_clinical_question_have_useful_complete_destinations(self):
+        for caption, guidance in (
+                ('Initial observations:', '[Describe the current clinical findings.]'),
+                ('Signed referral receipt:', '[Signed report received on Tuesday.]'),
+                ('Review of systems:', '[Describe symptoms; the patient should remain hydrated.]')):
+            with self.subTest(caption=caption):
+                doc = Document(io.BytesIO(source()))
+                doc.paragraphs[1].text = caption
+                doc.paragraphs[2].text = guidance
+                raw = saved(doc)
+                field, = [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'ruled_paragraphs']
+                answer = 'Synthetic complete clinical response.\nReviewed second sentence.'
+                out = w.fill(raw, [field], {field['key']: answer})
+                self.assertEqual(w.effective_values(raw, [field], {field['key']: answer})[field['key']], answer)
+                self.assertEqual(w.fill(raw, [field], {}), raw)
+                before, after = w.SlotIndex(w.open_package(raw)), w.SlotIndex(w.open_package(out))
+                writes = {field['locator']['slot'], *(x['slot'] for x in field['locator']['extra'])}
+                for slot in before.slots:
+                    if slot.part != 'word/document.xml' or slot.path not in writes:
+                        self.assertEqual(w.fingerprint(slot.el), w.fingerprint(after.by_id[slot.id].el))
+
+    def test_refreshing_all_physical_fingerprints_cannot_relabel_a_human_source_as_clinical(self):
+        ordinary = located(source())
+        for target, text in ((1, 'Date Alex Reed should sign:'),
+                             (2, '[Witness should write the following:]'),
+                             (2, '[Describe findings;I approve this document.]')):
+            with self.subTest(target=target, text=text):
+                doc = Document(io.BytesIO(source())); doc.paragraphs[target].text = text
+                raw = saved(doc); index = w.SlotIndex(w.open_package(raw))
+                field = deepcopy(ordinary)
+                refs = [field['locator'], *field['locator']['extra']]
+                relation = field['source_questions'][0]
+                refs += [relation['source'], *relation['descriptors'], *relation['instructions']]
+                for ref in refs:
+                    slot = index.by_id[ref['part'] + '#' + ref['slot']]
+                    ref['fingerprint'] = w.fingerprint(slot.el)
+                    if 'text' in ref: ref['text'] = w.paragraph_text(slot.el)[0]
+                relation['question'] = w.paragraph_text(index.by_id['word/document.xml#b/p[1]'].el)[0].strip()
+                with self.assertRaises(w.V3Failure): w.fill(raw, [field], {field['key']: 'Dr Synthetic Finalizer'})

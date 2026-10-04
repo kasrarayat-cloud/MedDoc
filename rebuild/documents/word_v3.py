@@ -2376,6 +2376,7 @@ class Detector:
         self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
+        self.rule_ruled_paragraphs()
         self.rule_parenthetical_write_cells()
         self.rule_lines_below_label(write_requests_only=True)
         self.rule_tab_columns()
@@ -7122,6 +7123,33 @@ class Detector:
             return None
         return geometry
 
+    def rule_ruled_paragraphs(self):
+        """One complete printed narrative owns every matching line and spacer.
+
+        Reuse the historical source-bound recovery compiler. The relation's
+        legacy name stays stable; automatic fields have no manual origin.
+        Partial or unresolved ruled destinations remain visible exclusions.
+        """
+        for slot in self.index.slots:
+            if (id(slot.el) in self.claimed or self.ruled_paragraph_stop(slot) is None
+                    or self.ptext(slot.el)[0] != '\t'):
+                continue
+            area = self.manual_ruled_paragraphs(slot, 'long_text')
+            if area is None:
+                self.claimed.add(id(slot.el))
+                reason = ('The complete ruled answer group and its printed question could not be bound. '
+                          'Review the original and recover the complete group; no partial group was appointed.')
+                self.coverage_issue(slot, 'unmapped_answer', reason)
+                self.notes.append(reason + ' Location: ' + slot.id)
+                continue
+            relation = area.source_questions[0]
+            refs = [relation['source'], *relation['descriptors'], *relation['instructions']]
+            if any(id(self.index.by_id[_place_id(ref['part'], ref['slot'])].el) in self.claimed for ref in refs):
+                continue
+            self.add(area)
+            for ref in refs:
+                self.claimed.add(id(self.index.by_id[_place_id(ref['part'], ref['slot'])].el))
+
     def manual_ruled_paragraphs(self, chosen, kind):
         """Explicitly recover a complete body narrative made of printed ruled lines.
 
@@ -7143,6 +7171,13 @@ class Detector:
         def ref(slot):
             return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el),
                     'text': self.ptext(slot.el)[0]}
+        def human(text):
+            lexical = self.question_box_signing(text)
+            if lexical and (self.ordinary_source_kind([text], 'initials')
+                            or self.ordinary_source_kind([text], 'signature')):
+                lexical = False
+            return (self.checkbox_source_action(text, governing=True) or self.question_box_authorship(text)
+                    or signing_place(text) or lexical)
         node, preceding = chosen.el.getprevious(), []
         while node is not None and node.tag == q('w:p') and len(preceding) < 3:
             slot = self.index.by_el.get(id(node))
@@ -7163,8 +7198,7 @@ class Detector:
         prompt = self.ptext(question.el)[0].strip()
         if (not prompt or ':' not in prompt and not self.question_box_request(prompt)
                 or len(prompt) > MAX_MAPPING_LABEL or self.blank_spans(*self.ptext(question.el))
-                or self.question_box_reference(prompt) or self.question_box_authorship(prompt)
-                or self.checkbox_source_action(prompt, governing=True) or self.question_box_signing(prompt)):
+                or self.question_box_reference(prompt) or human(prompt)):
             return None
         lines, descriptors = [], []
         node = chosen.el
@@ -7184,7 +7218,15 @@ class Detector:
             return None
         context = ' > '.join(value for value in (self.context_for(question, complete=True), prompt,
                             *[self.ptext(slot.el)[0].strip() for slot in guidance]) if value)
-        if len(context) > MAX_MAPPING_CONTEXT:
+        governing_context, context_problem = self.question_box_context(question, require_visible=True)
+        previous = self.previous_continuous_paragraph(question)
+        source_readings = [prompt, governing_context, *[self.ptext(slot.el)[0].strip('[] \t\r\n') for slot in guidance]]
+        if previous is not None:
+            source_readings.append(self.ptext(previous.el)[0])
+        source_readings = [clause.strip() for text in source_readings for clause in
+                           [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip()]
+        if (context_problem or len(context) > MAX_MAPPING_CONTEXT
+                or any(human(value) for value in source_readings)):
             return None
         relation = {'relation': 'manual_ruled_paragraph_answer', 'question': prompt, 'source': ref(question),
                     'descriptors': descriptors, 'instructions': [ref(slot) for slot in guidance + preceding],
