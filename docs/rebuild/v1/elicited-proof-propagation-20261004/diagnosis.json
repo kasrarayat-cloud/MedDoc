@@ -1,0 +1,117 @@
+{
+  "source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "diagnostic_conditions": {
+    "frame_fullmatch": true,
+    "base": true,
+    "sentences": 1,
+    "patient_found": true,
+    "patient_nominal": true,
+    "patient_finite": true,
+    "subjects": [
+      {
+        "text": "patient",
+        "pos": "NOUN",
+        "dep": "nsubj",
+        "head": "said",
+        "finite": true,
+        "patient_head_in_ancestors": true
+      },
+      {
+        "text": "partner",
+        "pos": "NOUN",
+        "dep": "nsubj",
+        "head": "knows",
+        "finite": true,
+        "patient_head_in_ancestors": true
+      },
+      {
+        "text": "staff",
+        "pos": "NOUN",
+        "dep": "nsubj",
+        "head": "confirm",
+        "finite": true,
+        "patient_head_in_ancestors": false
+      }
+    ],
+    "direct_elicited_result": true
+  },
+  "original_notes": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+  "actual_results": [
+    {
+      "mode": "unchanged_C",
+      "answer_status": "conflict",
+      "page_status": "conflict",
+      "final_decisions": [],
+      "tests_run": 3,
+      "failures": 3,
+      "errors": 0,
+      "passed": false
+    },
+    {
+      "mode": "shared_empty_cache_counterfactual_only",
+      "answer_status": "supported",
+      "page_status": "supported",
+      "final_decisions": [],
+      "tests_run": 3,
+      "failures": 0,
+      "errors": 0,
+      "passed": true
+    }
+  ],
+  "elapsed_seconds": 17.108658006007317,
+  "manifest": {
+    "first-single-source-diagnostic.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/elicited-C-63460193/first-single-source-diagnostic.json",
+      "sha256": "ccfbbb5a257a81274c996f0a71dd45764722c112c4a762455d8dac042966da38"
+    },
+    "unchanged_C.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/elicited-C-63460193/unchanged_C.json",
+      "sha256": "de35705962985bcfdaef427e05dd815fdad9271c1eaed74fa2b0631a4798e745"
+    },
+    "shared_empty_cache_counterfactual_only.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/elicited-C-63460193/shared_empty_cache_counterfactual_only.json",
+      "sha256": "da95b158f25554be3f1e2cf1d96b380ee85f0fcbb2e4f5aa11b51f7b7405133d"
+    },
+    "trace-summary.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/elicited-C-63460193/trace-summary.json",
+      "sha256": "36d65054904297fd10ba8132810eeabbedcad860d7a07b119e82ccb9aeec3f32"
+    },
+    "unchanged_C.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/elicited-C-63460193/unchanged_C.log",
+      "sha256": "b5f6cb9985c262df8d1b030f94465d797adf194065c558d62b1c42dc56327412"
+    },
+    "shared_empty_cache_counterfactual_only.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/elicited-C-63460193/shared_empty_cache_counterfactual_only.log",
+      "sha256": "0519f9c6ef4685d8c5d783b13a44a19c78d22205cb8bfdcb3548ab97d37c7b81"
+    },
+    "trace.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/elicited-C-63460193/trace.py",
+      "sha256": "668754126d0e0fd7c3a8c14c924d47e28539cf5aaac63fcc46a08b59bddaab95"
+    },
+    "original_C_CI/111476058888-18.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/ci-63460193-one-snapshot-20261004T170114Z/exact-failure-inventory/111476058888-18.log",
+      "sha256": "7f9d9b3f97f5d86612789beffeb1a27ba0fddb8f6009340159bc2aedd7e3111d"
+    },
+    "original_C_CI/111476058888-19.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/ci-63460193-one-snapshot-20261004T170114Z/exact-failure-inventory/111476058888-19.log",
+      "sha256": "611a4b6b40bb15dd8bd163d19430c4ac2a20c22a005a75617c9c7b1fe43e5a1a"
+    },
+    "original_C_CI/111476058852-27.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/ci-63460193-one-snapshot-20261004T170114Z/exact-failure-inventory/111476058852-27.log",
+      "sha256": "65d189f3a1f43678c32fcd38a3f5f8c21bc08cb6d006e25ec4f222651642b651"
+    }
+  },
+  "source_changes": 0,
+  "provider_calls": 0,
+  "DB_calls": 0,
+  "network_attempts": [],
+  "proposal_only": "Explicit field/selected-unit elicited IDs from successful relation read to scoped actor/bounded floors; never share mutable cache, widen grammar or change fixture expectations.",
+  "guard_requirements": [
+    "Rejected/incomplete/invalid/no relation returns no proof.",
+    "Capture elicitedIDs from literal reader before reviewed-source/literal unions.",
+    "Bind by actual selected unit and exact destination already validated; no cross-field marker.",
+    "Keep all negation/foreign speaker/conditional/unknown/time/correction/medication/signing vetoes.",
+    "Priced module/function AST changes must be deliberately qualified/refuted before accepted-pin renewal."
+  ],
+  "status": "DIAGNOSED; no application repair or renewed paid qualification claimed"
+}
