@@ -168,7 +168,7 @@ class ReinspectionMigrationSource(unittest.TestCase):
     def test_renewed_capture_receipt_binds_current_catalog_sources_and_retains_the_old_identity(self):
         repository = ROOT.parent
         directory = repository / 'docs/rebuild/v1/private-synthetic-install-preparation-20261004'
-        current = json.loads((directory / 'postgresql-catalog-capture-0038.json').read_bytes())
+        current = json.loads((directory / 'postgresql-catalog-capture-0038-reverse-guard.json').read_bytes())
         previous = json.loads((directory / 'postgresql-catalog-capture.json').read_bytes())
         schema_bytes = (repository / preparation.SCHEMA_PATH).read_bytes()
         schema = json.loads(schema_bytes)
