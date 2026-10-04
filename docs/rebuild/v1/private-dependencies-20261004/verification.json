@@ -1,0 +1,279 @@
+{
+  "baseline": "dedac1625032e32c7a149e6771be22e26c307eb1",
+  "cleanup_deleted_bytes": 0,
+  "current_private_install_gates_met": false,
+  "dependency_source": "2702cf0a65ada984f7d512bfa4672ac8ed5e7b16",
+  "first_f1_test_runner_path_error_before_child": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dependency-bundle-source-tests-f1e60282-20261004",
+    "reason": "Wrong test source path ops/tests/test_dependency_lock.py; actual test module is ops.test_dependency_lock; no test child started. Tool transcript retained, not a passing gate."
+  },
+  "focused_test_source": "f1e602823bff0ca47f9f140b2701f1c989a59bf0",
+  "focused_tests": {
+    "evidence": {
+      "bytes": 1241,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dependency-bundle-source-tests-f1e60282-r2-20261004/result.json",
+      "sha256": "f32639735afac74cb7566974c68b67e4322181b5ecf6bd2646cd20668f1e7a20"
+    },
+    "exit_code": 0,
+    "methods": 14,
+    "test_seconds": 0.359
+  },
+  "installed_metadata_read": {
+    "bytes": 19790,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/installed-dependency-metadata-read-20261004/result.json",
+    "sha256": "8acaadc2f2f2d35f83ba185bdd9db97dd122e08251ba13618f145a57f6aafc0b"
+  },
+  "installed_mismatches": [
+    {
+      "installed": null,
+      "matches": false,
+      "name": "annotated-doc",
+      "required": "0.0.5"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "blis",
+      "required": "1.3.3"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "catalogue",
+      "required": "2.0.10"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "click",
+      "required": "8.5.0"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "cloudpathlib",
+      "required": "0.25.0"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "confection",
+      "required": "1.3.3"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "cymem",
+      "required": "2.0.13"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "en-core-web-sm",
+      "required": "3.8.0"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "jinja2",
+      "required": "3.1.6"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "markupsafe",
+      "required": "3.0.3"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "murmurhash",
+      "required": "1.0.15"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "numpy",
+      "required": "2.5.3"
+    },
+    {
+      "installed": "24.0",
+      "matches": false,
+      "metadata_sha256": "90d11f277fd5868da679ee257c97656dde511c8aac7d025231407e6ce90839e2",
+      "name": "pip",
+      "required": "26.2.1"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "preshed",
+      "required": "3.0.13"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "setuptools",
+      "required": "84.0.0"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "shellingham",
+      "required": "1.5.4"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "smart-open",
+      "required": "8.0.1"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "spacy",
+      "required": "3.8.16"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "spacy-legacy",
+      "required": "3.0.12"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "spacy-loggers",
+      "required": "1.0.5"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "srsly",
+      "required": "2.5.4"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "thinc",
+      "required": "8.3.13"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "typer",
+      "required": "0.27.2"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "wasabi",
+      "required": "1.1.3"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "weasel",
+      "required": "1.0.0"
+    },
+    {
+      "installed": null,
+      "matches": false,
+      "name": "wrapt",
+      "required": "2.5.0"
+    }
+  ],
+  "installed_mutations": 0,
+  "matching_installed_packages": 63,
+  "native_model_evidence": {
+    "bytes": 129,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-dependencies-20261004-recovered-r3/native-model.log",
+    "sha256": "8cbc796954da6d004f1c3d268d2043b50d28a522a64a94fb4e98fb642aac4953"
+  },
+  "network_downloads": 0,
+  "observed_at": "2026-10-04T03:53:39.527950+00:00",
+  "prepared_venv_is_relocatable": false,
+  "provider_requests": 0,
+  "retained_failures": [
+    {
+      "bytes": 790,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-dependencies-20261004/original-failure.txt",
+      "sha256": "92663cf7b0f57c42faf6681f7594a3cf6261ab5353997da0d074e6584abf991a"
+    },
+    {
+      "bytes": 1281,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-dependencies-20261004-recovered-r2/original-failure.txt",
+      "sha256": "b5d1092a211db6849fdb65e2751f6abf5b0e849bea7fb2816dae2650491895dc"
+    },
+    {
+      "bytes": 1044,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dependency-bundle-source-tests-2702cf0a-20261004/result.json",
+      "sha256": "291a13c3db95788a35b3bead5ff9cba9043edab44d7edb8fd7f4ac593f79c72b"
+    }
+  ],
+  "second_preparation_child_exit_unrecorded": true,
+  "storage": {
+    "available_bytes": 326805594112,
+    "available_inodes": 35306705,
+    "total_bytes": 633927315456
+  },
+  "successful_bundle": {
+    "complete": true,
+    "deadline_seconds": 600,
+    "elapsed_seconds": 28.08791137099979,
+    "installed_mutation_performed": false,
+    "max_owned_bytes": 2000000000,
+    "network_requests": 0,
+    "owned_bytes": 570188754,
+    "packages": 89,
+    "provider_calls": 0,
+    "reviewed_cache": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/dependency-lock-repair-20260928/wheelhouse",
+    "root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-dependencies-20261004-recovered-r3",
+    "run_id": "recovered-r3",
+    "source_commit": "2702cf0a65ada984f7d512bfa4672ac8ed5e7b16",
+    "source_sha256": {
+      "requirements-production.lock": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+      "requirements-production.manifest.json": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade",
+      "requirements.txt": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b"
+    },
+    "steps": [
+      {
+        "exit_code": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "owned_bytes": 170491253,
+        "step": "create-owned-venv",
+        "stop_reason": null
+      },
+      {
+        "exit_code": 0,
+        "log_sha256": "7a5b0969c3391343729bcd8859224874f64d5bcf8c5aadec68544d288c101b44",
+        "owned_bytes": 570188049,
+        "step": "offline-install",
+        "stop_reason": null
+      },
+      {
+        "exit_code": 0,
+        "log_sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09",
+        "owned_bytes": 570188264,
+        "step": "pip-check",
+        "stop_reason": null
+      },
+      {
+        "exit_code": 0,
+        "log_sha256": "8cbc796954da6d004f1c3d268d2043b50d28a522a64a94fb4e98fb642aac4953",
+        "owned_bytes": 570188572,
+        "step": "native-model",
+        "stop_reason": null
+      }
+    ]
+  },
+  "successful_result": {
+    "bytes": 1843,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-dependencies-20261004-recovered-r3/result.json",
+    "sha256": "cfdec1f49a9f7cbbaa8eb24dd739420716a4ba085b23cec3c3c74053b1257141"
+  },
+  "wheel_metadata_manifest": {
+    "bytes": 86923,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-dependencies-20261004-recovered-r3/wheel-manifest.json",
+    "sha256": "4724977a11140fb707b3c67c1e30cab4d01808ccc21e8e049b19f6b7a3ec891b"
+  }
+}

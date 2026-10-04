@@ -1,0 +1,138 @@
+{
+  "actual_served_helper_execution_pending": true,
+  "cleanup_deleted_bytes": 0,
+  "database_mutations": 0,
+  "existing_fixture_interpreter_metadata_observation": {
+    "expected_requirements_manifest_sha256": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade",
+    "interpreter": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+    "mismatches": [],
+    "required_packages": 89,
+    "scope": "importlib.metadata.version only; source command output retained in tool transcript; no application/native/model import or mutation"
+  },
+  "helper_pure_methods": 8,
+  "helper_pure_test_seconds": 2.608,
+  "helper_source": "fa99e7b698b77d7f75ee15e734707ce2bddd3c3f",
+  "helper_test_receipt": {
+    "bytes": 798,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/served-persisted-source-tests-fa99e7b6-20261004/result.json",
+    "sha256": "2aa6341d4de7d168473e22f922a6f65389a48e6d1de29c2d3ea3fcdab6207ca0"
+  },
+  "human_microphone_unverified": true,
+  "installed_release": "dedac1625032e32c7a149e6771be22e26c307eb1",
+  "messages": 0,
+  "native_word_unverified": true,
+  "new_demo_launched": false,
+  "old_demo_release": "789c0372127d89b1750a2f790c561e68c19f1654",
+  "old_readonly_observation": {
+    "credential_reads": 0,
+    "database_actions": 0,
+    "database_declared": "quillmd_qa_int_sol_789c0372",
+    "database_presence_read_unverified": true,
+    "database_server_declared": "127.0.0.1:55731",
+    "helpers": {
+      "create_qa_database.py": {
+        "bytes": 2001,
+        "expected_sha256": "fe655ed822151089af5b46ed92af747c23f850dc783a3ac46d4bf7a5774e4425",
+        "matches": true,
+        "mode": "0o600",
+        "sha256": "fe655ed822151089af5b46ed92af747c23f850dc783a3ac46d4bf7a5774e4425",
+        "uid": 1000
+      },
+      "netwatch.py": {
+        "bytes": 2372,
+        "expected_sha256": "45749a850892b98e2bae15cb1c02c1cec914e64c01998bcef5677fda555878f7",
+        "matches": true,
+        "mode": "0o600",
+        "sha256": "45749a850892b98e2bae15cb1c02c1cec914e64c01998bcef5677fda555878f7",
+        "uid": 1000
+      },
+      "qa_launch.py": {
+        "bytes": 8749,
+        "expected_sha256": "578cb1b3ff99b1dad051dee66690806f14d59fb4f6b1198ec5ecfda8267629dd",
+        "matches": true,
+        "mode": "0o600",
+        "sha256": "578cb1b3ff99b1dad051dee66690806f14d59fb4f6b1198ec5ecfda8267629dd",
+        "uid": 1000
+      },
+      "run_harness.sh": {
+        "bytes": 1940,
+        "expected_sha256": "51e31f2ba8d371d11d0a9e52fa5de8f7a4f9ee10a814568bf3298e4785e5b2cb",
+        "matches": true,
+        "mode": "0o700",
+        "sha256": "51e31f2ba8d371d11d0a9e52fa5de8f7a4f9ee10a814568bf3298e4785e5b2cb",
+        "uid": 1000
+      },
+      "start.sh": {
+        "bytes": 2961,
+        "expected_sha256": "66356ec19f5f6c3680ff25a307e3ee28b2c423e13aa92825a707739742914413",
+        "matches": true,
+        "mode": "0o700",
+        "sha256": "66356ec19f5f6c3680ff25a307e3ee28b2c423e13aa92825a707739742914413",
+        "uid": 1000
+      },
+      "stop.sh": {
+        "bytes": 2852,
+        "expected_sha256": "54b743da424d21d8fd66e40b850003a8f54badcaa5394e20360a9ceff5d68130",
+        "matches": true,
+        "mode": "0o700",
+        "sha256": "54b743da424d21d8fd66e40b850003a8f54badcaa5394e20360a9ceff5d68130",
+        "uid": 1000
+      }
+    },
+    "host_actions": 0,
+    "observed_at": "2026-10-04T03:24:17.514099+00:00",
+    "old_release": "789c0372127d89b1750a2f790c561e68c19f1654",
+    "old_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-789c0372",
+    "old_source": {
+      "matches_git_blob_bytes_unverified": true,
+      "missing_or_linked": [],
+      "present_regular_source_files": 629,
+      "retained_source_manifest_sha256": "8165f1bc66e7f0aa40dfb06d66b8c8bc751b39c598cd882d63496f93dda3ad1c",
+      "tracked_runtime_files": 629
+    },
+    "pid_files": {
+      "admin": {
+        "present": false
+      },
+      "doctor": {
+        "present": false
+      },
+      "worker": {
+        "currently_exists": false,
+        "pid": 1247541,
+        "present": true
+      }
+    },
+    "port_observation": "State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess\nLISTEN 0      4096       127.0.0.1:55731      0.0.0.0:*          \n",
+    "provider_calls": 0,
+    "word_runtime": {
+      "actual_manifest_sha256": "2a1e4477144207bed04d3f3d38cb3b276cdaf7e450ef7d622f1ee63cd4e0d756",
+      "manifest": "/opt/meddoc-pro/rebuild/.runtime/v1-product-20260930/int/browser/word-build/runtime-manifest.json",
+      "manifest_sha256": "2a1e4477144207bed04d3f3d38cb3b276cdaf7e450ef7d622f1ee63cd4e0d756",
+      "qualification": true,
+      "reused_from": "int/browser word-build (98aebf7b environment); 14ed2459 build inputs and manifest verified equal: evidence/word-runtime-reuse.json",
+      "runtime": "/opt/meddoc-pro/rebuild/.runtime/v1-product-20260930/int/browser/word-build/runtime",
+      "runtime_present": true
+    }
+  },
+  "old_readonly_receipt": {
+    "bytes": 3511,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/demo-readonly-observation-20261004/result.json",
+    "sha256": "1e1a7534331b9b6a530f8f60da14ccb83096caf15481c765de85dbd93f08a663"
+  },
+  "prepared_only": true,
+  "prior_helper_receipts": [
+    {
+      "bytes": 800,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/served-persisted-source-tests-ea166230-first-20261004/result.json",
+      "sha256": "b79052400f803479c75b8f1c3579d1af60747729052b13adb5575b9319ce9555"
+    },
+    {
+      "bytes": 800,
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/served-persisted-source-tests-7afdc1a4-20261004/result.json",
+      "sha256": "065a06bae820ee7de5ce2e5631b46ed34d23bac4ff05a7edfe6c75748c9eb7d7"
+    }
+  ],
+  "provider_requests": 0,
+  "service_actions": 0
+}

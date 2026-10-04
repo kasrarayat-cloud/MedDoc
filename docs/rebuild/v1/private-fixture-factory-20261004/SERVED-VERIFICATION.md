@@ -35,6 +35,10 @@ timeout 30s python3 -B "$fixture_demo/qa_launch.py" --profile v1 -- "$fixture_py
 timeout 300s bash "$fixture_demo/run_harness.sh" <FRESH_WORD_AUTHORITY_RUN_ID> /usr/bin/node word-authority-browser.mjs
 ```
 
+The retained starter uses the existing fixed `v1-workflow-candidate` fixture interpreter. Its 89 required package METADATA versions were read on October4 and all match the target lock; no package/application/model import or mutation was performed by that observation. The task-owned dependency virtualenv is separate and is not moved here. A startup failure is not a healthy demonstration: retain its actual exit and logs, inspect only recorded owned process identities, and use the new archive's bounded `stop.sh` for a partial start before a distinct retry. Never kill a reused PID by its number alone.
+
+For an automatic/v3 seed, `seed_private` intentionally leaves the three-field original mapping **unconfirmed**. Before the ordinary doctor/admin browser gate above, the clinician signs in to 9160, opens “Clinical assessment” in the library, inspects the original and all three destinations, and confirms mapping version 1 through actual mapping review. The browser gate then selects that unchanged approved mapping. Do not insert MappingConfirmation directly or rewrite the blank source to make the browser proceed. If coverage requires correction, retain the original automatic result and new mapping identity separately; the old gate's mapping 1 expectation must not be silently relabeled.
+
 These existing scripts use the archive's protected synthetic seed credentials, actual browser routes and localhost-only harness. Capture their real process exits, JSON results, downloads and network records; retire any watcher when its actual child is finished. The input-workflow browser's static fixture is supplemental JavaScript evidence only. `identity-browser.mjs` assumes installed `/var/lib/quillmd` state, and `private-beta-browser.mjs` assumes a Git worktree plus environment-file bootstrap; do not run those unchanged on an archive or reinterpret their fixture assumptions as application failures. The admin console script has a separate module-resolution/seed contract; the existing doctor/admin browser gate already tests actual MFA and financial-only routes without importing those assumptions.
 
 ## Persisted acceptance record
@@ -54,3 +58,52 @@ These existing scripts use the archive's protected synthetic seed credentials, a
 The existing identity-bound `ops/verify_qa_authorization.py` can be reused only through its confirmed archive launcher with exact candidate, three real PIDs, new run ID and `--execute`, when the integration owner verifies its still-applicable contract. Its 180-second/150-request limits, own synthetic fixtures and retained financial fingerprints are explicit; direct synthetic final-file fixtures qualify authorization only. Its output and current active-route controls have separate denominators from the historical 124. It is not a clinical workflow or Word acceptance shortcut.
 
 Persist evidence under the new demo's own protected directory with request IDs, job IDs, source/version hashes, first answer results, manual corrections, exports, actual exits and original failures. Claim the served revision only after those checks complete. A fixture demonstration, qualified synthetic pilot and real-patient V1 have distinct requirements; no readiness follows solely from these proposed commands.
+
+## Actual SOAP/custom positive examples and readback
+
+The ordinary browser creates the custom Clinical assessment example through supported patient/document/generation/review/finalization/export routes. Record its actual encounter and successful generation job IDs from that workflow, its immutable original, raw first result and downloaded DOCX. It uses these unchanged synthetic notes:
+
+```text
+History: Synthetic patient reports left wrist discomfort after a fall.
+Findings: No deformity documented.
+Plan: Follow-up assessment documented.
+```
+
+For SOAP, sign in as the same synthetic doctor and use **Use SOAP note**. Choose the permitted X-ray department, inspect the deterministic original and all Subjective/Objective/Assessment/Plan destinations, and approve the actual immutable mapping through its review page. Create a new document for the synthetic patient with service date today and these source notes:
+
+```text
+Subjective: cough for two days.
+Objective: lungs clear.
+Assessment: clinician assessed a viral upper respiratory infection.
+Plan: rest, hydration and review if symptoms worsen.
+```
+
+Generate through the displayed fixture route and let the actual separately identified worker finish. Preserve the first result before editing. Inspect supported, held and missing answers with source quotations. Explicitly review or correct each answer; where appropriate use **Leave blank — reviewed**, preserving that decision separately from automatic correctness. Finalize and download through the actual doctor route. Record the encounter and generation job IDs. A meaningful positive must have useful supported first-pass answers; a zero-useful result remains failed usefulness even if manually filled and exported. Do not invent an assessment or change the source merely to satisfy a fixture.
+
+The new default-prepared `ops.verify_fixture_persisted` reads these actual finalized records. It does not create, generate, review, finalize or charge them. It requires the new archive's exact full source inventory, confirmed doctor/admin/worker PID/cwd/start ticks, fixture profile and database, and explicit example IDs. Its database connection is read-only. Normal sign-in creates session/audit events; existing authorization checks own the password-only MFA negative, and this reader waits at most 32 seconds for an unconsumed seed-admin TOTP after the browser run. It checks actual doctor HTTP downloads against stored final bytes, original/mapping/physical bindings, raw source spans, explicit clinician review/blank decisions, ordinary-v4/20k fixture snapshots, real persisted zero simulated usage/receipt/reservation state, positive MFA financial access and denied foreign-department/admin clinical access. It retains first/final artifacts before assertions and compares financial/clinical state afterward. Holds, missing answers, corrections and reviewed blanks are counted separately. Its package/fidelity claim is limited to the two declared growing two-column examples, with no native Word or microphone claim.
+
+```bash
+fixture_doctor_pid=$(cat "$fixture_demo/state/doctor.pid")
+fixture_admin_pid=$(cat "$fixture_demo/state/admin.pid")
+fixture_worker_pid=$(cat "$fixture_demo/state/worker.pid")
+
+# Fresh scoped authorization accounts/state only.
+timeout 195s python3 -B "$fixture_demo/qa_launch.py" --profile v1 -- "$fixture_python" -B \
+  -m ops.verify_qa_authorization --demo-dir "$fixture_demo" --expected-commit "$fixture_commit" \
+  --doctor-pid "$fixture_doctor_pid" --admin-pid "$fixture_admin_pid" --worker-pid "$fixture_worker_pid" \
+  --run-id <FRESH_AUTH_RUN_ID> --execute
+
+# Read actual route-created examples, not directly fabricated records.
+timeout 195s python3 -B "$fixture_demo/qa_launch.py" --profile v1 -- "$fixture_python" -B \
+  -m ops.verify_fixture_persisted --demo-dir "$fixture_demo" --expected-commit "$fixture_commit" \
+  --doctor-pid "$fixture_doctor_pid" --admin-pid "$fixture_admin_pid" --worker-pid "$fixture_worker_pid" \
+  --soap-encounter <ACTUAL_SOAP_UUID> --soap-job <ACTUAL_SOAP_GENERATION_UUID> \
+  --custom-encounter <ACTUAL_CUSTOM_UUID> --custom-job <ACTUAL_CUSTOM_GENERATION_UUID> \
+  --run-id <FRESH_PERSISTED_RUN_ID> --execute
+
+# Only the actual identified unhealthy/finished new demo, through its own helper:
+timeout 35s bash "$fixture_demo/stop.sh" --check
+timeout 35s bash "$fixture_demo/stop.sh"
+```
+
+The historical 124 denominator remains bound to 789c0372. New request counts and mounted-route coverage are recorded prospectively; a retired/unmounted route's404 is not an authorization result. The authorization helper's synthetic financial/finalized fixtures qualify access scope only, while this reader checks real application-generated fixture usage and actual clinical finalization. Preserve original historical failed runs. Both commands require the integration owner's coherent-source/CI/demo execution gate; neither has run as part of this preparation.
