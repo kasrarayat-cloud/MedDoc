@@ -1,0 +1,267 @@
+{
+  "source": "1459595edd4551dc4eb9427ccc89da9bda87604f",
+  "packet": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev-d08d09-1459595e-20261004/replay-v2/dev-application-1459595edd45-1791102061725144354",
+  "original_attempt": {
+    "actual_exit": 1,
+    "reason": "Django class label rejected before methods",
+    "receipt": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev-d08d09-1459595e-20261004/outer-result.json",
+    "sha256": "fd4ece50e0d33ee1686a5a8f016b564bfdb0b6d6dcfae095a1509cd822a1e26e"
+  },
+  "v2_route_packet": {
+    "actual_runner_exit": 1,
+    "timed_out": false,
+    "elapsed_seconds": 75.399217,
+    "log_sha256": "ace392f79c6cabb89c87ffdaabd5c0d6d00072adf8af42a9bb50b6ebd71cb47c",
+    "prospective_manifest_sha256": "93d32c2a3a8b427503200e6ebe58c50a66c28a4b0bcf90524e30511bb52697b0",
+    "supervisor_sha256": "e8e8a99ed2864c70be99a10bdff3f6ec50b445926502470136d7172f8d99327a",
+    "provider_calls": 0,
+    "runner_pid_absent": true,
+    "runtime_output": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev-d08d09-1459595e-20261004/replay-v2/dev-application-1459595edd45-1791102061725144354",
+    "renderer_pid": 1573203,
+    "renderer_pid_absent": true,
+    "layout_socket_absent": true,
+    "database_teardown": {
+      "verified": true,
+      "requested_database": "quillmd_qa_sol_ops_dev0809b_145",
+      "checked_names": [
+        "quillmd_qa_sol_ops_dev0809b_145",
+        "test_quillmd_qa_sol_ops_dev0809b_145"
+      ],
+      "present": [],
+      "all_absent": true,
+      "provider_calls": 0
+    },
+    "actual_outer_exit": 1
+  },
+  "v2_route_tests": {
+    "methods": 2,
+    "actual_exit": 0,
+    "elapsed_seconds": 33.401
+  },
+  "D08": {
+    "first_pass": {
+      "correct": 29,
+      "denominator": 41,
+      "missed": 2,
+      "wrong": 10,
+      "extras": 5,
+      "strict": false
+    },
+    "manual_corrections": 0,
+    "ordinary_long_save_status": 400,
+    "ordinary_long_save_reason": "SDU is a checkbox: its answer is checked or empty",
+    "empty_export_sha256": "7bea25c4d5a172b1cd40eab3b8954dfb5972cf9bc15a51a6d965926803d3603e",
+    "cause": {
+      "source_commit": "1459595edd4551dc4eb9427ccc89da9bda87604f",
+      "source_word_v3_sha256": "b186946772679acd1bbcacecba0719497c0d79d574aea5f09022f454f1ff0a1b",
+      "script_sha256": "9b4e198dcafc4bee561fb9bf41479a8435d1e7e0b589114840c9f43a8dc41f39",
+      "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+      "route_empty_export_sha256": "7bea25c4d5a172b1cd40eab3b8954dfb5972cf9bc15a51a6d965926803d3603e",
+      "direct_no_answers_byte_identical": true,
+      "direct_seven_false_answers_equal_actual_route_export": true,
+      "requested_false": {
+        "v3_7": false,
+        "v3_14": false,
+        "v3_18": false,
+        "v3_22": false,
+        "v3_26": false,
+        "v3_30": false,
+        "v3_35": false
+      },
+      "changed_raw_zip_parts": [
+        "word/document.xml"
+      ],
+      "exact_added_checked_nodes": [
+        {
+          "xml_path": "/w:document/w:body/w:p[11]/w:r[2]/w:fldChar/w:ffData/w:checkBox/w:checked",
+          "value": "0"
+        },
+        {
+          "xml_path": "/w:document/w:body/w:tbl/w:tr[3]/w:tc[2]/w:p/w:r[1]/w:fldChar/w:ffData/w:checkBox/w:checked",
+          "value": "0"
+        },
+        {
+          "xml_path": "/w:document/w:body/w:tbl/w:tr[5]/w:tc[2]/w:p/w:r[1]/w:fldChar/w:ffData/w:checkBox/w:checked",
+          "value": "0"
+        },
+        {
+          "xml_path": "/w:document/w:body/w:tbl/w:tr[7]/w:tc[2]/w:p/w:r[1]/w:fldChar/w:ffData/w:checkBox/w:checked",
+          "value": "0"
+        },
+        {
+          "xml_path": "/w:document/w:body/w:tbl/w:tr[9]/w:tc[2]/w:p/w:r[1]/w:fldChar/w:ffData/w:checkBox/w:checked",
+          "value": "0"
+        },
+        {
+          "xml_path": "/w:document/w:body/w:tbl/w:tr[11]/w:tc[2]/w:p/w:r[1]/w:fldChar/w:ffData/w:checkBox/w:checked",
+          "value": "0"
+        },
+        {
+          "xml_path": "/w:document/w:body/w:p[24]/w:r[2]/w:fldChar/w:ffData/w:checkBox/w:checked",
+          "value": "0"
+        }
+      ],
+      "remaining_entire_document_canonical_xml_identical": true,
+      "original_unchanged": true,
+      "elapsed_seconds": 2.163928,
+      "provider_calls": 0,
+      "database_queries": 0,
+      "new_renders": 0,
+      "source_or_scorer_changes": false,
+      "cause": "core.v3_mapping.fill_answers emits explicit False for reviewed ordinary checkboxes; documents.word_v3.set_ff_checkbox always inserts explicit zero checked state although original default zero already supplies the requested false state."
+    },
+    "adjudication_sha256": "ce0405305e44779ede41d1ad5f377bb63d286d801f1cbbe49173bdee81d47d5c"
+  },
+  "D09": {
+    "first_pass": {
+      "correct": 47,
+      "denominator": 47,
+      "missed": 0,
+      "wrong": 0,
+      "extras": 0,
+      "strict": true
+    },
+    "manual_corrections": 0,
+    "profiles_mechanical_passed": [
+      "empty",
+      "ordinary",
+      "long"
+    ],
+    "export_sha256": {
+      "empty": "b04f37b4ff081529644b1d16c225bf4603c1749e392d8327ed0eb3943019822a",
+      "ordinary": "210a4c783ed6f70e2115733ba84e846a12d98c39a501b779b8a76f5b3b449269",
+      "long": "c3deb9df4ca79cfab6f2fa7179f7fa38f784cf573ed8c6f907cd0fe7337a2f19"
+    },
+    "original_instrument_failure": "Missing sibling render-checker-python dependency directory, pypdfium2 import refused; original checker exit1 unchanged",
+    "supplementary_checker": {
+      "source_commit": "1459595edd4551dc4eb9427ccc89da9bda87604f",
+      "prospective_manifest_sha256": "49fff21eb43c70e37f94125be91821857b2bc606fdb8febd92e3ef2d5ca1a448",
+      "supervisor_sha256": "3b05cff934cdee9251e44e117fbf76ae0fedac7c693bb7688803a6acc5561a5a",
+      "files_unchanged": true,
+      "provider_calls": 0,
+      "database_queries": 0,
+      "new_renders": 0,
+      "original_failure_preserved": true,
+      "rows": [
+        {
+          "profile": "ordinary",
+          "actual_exit": 0,
+          "timed_out": false,
+          "elapsed_seconds": 0.674619,
+          "pid_absent": true,
+          "stdout_sha256": "02805d519a5c86b5024e77c2680a987e097cd44189341927ed194da14d5a5a41",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "checker": {
+            "problems": [],
+            "info": {
+              "pages": [
+                3,
+                3
+              ],
+              "overlap": [
+                0,
+                0
+              ],
+              "missing": []
+            },
+            "pypdfium2": "4.30.0",
+            "supplemental_problems": [],
+            "full_answer_visibility": {
+              "probed": [
+                "v3_4",
+                "v3_7",
+                "v3_10",
+                "v3_13",
+                "v3_16",
+                "v3_19",
+                "v3_22",
+                "v3_25",
+                "v3_28",
+                "v3_31",
+                "v3_34",
+                "v3_37",
+                "v3_40",
+                "v3_43",
+                "v3_46",
+                "v3_47"
+              ],
+              "missing": []
+            },
+            "scope": "Existing fixed render criterion unchanged; full text visibility supplements its fixed 14-character probes. Prospectively pinned PDFium4.30.0; historical tool-version equivalence is not asserted."
+          }
+        },
+        {
+          "profile": "long",
+          "actual_exit": 0,
+          "timed_out": false,
+          "elapsed_seconds": 0.871597,
+          "pid_absent": true,
+          "stdout_sha256": "1c6fc6c1463cf162a7ad8dc037ab61c40d0e9c33fd6d18aa2d5e822a773fdf81",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "checker": {
+            "problems": [],
+            "info": {
+              "pages": [
+                3,
+                7
+              ],
+              "overlap": [
+                0,
+                0
+              ],
+              "missing": []
+            },
+            "pypdfium2": "4.30.0",
+            "supplemental_problems": [],
+            "full_answer_visibility": {
+              "probed": [
+                "v3_4",
+                "v3_7",
+                "v3_10",
+                "v3_13",
+                "v3_16",
+                "v3_19",
+                "v3_22",
+                "v3_25",
+                "v3_28",
+                "v3_31",
+                "v3_34",
+                "v3_37",
+                "v3_40",
+                "v3_43",
+                "v3_46",
+                "v3_47"
+              ],
+              "missing": []
+            },
+            "scope": "Existing fixed render criterion unchanged; full text visibility supplements its fixed 14-character probes. Prospectively pinned PDFium4.30.0; historical tool-version equivalence is not asserted."
+          }
+        }
+      ],
+      "supplementary_replay_only": true
+    },
+    "adjudication_sha256": "6595c1bbc3f952d334eeae36d24e290bba70f7b4a90934301d2b7cfcbd71e733"
+  },
+  "evidence_hashes": {
+    "replay-v2/execution-manifest.json": "93d32c2a3a8b427503200e6ebe58c50a66c28a4b0bcf90524e30511bb52697b0",
+    "replay-v2/outer-result.json": "1babce8bd639378f375c210dfab6b1019f14f473c12240a3cdc94b1a1db0dc5c",
+    "replay-v2/dev-application-1459595edd45-1791102061725144354/workflow.log": "551d6629dc24c90bc90920ee49cad7e986b0638bba94e674ea9a056a0f2e6bf8",
+    "replay-v2/dev-application-1459595edd45-1791102061725144354/source-before.json": "cb4d495ed898d41bd406e970c9730d0a99e10271539aa50ef28fe47450e58808",
+    "replay-v2/dev-application-1459595edd45-1791102061725144354/source-after.json": "cb4d495ed898d41bd406e970c9730d0a99e10271539aa50ef28fe47450e58808",
+    "replay-v2/dev-application-1459595edd45-1791102061725144354/database-after.json": "7d2c5bd419400eec58df0a5f7d619dee4ea9223b5d5bd852082a1deb19bb91a9",
+    "replay-v2/dev-application-1459595edd45-1791102061725144354/process-teardown.json": "d6011f6788be4f6db6c2c14d1999b219fd543f7f344d736e1aac7309c86bb533",
+    "replay-v2/d08-empty-cause-result.json": "42d8d4d7c5169a8479e96bfb9b320dcba095b72484184d105efe5a0eb2fef983",
+    "replay-v2/checker-only-replay/result.json": "7ed650e9bf47b02dbfc6600b8489f9dd141e7421030000bb66d8e8ed73c7bf91"
+  },
+  "whole_acceptance_gates_met": false,
+  "fixed_denominators": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20
+  },
+  "clinical_generation_usefulness_measured": false,
+  "native_Word_verified": false,
+  "provider_calls": 0,
+  "cleanup_bytes": 0
+}
