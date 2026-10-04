@@ -5056,6 +5056,109 @@ class Detector:
                 return candidates[0]
         return None
 
+    @staticmethod
+    def named_instruction_clauses(text):
+        """Complete clauses, retaining punctuation inside quotes and parentheses.
+
+        A sentence's terminal period can be inside its closing quote. Apostrophes
+        within a word are not quotation boundaries. Malformed framing remains
+        unproved; no original text is changed by this analysis.
+        """
+        clauses, start, depth, quote = [], 0, 0, None
+        pairs = {'‘': '’', '“': '”', "'": "'", '"': '"'}
+        for at, char in enumerate(text):
+            boundary = False
+            if quote:
+                if char == quote:
+                    quote = None
+                    boundary = depth == 0 and at > 0 and text[at - 1] in '.!?'
+            elif char in pairs and (char in '‘“' or at == 0 or not text[at - 1].isalnum()):
+                quote = pairs[char]
+            elif char == '(':
+                depth += 1
+            elif char == ')':
+                if not depth:
+                    return None
+                depth -= 1
+            elif not depth and char in '.;!?\r\n':
+                boundary = True
+            if boundary:
+                value = text[start:at + 1].strip(' .;!?\r\n')
+                if value:
+                    clauses.append(value)
+                start = at + 1
+        if quote or depth:
+            return None
+        rest = text[start:].strip(' .;!?\r\n')
+        if rest:
+            clauses.append(rest)
+        return clauses
+
+    def named_local_object_scope(self, entries, options):
+        """Prove selection objects stay on this uniquely captioned local group.
+
+        Every selection command must name one unique printed option. A condition
+        may refer to a datum defined above/below, but that direction must belong
+        to its complete definition-reference frame, not the selected object.
+        This proves scope only; it never supplies multiple or single cardinality
+        and never changes the accepted answer names.
+        """
+        names = []
+        for option in options:
+            printed = option_text(option)
+            names.append((printed, printed))
+            # The instruction can cite the option before its printed skip
+            # qualifier. Its answer value still includes that exact qualifier.
+            skip = re.fullmatch(r'(.+?)\s+\(skip\s+to\s+[^()]+\)', printed, re.I)
+            if skip:
+                names.append((skip[1], printed))
+        def condition_scope(condition):
+            refs = list(re.finditer(r'as\s+defined\s+in\s+(?:[‘“\'"][^‘’“”\'"\r\n]+[’”\'"]|'
+                                   r'[\w -]+?)\s+(?P<direction>above|below)\b', condition, re.I))
+            return all(any(match.span() == ref.span('direction') for ref in refs)
+                       for match in WIDER_REACH.finditer(condition))
+        selected = []
+        for _, text in entries:
+            clauses = self.named_instruction_clauses(text)
+            if clauses is None:
+                return None
+            for clause in clauses:
+                verbs = list(re.finditer(r'\b' + _TICK_VERB + r'\b', clause, re.I))
+                if not verbs:
+                    if WIDER_REACH.search(clause) or limit_language(clause):
+                        return None
+                    continue
+                if len(verbs) != 1:
+                    return None
+                verb = verbs[0]; prefix = clause[:verb.start()].strip()
+                if prefix.casefold() not in ('', 'please'):
+                    leading = re.fullmatch(r'(?:if|when)\s+(.+),\s*(?:please\s*)?', prefix, re.I)
+                    if not leading or not condition_scope(leading[1]):
+                        return None
+                argument = clause[verb.end():].strip()
+                quoted = re.match(r'([‘“\'\"])(.+?)([’”\'\"])(?=\s|$)', argument)
+                if quoted:
+                    matching_quote = {'‘': '’', '“': '”', "'": "'", '"': '"'}[quoted[1]]
+                    if quoted[3] != matching_quote:
+                        return None
+                    cited = quoted[2].removesuffix('.')
+                    matches = [(name, printed) for name, printed in names if name.casefold() == cited.casefold()]
+                    tail = argument[quoted.end():].strip()
+                else:
+                    matches = [(name, printed) for name, printed in names
+                               if re.match(re.escape(name) + r'(?=\s|$)', argument, re.I)]
+                    longest = max((len(name) for name, _ in matches), default=0)
+                    matches = [(name, printed) for name, printed in matches if len(name) == longest]
+                    tail = argument[longest:].strip()
+                if len(matches) != 1:
+                    return None
+                if tail:
+                    trailing = re.fullmatch(r'(?:if|when)\s+(.+)', tail, re.I)
+                    if not trailing or not condition_scope(trailing[1]):
+                        return None
+                selected.append(matches[0][1])
+        return selected if selected and set(selected) == set(options) else None
+
     def named_selection_source(self, question, own, options):
         owners, instructions = self.named_guidance_index()
         caption = self.named_caption(question);entries = instructions.get(caption, [])
@@ -5072,6 +5175,10 @@ class Detector:
         if any(self.checkbox_source_action(clause, governing=True) for clause in clauses):
             return {'problem': 'This exact named instruction appoints a human signing or author action; ordinary clinical answers cannot perform it.', 'human': True, 'source_slots': candidates + [slot for slot, _ in entries]}
         if any(WIDER_REACH.search(text) for _, text in entries):
+            local_objects = self.named_local_object_scope(entries, options)
+            if local_objects:
+                return {'commands': [], 'owner': candidates[0], 'entries': entries,
+                        'selected_objects': local_objects}
             return {'problem': 'The named instruction states a wider or referenced scope; its reach remains unresolved.',
                     'source_slots': candidates + [slot for slot, _ in entries]}
         many, unresolved, commands = False, False, []
@@ -5773,6 +5880,8 @@ class Detector:
                     'instructions': [text for _, text in named['entries']],
                     'sources': [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
                                 for p in dict.fromkeys([named['owner'], *g['paras'], *[slot for slot, _ in named['entries']]])]})
+                if named.get('selected_objects'):
+                    area.source_questions[-1]['selected_objects'] = named['selected_objects']
             branches = [branch for unit in units for branch in [self.option_branch_source(unit)]
                         if branch and branch['qualified']]
             if branches:
