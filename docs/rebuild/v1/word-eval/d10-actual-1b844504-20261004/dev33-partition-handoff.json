@@ -1,0 +1,143 @@
+{
+  "status": "Prepared, no DEV original evaluation before root coherent clinical freeze",
+  "sealed_adapter": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/acceptance-application-adapter-seal-v2-20261004.json",
+  "sealed_adapter_sha256": "6b4c6e58aa119874d25a0332cd038b201f99ea46d16a3f78c182ca5622e749ab",
+  "requirements": [
+    "Root exact clean coherent integrated clinical candidate freeze",
+    "Exclusive serialized QA/DB/renderer slot per batch",
+    "Separate prospective taskDB/socket/output identities",
+    "Existing protectedQA wrapper and authorized same-source layout adapter",
+    "No original/fieldcatalogue transmitted to any provider"
+  ],
+  "source_freeze_fields": {
+    "frozen_for_word_acceptance": true,
+    "source_commit": "<full-final-commit>",
+    "thresholds": {
+      "overall_required": 54,
+      "overall_denominator": 60,
+      "holdout_required": 18,
+      "holdout_denominator": 20,
+      "family_fraction": 0.75
+    },
+    "provider_calls": 0
+  },
+  "partitions": [
+    [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    [
+      "D04",
+      "D05",
+      "D07"
+    ],
+    [
+      "D08",
+      "D09",
+      "D10"
+    ],
+    [
+      "D11",
+      "D12",
+      "D13"
+    ],
+    [
+      "D14",
+      "D15",
+      "D16"
+    ],
+    [
+      "D17",
+      "D18",
+      "D21"
+    ],
+    [
+      "D22",
+      "D26",
+      "D27"
+    ],
+    [
+      "D28",
+      "D29",
+      "D30"
+    ],
+    [
+      "D31",
+      "D33",
+      "D34"
+    ],
+    [
+      "D35",
+      "D36",
+      "D37"
+    ],
+    [
+      "D38",
+      "D39",
+      "D40"
+    ]
+  ],
+  "batch_command": [
+    "python3",
+    "-B",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_dev_application_gate.py",
+    "<clean-readonly-root-source>",
+    "<full-final-commit>",
+    "--freeze",
+    "<root-owned-freeze.json>",
+    "--ids",
+    "<one-listed-partition>"
+  ],
+  "consolidation_command": [
+    "python3",
+    "-B",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/consolidate_original_word_gate.py",
+    "<clean-final-root-source>",
+    "<full-final-commit>",
+    "--freeze",
+    "<root-owned-freeze.json>",
+    "--batch",
+    "<each-disjoint-batch-directory>",
+    "--output",
+    "<new-original60-report.json>"
+  ],
+  "batch_global_bound_seconds": 1200,
+  "application_child_bound_seconds": 900,
+  "maximum_documents_per_partition": 3,
+  "maximum_total_global_bounds_seconds": 13200,
+  "normal_scheduler_sequence": "One authorized disjoint DEV partition, verify exit/DBcatalogabsence/renderer/socket/source teardown and release slot; owner may alternate separate provider campaigns; next DEV partition on same frozen revision",
+  "automatic_first_pass": "Unchanged initial mapping scored against immutable originalGT before any coverage confirmation. No manual mapping corrections. Profile and clinicalmanualreview does not become modelgeneration correctness.",
+  "fixed_scores_separate_from_supplemental_checks": true,
+  "providers": 0,
+  "generation_qualification": "Fixed mechanical answer profiles only, no clinicalfirstgeneration usefulness claim",
+  "archive_before_fidelity_assertions": true,
+  "fixed_denominators": {
+    "development": 40,
+    "eligible_development": 33,
+    "held_development": 7,
+    "overall": 60,
+    "overall_required": 54,
+    "holdout": 20,
+    "holdout_required": 18,
+    "family_fraction": 0.75,
+    "overall_upper_bound_if_all_eligible_plus_holdout_pass": 53
+  },
+  "rightsheld_ids": [
+    "D06",
+    "D19",
+    "D20",
+    "D23",
+    "D24",
+    "D25",
+    "D32"
+  ],
+  "held_members_in_denominator": true,
+  "holdout_evaluation": "Not part of thisDEVadapter; no opening/evaluation before qualifiedfreeze and explicit owner scheduling",
+  "new_unseen_claim": false,
+  "nativeWord": "unverified",
+  "D10_latest_automatic_strict": false,
+  "D10_manual_recovery_counted_asautomatic": false,
+  "D10_actual_export_sha256": "52b9ff085392b3bac348225f86a094164ef8801d785c7a2bd39fb3d0cde50c90",
+  "public_or_realpatient_installation": false
+}
