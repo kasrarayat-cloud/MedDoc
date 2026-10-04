@@ -49,7 +49,7 @@ class CIGatePartitions(unittest.TestCase):
             'documents.test_source_policy', 'documents.test_layout_verification', 'documents.test_layout_containment', 'documents.test_guidance_preservation', 'documents.test_checkbox_history', 'documents.test_structural_columns',
             'documents.test_destination_roles', 'documents.test_import_selection', 'documents.test_source_coverage',
             'documents.test_destination_regressions', 'documents.test_paragraph_option_recovery',
-            'documents.test_ruled_paragraph_recovery'])
+            'documents.test_ruled_paragraph_recovery', 'documents.test_numeric_part_recovery'])
         self.assertEqual(support[0][-1], '-v')
         self.assertEqual(support[1], ['-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_*.py', '-v'])
 

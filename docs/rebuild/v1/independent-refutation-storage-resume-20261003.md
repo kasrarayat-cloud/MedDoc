@@ -132,3 +132,25 @@ database was used by either root packet.
 - `root-soap-speaker-refutation-1ce41adf30aa/result.json`: `1c584d086c9e00a4da1ae76cc27e126bb65c68de982f1a17710fcbcdf415f3a7`
 - `root-numeric-signing-refutation-2d40c73c/result.json`: `208782c3604b890a22b6bc85da46e803a18121fa746d7194e3e858a120d4e544`
 - `root-numeric-explicit-witness-refutation-2d40c73c/result.json`: `5632f19a466972a98e38cb64707253ec7d35eb270dc13e88b1d39ce69f1aae1b`
+
+## Verified corrective integration — 2026-10-04
+
+The finished caedf1d4 clinical correction passes the unchanged 21-control
+document-status packet and 45-control SOAP speaker packet, with zero wrong
+releases and zero false holds in these controls. The questioned `Yes?` gap was
+already present at c628; the foreign-person scope reset was introduced by 1ce.
+Both original failures and that baseline distinction remain recorded.
+
+The finished 27e3bbc3 Word correction passes 128 retained signing/ordinary
+physical controls and all 16 explicit witness-act controls. Both original
+whole-band and new manual part writers refuse the human-owned witness band.
+These scoped safety results are separate from whole-document acceptance. The
+initial source-check race ran before worktree checkout completed, imported no
+application code and is retained as an instrument failure; the completed-source
+packet is the evidence. The full support selector now includes the new numeric
+module, with the independently maintained selector contract updated as well.
+
+- `root-document-status-refutation-caedf1d4/result.json`: `32558acabf89018d411659fe7db863764f19cc80c9fcfe7b26bb8e718340d3a9`
+- `root-soap-speaker-refutation-caedf1d4f59a/result.json`: `7890891d382823ee3e94dc711e97253a095882aaf1cc64c5b8250ece06a63fb3`
+- `root-numeric-signing-refutation-27e3bbc3-source-complete/result.json`: `99b4cae763962b2528731f0767d8afaeef01b318ede8213332ddc72ed442c54e`
+- `root-numeric-explicit-witness-refutation-27e3bbc3/result.json`: `3ee2a9a46fb78755a7ab044b45f102d0cf550c297320a79cec22324f89fa1df5`
