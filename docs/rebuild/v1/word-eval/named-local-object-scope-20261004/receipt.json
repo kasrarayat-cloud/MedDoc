@@ -1,0 +1,453 @@
+{
+  "source": "7dc6800d948eddadba8dcf41eb0518eaee623c11",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-named-single-scope-20261004",
+  "source_word_sha256": "ab94c43133a4dfc6e19d92d750f3208a63cceebba386377d7092bfa354dd8d2c",
+  "seal_sha256": "a52b71956dbb653c4f4551bea83f34a0c652da09a1d5244ecc81ec75deb87bbc",
+  "finished_original_proof": {
+    "source_commit": "7dc6800d948eddadba8dcf41eb0518eaee623c11",
+    "source_clean": true,
+    "word_sha256": "ab94c43133a4dfc6e19d92d750f3208a63cceebba386377d7092bfa354dd8d2c",
+    "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+    "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+    "mapping_sha256": "88f0475281ce5b02997c44d003b4d6034cb96710a14d1639748a7eeed04c58e9",
+    "export_sha256": "a2c0fe1c93d5852b3a80265c58a727ac3e82817489dfa45fbc74684d38edbc40",
+    "field": {
+      "key": "v3_6",
+      "label": "1. Delivered:",
+      "kind": "choice",
+      "context": "Required items > Select \u2018Yes\u2019 if the participant received the minimum amount of the intervention considered to be confounding, as defined in \u2018Quantity\u2019 above. If a participant received the potentially confounding non-study treatment, but the quantity cannot be reliably determined because of missing or incomplete information, select \u2018Yes.\u2019 Select \u2018No\u2019 when there is an absence of evidence that a participant received the potentially confounding non-study treatment (e.g., there is no mention of it in the medical record and the participant/family report having not received it). Select \u2018unknown\u2019 when a participant\u2019s treatment history cannot be accessed (e.g., medical records are unavailable and the participant/family cannot be interviewed).",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[1]/ff[0]",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[1]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[2]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[3]/ff[0]"
+            }
+          ]
+        },
+        "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016",
+        "extra": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[2]/ff[0]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          },
+          {
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[3]/ff[0]",
+            "fingerprint": "98dbf7bf3108830a7c8e0eafae6649e33692ce79c803705785f938d6da505016"
+          }
+        ]
+      },
+      "options": [
+        "Yes",
+        "No (skip to #12)",
+        "Unknown (skip to end)"
+      ],
+      "source_questions": [
+        {
+          "relation": "nested_cell_options",
+          "sources": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]",
+              "fingerprint": "58fa4766f73b45e5e2d9b7b627dcf0e7a854990c2ba1c57e4c50d7767ef4fb90"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]",
+              "fingerprint": "75d99d75e84d5f9aa15204786d92a16000f7d56dec921d80107383d8693dc0a1"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+              "fingerprint": "e82a033aa2b593299b5619bf5e46eac9425c9fe96dfad7244c674eccb74ad8dd"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/p[1]",
+              "fingerprint": "bf92850e3eea4813079318edd54e067dd7d26da6324f96e9d4a13b00cd29ad18"
+            }
+          ]
+        },
+        {
+          "relation": "named_selection_instruction",
+          "question": "1. Delivered:",
+          "context": "Required items > Select \u2018Yes\u2019 if the participant received the minimum amount of the intervention considered to be confounding, as defined in \u2018Quantity\u2019 above. If a participant received the potentially confounding non-study treatment, but the quantity cannot be reliably determined because of missing or incomplete information, select \u2018Yes.\u2019 Select \u2018No\u2019 when there is an absence of evidence that a participant received the potentially confounding non-study treatment (e.g., there is no mention of it in the medical record and the participant/family report having not received it). Select \u2018unknown\u2019 when a participant\u2019s treatment history cannot be accessed (e.g., medical records are unavailable and the participant/family cannot be interviewed).",
+          "options": [
+            "Yes",
+            "No (skip to #12)",
+            "Unknown (skip to end)"
+          ],
+          "cardinality": "choice",
+          "instructions": [
+            "Select \u2018Yes\u2019 if the participant received the minimum amount of the intervention considered to be confounding, as defined in \u2018Quantity\u2019 above. If a participant received the potentially confounding non-study treatment, but the quantity cannot be reliably determined because of missing or incomplete information, select \u2018Yes.\u2019 Select \u2018No\u2019 when there is an absence of evidence that a participant received the potentially confounding non-study treatment (e.g., there is no mention of it in the medical record and the participant/family report having not received it). Select \u2018unknown\u2019 when a participant\u2019s treatment history cannot be accessed (e.g., medical records are unavailable and the participant/family cannot be interviewed)."
+          ],
+          "sources": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]",
+              "fingerprint": "e82a033aa2b593299b5619bf5e46eac9425c9fe96dfad7244c674eccb74ad8dd"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[1]",
+              "fingerprint": "3ffd1cbcae023adceed97f0b61c1aa804726a3bec1ce4e917013dcf88a170c8e"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[2]",
+              "fingerprint": "23dda0e550d410b81c929bd7f4bb03248f38aabedc94ca2cfb8723d52ea3317a"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[3]",
+              "fingerprint": "f4c5b5fbdefbd7492cec7b4c3a90c36ba875bcc5ebfe9852644c1092800927d6"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[21]",
+              "fingerprint": "81fefb0072de29d9e0799cf65d7c45f5b2c2bca8f328421b0e7329ff4beb39ae"
+            }
+          ],
+          "selected_objects": [
+            "Yes",
+            "Yes",
+            "No (skip to #12)",
+            "Unknown (skip to end)"
+          ]
+        }
+      ]
+    },
+    "native_checkbox_states": [
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[1]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[2]/ff[0]",
+        "before": false,
+        "after": true
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[0]/p[3]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[1]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[2]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[3]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[4]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[1]/tc[0]/p[1]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[1]/tc[1]/p[1]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[3]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[4]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[5]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[6]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/ff[7]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[3]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[3]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[0]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[1]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[2]",
+        "before": false,
+        "after": false
+      },
+      {
+        "slot": "word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[2]/ff[0]",
+        "before": false,
+        "after": false
+      }
+    ],
+    "untargeted_paragraphs_identical": 109,
+    "all_printed_paragraph_text_unchanged": true,
+    "all_other_raw_parts_identical": true,
+    "empty_export_raw_identity": true,
+    "bare_No_alias_refused": "The answer is not one of the printed options.",
+    "automatic_source_only": {
+      "n": 28,
+      "ok": 25,
+      "missed": 3,
+      "wrong": 0,
+      "extras": 4,
+      "strict": false
+    },
+    "remaining_misses": [
+      "A26",
+      "A27",
+      "A28"
+    ],
+    "whole_document_qualification": false,
+    "database": 0,
+    "provider": 0,
+    "renderer": 0
+  },
+  "actual_runs": {
+    "before-f76-launch": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-single-scope-20261004/capture_before.py"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 5.834708900001715,
+      "timeout": false,
+      "reaped": true,
+      "pid": 2922544,
+      "database": 0,
+      "renderer": 0,
+      "provider": 0
+    },
+    "focused-clean": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_named_single_scope",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 14.067911664998974,
+      "timeout": false,
+      "reaped": true,
+      "pid": 2951293,
+      "database": 0,
+      "renderer": 0,
+      "provider": 0
+    },
+    "focused-v1": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_named_single_scope",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 36.958252951997565,
+      "timeout": false,
+      "reaped": true,
+      "pid": 2938401,
+      "database": 0,
+      "renderer": 0,
+      "provider": 0
+    },
+    "original-d07-proof-launch": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-single-scope-20261004/original_d07_proof.py"
+      ],
+      "actual_exit": 1,
+      "elapsed_s": 5.287011512002209,
+      "timeout": false,
+      "reaped": true,
+      "pid": 2953221,
+      "database": 0,
+      "renderer": 0,
+      "provider": 0
+    },
+    "original-d07-proof-v2-launch": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-single-scope-20261004/original_d07_proof_v2.py"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 9.198822450998705,
+      "timeout": false,
+      "reaped": true,
+      "pid": 2955544,
+      "database": 0,
+      "renderer": 0,
+      "provider": 0
+    }
+  },
+  "whole_gate_pass": false,
+  "owner_cleanup_bytes": 0,
+  "active_owned_children": false
+}
