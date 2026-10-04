@@ -59,3 +59,27 @@ any financial accepted-pin renewal. A revised frozen repair must retain the
 complete positive while refusing these two omissions. The 7d95 financial
 transfer prepared literals remain unexecuted and preserved separately; they
 must be rebound to the revised source before any actual financial witness.
+
+## Final revised source outcome
+
+The author froze the corrected source at
+`e23857b6620a7f23722f1a19b78c47ea0afc1d73`. The exact same independent
+12-case packet, now expecting both demonstrated omissions to be refused,
+exits 0 in 16.88 seconds. Both partial answers are conflict/blank at validation
+and on the current page; forced stale finalization refuses both. The full
+positive retains its two original quotes, exact offsets and 114 characters.
+All eight other person/time/source controls still refuse. Every tracked file
+byte, rather than only the application modules, was hashed before and after;
+all remain identical and zero connection attempts occur. Nothing further was
+found within this finite distinct lens.
+
+The final originals remain beside the earlier failures, never replacing them:
+`final-result.json` SHA256
+`5582f3c1f8fc252cac7bafc731ab66d90e657cfc2f6a991fc2a027d7920dae3b`,
+`final-process.json` SHA256
+`9a37cbad2d4d1830032132274e1271f985f9bc67dc4717b03d6f652a38e006c5`,
+and `final.log` SHA256
+`a32a4235868472db9f5c054c7cc6da9416c4bf0672743e223e939ec2938796de`.
+The separate [genuine financial reconstruction](FINANCIAL-N01-RENEWAL-20261004.md)
+was rebound to this final source and completed before the root approved its
+two explicit accepted-pin replacements.
