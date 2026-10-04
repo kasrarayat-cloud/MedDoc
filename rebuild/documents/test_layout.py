@@ -156,6 +156,24 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
             changed = [n for n in a.namelist() if n != 'word/document.xml' and a.read(n) != b.read(n)]
             self.assertEqual(changed, [], '%s: %s' % (source.name, changed))
 
+    def test_original_archive_comment_is_retained_on_changed_exports(self):
+        for number, comment in enumerate((b'', b'Original customer archive comment', b'\x00\xff\x80')):
+            with self.subTest(comment=comment):
+                target = self.work / ('archive-comment-%d.docx' % number)
+                with zipfile.ZipFile(ORIGINAL) as original, zipfile.ZipFile(target, 'w') as output:
+                    output.comment = comment
+                    for item in original.infolist():
+                        output.writestr(item, original.read(item.filename))
+                before = target.read_bytes()
+                self.assertEqual(layout.repair_export(target), {'tables': 1, 'heading_rows': 2})
+                with zipfile.ZipFile(target) as exported:
+                    self.assertEqual(exported.comment, comment)
+                # Re-entering the corrected export is a byte-identical no-op.
+                corrected = target.read_bytes()
+                layout.repair_export(target)
+                self.assertEqual(target.read_bytes(), corrected)
+                self.assertNotEqual(before, corrected)
+
     def test_the_uploaded_original_on_disk_is_never_modified(self):
         """The repair runs on the EXPORT. The customer's original keeps its own bytes and its own hash."""
         import hashlib

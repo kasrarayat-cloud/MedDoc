@@ -181,11 +181,13 @@ def repair_export(path):
             return {'tables': 0, 'heading_rows': 0}
         original = archive.read(DOCUMENT).decode('utf-8')
         entries = [(info, archive.read(info.filename)) for info in archive.infolist()]
+        comment = archive.comment
     repaired, summary = apply_table_continuation(original)
     if repaired == original:
         return summary
     temporary = path.with_name(path.name + '.layout')
     with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED) as out:
+        out.comment = comment
         for info, payload in entries:
             out.writestr(info, repaired.encode('utf-8') if info.filename == DOCUMENT else payload)
     shutil.move(str(temporary), str(path))
