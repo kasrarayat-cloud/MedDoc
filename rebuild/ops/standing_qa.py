@@ -185,10 +185,12 @@ MAX_DEADLINE_SECONDS = 600
 #: Which stage runner a stage uses ('model_check': sonnet5_qa.run_model_check; transcription:
 #: standing_qa_transcription.TranscriptionRun; the others: sonnet5_stages.Run).
 STAGE_KIND = {'model_check': 'model_check', 'mapping': 'mapping', 'notes_comparison': 'ordinary_notes',
+              'notes_qualification': 'ordinary_notes',
               'd30_d31_structure': 'ordinary_notes', 'transcription': 'transcription', 'ordinary_batch': 'ordinary_batch'}
 #: The pricing keys each stage's sends are priced under (every one must be declared for a declared stage).
 STAGE_PRICING = {'model_check': ('model_check',), 'mapping': ('mapping',),
                  'notes_comparison': ('ordinary_notes', 'ordinary_notes_field_relations'),
+                 'notes_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'd30_d31_structure': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'transcription': ('transcription',), 'ordinary_batch': ('ordinary_notes', 'ordinary_notes_field_relations')}
 _ALL_OFF = {'QUILLMD_WM_NARRATIVE': '0', 'QUILLMD_V3_HISTORY_CONTEXT': '0', 'QUILLMD_V3_GENERATION_BATCHES': '0',
@@ -202,6 +204,7 @@ STAGE_FLAGS = {'model_check': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'legacy'},
                'mapping': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_MAPPING_ASSISTANCE': '1',
                            'QUILLMD_MAPPING_ASSISTANCE_LIVE': '1'},
                'notes_comparison': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'notes_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'd30_d31_structure': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'ordinary_batch': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'transcription': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_DEEPGRAM_MIP_OPT_OUT': 'true',
@@ -225,6 +228,10 @@ FLAG_SETTINGS = {'QUILLMD_WM_NARRATIVE': ('WM_NARRATIVE', bool), 'QUILLMD_V3_HIS
 MODEL_CHECK_SEND = 'model_check:fixed-case'
 #: The 14 frozen notes cases with a default send (cases.json), each sent on BOTH requests.
 NOTES_COMPARISON_CASES = 14
+# This separate prospective stage always measures the complete qualified arm.
+# It never narrows the historical comparison or accepts an arbitrary case list.
+NOTES_QUALIFICATION_CASE_IDS = tuple(f'N{i:02d}' for i in range(1, 14)) + ('N16',)
+NOTES_REVIEW_STAGES = ('notes_comparison', 'notes_qualification')
 #: Why the D30/D31-structure stage has no plan yet (it refuses rather than guess one).
 D30_D31_NOT_ESTABLISHED = (
     'not established: no frozen, provider-safe synthetic D30/D31-structure input set exists. The D30/D31 whole-app '
@@ -883,8 +890,12 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
             from . import standing_qa_notes_review as nr
         except ImportError:
             import standing_qa_notes_review as nr
-        require(notes_review == nr.MANIFEST_SHA256 and 'notes_comparison' in ids,
-                'The explicit notes mapping review requires its frozen hash and notes_comparison stage.')
+        require(notes_review == nr.MANIFEST_SHA256 and any(stage in ids for stage in NOTES_REVIEW_STAGES),
+                'The explicit notes mapping review requires its frozen hash and a notes stage.')
+    if 'notes_qualification' in ids:
+        require(notes_review, 'The qualified-only stage requires the exact prospective notes mapping review.')
+        require(next(stage.sends for stage in stages if stage.id == 'notes_qualification') == 14,
+                'The qualified-only stage declares all fourteen frozen cases.')
     if transcription is not None and transcription.notes_contract != 'default':
         key = TRANSCRIPTION_NOTES_CONTRACTS[transcription.notes_contract]
         require(key in names, f'Stage transcription has no declared pricing version for {key} (its notes contract).')
@@ -1107,6 +1118,15 @@ def standing_plan(stage, inputs=None):
         return sends
     if stage == 'mapping':
         return stages.plan_sends('mapping', inputs)
+    if stage == 'notes_qualification':
+        compared = standing_plan('notes_comparison', inputs)
+        qualified = [send for send in compared if send.path == 'field_relations']
+        require(tuple(send.case for send in qualified) == NOTES_QUALIFICATION_CASE_IDS
+                and len({send.id for send in qualified}) == 14
+                and all(send.kind == 'generation' and send.pricing_key == 'ordinary_notes_field_relations'
+                        for send in qualified),
+                'The qualified-only stage requires the complete unchanged fourteen-case qualified arm.')
+        return [dataclasses.replace(send, index=index) for index, send in enumerate(qualified, 1)]
     if stage == 'notes_comparison':
         cases = sorted(inputs['cases']['cases'], key=lambda case: case['id'])
         compared = [case for case in cases if 'default' in case['send_paths']]
@@ -1161,7 +1181,7 @@ def stage_inputs(stage, declaration):
     if stage == 'ordinary_batch':
         return batch_module().frozen_inputs()
     inputs = sq.stages_module().frozen_inputs()
-    if stage == 'notes_comparison' and declaration.notes_mapping_review:
+    if stage in NOTES_REVIEW_STAGES and declaration.notes_mapping_review:
         try:
             from . import standing_qa_notes_review as nr
         except ImportError:
@@ -1373,7 +1393,7 @@ class StandingLedger(pc.Ledger):
                 'The attempt\'s form is not one of the synthetic inputs its run allows.')
         require(form not in set(run['restricted_inputs']),
                 'The attempt\'s form is a development original marked "no provider upload"; it is never sent.')
-        if attempt['stage'] == 'notes_comparison':
+        if attempt['stage'] in NOTES_REVIEW_STAGES:
             require(attempt.get('notes_mapping_review_manifest_sha256', '') == declaration.notes_mapping_review,
                     'The attempt does not bind the prospectively declared notes mapping review.')
         if attempt['stage'] == 'transcription' or 'audio_sha256' in attempt:
@@ -1471,7 +1491,7 @@ class StandingCampaign(pc.Campaign):
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         self.require_pinned_terms(rows)
         signing_identity(self)
-        if stage.id == 'notes_comparison':
+        if stage.id in NOTES_REVIEW_STAGES:
             require(all(a.get('notes_mapping_review_manifest_sha256', '') == self.declaration.notes_mapping_review
                         for a, _ in rows if a.get('stage') == stage.id),
                     'An edited declaration never changes an earlier notes mapping review.')
@@ -2026,6 +2046,32 @@ def cancel_queued(world):
         return {'error': f'{type(error).__name__}: {error}'[:300]}
 
 
+def qualification_result(stage, record, stops):
+    """A prospective qualification cannot inherit historical unsafe veto behavior.
+
+    The original worker classification stays immutable in its evidence file.
+    The new run's record explicitly distinguishes its stricter stop policy.
+    Historical stages return the exact original object and stop decision.
+    """
+    if stage != 'notes_qualification' or stops:
+        return record, stops
+    verdict = record.get('verdict')
+    require(isinstance(verdict, dict) and isinstance(verdict.get('unsafe'), list)
+            and isinstance(verdict.get('contract'), list) and isinstance(verdict.get('fields'), dict),
+            'A qualified result has no complete unsafe classification; no further send is eligible.')
+    require(verdict == pc.classify_case(verdict['fields'], verdict['unsafe'] + verdict['contract']),
+            'A qualified result differs from its full frozen classification; no further send is eligible.')
+    require(not verdict['contract'],
+            'A qualified contract failure cannot be returned as a non-stopping result.')
+    if not verdict['unsafe'] and verdict.get('verdict') != 'unsafe':
+        return record, stops
+    return {**record, 'stops_stage': True, 'recorded_as': 'qualification_unsafe',
+            'qualification_policy': {'contract': 'standing-qualified-notes-v1',
+                'worker_stops_stage': record.get('stops_stage'),
+                'worker_recorded_as': record.get('recorded_as'),
+                'reason': 'An unsafe qualified answer stops this prospective stage.'}}, True
+
+
 def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=None, rebuild=REBUILD,
               database_prefix=sq.DATABASE_PREFIX, transcription_secret=None):
     """One bounded run of a mapping, notes or transcription stage, through the historical per-send machinery
@@ -2070,6 +2116,8 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     require_none_stranded(stage, remaining)                 # (before anything is written: the historical rule)
     cap = limits.max_sends_per_run if max_sends is None else min(int(max_sends), limits.max_sends_per_run)
     require(cap > 0, 'A run makes at least one send.')
+    if stage == 'notes_qualification':
+        cap = min(cap, 1)  # Inspect each qualified result before any following request.
     selected = select_batch(remaining, cap)
     run = begin_run(campaign, stage, selected, inputs, cap, provenance)
     try:
@@ -2128,9 +2176,18 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
         if done is None:
             continue
         record, stops = done
+        qualified, stops = qualification_result(stage, record, stops)
+        if qualified is not record:
+            require(worker.sends and worker.sends[-1] is record,
+                    'The qualified worker result does not match its retained send record.')
+            worker.sends[-1] = qualified
+            record = qualified
         if stops:
             worker.stopped = {'send': send.id, 'attempt': record.get('attempt'), 'findings': record.get('findings')}
-            reasons.append(f'{send.id}: ' + '; '.join(f['why'] for f in record.get('findings') or []))
+            reason = '; '.join(f['why'] for f in record.get('findings') or [])
+            if record.get('qualification_policy'):
+                reason = record['qualification_policy']['reason'] + (' ' + reason if reason else '')
+            reasons.append(f'{send.id}: ' + reason)
     base = {'settled_before_start': settled, 'stale_jobs_cancelled': stale}
     if stage == 'ordinary_batch' and (halted or reasons or worker.stopped):
         base['batch_abort'] = worker.abort_remaining('The supplemental run halted or failed; no child is resent.')
@@ -2262,7 +2319,7 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
         for name, entry in definitions.items():
             if not entry.get('established'):
                 continue
-            if name == 'ordinary_batch' and not any(s.id == name for s in declaration.stages):
+            if name in ('ordinary_batch', 'notes_qualification') and not any(s.id == name for s in declaration.stages):
                 entry['declared'] = False
                 continue
             if name == 'transcription':
@@ -2290,7 +2347,11 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                         'sha256': TRANSCRIPTION_FORM_HASHES[transcription_form_id(audio_id, declaration.transcription.forms)]}
                         for audio_id in declaration.transcription.inputs]
             else:
-                sends = standing_plan(name, stage_inputs(name, declaration) if name == 'ordinary_batch' else inputs)
+                own_inputs = (stage_inputs(name, declaration)
+                              if name in ('ordinary_batch', 'notes_qualification') else inputs)
+                sends = standing_plan(name, own_inputs)
+                if name == 'notes_qualification':
+                    entry['notes_mapping_review_manifest_sha256'] = own_inputs['notes_mapping_review_manifest_sha256']
             left = remaining_sends(campaign, name, sends)
             entry['remaining'] = [send.id for send in left]
             entry['stranded'] = [send.id for send in stranded(left)]         # (never sent here: the stage cannot pass)
@@ -2702,7 +2763,8 @@ def priced_plan(stage=None, path=None):
                                 for send_id, value in planned.items()}
                 continue
             with override_settings(**expected_settings(name)):
-                own_inputs = stage_inputs(name, declaration) if name == 'ordinary_batch' else inputs
+                own_inputs = (stage_inputs(name, declaration)
+                              if name in ('ordinary_batch', 'notes_qualification') else inputs)
                 priced = price_sends(name, standing_plan(name, own_inputs), own_inputs, Path(scratch) / name, declaration)
             report[name] = {send_id: {k: (format(v, 'f') if isinstance(v, Decimal) else v) for k, v in row.items()}
                             for send_id, row in priced.items()}

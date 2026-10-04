@@ -1,0 +1,185 @@
+{
+  "artifact_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/qualification4-implementation-f09fcb1b",
+  "manifest_sha256": "3ba9120e27ad1f78ed930b61466eb307ede73fad5c173f595e1c598006602ede",
+  "manifest": {
+    "writer": "/opt/meddoc-pro/.worktrees/v1-clinical-qualification4-f09fcb1b",
+    "base_commit": "f09fcb1b8a2709a0d5790a210c95d8d9c3b50ecf",
+    "source": [
+      {
+        "path": "rebuild/ops/standing_qa.py",
+        "sha256": "54dc4c73fd42e28d212b3196893cd040741240f6f9619527f079127a06c80ff7",
+        "bytes": 181067
+      },
+      {
+        "path": "rebuild/ops/tests/test_standing_qa_qualification.py",
+        "sha256": "c2507bb08cf3fa1ff8ae60e87515e08c0997d029a176487cddf63d3f4761d224",
+        "bytes": 19651
+      },
+      {
+        "path": "docs/foundation/mutations/20261004-quillmd-v1-standing-api-testing-4.md",
+        "sha256": "e72cf9f54a5f692f9b8dbdcda05b5831f017cf083fb2ad562168bd9bce138687",
+        "bytes": 22057
+      }
+    ],
+    "unchanged": [
+      {
+        "path": "docs/foundation/mutations/20261001-quillmd-v1-standing-api-testing-2.md",
+        "sha256": "aad9f8b5acad6a97917240af31c5443a8a2316db917dd9724f20483ba3326c9a",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261001-quillmd-v1-standing-api-testing.TEMPLATE.md",
+        "sha256": "620cb30db61379d9731af09f6604a0ee11344998030820dc31f994386cd28c29",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261001-quillmd-v1-standing-api-testing.md",
+        "sha256": "1516489cc05b238c8c2b1df618c564a74e70e61a19983dc8cc6845f46fd81b33",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261002-quillmd-v1-standing-api-testing-2.md",
+        "sha256": "5ece5c88809f64ee59ef5b64b45ceca93d4f1d851d46cb82d2e2be9a8860e096",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261002-quillmd-v1-standing-api-testing-3.md",
+        "sha256": "197898b8d15bb4af989095ca0d97536e3b4df4fc2dac90506b3c27d4ec3a4d4b",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261002-quillmd-v1-standing-api-testing-4.md",
+        "sha256": "ae38566b185b3586c57dad19a8e0eb75fc5791c3f18527af0576481c2da197da",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261002-quillmd-v1-standing-api-testing.md",
+        "sha256": "393999e846aa8c08588f84c5f58288209dc30d69525ad69f99bbd1da2592f2ac",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261003-quillmd-v1-standing-api-testing.md",
+        "sha256": "7f6aafea3a4f1d991dad185685525279f48d9cfbf2598778d7b023bcaa3b4440",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261004-quillmd-v1-standing-api-testing-2.md",
+        "sha256": "52b6c5a4a6ceee357759500fc21ef529476e88d365e336f0f79c05662b44d172",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261004-quillmd-v1-standing-api-testing-3.md",
+        "sha256": "334c49aa621d071bfbe20f502cdc7f4c7e11c25a67736a7358d082a96ba40469",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/foundation/mutations/20261004-quillmd-v1-standing-api-testing.md",
+        "sha256": "280f840835ee0ed1c581656e697078d6a2d231f6b197f1d02414f742d277c3af",
+        "base_byte_equal": true
+      },
+      {
+        "path": "rebuild/ops/sonnet5_stages.py",
+        "sha256": "3147cfdeec40d0972b52bcda65c1633545b477faa17f403ec4f9ebb6f165617d",
+        "base_byte_equal": true
+      },
+      {
+        "path": "rebuild/ops/tests/test_sonnet5_stages_plain.py",
+        "sha256": "4c5ca9805fd110a4f4d5e0f1eb7083f3d21f72391d9bfc885cc8990b4a55f80a",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/rebuild/v1/sonnet5-campaign/diagnostics/FREEZE.json",
+        "sha256": "20536f6a31e2345771c7947f3e12af2894bd4485a7e61e6abd9bfa8460df1c5c",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/cases.json",
+        "sha256": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+        "base_byte_equal": true
+      },
+      {
+        "path": "docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/app_path_steps.py",
+        "sha256": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+        "base_byte_equal": true
+      },
+      {
+        "path": "rebuild/ops/standing_qa_notes_review.py",
+        "sha256": "21a57ee9eb3566c05b4939a68f5b479e4864d6051b451ff05191cbd1e047d82b",
+        "base_byte_equal": true
+      },
+      {
+        "path": "rebuild/ops/standing_qa_voice_review.py",
+        "sha256": "8f236bb78b2ffe61b9c35cf94b3e169bdece08abab5a182083ebbfed3846c27c",
+        "base_byte_equal": true
+      }
+    ],
+    "tests": {
+      "methods": 34,
+      "success": true,
+      "exit_code": 0,
+      "outer_seconds": 11.501203679996252,
+      "child_reaped": true,
+      "result_sha256": "e86f37f2f58156a1a9810878dbab55ddadf4e1998553b564af99afc7d661c96c",
+      "exit_sha256": "9313122806d88afc8678196aeab3b761e642fc3a752fcdfdd9dc58095a24cde6",
+      "network_attempts": []
+    },
+    "declaration_post_test_prose_spacing_only": true,
+    "tested_to_final_machine_blocks_byte_equal": true,
+    "canonical4_runtime_exists": false,
+    "provider_calls": 0,
+    "qa_DB_calls": 0,
+    "accepted_pin_changes": false,
+    "planned_sends": {
+      "model_check": 1,
+      "notes_qualification": 14,
+      "transcription": 4,
+      "total": 19
+    },
+    "fixed_cases": [
+      "N01",
+      "N02",
+      "N03",
+      "N04",
+      "N05",
+      "N06",
+      "N07",
+      "N08",
+      "N09",
+      "N10",
+      "N11",
+      "N12",
+      "N13",
+      "N16"
+    ],
+    "prior_boundary": {
+      "attempts": 176,
+      "estimated_exposure_usd": "1.951657505200",
+      "invoice_reconciliation": false
+    },
+    "evidence_scope": "Pure normal declaration/plan/ledger/reconciliation with synthetic worker and quote capture; no paid or HTTP/worker qualification. Root source-bound readback repair, refutation and final freeze still required."
+  },
+  "retained_first": {
+    "patch_instrument_failure": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/qualification4-implementation-f09fcb1b/first-patch-instrument-failure.json",
+    "test_result_sha256": "b4316127bbdb4cd30b49543763adaee707740a2380ee3320ffed22785ce5b9eb",
+    "test_exit_code": 1,
+    "test_failure": "Nonexistent wrapper class only; all 28 executed methods passed.",
+    "manifest_instrument_failure": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/qualification4-implementation-f09fcb1b/manifest-first-instrument-failure.json"
+  },
+  "retained_quote_discrepancy": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/qualification4-implementation-f09fcb1b/quote-report-before.json",
+    "sha256": "ce974e719f600319032d785865c50ae521256b21195a6dd3a9c6e304366db0cf",
+    "type": "Report quote-input mismatch only; actual run was already review-bound."
+  },
+  "second": {
+    "tests": 32,
+    "actual_exit": 0,
+    "result_sha256": "240aa3208cbc0e98525de714f918482d382ea830f862b8dfe3642bc397927f8e"
+  },
+  "finished": {
+    "tests": 34,
+    "actual_exit": 0,
+    "result_sha256": "e86f37f2f58156a1a9810878dbab55ddadf4e1998553b564af99afc7d661c96c",
+    "stderr_sha256": "add1e087a13c15475461ec0e8cccf18e3b632673e60f2f4a297b125a620a09f1",
+    "stdout_sha256": "d42c8531f66783b1d11ce500984b7642cb303d79e77d939ebde36f0636d5e697"
+  }
+}
