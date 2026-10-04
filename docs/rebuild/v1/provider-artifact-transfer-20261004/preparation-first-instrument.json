@@ -1,0 +1,16 @@
+{
+  "actual_exit_status": 1,
+  "test_count": 6,
+  "passed": 4,
+  "failures": 1,
+  "errors": 1,
+  "elapsed_seconds": 0.16,
+  "cause": [
+    "Test copied manifest evidence hashes as dict, actual request.json manifest entry is string.",
+    "Overbroad test substring standing_qa also matched the legitimate existing standing_qa_notes_review helper."
+  ],
+  "product_or_paid_evidence_changes": false,
+  "QA_DB_calls": 0,
+  "provider_calls": 0,
+  "source": "Tool result from first pure invocation retained as explicit status/cause record; no fabricated log."
+}

@@ -1,0 +1,51 @@
+{
+  "status": "NO APPLICATION PATCH; conservative N01 HPI overhold remains explicit",
+  "paid_attempt": "v1-standing-api-testing-20261004-4/002",
+  "paid_source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "diagnostic_source": "07079a699f5ba68473d1b3b9b6fa65cb0381ab24",
+  "selected_units": [
+    2,
+    3
+  ],
+  "cause": "sole_independent:516 broad symptom-class reach holds the specific visual/nausea/weakness denial against the presenting headache opener; read:682 cannot release both selected units. This is an application overhold, not a missing model answer.",
+  "corrected_normal_caller_context": [],
+  "historical_instrument_errors": [
+    "syn.doc was invalid (syn.docs is actual API).",
+    "Already-derived protected context labels were supplied to page/final/compiler and duplicated; resulting refusal/SDK difference is an instrument error, not a product defect."
+  ],
+  "normal_HPI_validation_and_page": "conflict, empty text; full two-sentence held candidate/evidence retained; other seven desired answers supported",
+  "finite_controls": {
+    "count": 11,
+    "result": "Exact retained source, explicit-patient variant and all nine safety negatives remain conflict. No application changes."
+  },
+  "rejected_mutant": "Scratch-only shared-key/class-floor relaxation accepts generic She denies any pain. and enumerated pain/fever/nausea beside documented headaches at validation/page; governed_decisions adds no hold. It is rejected. No actual finalize/export route was run for the mutant.",
+  "safe_proposal": "None within the ten-minute bound. Existing coarse closed typing protects synonyms/class-wide negation and gives no finer semantic argument equivalence proof; raw word difference is insufficient. No ontology/keyword expansion.",
+  "unchanged_controls": [
+    "C08 blood loss ambiguity held",
+    "SOAP whole Subjective pain correction held",
+    "Generic and unknown denials, family/speaker/time/uncertainty/condition safety floors retained"
+  ],
+  "artifacts": {
+    "N01-exact-normal-context.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-07079/N01-exact-normal-context.json",
+      "sha256": "64aa3cbd800f05d25e095e5a19b321406384b123c4ed52852465a13ceea6452f"
+    },
+    "N01-finite-normal-context.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-07079/N01-finite-normal-context.json",
+      "sha256": "c93f2b531da9902a82f13422ff6fa908491c73010a28d78a4f74259075204396"
+    },
+    "N01-broad-proposal-normal-context.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-07079/N01-broad-proposal-normal-context.json",
+      "sha256": "28b85a48b09acc512adb55a34e37f048f4b8532ed3e8e11682a09036140d6219"
+    },
+    "source-compiler-prerequisites.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-07079/source-compiler-prerequisites.json",
+      "sha256": "2ab1f3af231ca68bb58fdd0af4bdab794a9a7ff6c92c8b5596649bfa2d2f7ce1"
+    }
+  },
+  "priced_source_changes": 0,
+  "accepted_pin_changes": 0,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "SDK_claim": "Corrected normal N01 diagnostic retained its separate duplicate-context compiler false result; genuine all16 compiler prerequisites already passed independently in source-compiler-prerequisites.json. Neither establishes fresh import/admission/export."
+}

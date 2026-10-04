@@ -1,0 +1,55 @@
+{
+  "status": "PREPARED ONLY; root grant and final frozen candidate required before QA execution",
+  "source_target": null,
+  "paid_source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "fixed_groups": {
+    "typed-first": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "typed-second": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "voice": [
+      17,
+      19
+    ]
+  },
+  "files": {
+    "transfer_inputs.py": "30e1a2814be06e64b9f48dceb842c0b03537af14eb0cd819464a7c163171d7a5",
+    "cached_provider_transfer.py": "0e96d2e81967519189a30721f7de72c0c1d433101e1c648e206e6db98229fbea",
+    "run_cached_provider_transfer.py": "0bebff57836438bfc901fd88712a65f2c020e26126078ab92c0a762855927ac1",
+    "test_transfer_preparation.py": "91e2f6a1902a3b1c8aa9af310451f9cedcae38f7110f74cba253ba5d99dd943d",
+    "transfer-seals.json": "750104f0c328f0d3a2fce083893b4bddfbd96fe0cf8913e401a24f9fbd26ed6a"
+  },
+  "pure_tests": {
+    "passed": 6,
+    "actual_exit": 0,
+    "logs": {
+      "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "825e6cd924b543bfec7ba84cbe2825f092358eceedf1123798f41268a8b03123"
+    }
+  },
+  "QA_execution": false,
+  "provider_calls": 0,
+  "catalog_calls": 0,
+  "credential_reads": 0,
+  "accepted_pin_mutations": 0,
+  "closed_campaign_mutations": 0,
+  "technical_bound_seconds_per_packet": 180,
+  "termination_grace_seconds": 10,
+  "database": "Separate fresh quillmd_qa_sol_ namespace per granted packet, PostgreSQL127.0.0.1:55731, protected wrapper only. Direct normal/test catalog absence before/after.",
+  "controls": "exact fresh original/field catalogue; source15AST+4bytes; current engine and import binding; explicit source-bound consent coverage; confirmation; exact cached SDK/old raw response; actual fixture worker/admission; fresh voice upload+raw submission hash+explicit reviewed transcript/current server proof; identical first status/text/evidence; all reviewed or leave blank reviewed; finalization/download; faithful read-back, original and repeated historic download; simulated receipts/zero charges/no held reservations; old artifacts unchanged",
+  "limits": "Not a new paid call, native Word or human microphone result. No transfer claim until all16 actual tests/export records pass. Current source changes outside pricedAST are explicitly exercised, not inferred equivalent."
+}
