@@ -2343,6 +2343,8 @@ class Detector:
         self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
+        self.rule_parenthetical_write_cells()
+        self.rule_lines_below_label(write_requests_only=True)
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
         self.rule_checkboxes()
@@ -5725,6 +5727,43 @@ class Detector:
     INSTRUCTED_REQUEST = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)"
                                     r"\s+(?:if|whether|any|all)\b", re.I)
     INSTRUCTED_PLACE = re.compile(r"\b(?:here|below|in this (?:box|space|cell|column|section))\b", re.I)
+
+    @classmethod
+    def parenthetical_write_request(cls, text):
+        """A complete named caption with a terminal imperative, not a status qualifier."""
+        frame = re.fullmatch(r'([^()\r\n?!]{1,160}?)\s*\(([^()\r\n]{1,80})\)\s*[:.]?', text.strip())
+        return bool(frame and clean_label(frame[1]) and cls.INSTRUCTED.fullmatch(frame[2].strip()))
+
+    def write_request_source(self, caption):
+        return {'relation': 'parenthetical_write_request', 'question': self.ptext(caption.el)[0].strip(),
+                'source': {'part': caption.part, 'slot': caption.path, 'fingerprint': fingerprint(caption.el)}}
+
+    def rule_parenthetical_write_cells(self):
+        """A sole printed request owns its flowing cell; append below and preserve its ink."""
+        for cell in (slot for slot in self.index.slots if slot.kind == 'tc'):
+            if self.cell_has_claim(cell.el) or not self.cell_is_plain(cell) or wraps_structure(cell.el):
+                continue
+            named = [p for p in cell.children if p.kind == 'p' and self.ptext(p.el)[0].strip()]
+            if len(named) != 1:
+                continue
+            caption = named[0]; printed, pieces = self.ptext(caption.el)
+            head = clean_label(printed.partition('(')[0])
+            role = signing_place(head); action = self.checkbox_source_action(head, governing=True)
+            if (not self.parenthetical_write_request(printed) or self.blank_spans(printed, pieces)
+                    or not self.tab_source_visible(caption) or self.question_box_paragraph(caption.el)[2]
+                    or not role and self.row_label(cell.parent, cell.info['row'], cell.info['col'])
+                    or any(p.kind != 'p' or p is not caption and not self.plain_spacing_paragraph(p, unused_tab_stops=True)
+                           for p in cell.children)):
+                continue
+            area = Area(role or 'long_text', clean_label(printed), cell, {'type': 'cell_append'},
+                        context=self.context_for(caption, complete=True), complete_source=True,
+                        source_questions=[self.write_request_source(caption)], label_slot=caption)
+            if role or action:
+                area.source_action = True
+                area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
+                                   if role or action == 'human_signing_action' else
+                                   'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
+            self.add(area)
     # Printed advice to the patient, never a request for the clinician's answer: it speaks to its reader as 'you'
     # ('... at your next appointment', '... when you phone us'), sends its reader to a clinician ('... to the nurse'), or
     # adds an instruction to act ('Note any dizziness and stop the tablets'). A clinician's request names the patient
@@ -6504,7 +6543,7 @@ class Detector:
             return False
         return any(a.slot is below and a.target.get("type") in ("cell", "cell_replace", "cell_append") for a in self.areas)
 
-    def rule_lines_below_label(self):
+    def rule_lines_below_label(self, *, write_requests_only=False):
         containers = [s for s in self.index.slots if s.kind in ("tc", "txbx")]
         seqs = [[c for c in s.children if c.kind == "p"] for s in containers]
         by_part = {}
@@ -6519,15 +6558,22 @@ class Detector:
                 txt = self.text(ps.el).strip()
                 if not txt or len(txt) > 200 or BOX in txt or "\x00" in self.ptext(ps.el)[0]:
                     continue
+                if write_requests_only and not self.parenthetical_write_request(txt):
+                    continue
                 # A printed heading can contain its own digit, underline or
                 # placeholder answer. That precise source blank owns the
                 # response; following empty paragraphs are not its answer.
                 if self.blank_spans(*self.ptext(ps.el)):
                     continue
                 label = clean_label(txt)
+                requested = self.parenthetical_write_request(txt)
+                cell = self.host_cell(ps)
+                if (requested and cell is not None and not signing_place(clean_label(txt.partition('(')[0]))
+                        and self.row_label(cell.parent, cell.info['row'], cell.info['col'])):
+                    continue  # A row's option/write-in cannot become a separate unconditional request.
                 signing = bool(SIGNATURE.search(label) or INITIALS.search(label) or re.match(r"^(?:date|printed name|name)\b", label, re.I))
                 if in_container:
-                    if not (txt.endswith(":") or signing or self.is_heading(ps.el) and len(paras) > i + 1):
+                    if not (requested or txt.endswith(":") or signing or self.is_heading(ps.el) and len(paras) > i + 1):
                         continue
                 elif not ((signing or LONG_LABEL.search(label) and self.text(ps.el).rstrip("\n").endswith(":"))
                           and len(label.split()) <= 12):
@@ -6545,11 +6591,26 @@ class Detector:
                         break
                 if not blanks:
                     continue
-                if in_container and self.mapped_beside_label(ps) and all(self.plain_spacing_paragraph(b) for b in blanks):
+                if requested and (not self.tab_source_visible(ps) or self.question_box_paragraph(ps.el)[2]
+                                  or any(not self.plain_spacing_paragraph(b, unused_tab_stops=True) or not self.tab_source_visible(b)
+                                         for b in blanks)):
                     continue
-                kind = "long_text" if len(blanks) >= 2 and not signing else self.kind_for(label)
-                self.add(Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),
-                              extra_slots=blanks[1:], label_slot=ps))
+                if in_container and not requested and self.mapped_beside_label(ps) and all(self.plain_spacing_paragraph(b) for b in blanks):
+                    continue
+                head = clean_label(txt.partition('(')[0]) if requested else ''
+                role = signing_place(head) if requested else ''
+                action = self.checkbox_source_action(head, governing=True) if requested else ''
+                kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
+                    ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
+                area = Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),
+                            extra_slots=blanks[1:], label_slot=ps, complete_source=requested,
+                            source_questions=[self.write_request_source(ps)] if requested else [])
+                if role or action:
+                    area.source_action = True
+                    area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
+                                       if role or action == 'human_signing_action' else
+                                       'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
+                self.add(area)
                 self.claimed.add(id(ps.el))
                 for b in blanks:
                     self.claimed.add(id(b.el))
@@ -8491,6 +8552,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                                                 'unmapped_bracketed_source')]
     adjacent_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
+    requested_answers = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'parenthetical_write_request' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -8512,6 +8575,17 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        for area in requested_answers:
+            regions = [{'place': slot.id, 'start': None, 'end': None} for slot in [area.slot, *area.extra_slots]]
+            if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
+                continue
+            extras = [{'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+                      for slot in area.extra_slots]
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or loc.get('extra', []) != extras
+                    or field.get('source_questions') != area.source_questions):
+                fail('The complete printed write request and answer area changed. Review its exact mapping again.',
+                     'mapping_mismatch')
         for area in adjacent_answers:
             region = {'place': area.slot.id, 'start': area.target['start'], 'end': area.target['end']}
             if not any(reader.touches(place, region) for place in reader.of(field)):
@@ -8610,6 +8684,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
+            elif relation.get('relation') == 'parenthetical_write_request':
+                refs = [relation.get('source')]
             else:
                 fail("The related question mapping is invalid.", "invalid_mapping")
             for ref in refs:
