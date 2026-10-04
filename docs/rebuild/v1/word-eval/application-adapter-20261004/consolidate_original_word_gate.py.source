@@ -1,0 +1,73 @@
+"""Metadata-only original60 ledger. Never substitutes qualification cases or scores manual recovery as automatic."""
+import argparse
+import hashlib
+import json
+import math
+from pathlib import Path
+
+from run_dev_application_gate import LEDGER,LEDGER_SHA,MANIFEST_SHA,THRESHOLDS
+
+
+def main():
+ parser=argparse.ArgumentParser();parser.add_argument('source',type=Path);parser.add_argument('commit')
+ parser.add_argument('--freeze',required=True,type=Path);parser.add_argument('--batch',action='append',type=Path,default=[])
+ parser.add_argument('--output',required=True,type=Path);args=parser.parse_args()
+ freeze=json.loads(args.freeze.read_text());assert freeze.get('source_commit')==args.commit
+ assert freeze.get('frozen_for_word_acceptance') is True and freeze.get('thresholds')==THRESHOLDS and freeze.get('provider_calls')==0
+ manifest_file=args.source/'docs/rebuild/v1/word-corpus-manifest.json'
+ assert hashlib.sha256(manifest_file.read_bytes()).hexdigest()==MANIFEST_SHA
+ assert hashlib.sha256(LEDGER.read_bytes()).hexdigest()==LEDGER_SHA
+ manifest=json.loads(manifest_file.read_text());rights={row['sha256']:row for row in json.loads(LEDGER.read_text())['records']}
+ results={};hashes={};harness_identity=None
+ for batch in args.batch:
+  plan=json.loads((batch/'plan.json').read_text());summary=json.loads((batch/'partial-summary.json').read_text())
+  assert plan['source_commit']==summary['source_commit']==args.commit
+  assert plan['thresholds']==summary['thresholds']==THRESHOLDS and plan['set']=='dev'
+  assert plan['provider_calls']==summary['provider_calls']==0 and plan['rights_sha256']==LEDGER_SHA and plan['manifest_sha256']==MANIFEST_SHA
+  before=json.loads((batch/'prospective-harness-before.json').read_text());after=json.loads((batch/'prospective-harness-after.json').read_text())
+  assert before==after
+  if harness_identity is None:harness_identity=before
+  else:assert before==harness_identity,'Different prepared harnesses cannot silently become one qualification run'
+  hashes[str(batch/'partial-summary.json')]=hashlib.sha256((batch/'partial-summary.json').read_bytes()).hexdigest()
+  for record in plan['records']:
+   identity=record['development_id'];assert identity not in results,'Repeated first-pass member; never select a favorable retry silently'
+   result=summary['results'].get(identity,{})
+   if result:assert result.get('source_commit',args.commit)==args.commit and result.get('source_sha256',record['sha256'])==record['sha256']
+   assert result.get('manual_mapping_corrections',0)==0
+   result={**result,'batch_actual_test_exit':summary.get('actual_test_exit')}
+   if not summary.get('database_teardown_verified'):
+    result={**result,'automatic_success':False,'fixed_protocol_success':False,'incomplete_batch':'Database teardown proof incomplete; retained without a pass'}
+   results[identity]=result
+ members=[]
+ for set_name in ('dev','holdout'):
+  for record in manifest['sets'][set_name]:
+   identity=Path(record['corpus_file']).stem.split('-')[0];result=results.get(identity)
+   eligible=set_name=='dev' and rights[record['sha256']]['offline_filled_copy_replay_supported']
+   state=('evaluated' if result else 'eligible_not_evaluated' if eligible else 'rights_or_provenance_held' if set_name=='dev' else 'original_holdout_not_evaluated')
+   members.append({**record,'identity':identity,'set':set_name,'state':state,
+    'automatic_success':bool(result and result.get('automatic_success')),
+    'fixed_protocol_success':bool(result and result.get('fixed_protocol_success')),
+    'manual_recovery_counted':False,'result':result,'previously_exposed':True})
+ assert len(members)==60 and sum(row['set']=='holdout' for row in members)==20
+ counts={name:{'successes':sum(row[metric] for row in members if name=='overall' or row['set']=='holdout'),
+               'denominator':60 if name=='overall' else 20,'required':54 if name=='overall' else 18}
+         for name,metric in (('overall','fixed_protocol_success'),('holdout','fixed_protocol_success'))}
+ families={}
+ for family in ('F'+str(number) for number in range(1,11)):
+  subset=[row for row in members if family in row['families_declared']]
+  families[family]={'successes':sum(row['fixed_protocol_success'] for row in subset),'denominator':len(subset),
+                    'required':math.ceil(0.75*len(subset))}
+ output={'source_commit':args.commit,'thresholds':THRESHOLDS,'original_members':members,'counts':counts,'families':families,
+  'supplemental_complete_export_successes':sum(row['automatic_success'] for row in members),'batch_hashes':hashes,
+  'gate_pass':False,'independence_requirement_met':False,
+  'independence_note':'Original exposed holdout results remain the historical holdout denominator; no new unseen claim is made. Renewal/source prerequisites require separate recorded adjudication.',
+  'maximum_overall_if_all_eligible_and_original_holdout_pass':53,
+  'rights_held_development_members':[row['identity'] for row in members if row['state']=='rights_or_provenance_held'],
+  'native_word':'unverified','clinical_generation_usefulness':'Separate qualification; fixed mechanical profiles do not assess model answers',
+  'provider_calls':0,'manual_mapping_corrections_counted_as_automatic':0}
+ with args.output.open('x') as file:json.dump(output,file,indent=2);file.write('\n')
+ args.output.chmod(0o600)
+ print(json.dumps({'counts':counts,'gate_pass':False,'members':len(members),'held':output['rights_held_development_members']}))
+
+
+if __name__=='__main__':main()

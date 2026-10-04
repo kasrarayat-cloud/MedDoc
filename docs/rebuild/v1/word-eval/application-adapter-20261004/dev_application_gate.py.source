@@ -1,0 +1,239 @@
+"""Fixed original DEV gate through actual application routes. No manual map repair or provider.
+Loaded only after a prospective exact-source freeze by run_dev_application_gate.py.
+"""
+import ast
+import hashlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import re
+import subprocess
+import types
+from unittest.mock import patch
+from zipfile import ZipFile
+
+from django.test import TestCase, override_settings
+from django.test.runner import DiscoverRunner
+from docx import Document
+from core.models import Encounter, Job, Reservation, Usage
+from core.security import private_path
+from core.tests.test_word_v3_workflow import V3Fixture
+from core.tests.test_workflow import TEST_SETTINGS
+from documents import word_v3 as w
+
+PLAN = Path('__PLAN__')
+plan = json.loads(PLAN.read_text())
+OUT = Path(plan['output'])
+C = Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus')
+PROJECT = Path.cwd().parent
+EVAL = PROJECT/'docs/rebuild/v1/word-eval'
+assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip() == plan['source_commit']
+assert plan['frozen_for_word_acceptance'] is True and plan['provider_calls'] == 0
+assert plan['set'] == 'dev' and plan['thresholds'] == {'overall_required':54,'overall_denominator':60,'holdout_required':18,'holdout_denominator':20,'family_fraction':0.75}
+
+
+def digest(raw): return hashlib.sha256(raw).hexdigest()
+
+
+def retain(path, value):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with path.open('x') as output: json.dump(value, output, indent=2, default=str); output.write('\n')
+    path.chmod(0o600)
+
+
+def load_module(name, path, expected):
+    assert digest(path.read_bytes()) == expected
+    spec=importlib.util.spec_from_file_location(name,path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+
+
+scorer=load_module('frozen_original_scorer',EVAL/'score.py','d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c')
+answering=load_module('frozen_answering',EVAL/'v2/answering.py','75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4')
+ticked=load_module('independent_fixed_ticked',EVAL/'v2/ticked.py','e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79')
+answers_for,_,_=answering.load_answers_for(EVAL/'final_eval.py')
+
+
+def functions(path, expected, names, namespace):
+    raw=path.read_bytes();assert digest(raw)==expected
+    nodes=[node for node in ast.parse(raw).body if isinstance(node,ast.FunctionDef) and node.name in names]
+    assert {node.name for node in nodes} == set(names)
+    exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),namespace)
+    return types.SimpleNamespace(**{name:namespace[name] for name in names})
+
+
+mechanical=functions(EVAL/'fill_eval.py','7c74e1d3a46a0252d0b79169ac7cf0905222e7d741ee8061130bc37a2bf2a848',
+ ['counts','para_texts','allowed_removals','is_subsequence'],{'w':w})
+checks=functions(EVAL/'final_eval.py','97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a',
+ ['check_with','package_identity'],{'w':w,'fill_eval':mechanical,'zipfile':__import__('zipfile'),'io':io})
+
+
+def artifact_name(identity, stage): return OUT/identity/(stage+'.json')
+
+
+def supplied(value, kind):
+    if isinstance(value,bool): return 'checked' if value else ''
+    if isinstance(value,list):
+        return '\n'.join(' | '.join(str(cell) for cell in row) for row in value) if kind=='table_rows' else '\n'.join(str(item) for item in value)
+    return str(value)
+
+
+def source_bound_answer_readback(original, final, field):
+    """Read only new paragraphs beyond a byte-stable original cell prefix."""
+    if field['locator']['target']['type']!='cell_append':
+        return w.constrained_scalar_value(original,final,field,True)
+    loc=field['locator'];identity=loc['part']+'#'+loc['slot']
+    before=original.by_id.get(identity);after=final.by_id.get(identity)
+    if before is None or after is None:return None
+    old=list(before.el);new=list(after.el)
+    if len(new)<=len(old) or any(w.fingerprint(a)!=w.fingerprint(z) for a,z in zip(old,new)):return None
+    added=new[len(old):]
+    if any(p.tag!=w.q('w:p') or w.wraps_structure(p) or w.region_hidden(final,p) for p in added):return None
+    return '\n'.join(w.paragraph_text(p)[0] for p in added)
+
+
+@override_settings(**dict(TEST_SETTINGS,QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True,
+ QUILLMD_LAYOUT_SOCKET=plan['layout_socket'],QUILLMD_ROLE_SUGGESTIONS=False,
+ V3_FIELD_RELATIONS=True,V3_GENERATION_BATCHES=False,AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-5-5',
+ AI_INPUT_RATE='2',AI_OUTPUT_RATE='10',AI_CACHED_RATE='0.20',AI_THINKING='between_tools',AI_EFFORT='medium',AI_INFERENCE_GEO=''))
+class ApplicationGate(V3Fixture,TestCase):
+    def evaluate(self, record):
+        identity=record['development_id'];directory=OUT/identity;directory.mkdir(mode=0o700)
+        result={'identity':identity,'source_commit':plan['source_commit'],'source_sha256':record['sha256'],
+                'automatic_success':False,'manual_mapping_corrections':0,'profiles':{},'failures':[],
+                'clinical_generation_usefulness':'NOT ASSESSED: fixed synthetic writer profiles, no model or transcription request',
+                'native_word':'unverified','previously_exposed':True,'families':record['families']}
+        from core import generation
+        configuration=generation.configuration()
+        self.assertEqual(configuration['model'],'claude-sonnet-5-5')
+        self.assertNotIn('invalid',configuration['request_profile'])
+        self.assertIn('ordinary_field_contract',configuration)
+        result['fixture_configuration']={key:configuration[key] for key in ('mode','provider','model','request_profile','ordinary_field_contract','pricing_version')}
+        original=C/record['corpus_file'];expected=Path(record['prior_expected_map_path'])
+        assert original.is_relative_to(C/'dev/originals') and expected.is_relative_to(C/'dev/groundtruth')
+        assert not original.is_symlink() and not expected.is_symlink()
+        raw=original.read_bytes();assert digest(raw)==record['sha256']
+        groundtruth_raw=expected.read_bytes();gt=json.loads(groundtruth_raw)
+        result['groundtruth_sha256']=digest(groundtruth_raw);result['destinations']=len(gt['answer_areas'])
+        response=self.upload(data=raw,name='SYNTHETIC FIXED ORIGINAL '+identity)
+        retain(artifact_name(identity,'upload-response'),{'status':response.status_code,'body':response.content.decode(errors='replace')})
+        if response.status_code!=302:
+            result['failures'].append('Actual original upload refused; no conversion or alternate source attempted')
+            retain(artifact_name(identity,'result'),result);return result
+        from core.models import Template
+        template=Template.objects.get(name='SYNTHETIC FIXED ORIGINAL '+identity);version=template.versions.get(number=1)
+        self.assertEqual(private_path(template.original_path).read_bytes(),raw)
+        retain(artifact_name(identity,'initial-mapping'),{'fields':version.fields,'import_manifest':version.import_manifest,
+            'contract':version.contract,'document_backend':version.document_backend,'original_sha256':template.sha256})
+        if version.contract!='v3':
+            result['failures'].append('Actual selected application processor is not contract v3; no engine override or mapping substitute')
+            retain(artifact_name(identity,'result'),result);return result
+        fields=json.loads(json.dumps(version.fields))
+        scoring=scorer.score_doc(gt,{'fields':fields});result['mapping']=scoring
+        retain(artifact_name(identity,'automatic-groundtruth'),scoring)
+        if not scoring['strict']:result['failures'].append('Fixed strict first-pass whole-document mapping failed')
+        issues=version.import_manifest.get('coverage',{}).get('selected_engine_issues',[])
+        result['source_exclusions']=issues
+        result['explicit_coverage_review_required']=bool(version.import_manifest.get('coverage',{}).get('block_generation'))
+        if version.import_manifest.get('coverage',{}).get('block_generation'):
+            response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_coverage','mapping_version':version.pk,
+                **{'exclude_'+issue['id']:'on' for issue in issues}})
+            retain(artifact_name(identity,'explicit-source-exclusions'),{'status':response.status_code,
+                'body':response.content.decode(errors='replace'),'reviewed_exact_issue_ids':[issue['id'] for issue in issues]})
+            if response.status_code!=302:
+                result['failures'].append('Actual source-bound partial coverage review refused; no manual map repair')
+                retain(artifact_name(identity,'result'),result);return result
+            version=self.latest(template);self.assertEqual(version.fields,fields)
+        response=self.client.post(f'/templates/{template.pk}/',{'action':'v3_confirm','mapping_version':version.pk,'checked_every_field':'on'})
+        retain(artifact_name(identity,'confirmation'),{'status':response.status_code,'body':response.content.decode(errors='replace')})
+        if response.status_code!=302:
+            result['failures'].append('Actual initial field mapping cannot be confirmed; original failures retained')
+            retain(artifact_name(identity,'result'),result);return result
+        for profile in ('empty','ordinary','long'):
+            answers,_,chosen,answer_notes,_=answering.plan(gt,{'fields':fields},profile,scorer.score_doc,answers_for)
+            if profile=='empty':answers,chosen={},{}
+            profile_result={'profile':profile,'fixed_answers':answers,'chosen_groundtruth_options':chosen,
+                            'answer_plan_notes':answer_notes,'passed':False,'failures':[]}
+            retain(artifact_name(identity,profile+'-profile-plan'),profile_result)
+            response=self.new_encounter(version,notes='Synthetic fixed Word writer profile; explicit clinician review.')
+            if response.status_code!=302:
+                profile_result['failures'].append('Actual encounter creation refused')
+                retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
+            encounter=Encounter.objects.get(pk=response.url.strip('/').split('/')[-1])
+            payload={'revision':encounter.revision}
+            for field in fields:
+                if field['kind'] in ('signature','initials'):continue
+                key=field['key']
+                if key in answers:
+                    payload['answer_'+key]=supplied(answers[key],field['kind']);payload['reviewed_'+key]='on'
+                else:payload['blank_'+key]='on'
+            response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
+            retain(artifact_name(identity,profile+'-save'),{'status':response.status_code,'body':response.content.decode(errors='replace'),'review_payload':payload})
+            encounter.refresh_from_db()
+            if response.status_code!=302:
+                profile_result['failures'].append('Actual explicit answer review refused')
+                retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
+            response=self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'},follow=True)
+            encounter.refresh_from_db()
+            retain(artifact_name(identity,profile+'-finalization'),{'status':encounter.status,'response_status':response.status_code,
+                'messages':[str(message) for message in response.context['messages']] if response.context else [],'answers':encounter.answers,
+                'original_sha256':template.sha256,'mapping_version':str(version.pk)})
+            if encounter.status!='finalized':
+                profile_result['failures'].append('Actual reviewed profile finalization refused')
+                retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result;continue
+            private_export=private_path(encounter.export_path).read_bytes()
+            file=directory/(profile+'-export.docx');file.write_bytes(private_export);file.chmod(0o600)
+            profile_result['export_sha256']=digest(private_export)
+            retain(artifact_name(identity,profile+'-export-before-assertions'),{'export_sha256':digest(private_export),
+                'original_sha256':template.sha256,'mapping':version.fields,'reviewed_answers':encounter.answers})
+            response=self.client.get(f'/encounters/{encounter.pk}/export/')
+            retain(artifact_name(identity,profile+'-download-response'),{'status':response.status_code})
+            self.assertEqual(response.status_code,200)
+            output=b''.join(response.streaming_content);self.assertEqual(output,private_export)
+            Document(io.BytesIO(output));w.open_package(output)
+            touched=set()
+            for field in fields:
+                if field['key'] not in answers:continue
+                loc=field['locator'];target=loc['target'];touched.add(loc['part'])
+                touched.update(ref['part'] for ref in target.get('copies',[])+target.get('boxes',[]))
+            package_problems=checks.package_identity(raw,output,set() if profile=='empty' else touched)
+            profile_result['failures'].extend(package_problems)
+            supplemental_failures=[]
+            if profile!='empty':
+                profile_result['failures'].extend(checks.check_with(raw,output,fields,answers))
+                source_index=w.SlotIndex(w.open_package(raw));output_index=w.SlotIndex(w.open_package(output))
+                scalar_readbacks={}
+                for field in fields:
+                    value=answers.get(field['key'])
+                    if not isinstance(value,str) or field['kind'] not in ('text','long_text','measurement','number','date','time'):continue
+                    actual=source_bound_answer_readback(source_index,output_index,field)
+                    scalar_readbacks[field['key']]={'expected':value,'actual':actual,'matched':actual==value}
+                    if actual!=value:supplemental_failures.append('Full scalar answer readback differs: '+field['key'])
+                profile_result['supplemental_full_scalar_readbacks']=scalar_readbacks
+            profile_result['independent_choice_reader']=ticked.check_document(raw,output,gt,chosen)
+            if not profile_result['independent_choice_reader']['passed']:
+                profile_result['failures'].append('Fixed independent original-destination choice reader failed')
+            profile_result['fixed_failures']=list(profile_result['failures'])
+            profile_result['fixed_mechanical_passed']=not profile_result['fixed_failures']
+            profile_result['supplemental_failures']=supplemental_failures
+            profile_result['failures'].extend(supplemental_failures)
+            profile_result['render']='PENDING bounded original/export render by exact checker; cannot count as pass'
+            profile_result['mechanical_passed']=not profile_result['failures']
+            self.assertEqual(private_path(template.original_path).read_bytes(),raw)
+            retain(artifact_name(identity,profile+'-result'),profile_result);result['profiles'][profile]=profile_result
+        self.assertFalse(Job.objects.exists());self.assertFalse(Reservation.objects.exists());self.assertFalse(Usage.objects.exists())
+        retain(artifact_name(identity,'result'),result)
+        return result
+
+
+def method(record):
+    def test(self):
+        with patch('anthropic.Anthropic',side_effect=AssertionError('Original corpus provider transmission forbidden')):
+            self.evaluate(record)
+    return test
+
+
+for record in plan['records']:
+    setattr(ApplicationGate,'test_'+record['development_id'],method(record))
+failures=DiscoverRunner(verbosity=2,interactive=False).run_tests([ApplicationGate])
+raise SystemExit(bool(failures))

@@ -1,0 +1,232 @@
+{
+  "status": "Prepared and pure-controlled; original application evaluation pending exact root freeze/QA slot",
+  "files": {
+    "run_dev_application_gate.py": "5a822fcfe1ed9c759f8b57d2475be69e11c5c53a2d52a3e205cb6fc0805f7032",
+    "dev_application_gate.py": "d773706ed5293f92c60ff10009a74afffee2d5b5dbc4d6cc6109c0ddd3fbd223",
+    "fixed_render_checker.py": "ab0cb64fb4133cadb3f1672323751d30e950712d0443724b8e3440a609d9024d",
+    "consolidate_original_word_gate.py": "4f0f5764b61e45f709088d21bbfa7658b54c42c5995be0e13ad338a8f7e511ec",
+    "run_numeric_word_workflow.py": "78a95c73cae047e69147eff7d8e5324216966c53c2156ad6a943b6256e6d02fa",
+    "development_renderer_numeric_integrated.py": "c95400f0e4c9c71c628c2d3db36067062564483b06f0878a65ce4d2e61381b08",
+    "run_numeric_archived_word_workflow.py": "60e9f604f3afac4e9a2faac2d3c2cd8ffcdb82429e930b2b23caf2335f3e74d5",
+    "development_renderer_numeric_archive_v2.py": "81e292d47f7e9c92aec9a6a61eef1cb62907dde77337a13234cd45d6e63ae9e5"
+  },
+  "fixed_helpers_unchanged": true,
+  "thresholds": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  },
+  "eligible_development_originals": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D07",
+    "D08",
+    "D09",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D15",
+    "D16",
+    "D17",
+    "D18",
+    "D21",
+    "D22",
+    "D26",
+    "D27",
+    "D28",
+    "D29",
+    "D30",
+    "D31",
+    "D33",
+    "D34",
+    "D35",
+    "D36",
+    "D37",
+    "D38",
+    "D39",
+    "D40"
+  ],
+  "bounded_partitions": [
+    [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    [
+      "D04",
+      "D05",
+      "D07"
+    ],
+    [
+      "D08",
+      "D09",
+      "D10"
+    ],
+    [
+      "D11",
+      "D12",
+      "D13"
+    ],
+    [
+      "D14",
+      "D15",
+      "D16"
+    ],
+    [
+      "D17",
+      "D18",
+      "D21"
+    ],
+    [
+      "D22",
+      "D26",
+      "D27"
+    ],
+    [
+      "D28",
+      "D29",
+      "D30"
+    ],
+    [
+      "D31",
+      "D33",
+      "D34"
+    ],
+    [
+      "D35",
+      "D36",
+      "D37"
+    ],
+    [
+      "D38",
+      "D39",
+      "D40"
+    ]
+  ],
+  "command": [
+    "python3",
+    "-B",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_dev_application_gate.py",
+    "<clean-readonly-root-source>",
+    "<full-final-commit>",
+    "--freeze",
+    "<root-owned-freeze.json>",
+    "--ids",
+    "<one-listed-partition>"
+  ],
+  "source_freeze_fields": {
+    "frozen_for_word_acceptance": true,
+    "source_commit": "<full-final-commit>",
+    "thresholds": {
+      "overall_required": 54,
+      "overall_denominator": 60,
+      "holdout_required": 18,
+      "holdout_denominator": 20,
+      "family_fraction": 0.75
+    },
+    "provider_calls": 0
+  },
+  "original_automatic_mapping": true,
+  "manual_mapping_corrections": 0,
+  "source_bound_explicit_coverage_review_separate": true,
+  "whole_application_routes": [
+    "original_upload",
+    "automatic_initial_mapping",
+    "explicit_mapping_confirmation",
+    "fixed_empty_ordinary_long_profile_clinician_review",
+    "finalization",
+    "export_download"
+  ],
+  "qualification_adapter": "Existing protected fixture QA + actual same-source bounded layout_server; no runtime/source/layout admission bypass",
+  "safety_controls": {
+    "unfrozen_rejected": true,
+    "weakened_threshold_rejected": true,
+    "held_D19_rejected_before_original_open": true,
+    "full_text_visibility_catches_prefix_only_false_pass": true
+  },
+  "supplemental_checks": "Full scalar readback and full text visibility; unchanged fixed protocol verdict is retained separately",
+  "generation": "Qualified Sonnet5.5/v4 synthetic fixture configuration, no model request; mechanical profile results never clinical-generation usefulness",
+  "provider_calls": 0,
+  "holdout_or_qualification_originals_opened": 0,
+  "new_unseen_claim": false,
+  "historical_pdfium_version": "unverified",
+  "prospective_pdfium_version": "4.30.0",
+  "required_teardown": [
+    "real child exit",
+    "direct QA catalog absence before/after",
+    "layout renderer exit",
+    "owned socket absence",
+    "tracked Python bytes unchanged",
+    "harness bytes unchanged"
+  ],
+  "consolidation_command": [
+    "python3",
+    "-B",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/consolidate_original_word_gate.py",
+    "<clean-final-root-source>",
+    "<full-final-commit>",
+    "--freeze",
+    "<root-owned-freeze.json>",
+    "--batch",
+    "<each-disjoint-batch-directory>",
+    "--output",
+    "<new-original60-report.json>"
+  ],
+  "held_denominators": "Seven DEV originals remain rights/provenance held; fixed60 maximum53 even all20 originalholdout pass; allmembers retained; no OLE conversion/provider upload/substitution",
+  "native_word": "unverified",
+  "cleanup_bytes": 0,
+  "supersedes_prepared_seal": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/acceptance-application-adapter-seal-20261004.json",
+    "sha256": "f7c90b27a0dc3efcbdd3366da795eaea57614bab222948c446da84dad18d129d",
+    "reason": "Before any DEV corpus evaluation, fixed supplemental cell_append reader mismatch discovered by D10 actual route; archive raw exports before all subsequent assertions and use exact canonical original-prefix/new-visible-plain-paragraph readback for append targets only"
+  },
+  "append_reader_controls": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/append-reader-fixed-countercontrols.json",
+    "sha256": "2d81b192fc80b18babbc789270f029c1f19e72a7ff56953c80492f00302870d0",
+    "correct_full_append_passed": true,
+    "changed_source_caption_refused": true,
+    "appended_table_refused": true,
+    "product_scalar_reader_unchanged": true
+  },
+  "actual_D10_first_failure": {
+    "source": "ce071a25c7dc0d40fd294ce9f2b1027b4034c02e",
+    "directory": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/numeric-original-word-ce071a25c7dc-1791080822315088115",
+    "automatic": {
+      "correct": 183,
+      "denominator": 198,
+      "missed": 15,
+      "wrong": 0,
+      "extras": 4,
+      "strict": false
+    },
+    "manual": {
+      "correct": 186,
+      "denominator": 198,
+      "missed": 12,
+      "wrong": 0,
+      "extras": 4,
+      "strict": false
+    },
+    "method_exit": 1,
+    "method_seconds": 296.09,
+    "outer_seconds": 309.746,
+    "failure": "Specialized scalar reader intentionally returns None for cell_append A194",
+    "first_raw_export": "Not separately archived before failed assertion; unavailable after test teardown. No reconstructed byte-identity claim.",
+    "real_finalized_status": true,
+    "batch_parts": 2,
+    "first_generated_supported_answers": 0,
+    "providers": 0,
+    "DB_absent": true,
+    "renderer_exit": -2,
+    "socket_removed": true,
+    "source_unchanged": true,
+    "A198_numeric_checks_passed_before_remaining_failure": true
+  }
+}
