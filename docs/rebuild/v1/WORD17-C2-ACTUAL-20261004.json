@@ -1,0 +1,1165 @@
+{
+  "automatic_successes": [
+    "D16"
+  ],
+  "evidence": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word17-C2-fc44-EXECUTION-20261004/mixed-consolidated.json",
+      "sha256": "d5208f121e70ae751e98024b062dbdbb7bd33632f720928839b8f7f912201757"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word17-C2-fc44-EXECUTION-20261004/execution-observations/controller-completed.json",
+      "sha256": "a3bd260c2b4574572a00d7c567714778a0a88eb2ed7cb55cb9960c57f22dd7da"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word17-C2-fc44-EXECUTION-20261004/word-source-seal.json",
+      "sha256": "76eb26f3a04105e078cdfafce0ae75e121762f9d7e53a984425e9f8df2b93023"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word17-C2-fc44-EXECUTION-20261004/full-source-inventory.json",
+      "sha256": "67ca36b40ff8a9cf3c346e8dbc4b81251105e56855b99fd0bf6e87236fadfaa1"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word17-C2-fc44-EXECUTION-20261004/invocations.bound.json",
+      "sha256": "f181df61ce4c5b9cf0029fc7d74626a3016b2826650b9a1978e6f4ae1f394b8e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/word17-C2-fc44-EXECUTION-20261004/metadata-consolidation/process.json",
+      "sha256": "db54355d568e9d74ef3106751a35bfd6da2279c3104008e48250bab8b22fe99c"
+    }
+  ],
+  "execution_complete": true,
+  "fixed_protocol_overall": {
+    "denominator": 60,
+    "required": 54,
+    "successes": 1
+  },
+  "full_gate_claim": false,
+  "holdout_canonical_placeholder": {
+    "denominator": 20,
+    "required": 18,
+    "successes": 0
+  },
+  "holdout_status": "NOT_EXECUTED_IN_THIS_DEV33_RUN",
+  "manual_mapping_corrections_counted_as_automatic": 0,
+  "members": [
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D01",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "native-long": {
+          "exported": true,
+          "failure_count": 62,
+          "manual_value_correction_count": 85,
+          "passed": false
+        },
+        "native-ordinary": {
+          "exported": true,
+          "failure_count": 62,
+          "manual_value_correction_count": 85,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D02",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "native-long": {
+          "exported": true,
+          "failure_count": 2,
+          "manual_value_correction_count": 1,
+          "passed": false
+        },
+        "native-ordinary": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 1,
+          "passed": true
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D03",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D04",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D05",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D07",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D08",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D09",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D10",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 24,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 10,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D11",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D12",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D13",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D14",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D15",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": true,
+      "fixed_protocol_success": true,
+      "identity": "D16",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D17",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 3,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 3,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D18",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 2,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 2,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D21",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D22",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 6,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 6,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D26",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D27",
+      "manual_mapping_corrections": 0,
+      "profiles": {}
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D28",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D29",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D30",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D31",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D33",
+      "manual_mapping_corrections": 0,
+      "profiles": {}
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D34",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D35",
+      "manual_mapping_corrections": 0,
+      "profiles": {}
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D36",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D37",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 5,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 2,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D38",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "long": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": false,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D39",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 1,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    },
+    {
+      "automatic_success": false,
+      "fixed_protocol_success": false,
+      "identity": "D40",
+      "manual_mapping_corrections": 0,
+      "profiles": {
+        "empty": {
+          "exported": true,
+          "failure_count": 0,
+          "manual_value_correction_count": 0,
+          "passed": true
+        },
+        "long": {
+          "exported": true,
+          "failure_count": 2,
+          "manual_value_correction_count": 0,
+          "passed": false
+        },
+        "ordinary": {
+          "exported": true,
+          "failure_count": 2,
+          "manual_value_correction_count": 0,
+          "passed": false
+        }
+      }
+    }
+  ],
+  "packets": [
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149365873691075/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149365873691075",
+      "identities": [
+        "D10"
+      ],
+      "outer_receipt_sha256": "3645f138d1237fbf65a8245069ed5ebbea90ca724bd997dbc53d48b1c029529f",
+      "packet": "P04",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149541301076959/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149541301076959",
+      "identities": [
+        "D15",
+        "D16"
+      ],
+      "outer_receipt_sha256": "fd4e4ab9d34e88b427f9fc30ac058ac8351ba3bd780c20798719b68f59162a9a",
+      "packet": "P07",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149618597438735/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149618597438735",
+      "identities": [
+        "D28"
+      ],
+      "outer_receipt_sha256": "f52d4ef431fdac796473b5d8e7fe42112ff5b9d4620c3abd052b5e1386d0c90a",
+      "packet": "P11",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149688084843146/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149688084843146",
+      "identities": [
+        "D30",
+        "D31"
+      ],
+      "outer_receipt_sha256": "4219b71e533f5602b494cf14955f6f12e5f4c4762c69fb11fec484a90a93a839",
+      "packet": "P13",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-native-application-fc44b4a27366-1791149740688807077/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-native-application-fc44b4a27366-1791149740688807077",
+      "identities": [
+        "D01",
+        "D02"
+      ],
+      "outer_receipt_sha256": "1f06152e63b0d9f04116ee0a644519731c0e80cb74542a6acb40926c20427bb6",
+      "packet": "P01",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149886364199486/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149886364199486",
+      "identities": [
+        "D03",
+        "D04",
+        "D05"
+      ],
+      "outer_receipt_sha256": "43e8ae973691d77e8f143489aa0a174413fa4593c1d30374ee8df059cdf2e132",
+      "packet": "P02",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149983450427162/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791149983450427162",
+      "identities": [
+        "D07",
+        "D08",
+        "D09"
+      ],
+      "outer_receipt_sha256": "ec6eb8a9d720f0c2028cb8dcfdcc2392dac6613c0c5df2933df5645eab271c76",
+      "packet": "P03",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150073600843195/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150073600843195",
+      "identities": [
+        "D11"
+      ],
+      "outer_receipt_sha256": "dfc65901bc38b8d0d59b0c08bb8b9901efcacb4d9a6e210fdae7b5548dd43430",
+      "packet": "P05",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150141274621676/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150141274621676",
+      "identities": [
+        "D12",
+        "D13",
+        "D14"
+      ],
+      "outer_receipt_sha256": "74d6d7cb6077e6d5e62cbbcac0b58dab85c04371148b235364d0f96e68f97462",
+      "packet": "P06",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150250435934495/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150250435934495",
+      "identities": [
+        "D17",
+        "D18",
+        "D21"
+      ],
+      "outer_receipt_sha256": "e4a07c99ee13af4fb4d60acb46440c3f8379827bc5ffdbe51b4f2531526e49b1",
+      "packet": "P08",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150347125637140/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150347125637140",
+      "identities": [
+        "D22",
+        "D26"
+      ],
+      "outer_receipt_sha256": "37c30f42fccb0b7cd20bd23f2d7bbfcddc44964f5c09c45e991368aa1bf6600f",
+      "packet": "P09",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150391469134510/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150391469134510",
+      "identities": [
+        "D27"
+      ],
+      "outer_receipt_sha256": "200c8739674481050b11d3324698b53e233080da9ef4e9665b2a6ef023063a1f",
+      "packet": "P10",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150417049864222/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150417049864222",
+      "identities": [
+        "D29"
+      ],
+      "outer_receipt_sha256": "80954ff50b423d9d9782b7586f977d1881cebc2a26bbfc15e8178fa63fcca871",
+      "packet": "P12",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150462402845526/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150462402845526",
+      "identities": [
+        "D33",
+        "D34"
+      ],
+      "outer_receipt_sha256": "d4d73eb201cbf5a3409a4e1bf8fea7af20d3cf5b6d14befb306370fc46f88fe4",
+      "packet": "P14",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150511884739236/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150511884739236",
+      "identities": [
+        "D35"
+      ],
+      "outer_receipt_sha256": "b47482a5cedf4db31d6ab47898673cd2bdefd4b63b4ecb0bc4c732d66ab31ba3",
+      "packet": "P15",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150543719286230/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150543719286230",
+      "identities": [
+        "D36",
+        "D37"
+      ],
+      "outer_receipt_sha256": "2f6f60f60b7e5a6da94a9633856fab9a3570c9b2fadca1dca8ce1b665ee526d6",
+      "packet": "P16",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    },
+    {
+      "actual_outer_exit": 1,
+      "application_test_result": "OK",
+      "application_workflow_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150688321062679/workflow.log",
+      "batch": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-supported-layout-prepared-20261004-v3/dev-application-fc44b4a27366-1791150688321062679",
+      "identities": [
+        "D38",
+        "D39",
+        "D40"
+      ],
+      "outer_receipt_sha256": "ccebd2bcacf08cfa1bd41c966be9c5a48bd44d37a1aea4836c6eed5974e81f60",
+      "packet": "P17",
+      "safe_to_continue": true,
+      "source_unchanged": true,
+      "teardown_verified": true
+    }
+  ],
+  "profile_counts": {
+    "empty": {
+      "attempts": 30,
+      "exported": 29,
+      "manual_value_corrections": 0,
+      "passed": 22
+    },
+    "long": {
+      "attempts": 30,
+      "exported": 13,
+      "manual_value_corrections": 0,
+      "passed": 1
+    },
+    "native-long": {
+      "attempts": 2,
+      "exported": 2,
+      "manual_value_corrections": 86,
+      "passed": 0
+    },
+    "native-ordinary": {
+      "attempts": 2,
+      "exported": 2,
+      "manual_value_corrections": 86,
+      "passed": 1
+    },
+    "ordinary": {
+      "attempts": 30,
+      "exported": 13,
+      "manual_value_corrections": 0,
+      "passed": 1
+    }
+  },
+  "provider_calls": 0,
+  "source_commit": "fc44b4a27366a4ab0514234d374f9f711cb7cfa9",
+  "source_unchanged": true,
+  "supplemental_complete_export_successes": 1,
+  "supplemental_native_word": "unverified"
+}
