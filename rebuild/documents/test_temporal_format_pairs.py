@@ -58,7 +58,7 @@ class TemporalFormatPairs(unittest.TestCase):
                 self.assertEqual(w.fill(raw,r['fields'],{}),raw)
 
     def test_renamed_ordinary_complete_caption_needs_no_template_subject_noun(self):
-        for caption in ('Specimen date and time:','Date and time recorded:','Date and time signed referral received:'):
+        for caption in ('Specimen date and time:','Date and time recorded:','Date and time signed referral received:','Date and time initial physical observations:'):
             with self.subTest(caption=caption):
                 raw=data(form(caption,family=None));f=pairs(w.inspect(raw));self.assertEqual(len(f),2)
                 self.assertTrue(all(x['source_questions'][0]['question']==caption for x in f))
@@ -72,6 +72,8 @@ class TemporalFormatPairs(unittest.TestCase):
             with self.subTest(caption=caption):
                 raw=data(form(caption));r=w.inspect(raw)
                 for x in pairs(r):
+                    self.assertTrue(x.get('write_protected'))
+                    with self.assertRaises(w.V3Failure):w.fill(raw,r['fields'],{x['key']:'10/04/2026'})
                     f=deepcopy(x);f.update(label='Clinical value',kind='text')
                     for k in ('write_protected','destination_roles','answer_policy'):f.pop(k,None)
                     with self.assertRaises(w.V3Failure):w.fill(raw,[f],{f['key']:'Dr Synthetic Finalizer'})

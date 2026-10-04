@@ -7744,14 +7744,31 @@ class Detector:
             context = self.context_for(caption, complete=True)
             if len(context) > MAX_MAPPING_CONTEXT:
                 continue
+            nominal = re.fullmatch(r'date\s+and\s+time(?:\s+(.+))?', printed.strip()[:-1].strip(), re.I)
+            trailing = re.fullmatch(r'(.+?)\s+date\s+and\s+time', printed.strip()[:-1].strip(), re.I)
+            if nominal is None and trailing is None:
+                continue
+            argument = (nominal[1] or '') if nominal is not None else trailing[1]
+            # The temporal noun modifies a complete event/author argument; it
+            # does not convert that person's signing, approval or statement
+            # into an ordinary clinical field. Use the established source
+            # predicates on that argument and retain the complete original.
+            human = (self.checkbox_source_action(argument, governing=True)
+                     or self.question_box_authorship(argument) or signing_place(argument))
             refs = [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)} for p in sources]
             for kind, paragraph in zip(('date', 'time'), paragraphs[:2]):
                 text, _ = self.ptext(paragraph.el)
                 relation = {'relation': 'temporal_format_hint', 'question': printed.strip(),
-                            'format': text, 'component': kind, 'sources': refs}
-                self.add(Area(kind, clean_label(printed) + ' — ' + kind.capitalize(), paragraph,
+                            'format': text, 'component': kind, 'argument': argument, 'sources': refs}
+                area = Area(kind, clean_label(printed) + ' — ' + kind.capitalize(), paragraph,
                     {'type': 'span', 'start': 0, 'end': len(text), 'shape': 'format_hint'},
-                    context=context, complete_source=True, label_slot=caption, source_questions=[relation]))
+                    context=context, complete_source=True, label_slot=caption, source_questions=[relation])
+                if human:
+                    area.source_action = True
+                    area.protection = ('The printed temporal question belongs to a human signing or authored act. '
+                                       'Keep it unchanged and use the explicit human workflow.')
+                    self.coverage_issue(paragraph, 'human_signing_action', area.protection)
+                self.add(area)
 
     def rule_paragraph_fields(self):
         pending, pending_last = None, None     # a multi-line answer area and its last line
