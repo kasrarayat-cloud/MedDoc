@@ -2983,6 +2983,8 @@ class Detector:
         options = [text[pos + 1:(positions[n + 1] if n + 1 < len(positions) else len(text))]
                    for n, pos in enumerate(positions)]
         roles = [self.checkbox_source_action(option) for option in options]
+        roles.extend(branch['protection'] for unit in self.box_units(slot)
+                     for branch in [self.option_branch_source(unit)] if branch and branch['protection'])
         head = text[:positions[0]].strip()
         if head:
             roles.append(self.checkbox_source_action(head, governing=True))
@@ -3326,8 +3328,43 @@ class Detector:
                    re.search(r'\b(?:recorded|documented)\b[^:?!]*\bsigned\b[^:?!]*\bstatus$',source,re.I)
                    for source in printed)
 
+    def option_branch_source(self, unit):
+        """A printed arrow + repeated Yes/No condition separates one instruction.
+
+        The complete source remains part of the mapping. Only this physically
+        adjacent, matching condition has a shorter option value; there is no
+        global alias for Yes or any arbitrary option prefix.
+        """
+        frame = re.fullmatch(r'\s*(Yes|No)\s*→\s*(if\s+(yes|no),)\s*(.+?)\s*', unit[1], re.I)
+        if not frame:
+            return None
+        ref = unit[0]
+        slot = self.index.by_id.get(ref['part'] + '#' + ref['slot'])
+        paragraph = self.host_paragraph(slot) if slot is not None else None
+        if paragraph is None:
+            return None
+        instruction = frame[4]
+        acts = [self.checkbox_source_action(clause, governing=True)
+                for clause in [instruction, *re.split(r'(?<=[.;!?])\s+', instruction)]]
+        protection = next((act for act in acts if act), '')
+        text, pieces = self.ptext(paragraph.el)
+        qualified = (frame[1].casefold() == frame[3].casefold() and '→' not in instruction
+                     and not re.search(r'[?\r\n\x00]', instruction) and ':' not in instruction.rstrip(':')
+                     and not self.blank_spans(text, pieces)
+                     and self.tab_source_visible(paragraph)
+                     and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                                 for n in paragraph.el.iter()) and not protection)
+        return {'caption': frame[1], 'condition': frame[2], 'instruction': instruction,
+                'printed': option_text(unit[1]), 'control': dict(ref), 'qualified': qualified,
+                'protection': protection,
+                'source': {'part': paragraph.part, 'slot': paragraph.path,
+                           'fingerprint': fingerprint(paragraph.el)}, 'source_text': text}
+
     def adjacent_option_text(self, unit):
         """Separate only a proven explicit trailing condition from its option."""
+        branch = self.option_branch_source(unit)
+        if branch and branch['qualified']:
+            return branch['caption']
         ref = unit[0]
         slot = self.index.by_id.get(ref['part'] + '#' + ref['slot'])
         paragraph = self.host_paragraph(slot) if slot is not None else None
@@ -5120,6 +5157,23 @@ class Detector:
                     self.claimed.add(id(source_slot.el))
                 for option_para in nested["option_paras"]:
                     self.nested_write_in(option_para, nested["write_context"])
+            branches = [branch for unit in units for branch in [self.option_branch_source(unit)]
+                        if branch and branch['qualified']]
+            if branches:
+                printed = [option_text(unit[1]) for unit in units]
+                original_target, original_context = dict(area.target), area.context
+                original_relations = list(area.source_questions)
+                area.target['printed'] = printed
+                area.context = ' > '.join(x for x in [area.context, *[
+                    'Printed instruction for ' + branch['caption'] + ': ' + branch['instruction']
+                    for branch in branches]] if x)
+                area.complete_source = True
+                area.source_questions.append({'relation': 'option_branch_instruction',
+                    'question': area.label, 'context': area.context, 'options': list(area.options),
+                    'printed': printed, 'branches': branches, 'original_target': original_target,
+                    'original_context': original_context, 'original_relations': original_relations,
+                    'sources': [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+                                for p in g['paras']]})
             self.add(area)
             for p in g["paras"]:
                 self.claimed.add(id(p.el))
@@ -8820,6 +8874,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relation.get('relation') == 'parenthetical_write_request' for relation in area.source_questions)]
     nested_choices = [area for area in source_detector.areas if any(
         relation.get('relation') == 'nested_cell_options' for relation in area.source_questions)]
+    branch_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'option_branch_instruction' for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
@@ -8840,6 +8896,23 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        for area in branch_choices:
+            branch_relation = next(r for r in area.source_questions if r.get('relation') == 'option_branch_instruction')
+            regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None}
+                       for ref in branch_relation['sources']]
+            if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
+                continue
+            legacy = (not branch_relation['original_relations'] and not field.get('source_questions')
+                      and target == branch_relation['original_target']
+                      and field.get('options') == branch_relation['printed']
+                      and field.get('context') == branch_relation['original_context'])
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or field.get('kind') != area.kind or field.get('label') != area.label
+                    or not legacy and (target != area.target or field.get('context') != area.context
+                                       or field.get('options') != area.options
+                                       or field.get('source_questions') != area.source_questions)):
+                fail('This option and its conditional instruction no longer match the original question. '
+                     'Review the exact caption and instruction again.', 'mapping_mismatch')
         for area in nested_choices:
             # This proven cell contains one caption, its complete options and
             # plain spacers. Its caption is source, never a second scalar answer.
@@ -8994,7 +9067,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -9026,7 +9099,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                             and current.options == field.get('options'))
             else:
                 owns = any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas)

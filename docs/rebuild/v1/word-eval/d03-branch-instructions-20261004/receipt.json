@@ -1,0 +1,22 @@
+{
+  "word_sha256": "1296fbbd4e76586808724989a7c8745524544ac872a683db123e3858272a8f4a",
+  "tests_sha256": "6e14eaf21522fea6a718ad7a5396c6c54ff49560397b836c11861d75cbeeb193",
+  "seven_new_actual_exit": 0,
+  "affected_methods": 23,
+  "affected_seconds": 40.339,
+  "affected_actual_exit": 0,
+  "source_original_actual_exit": 0,
+  "legacy_actual_exit": 0,
+  "prior_actual_unsafe_approval_exports": 2,
+  "fixed_d03_denominator": 88,
+  "fixed_d03_correct": 45,
+  "d03_strict": false,
+  "full_application_route": false,
+  "manual_mapping_corrections": 0,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "full_word_denominator": 60,
+  "holdout_denominator": 20,
+  "artifact_seal_sha256": "7eab3f86e7efbd0187da0ba5c128eb616dd115efd57e6b14bb49e6412dd33212"
+}

@@ -1,0 +1,19 @@
+{
+  "source_sha256": "1296fbbd4e76586808724989a7c8745524544ac872a683db123e3858272a8f4a",
+  "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "old_mapping_sha256": "ece58fe11b8f6bf8f82a33e41df7cf3ce60d6cdc99bc4931910d182027ecf03f",
+  "export_sha256": "b3675ca72236fa00abc903a8fff5090775eea77a13d8af0aa93d8f1c2c888db9",
+  "states": {
+    "v3_19": [
+      false,
+      true
+    ],
+    "v3_55": [
+      false,
+      true
+    ]
+  },
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0
+}

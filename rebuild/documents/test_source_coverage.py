@@ -1109,3 +1109,106 @@ class TerminalChoiceWriteIns(unittest.TestCase):
                 raw=self.form(caption=caption,question=question);result=word_v3.inspect(raw)
                 self.assertFalse([f for f in result['fields']if f.get('source_questions')and f['source_questions'][0]['relation']=='adjacent_checkbox_answer'])
                 self.assertEqual(word_v3.fill(raw,result['fields'],{}),raw)
+
+
+class PrintedOptionBranchInstructions(unittest.TestCase):
+    def form(self, option='Yes → If yes, focus on the following questions.', *, native=False):
+        doc=Document();p=doc.add_paragraph('Symptoms present? ')
+        if native:ff_field(p,'checkbox',name='branch0');p.add_run(' No ');ff_field(p,'checkbox',name='branch1');p.add_run(' '+option)
+        else:p.add_run('☐ No ☐ '+option)
+        doc.add_paragraph('Details: ______');doc.add_paragraph('Independent question? ☐ No ☐ Yes')
+        return data(doc)
+
+    def group(self, raw):
+        fields=word_v3.inspect(raw)['fields'];return fields,next(f for f in fields if f['label']=='Symptoms present?')
+
+    def test_branch_caption_and_instruction_have_separate_bound_meanings(self):
+        for native in (False,True):
+            raw=self.form(native=native);fields,choice=self.group(raw)
+            self.assertEqual(choice['options'],['No','Yes'])
+            self.assertEqual(word_v3.printed_options(choice),['No','Yes → If yes, focus on the following questions.'])
+            self.assertIn('focus on the following questions.',choice['context'])
+            out=word_v3.fill(raw,fields,{choice['key']:'Yes'})
+            index=word_v3.SlotIndex(word_v3.open_package(out))
+            self.assertEqual(word_v3.constrained_option_states(index,choice),[False,True])
+            expected=Document(io.BytesIO(raw)).paragraphs[0].text
+            actual=Document(io.BytesIO(out)).paragraphs[0].text
+            self.assertEqual(actual.replace('☒','☐'),expected)
+            self.assertEqual(Document(io.BytesIO(out)).paragraphs[1].text,'Details: ______')
+            self.assertEqual(Document(io.BytesIO(out)).paragraphs[2].text,'Independent question? ☐ No ☐ Yes')
+            self.assertEqual(word_v3.fill(raw,fields,{}),raw)
+
+    def test_terminal_conditional_caption_keeps_a_separate_following_answer(self):
+        raw=self.form('Yes → if yes, please expand:');fields,choice=self.group(raw)
+        self.assertEqual(choice['options'],['No','Yes'])
+        details=next(f for f in fields if f['label']=='Details')
+        out=word_v3.fill(raw,fields,{choice['key']:'Yes',details['key']:'Synthetic complete detail'})
+        doc=Document(io.BytesIO(out))
+        self.assertEqual(doc.paragraphs[0].text,'Symptoms present? ☐ No ☒ Yes → if yes, please expand:')
+        self.assertEqual(doc.paragraphs[1].text,'Details: Synthetic complete detail')
+        self.assertEqual(doc.paragraphs[2].text,'Independent question? ☐ No ☐ Yes')
+
+    def test_no_global_yes_alias_or_cross_question_boundary_is_created(self):
+        for caption in ('Yes if yes, focus on the following questions.',
+                'Yes → If no, focus on the following questions.',
+                'Yes → If yes, explain: _____',
+                'Yes → If yes, location? _____',
+                'Yes → If yes, focus here → then answer another question.',
+                'Yes → If yes,'):
+            raw=self.form(caption);fields,choice=self.group(raw)
+            if caption in ('Yes → If yes, explain: _____','Yes → If yes, location? _____'):
+                # The established drawn conditional writer is a separate contract.
+                continue
+            self.assertNotEqual(choice['options'],['No','Yes'])
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,fields,{choice['key']:'Yes'})
+
+    def test_changed_removed_or_forged_branch_mapping_cannot_select_another_box(self):
+        raw=self.form();fields,choice=self.group(raw)
+        for change in ('relation','context','options','printed','boxes'):
+            forged=deepcopy(choice)
+            if change=='relation':forged.pop('source_questions')
+            elif change=='context':forged['context']='Some other printed context'
+            elif change=='options':forged['options']=['Yes','No']
+            elif change=='printed':forged['locator']['target']['printed']=['No','Yes']
+            else:forged['locator']['target']['boxes'].reverse()
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'Yes'})
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(self.form('Yes → If yes, answer the following questions.'),fields,{choice['key']:'Yes'})
+
+    def test_existing_selection_branch_retains_state_and_ordinary_history_arguments(self):
+        for instruction in ('review the dose.','record the initial reading.',
+                'document the signed referral received.'):
+            raw=self.form('Yes → If yes, '+instruction);fields,choice=self.group(raw)
+            self.assertEqual(choice['options'],['No','Yes'])
+            self.assertFalse(choice.get('write_protected'))
+            out=word_v3.fill(raw,fields,{choice['key']:'No'})
+            self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),choice),[True,False])
+            self.assertEqual(Document(io.BytesIO(out)).paragraphs[0].text.replace('☒','☐'),Document(io.BytesIO(raw)).paragraphs[0].text)
+        raw=self.form();fields,choice=self.group(raw)
+        out=word_v3.fill(raw,fields,{choice['key']:'No'})
+        remapped=word_v3.inspect(out)['fields'];current=next(f for f in remapped if f['label']=='Symptoms present?')
+        self.assertEqual(word_v3.fill(out,remapped,{}),out)
+        next_output=word_v3.fill(out,remapped,{current['key']:'Yes'})
+        self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(next_output)),current),[False,True])
+
+    def test_original_full_option_mapping_remains_usable_without_a_new_alias(self):
+        raw=self.form();fields,choice=self.group(raw);relation=choice['source_questions'][-1]
+        legacy=deepcopy(choice);legacy['options']=relation['printed'];legacy['context']=relation['original_context']
+        legacy['locator']['target']=relation['original_target'];legacy.pop('source_questions')
+        out=word_v3.fill(raw,[legacy],{legacy['key']:legacy['options'][-1]})
+        self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),legacy),[False,True])
+        with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[legacy],{legacy['key']:'Yes'})
+        for change in ('caption','context','box'):
+            forged=deepcopy(legacy)
+            if change=='caption':forged['label']='Other clinical question'
+            elif change=='context':forged['context']='Some other source'
+            else:forged['locator']['target']['boxes'].reverse()
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:forged['options'][-1]})
+
+    def test_human_branch_act_is_not_released_as_an_ordinary_yes(self):
+        for instruction in ('I approve this document.','I certify that I witnessed the patient sign this consent form.',
+                'the line manager will review this form.','focus here. I approve this document.'):
+            raw=self.form('Yes → If yes, '+instruction);fields,choice=self.group(raw)
+            self.assertTrue(choice.get('write_protected'))
+            forged=deepcopy(choice);forged.pop('write_protected',None);forged.pop('destination_roles',None);forged['label']='Symptoms present';forged['options']=['No','Yes']
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'Yes'})
+            self.assertEqual(word_v3.fill(raw,fields,{}),raw)
