@@ -5,6 +5,7 @@
 <div class="page-heading"><div><div class="eyebrow">Original form · {{ template.format|upper }}</div><h1>{{ template.name }}</h1><p>Review where each answer belongs. Saving a mapping creates a new version.</p></div><div class="actions"><a class="button secondary" href="{% url 'template_original' template.pk %}">Download original</a>{% if not version.needs_confirmation %}<a class="button" href="{% url 'encounter_new' %}?template={{ template.pk }}">Use this form <span aria-hidden="true">→</span></a>{% endif %}</div></div>
 <ol class="step-list" aria-label="Document workflow"><li>Upload original</li><li class="current" aria-current="step">Review mapping</li><li>Add notes</li><li>Review & export</li></ol>
 {% if template.warnings %}<div class="notice warning"><strong>Form inspection notes</strong><ul>{% for warning in template.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}
+{% include 'template_reinspection.html' %}
 {% if v3 %}{% include 'template_detail_v3.html' %}{% else %}
 <div class="split">
   <section>

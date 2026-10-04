@@ -12,7 +12,7 @@ def for_mapping(manifest, fields):
     return bound
 
 
-def verify(version, *, allow_unreviewed=False):
+def verify(version, *, allow_unreviewed=False, reviewing_reinspection=False):
     manifest = getattr(version, 'import_manifest', {})
     if not manifest:  # historical versions retain their established contract
         return
@@ -28,7 +28,21 @@ def verify(version, *, allow_unreviewed=False):
             or manifest.get('engine_code_sha256') != processor
             or manifest.get('mapping_sha256') != digest(version.fields)):
         raise ValidationError('The stored import choice does not match this original and mapping version. '
-                              'Nothing was sent or exported; review a new mapping version.')
+                              'Nothing was sent or exported. Open the form and choose Recheck answer locations, '
+                              'then review its freshly inspected mapping.')
+    lineage = manifest.get('reinspection')
+    if lineage:
+        from .models import TemplateVersion
+        if (not isinstance(lineage, dict) or lineage.get('source_sha256') != version.template.sha256
+                or not TemplateVersion.objects.filter(pk=lineage.get('source_version_id'),
+                    template_id=lineage.get('source_template_id'),
+                    template__department_id=version.template.department_id,
+                    template__sha256=version.template.sha256).exists()):
+            raise ValidationError('This reinspection does not bind its preserved source form. Nothing was sent or exported.')
+        # V3 confirmation already reads physical roles through verify(). Legacy reinspection
+        # uses a separate review route; ordinary legacy imports retain their historical contract.
+        if expected == 'legacy' and not allow_unreviewed and not reviewing_reinspection and version.needs_confirmation:
+            raise ValidationError('Review every answer location and confirm this freshly inspected mapping before generating or exporting.')
     from documents.word_v3 import KNOWN_LAYOUT_FAILURES
     if not allow_unreviewed and (manifest.get('coverage', {}).get('layout_quarantine')
                                 or version.template.sha256 in KNOWN_LAYOUT_FAILURES):

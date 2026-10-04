@@ -324,8 +324,8 @@ class TemplateVersion(Entity):
         except ObjectDoesNotExist:return None
     @property
     def needs_confirmation(self):
-        """A contract v3 mapping starts no document until a clinician states they checked every field against the form."""
-        return self.contract=='v3' and self.confirmed is None
+        """New v3 mappings and freshly reinspected forms require their own explicit review."""
+        return (self.contract=='v3' or bool(self.import_manifest.get('reinspection'))) and self.confirmed is None
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
 class MappingConfirmation(Entity):
     """A clinician's statement that every field of one contract v3 mapping version was checked against the form.

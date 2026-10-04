@@ -513,6 +513,18 @@ def statement_guide(version):
 def template_detail(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
     version=t.versions.order_by('-number').first()
+    if request.method=='POST' and request.POST.get('action') in ('reinspect_original','confirm_reinspection'):
+        from documents import DocumentError
+        try:
+            if request.POST['action']=='reinspect_original':return reinspect_original(request,t)
+            return confirm_reinspection(request,t)
+        except (ValidationError,DocumentError,OSError) as exc:
+            error=error_message(exc) if not isinstance(exc,OSError) else 'The preserved original is unavailable. Nothing was saved.'
+            if v3_mapping.is_v3_version(version):return v3_page(request,t,version,status=400,error=error)
+            form=MappingForm(initial={'labels':{f['key']:f['label'] for f in version.fields}})
+            return render(request,'template_detail.html',{'template':t,'version':version,'form':form,
+                'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],
+                'statements':statement_guide(version),'reinspection_error':error,**reinspection_context(request,t,version)},status=400)
     if v3_mapping.is_v3_version(version):return template_detail_v3(request,t,version)
     form=MappingForm(request.POST or None,initial={'labels':{f['key']:f['label'] for f in version.fields}})
     if request.method=='POST' and form.is_valid():
@@ -543,7 +555,101 @@ def template_detail(request,pk):
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version),**reinspection_context(request,t,version)})
+
+
+def reinspection_context(request,t,version):
+    """Scoped navigation between immutable old forms and their freshly inspected copies."""
+    lineage=version.import_manifest.get('reinspection') or {}
+    source=scoped(Template,request.user).filter(pk=lineage.get('source_template_id')).first() if lineage else None
+    children=TemplateVersion.objects.filter(template__in=scoped(Template,request.user),number=1,
+        import_manifest__reinspection__source_template_id=str(t.pk)).select_related('template').order_by('-created_at')[:10]
+    stale=False
+    if t.format=='docx' and version.import_manifest:
+        from documents.service import engine_fingerprint,DocumentError
+        try:stale=version.import_manifest.get('engine_code_sha256')!=engine_fingerprint('v3' if version.contract=='v3' else 'legacy',source_sha256=t.sha256)
+        except (DocumentError,OSError,ValueError):stale=True
+    return {'reinspection_source':source,'reinspection_forms':children,'mapping_processor_changed':stale,
+        'can_reinspect':t.format=='docx' and Membership.objects.filter(user=request.user,department=t.department,
+            active=True,role__in=['owner','clinician']).exists()}
+
+
+def reinspect_original(request,t):
+    """A new form's FIRST import is genuine inspection; old provenance and records never change."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from documents import inspect_template
+    from documents.service import word_engine
+    membership(request.user,t.department,roles=['owner','clinician'])
+    if t.format!='docx':raise ValidationError('Rechecking answer locations is available for preserved Word .docx forms.')
+    if request.POST.get('review_reinspection')!='on':raise ValidationError('Confirm that you will review the freshly detected mapping. Previous corrections and answers are not copied.')
+    relative=None
+    try:
+        with transaction.atomic():
+            Template.objects.select_for_update().get(pk=t.pk)
+            latest=t.versions.order_by('-number').first()
+            if request.POST.get('mapping_version')!=str(latest.pk):raise ValidationError('This mapping changed. Reload the form before rechecking its answer locations.')
+            original=v3_original(t)
+            # A repeated submitted request reopens its still-current inspection instead of
+            # allocating another private file. Code changes require a genuinely new inspection.
+            from .import_binding import verify
+            children=TemplateVersion.objects.filter(template__department=t.department,number=1,
+                import_manifest__reinspection__source_version_id=str(latest.pk)).select_related('template').order_by('-created_at')
+            for candidate in children:
+                try:
+                    verify(candidate,allow_unreviewed=True)
+                    if v3_original(candidate.template)==original:return redirect('template_detail',pk=candidate.template_id)
+                except (ValidationError,OSError):continue
+            relative=store_upload(SimpleUploadedFile(t.original_name,original))
+            info=inspect_template(private_path(relative),engine=word_engine())
+            if info.get('sha256')!=t.sha256 or info.get('format')!='docx':raise ValidationError('The fresh inspection did not match the preserved original. Nothing was saved.')
+            contract=v3_mapping.CONTRACT if info.get('contract')==v3_mapping.CONTRACT else ''
+            count=len(v3_mapping.answerable(info['fields'])) if contract else len(info['fields'])
+            if count>(v3_mapping.field_limit() if contract else 100):raise ValidationError(v3_mapping.too_many_fields(count) if contract else 'Templates support at most 100 answer fields. Split this template explicitly.')
+            manifest=info.get('import_manifest')
+            if not manifest:raise ValidationError('The fresh inspection has no processor identity. Nothing was saved.')
+            lineage={'source_template_id':str(t.pk),'source_version_id':str(latest.pk),'source_sha256':t.sha256,
+                'source_engine_code_sha256':latest.import_manifest.get('engine_code_sha256','')}
+            fresh=Template.objects.create(department=t.department,name=(t.name[:115]+' · rechecked'),format=t.format,
+                original_name=t.original_name,original_path=relative,sha256=t.sha256,warnings=info.get('warnings',[]),created_by=request.user)
+            version=TemplateVersion.objects.create(template=fresh,number=1,fields=info['fields'],contract=contract,
+                review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),
+                import_manifest={**manifest,'reinspection':lineage},created_by=request.user)
+            verify(version,allow_unreviewed=True)
+            audit(request.user,'template.reinspected',fresh.pk,department=t.department,**lineage,
+                mapping_version_id=str(version.pk),engine_code_sha256=manifest['engine_code_sha256'],field_count=len(version.fields))
+        messages.success(request,'The preserved original was inspected again as a linked form. Review every answer location and confirm the new mapping. Existing drafts and downloads keep their original version.')
+        return redirect('template_detail',pk=fresh.pk)
+    except Exception:
+        if relative:cleanup_file(private_path(relative))
+        raise
+
+
+def confirm_reinspection(request,t):
+    """Legacy/native copies also require explicit review, with fresh physical destinations."""
+    from documents import inspect_template
+    from documents.engine import structure
+    from . import import_binding,destination_roles
+    membership(request.user,t.department,roles=['owner','clinician'])
+    if request.POST.get('checked_every_field')!='on':raise ValidationError('Tick "I checked every field against the form" to confirm this mapping.')
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):raise ValidationError('This mapping changed. Reload before confirming it.')
+        if latest.contract=='v3' or not latest.import_manifest.get('reinspection'):raise ValidationError('Use this form\'s field-by-field mapping review.')
+        import_binding.verify(latest,reviewing_reinspection=True)
+        if not latest.fields:raise ValidationError('No supported answer locations were found. This mapping cannot be confirmed.')
+        v3_original(t)
+        info=inspect_template(private_path(t.original_path),engine='legacy')
+        if (info.get('sha256')!=t.sha256 or info.get('contract')=='v3' or structure(info['fields'])!=structure(latest.fields)
+                or document_backend(info)!=latest.document_backend or info.get('review_requirements',[])!=latest.review_requirements):
+            raise ValidationError('The fresh physical destinations differ from this mapping. Recheck the original; nothing was confirmed.')
+        report=destination_roles.report(latest,mapping_review=True)
+        if report and report.get('legacy_unresolved_actions'):raise ValidationError('This original has an unresolved human-owned answer area. Nothing was confirmed.')
+        if not latest.confirmed:
+            MappingConfirmation.objects.create(version=latest,confirmed_by=request.user)
+            audit(request.user,'template.mapping_confirmed',latest.pk,department=t.department,number=latest.number,field_count=len(latest.fields),reinspection=True)
+    messages.success(request,'Freshly inspected mapping confirmed. You can now create documents with this linked form.')
+    return redirect('template_detail',pk=t.pk)
 
 #: At most this many unmapped places are listed at once; the search narrows the rest.
 V3_PLACES_SHOWN=300
@@ -604,7 +710,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
         'coverage_issues':version.import_manifest.get('coverage',{}).get('selected_engine_issues',[]),
         'coverage_reviewed':coverage_reviewed(version),
-        'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
+        'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False),**reinspection_context(request,t,version)},status=status)
 
 def template_detail_v3(request,t,version):
     from documents import DocumentError
