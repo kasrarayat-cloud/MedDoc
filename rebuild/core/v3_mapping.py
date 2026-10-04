@@ -504,7 +504,16 @@ def open_places(outline_rows, fields, query=''):
     wanted = ' '.join(str(query or '').split()).casefold()
     rows = []
     for row in outline_rows or []:
-        if is_mapped(row['slot'], mapped):
+        numeric_open = False
+        if row.get('numeric_parts'):
+            related = [field for field in fields if is_mapped(row['slot'], mapped_slots([field]))]
+            numbers = {field.get('locator', {}).get('target', {}).get('number') for field in related}
+            numeric_open = bool(related and all(
+                field.get('locator', {}).get('part', '') + '#' + field.get('locator', {}).get('slot', '') == row['slot']
+                and field.get('locator', {}).get('target', {}).get('shape') == 'numeric_part'
+                and field.get('locator', {}).get('target', {}).get('type') == 'span'
+                for field in related) and len(numbers) < len(row['numeric_parts']))
+        if is_mapped(row['slot'], mapped) and not numeric_open:
             continue
         if wanted and wanted not in ' '.join((row.get('preview') or '', row.get('context') or '')).casefold():
             continue

@@ -582,7 +582,8 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
     rows=[{'number':n,'key':f['key'],'field':f,'label':posted.get('label_'+f['key'],f['label']),
            'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
-           'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS or f['key'] in ordinary_roles,
+           'kind_editable':(f.get('kind') in v3_mapping.TEXT_KINDS or f['key'] in ordinary_roles)
+                           and f.get('locator',{}).get('target',{}).get('shape')!='numeric_part',
            'ordinary_role_review':f['key'] in ordinary_roles,
            'ordinary_role_ack':posted.get('ordinary_'+f['key'])=='on',
            'kind_choices':([(f.get('kind'),v3_mapping.KIND_NAMES[f['kind']])] if f['key'] in ordinary_roles else [])+[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
@@ -597,6 +598,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'places':places[:V3_PLACES_SHOWN],'places_hidden':max(0,len(places)-V3_PLACES_SHOWN),'places_total':len(places),
         'find':query,'outline_error':outline_error,'posted_slot':posted.get('slot',''),'posted_add_label':posted.get('label',''),
         'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
+        'posted_numeric_part':posted.get('numeric_part',''),
         'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
         'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.field_limit(),
         'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
@@ -679,6 +681,8 @@ def v3_save_corrections(request,t):
             if not label or len(supplied_label)>MAX_MAPPING_LABEL or '\n' in label:raise ValidationError(f'Give question {number} a one-line label of 1 to {MAX_MAPPING_LABEL} characters.')
             kind=request.POST.get('kind_'+key,f.get('kind'))
             if kind!=f.get('kind'):
+                if f.get('locator',{}).get('target',{}).get('shape')=='numeric_part':
+                    raise ValidationError('A reviewed numeric part keeps Text and its printed digit capacity. Remove it and review another destination to change its kind. Nothing was saved.')
                 if (f.get('kind') not in v3_mapping.TEXT_KINDS and key not in ordinary_roles) or kind not in v3_mapping.TEXT_KINDS:
                     raise ValidationError(f'"{f["label"]}" keeps its kind ({v3_mapping.KIND_NAMES.get(f.get("kind"),f.get("kind"))}): only text, long text, date and time can be changed into one another. Nothing was saved.')
                 if key in ordinary_roles and request.POST.get('ordinary_'+key)!='on':
@@ -712,9 +716,15 @@ def v3_add_field(request,t):
     outline=v3_outline(t)
     place=next((row for row in outline if row['slot']==slot),None)
     if place is None:raise ValidationError('That place is not in this form. Choose one from the list.')
-    if v3_mapping.is_mapped(slot,v3_mapping.mapped_slots(latest.fields)):
+    numeric_part=request.POST.get('numeric_part','').strip()
+    if v3_mapping.is_mapped(slot,v3_mapping.mapped_slots(latest.fields)) and not numeric_part:
         raise ValidationError('That place already belongs to a field. Correct that field instead of adding another.')
     target={'slot':slot,'kind':kind,'label':label}
+    if numeric_part:
+        try:number=int(numeric_part)
+        except ValueError:number=0
+        if number<1:raise ValidationError('Give the numbered numeric part, counting from 1, or leave it empty for a whole place.')
+        target['numeric_part']=number
     if kind=='checkbox' or place.get('kind')=='glyphs':
         # ⚠️ The box the clinician named, for ANY place that holds printed boxes; the engine refuses a number beyond
         # the boxes the place actually holds (a paragraph place used to take box 1 whatever was asked).
@@ -723,13 +733,27 @@ def v3_add_field(request,t):
         if box<1:raise ValidationError('Give the number of the printed box, counting from 1.')
         target['glyph']=box-1
     field=locate_fields(v3_original(t),[target])['fields'][0]
+    if any(f['key']==field['key'] for f in latest.fields):raise ValidationError('That place already belongs to a field with this label.')
+    if numeric_part:
+        from documents.service import writing_places
+        from documents.word_v3 import _PlaceReader
+        from types import SimpleNamespace
+        places=writing_places(v3_original(t),latest.fields+[field])
+        if places.get('sha256')!=t.sha256:raise ValidationError('The original could not be verified. Nothing was added.')
+        reader=_PlaceReader(SimpleNamespace(by_id={}))
+        destinations=places.get('places',{})
+        if field['key'] not in destinations or any(f['key'] not in destinations for f in latest.fields):
+            raise ValidationError('The existing writing destinations could not be verified. Nothing was added.')
+        if any(reader.touches(new,{'place':old[0],'start':old[1],'end':old[2]}) or new[0]==old[0]
+               and f.get('locator',{}).get('target',{}).get('shape')!='numeric_part'
+               for f in latest.fields for old in destinations[f['key']] for new in destinations[field['key']]):
+            raise ValidationError('That numeric part overlaps an existing field. Remove the whole-band field first, then add each part separately with its reviewed label.')
     if field.get('kind') in ('choice','multi_choice') and not field.get('options'):
         raise ValidationError('Choose a Word dropdown, a legacy dropdown, or the question or first item of a complete printed option list. Use text for a narrative answer.')
     if field.get('locator',{}).get('target',{}).get('type') in ('paragraph_options','ruled_paragraphs'):
         if any(v3_mapping.is_mapped(place,v3_mapping.mapped_slots(latest.fields))
                for place in v3_mapping.mapped_slots([field])):
             raise ValidationError('One of these answer destinations already belongs to a field. Correct that mapping before adding the complete area.')
-    if any(f['key']==field['key'] for f in latest.fields):raise ValidationError('That place already belongs to a field with this label.')
     with transaction.atomic():
         Template.objects.select_for_update().get(pk=t.pk)
         if t.versions.order_by('-number').first().pk!=latest.pk:
