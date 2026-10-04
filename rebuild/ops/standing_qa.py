@@ -191,7 +191,7 @@ STAGE_KIND = {'model_check': 'model_check', 'mapping': 'mapping', 'notes_compari
 STAGE_PRICING = {'model_check': ('model_check',), 'mapping': ('mapping',),
                  'notes_comparison': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'notes_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
-                 'elicited_qualification': ('ordinary_notes_field_relations',),
+                 'elicited_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'd30_d31_structure': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'transcription': ('transcription',), 'ordinary_batch': ('ordinary_notes', 'ordinary_notes_field_relations')}
 _ALL_OFF = {'QUILLMD_WM_NARRATIVE': '0', 'QUILLMD_V3_HISTORY_CONTEXT': '0', 'QUILLMD_V3_GENERATION_BATCHES': '0',
