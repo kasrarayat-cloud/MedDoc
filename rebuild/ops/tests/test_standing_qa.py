@@ -2804,5 +2804,33 @@ class TranscriptJudgeTests(unittest.TestCase):
         self.assertIsNone(tr.provider_transcript({'results': {'channels': []}}))
 
 
+
+class ProspectiveNotesReviewAdmission(Base):
+    def test_declaration_defaults_and_explicit_hash_duplicate_or_wrong_hash(self):
+        from ops import standing_qa_notes_review as nr
+        self.assertEqual(parse(self).notes_mapping_review,'')
+        text=fixture_text()+f'\nnotes_mapping_review: {nr.MANIFEST_SHA256}\n'
+        self.assertEqual(parse(self,text).notes_mapping_review,nr.MANIFEST_SHA256)
+        for bad in (text.replace(nr.MANIFEST_SHA256,'0'*64),
+                    text+f'notes_mapping_review: {nr.MANIFEST_SHA256}\n'):
+            with self.assertRaises(pc.Refused):parse(self,bad)
+
+    def test_last_door_requires_declared_hash_and_cannot_retrofit_prior_attempt(self):
+        from ops import standing_qa_notes_review as nr
+        campaign=self.campaign(dataclasses.replace(parse(self),notes_mapping_review=nr.MANIFEST_SHA256))
+        self.pass_model_check(campaign)
+        inputs=sq.stages_module().frozen_inputs()
+        plan=st.standing_plan('notes_comparison',inputs)
+        run,_=self.open_notes_run(campaign,plan[:2])
+        attempt=self.notes_attempt(campaign,plan[0],inputs)
+        with self.assertRaisesRegex(pc.Refused,'prospectively declared notes mapping review'):
+            campaign.ledger.write_attempt(attempt)
+        attempt['notes_mapping_review_manifest_sha256']=nr.MANIFEST_SHA256
+        campaign.ledger.write_attempt(attempt);self.completed(campaign,attempt['number'])
+        campaign.runs.close(campaign.ledger,run['run'],{'closed_as':'partial','sends':[]})
+        campaign.declaration=dataclasses.replace(campaign.declaration,notes_mapping_review='')
+        with self.assertRaisesRegex(pc.Refused,'earlier notes mapping review'):
+            campaign.stage_open('notes_comparison')
+
 if __name__ == '__main__':
     unittest.main()

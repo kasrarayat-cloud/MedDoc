@@ -1274,14 +1274,26 @@ class Run:
             template, version = self.upload(self.forms[case['form']],
                                             f'SYNTHETIC SONNET5 NOTES {case["id"]} {send.path} attempt {number}',
                                             'intake.docx')
+            review_digest = self.inputs.get('notes_mapping_review_manifest_sha256', '')
+            mapping_review = None
             if version.fields != form['fields']:
-                raise StageStop(f'{send.id}: the stored mapping differs from the frozen cases.json fields (nothing sent)')
+                raise StageStop(f'{send.id}: the stored mapping differs from the declared fields (nothing sent)')
+            if review_digest:
+                try:
+                    from . import standing_qa_notes_review as nr
+                except ImportError:
+                    import standing_qa_notes_review as nr
+                row = nr.frozen(review_digest)
+                if case['form'] == row['form']:
+                    version, mapping_review = nr.review_mapping(self.world.client, template, version, row, form['fields'])
             page = self.world.client.get(f'/templates/{template.pk}/')
             require(page.status_code == 200, f'The mapping review page failed ({page.status_code}).')
             response = steps.confirm_mapping(self.world.client, template.pk, version.pk)
             version.refresh_from_db()
             require(response.status_code == 302 and version.confirmed, 'The mapping confirmation was refused.')
-            return self.generation_send(send, template, version, case['notes'], extra={'case': case['id']},
+            return self.generation_send(send, template, version, case['notes'], extra={
+                'case': case['id'], **({'notes_mapping_review_manifest_sha256':review_digest,
+                    'mapping_review':mapping_review} if review_digest else {})},
                                         judge=self.judge_notes(case))
 
     def judge_notes(self, case):

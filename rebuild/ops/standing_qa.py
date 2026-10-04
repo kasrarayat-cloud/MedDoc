@@ -387,6 +387,7 @@ def build_transcription_forms(target, inputs):
 WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
     'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
     'rebuild/ops/standing_qa_signing.py',
+    'rebuild/ops/standing_qa_notes_review.py', 'rebuild/ops/fixtures/frozen-notes-consent-review-v1.json',
     'rebuild/ops/standing_qa_voice_forms.py', 'rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json',
     'rebuild/ops/standing_qa_soap_form.py', 'rebuild/ops/fixtures/builtin-soap-voice-v1.json',
     'rebuild/ops/standing_qa_voice_review.py', 'rebuild/ops/fixtures/reviewed-synthetic-voice-v1.json',
@@ -520,6 +521,7 @@ class StandingDeclaration:
     restricted_inputs_ledger_sha256: str
     transcription: object = None    # TranscriptionTerms when a transcription stage is declared, else None
     qa_signing_key_file: object = None  # Prospective opt-in only; historical declarations keep random process keys.
+    notes_mapping_review: str = ''  # Absence preserves the historical exact-field confirmation path.
 
     # (read by provider_campaign code written for the historical declaration)
     total_limit = None
@@ -867,6 +869,15 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
         pc.refuse_env_path(named)
     transcription = transcription_terms(text, seen, stages, credential_file)
     signing_file = qa_signing.declared_file(text, seen, campaign_root)
+    notes_review = ''
+    if re.findall(r'(?<![A-Za-z0-9_])notes_mapping_review(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I):
+        notes_review = one('notes_mapping_review', r'([0-9a-f]{64})')
+        try:
+            from . import standing_qa_notes_review as nr
+        except ImportError:
+            import standing_qa_notes_review as nr
+        require(notes_review == nr.MANIFEST_SHA256 and 'notes_comparison' in ids,
+                'The explicit notes mapping review requires its frozen hash and notes_comparison stage.')
     if transcription is not None and transcription.notes_contract != 'default':
         key = TRANSCRIPTION_NOTES_CONTRACTS[transcription.notes_contract]
         require(key in names, f'Stage transcription has no declared pricing version for {key} (its notes contract).')
@@ -882,7 +893,7 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
         stages=tuple(stages), root=campaign_root, qa_database=database, credential_file=credential_file,
         qa_database_password_file=password_file, restricted_inputs_ledger=restricted,
         restricted_inputs_ledger_sha256=one('restricted_inputs_ledger_sha256', r'([0-9a-f]{64})'),
-        transcription=transcription, qa_signing_key_file=signing_file)
+        transcription=transcription, qa_signing_key_file=signing_file, notes_mapping_review=notes_review)
     print(f'declaration {relative}: committed {commit_time} in {commit}; sha256 {declaration.sha256}; authority '
           f'{authority_id}; mode {MODE}; monetary ceiling none', file=out)
     return declaration
@@ -1128,6 +1139,13 @@ def stage_inputs(stage, declaration):
     if stage == 'model_check':
         return None
     inputs = sq.stages_module().frozen_inputs()
+    if stage == 'notes_comparison' and declaration.notes_mapping_review:
+        try:
+            from . import standing_qa_notes_review as nr
+        except ImportError:
+            import standing_qa_notes_review as nr
+        inputs = nr.inputs_with_review(inputs, nr.frozen(declaration.notes_mapping_review))
+        inputs['notes_mapping_review_manifest_sha256'] = declaration.notes_mapping_review
     if stage == 'transcription':
         require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
         inputs = {**inputs, 'transcription_audio': declaration.transcription.inputs,
@@ -1330,6 +1348,9 @@ class StandingLedger(pc.Ledger):
                 'The attempt\'s form is not one of the synthetic inputs its run allows.')
         require(form not in set(run['restricted_inputs']),
                 'The attempt\'s form is a development original marked "no provider upload"; it is never sent.')
+        if attempt['stage'] == 'notes_comparison':
+            require(attempt.get('notes_mapping_review_manifest_sha256', '') == declaration.notes_mapping_review,
+                    'The attempt does not bind the prospectively declared notes mapping review.')
         if attempt['stage'] == 'transcription' or 'audio_sha256' in attempt:
             # (a recording is the runner's allowlisted synthetic speech for THIS send, one its run allows, and never a
             # restricted original — whatever the worker or a run record says)
@@ -1425,6 +1446,10 @@ class StandingCampaign(pc.Campaign):
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         self.require_pinned_terms(rows)
         signing_identity(self)
+        if stage.id == 'notes_comparison':
+            require(all(a.get('notes_mapping_review_manifest_sha256', '') == self.declaration.notes_mapping_review
+                        for a, _ in rows if a.get('stage') == stage.id),
+                    'An edited declaration never changes an earlier notes mapping review.')
         if stage.id == 'transcription' and self.declaration.transcription is not None:
             for attempt, _ in rows:
                 if attempt.get('stage') != 'transcription':
