@@ -58,12 +58,38 @@ class TemporalFormatPairs(unittest.TestCase):
                 self.assertEqual(w.fill(raw,r['fields'],{}),raw)
 
     def test_renamed_ordinary_complete_caption_needs_no_template_subject_noun(self):
-        for caption in ('Specimen date and time:','Date and time recorded:','Date and time signed referral received:','Date and time initial physical observations:'):
+        for caption in ('Specimen date and time:','Date and time recorded:', 'Date and time collected and recorded:',
+                        'Date and time initial symptoms and signs observed:',
+                        'Date and time signed referral received:','Date and time initial physical observations:'):
             with self.subTest(caption=caption):
                 raw=data(form(caption,family=None));f=pairs(w.inspect(raw));self.assertEqual(len(f),2)
                 self.assertTrue(all(x['source_questions'][0]['question']==caption for x in f))
                 out=w.fill(raw,f,{f[0]['key']:'10/04/2026',f[1]['key']:'14:35'})
                 self.assertEqual(Document(io.BytesIO(out)).tables[0].cell(0,1).text,caption)
+
+    def test_prospective_possessive_response_and_coordinated_human_clauses_are_protected(self):
+        arguments = ('Alex Reed is to write his comments', 'Alex Reed is not to enter his response',
+                     'Avery should write her statement', 'collected and I approve this document',
+                     'collected or I approve this document', 'collected, but I approve this document',
+                     'collected and Alex Reed is to write his comments')
+        for argument in arguments:
+            for family in ('glyph','ff','sdt'):
+                with self.subTest(argument=argument,family=family):
+                    raw=data(form('Date and time '+argument+':',family=family));r=w.inspect(raw);f=pairs(r)
+                    self.assertEqual(len(f),2)
+                    for field in f:
+                        self.assertTrue(field.get('write_protected'))
+                        with self.assertRaises(w.V3Failure):w.fill(raw,r['fields'],{field['key']:'Dr Synthetic Finalizer'})
+                        forged=deepcopy(field);forged.update(kind='text',label='Clinical value')
+                        for key in ('write_protected','destination_roles','answer_policy'):forged.pop(key,None)
+                        with self.assertRaises(w.V3Failure):w.fill(raw,[forged],{forged['key']:'Dr Synthetic Finalizer'})
+                    self.assertEqual(w.fill(raw,r['fields'],{}),raw)
+        for argument in ('Alex Reed is to write his comments', 'Avery should enter her response'):
+            self.assertTrue(w.Detector.question_box_authorship(argument))
+        for argument in ('The patient is to start her medication', 'Alex Reed is to review his symptoms',
+                         'Signed referral received and recorded', 'initial symptoms and signs observed'):
+            self.assertFalse(w.Detector.question_box_authorship(argument))
+            self.assertFalse(w.Detector.temporal_source_action(argument))
 
     def test_human_signing_and_author_captions_refuse_physical_date_forgery(self):
         for caption in ('Date and time Alex Reed should sign:','Date and time Avery is required to sign:',

@@ -7013,7 +7013,7 @@ class Detector:
         prospective = re.fullmatch(
             r"\s*[^;:?!\r\n]+?\s+(?:" + SOURCE_ACTION_AUXILIARY + r"\s+)+"
             r"(?:(?:required\s+)?to\s+)?(?P<predicate>[^.;:?!\r\n]+?)\s+"
-            r"(?P<object>the\s+following|(?:this|the|these)\s+" + response + r")\s*[:.]?\s*", text, re.I)
+            r"(?P<object>the\s+following|(?:this|the|these|my|our|your|his|her|their)\s+" + response + r")\s*[:.]?\s*", text, re.I)
         # Reuse the existing data-entry instruction grammar. A prospective
         # clinical obligation to include/avoid something is not a writer.
         writing = prospective and (re.match(r'write\b', prospective['predicate'], re.I)
@@ -7681,6 +7681,17 @@ class Detector:
                 kept.append((start, end, kind))
         return kept
 
+    @classmethod
+    def temporal_source_action(cls, argument):
+        # A temporal modifier can qualify coordinated events. Each complete
+        # clause keeps its own actor/predicate/argument reading: recording an
+        # observation does not release a subsequent approval or appointed
+        # response. Ordinary coordinated recorded states are still ordinary.
+        clauses = [argument, *re.split(r'(?:\s+|,\s*)(?:and|or|but)\s+', argument, flags=re.I)]
+        return any(cls.checkbox_source_action(clause, governing=True)
+                   or cls.question_box_authorship(clause) or signing_place(clause)
+                   for clause in clauses if clause.strip())
+
     def rule_temporal_format_pairs(self):
         """Two complete format paragraphs under their own aligned temporal caption.
 
@@ -7753,8 +7764,7 @@ class Detector:
             # does not convert that person's signing, approval or statement
             # into an ordinary clinical field. Use the established source
             # predicates on that argument and retain the complete original.
-            human = (self.checkbox_source_action(argument, governing=True)
-                     or self.question_box_authorship(argument) or signing_place(argument))
+            human = self.temporal_source_action(argument)
             refs = [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)} for p in sources]
             for kind, paragraph in zip(('date', 'time'), paragraphs[:2]):
                 text, _ = self.ptext(paragraph.el)
