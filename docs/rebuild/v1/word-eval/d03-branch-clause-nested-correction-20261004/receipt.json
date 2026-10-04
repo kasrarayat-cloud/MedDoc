@@ -1,0 +1,36 @@
+{
+  "parent_commit": "9a2bbdbcd466b247796d3336a6ee76871d88f432",
+  "source_hashes": {
+    "rebuild/documents/word_v3.py": "b186946772679acd1bbcacecba0719497c0d79d574aea5f09022f454f1ff0a1b",
+    "rebuild/documents/test_source_coverage.py": "d394027e523d4c9ff2c5825a5b1b83a43c7ecb5973f29ee8bf88d40bf1351e83"
+  },
+  "original_root_controls": 24,
+  "original_unsafe_exports": 6,
+  "original_historical_nested_refusals": 2,
+  "corrected_exact_root_controls": 52,
+  "corrected_wrong": 0,
+  "pure_eight_methods_actual_exit": 0,
+  "pure_eight_methods_seconds": 24.287,
+  "first_nested_corrective_run_actual_exit": 1,
+  "first_nested_corrective_run_cause": "Final fresh related-question ownership still compared only the new representation; retained before the narrow common helper was also applied there.",
+  "db_calls": 0,
+  "provider_calls": 0,
+  "render_calls": 0,
+  "native_word_inspection": false,
+  "fixed_D03_score_unchanged": {
+    "denominator": 88,
+    "correct": 45,
+    "missed": 32,
+    "wrong": 11,
+    "extras": 2,
+    "strict": false
+  },
+  "acceptance_gate_unchanged": {
+    "overall": "54/60",
+    "holdout": "18/20"
+  },
+  "artifacts": "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/docs/rebuild/v1/word-eval/d03-branch-clause-nested-correction-20261004/artifact-seal.json",
+  "affected_methods": 24,
+  "affected_actual_exit": 0,
+  "affected_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/printed-branch-clause-nested-final-24-20261004.log"
+}

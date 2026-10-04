@@ -3335,7 +3335,7 @@ class Detector:
         adjacent, matching condition has a shorter option value; there is no
         global alias for Yes or any arbitrary option prefix.
         """
-        frame = re.fullmatch(r'\s*(Yes|No)\s*→\s*(if\s+(yes|no),)\s*(.+?)\s*', unit[1], re.I)
+        frame = re.fullmatch(r'\s*(Yes|No)\s*→\s*(if\s+(yes|no),)\s*(.+?)\s*', unit[1], re.I | re.S)
         if not frame:
             return None
         ref = unit[0]
@@ -3345,7 +3345,7 @@ class Detector:
             return None
         instruction = frame[4]
         acts = [self.checkbox_source_action(clause, governing=True)
-                for clause in [instruction, *re.split(r'(?<=[.;!?])\s+', instruction)]]
+                for clause in [instruction, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', instruction)]]
         protection = next((act for act in acts if act), '')
         text, pieces = self.ptext(paragraph.el)
         qualified = (frame[1].casefold() == frame[3].casefold() and '→' not in instruction
@@ -8885,6 +8885,28 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("The stored mapping no longer matches this form. Review the mapping again.", "mapping_mismatch")
         return slot
 
+    def original_branch_mapping(field, area):
+        """Match the complete former representation compiled from this original.
+
+        A nested question's existing source relationship is retained, never
+        dropped to obtain a shorter option. The former full option still has
+        only its former full answer value.
+        """
+        relation = next((r for r in area.source_questions
+                         if r.get('relation') == 'option_branch_instruction'), None)
+        if relation is None:
+            return False
+        loc = field.get('locator') or {}
+        extras = [{'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+                  for slot in area.extra_slots]
+        return (loc.get('part') == area.slot.part and loc.get('slot') == area.slot.path
+                and loc.get('fingerprint') == fingerprint(area.slot.el) and loc.get('extra', []) == extras
+                and loc.get('target') == relation['original_target']
+                and field.get('kind') == area.kind and field.get('label') == area.label
+                and field.get('options') == relation['printed']
+                and field.get('context') == relation['original_context']
+                and field.get('source_questions', []) == relation['original_relations'])
+
     for field in fields:
         loc = field.get("locator") or {}
         if loc.get("contract") != CONTRACT:
@@ -8902,10 +8924,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                        for ref in branch_relation['sources']]
             if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
                 continue
-            legacy = (not branch_relation['original_relations'] and not field.get('source_questions')
-                      and target == branch_relation['original_target']
-                      and field.get('options') == branch_relation['printed']
-                      and field.get('context') == branch_relation['original_context'])
+            legacy = original_branch_mapping(field, area)
             if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
                     or field.get('kind') != area.kind or field.get('label') != area.label
                     or not legacy and (target != area.target or field.get('context') != area.context
@@ -8926,6 +8945,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                    and target == adjacent.target and field.get('kind') == adjacent.kind
                    and field.get('label') == adjacent.label and field.get('context') == adjacent.context
                    and field.get('source_questions') == adjacent.source_questions for adjacent in adjacent_answers):
+                continue
+            if original_branch_mapping(field, area):
                 continue
             if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
                     or target != area.target or field.get('kind') != area.kind
@@ -9098,11 +9119,12 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 owns = bool(current and current.target == target and current.source_questions == relations
                             and current.options == field.get('options'))
             else:
-                owns = any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
+                owns = (any(original_branch_mapping(field, area) for area in relation_areas)
+                        or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
                            and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
-                           for area in relation_areas)
+                           for area in relation_areas))
             if not owns:
                 fail("The related question no longer owns this answer destination. Review the mapping again.",
                      "mapping_mismatch")

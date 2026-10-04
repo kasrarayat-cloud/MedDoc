@@ -1114,7 +1114,14 @@ class TerminalChoiceWriteIns(unittest.TestCase):
 class PrintedOptionBranchInstructions(unittest.TestCase):
     def form(self, option='Yes → If yes, focus on the following questions.', *, native=False):
         doc=Document();p=doc.add_paragraph('Symptoms present? ')
-        if native:ff_field(p,'checkbox',name='branch0');p.add_run(' No ');ff_field(p,'checkbox',name='branch1');p.add_run(' '+option)
+        if native:
+            from .test_word_v3 import checkbox_control
+            if native=='sdt':p._p.append(checkbox_control())
+            else:ff_field(p,'checkbox',name='branch0')
+            p.add_run(' No ')
+            if native=='sdt':p._p.append(checkbox_control())
+            else:ff_field(p,'checkbox',name='branch1')
+            p.add_run(' '+option)
         else:p.add_run('☐ No ☐ '+option)
         doc.add_paragraph('Details: ______');doc.add_paragraph('Independent question? ☐ No ☐ Yes')
         return data(doc)
@@ -1123,7 +1130,7 @@ class PrintedOptionBranchInstructions(unittest.TestCase):
         fields=word_v3.inspect(raw)['fields'];return fields,next(f for f in fields if f['label']=='Symptoms present?')
 
     def test_branch_caption_and_instruction_have_separate_bound_meanings(self):
-        for native in (False,True):
+        for native in (False,True,'sdt'):
             raw=self.form(native=native);fields,choice=self.group(raw)
             self.assertEqual(choice['options'],['No','Yes'])
             self.assertEqual(word_v3.printed_options(choice),['No','Yes → If yes, focus on the following questions.'])
@@ -1205,10 +1212,49 @@ class PrintedOptionBranchInstructions(unittest.TestCase):
             with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:forged['options'][-1]})
 
     def test_human_branch_act_is_not_released_as_an_ordinary_yes(self):
-        for instruction in ('I approve this document.','I certify that I witnessed the patient sign this consent form.',
-                'the line manager will review this form.','focus here. I approve this document.'):
-            raw=self.form('Yes → If yes, '+instruction);fields,choice=self.group(raw)
-            self.assertTrue(choice.get('write_protected'))
-            forged=deepcopy(choice);forged.pop('write_protected',None);forged.pop('destination_roles',None);forged['label']='Symptoms present';forged['options']=['No','Yes']
-            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'Yes'})
+        for native in (False,True,'sdt'):
+            for instruction in ('I approve this document.','I certify that I witnessed the patient sign this consent form.',
+                    'the line manager will review this form.','focus here. I approve this document.',
+                    'focus here;I approve this document.','focus here.\nI approve this document.'):
+                with self.subTest(native=native,instruction=instruction):
+                    raw=self.form('Yes → If yes, '+instruction,native=native);fields,choice=self.group(raw)
+                    self.assertTrue(choice.get('write_protected'))
+                    forged=deepcopy(choice);forged.pop('write_protected',None);forged.pop('destination_roles',None);forged['label']='Symptoms present';forged['options']=['No','Yes']
+                    with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'Yes'})
+                    self.assertEqual(word_v3.fill(raw,fields,{}),raw)
+
+    def test_original_nested_relationship_and_full_option_remain_bound(self):
+        from .test_question_boxes import IndependentNestedQuestionCells
+        fixture=IndependentNestedQuestionCells()
+        for control in ('glyph','ff'):
+            raw=fixture.form(control=control)
+            doc=Document(io.BytesIO(raw));cell=doc.tables[0].cell(0,0).tables[0].cell(0,0)
+            cell.paragraphs[1].add_run(' → If yes, review the dose.')
+            raw=data(doc);fields=word_v3.inspect(raw)['fields']
+            choice=next(f for f in fields if f['label']=='1. Current symptoms (choose one):')
+            relation=next(r for r in choice['source_questions'] if r['relation']=='option_branch_instruction')
+            legacy=deepcopy(choice);legacy['options']=relation['printed'];legacy['context']=relation['original_context']
+            legacy['locator']['target']=relation['original_target'];legacy['source_questions']=relation['original_relations']
+            self.assertEqual([r['relation']for r in legacy['source_questions']],['nested_cell_options'])
+            full=legacy['options'][0];out=word_v3.fill(raw,[legacy],{legacy['key']:full})
+            self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),legacy),[True,False])
+            self.assertEqual(Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,1)._tc.xml,
+                             Document(io.BytesIO(raw)).tables[0].cell(0,0).tables[0].cell(0,1)._tc.xml)
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[legacy],{legacy['key']:'Yes'})
+            for change in ('relation','source','context','fingerprint','extra','target','kind','caption','options'):
+                forged=deepcopy(legacy)
+                if change=='relation':forged.pop('source_questions')
+                elif change=='source':forged['source_questions'][0]['sources'][0]['fingerprint']='0'*64
+                elif change=='context':forged['context']='Other source'
+                elif change=='fingerprint':forged['locator']['fingerprint']='0'*64
+                elif change=='extra':forged['locator']['extra']=[]
+                elif change=='target':forged['locator']['target']['boxes'].reverse()
+                elif change=='kind':forged['kind']='multi_choice'
+                elif change=='caption':forged['label']='Different question'
+                else:forged['options'].reverse()
+                with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:full})
+            cell.paragraphs[1].add_run(';I approve this document.');human=data(doc)
+            human_fields=word_v3.inspect(human)['fields'];candidate=next(f for f in human_fields if f['label']==choice['label'])
+            candidate.pop('write_protected',None);candidate.pop('destination_roles',None)
+            with self.assertRaises(word_v3.V3Failure):word_v3.fill(human,[candidate],{candidate['key']:candidate['options'][0]})
             self.assertEqual(word_v3.fill(raw,fields,{}),raw)
