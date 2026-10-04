@@ -170,3 +170,15 @@ class NumericMetadataCorrection(SimpleTestCase):
                 self.check('No polyps were seen. Correction: '+change,False)
         self.check('No polyps were seen. The earlier findings were wrong. '
                    'Correction: examination date was 2026-09-22.',False)
+
+    def test_demonstrative_date_subject_cannot_discharge_a_literal_pointer(self):
+        for change in ('that procedure date was 09/21/2026.',
+                'this procedure date was 09/21/2026.', 'these procedure dates were 09/21/2026.',
+                'those procedure dates were 09/21/2026.',
+                'that examination date was 2026-09-22.', 'this examination date was 2026-09-22.'):
+            with self.subTest(change=change):
+                self.check('No polyps were seen. Correction: '+change,False)
+        for change in ('procedure date was 09/21/2026.', 'the procedure date was 09/21/2026.',
+                'examination date was 2026-09-22.', 'the examination date was 2026-09-22.'):
+            with self.subTest(change=change):
+                self.check('No polyps were seen. Correction: '+change,True)

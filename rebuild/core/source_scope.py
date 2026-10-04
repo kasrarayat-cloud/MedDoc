@@ -1697,7 +1697,8 @@ def date_correction_governors(governance, label, evidence, ordinary_relation, fi
         if (a._lemma(root)!='be' or root.tag_!='VBD' or len(subjects)!=1
                 or subjects[0].pos_!='NOUN' or a._lemma(subjects[0])!='date'):continue
         subject=set(subjects[0].subtree)
-        if any(t.pos_ not in ('NOUN','DET') or t.dep_ not in ('nsubj','compound','det') for t in subject):continue
+        if any(t.pos_ not in ('NOUN','DET') or t.dep_ not in ('nsubj','compound','det')
+                or 'Dem' in t.morph.get('PronType') for t in subject):continue
         attributes=[t for t in root.children if t.dep_=='attr']
         if len(attributes)!=1 or any(t.pos_!='NUM' for t in attributes[0].subtree if not t.is_punct):continue
         allowed=subject|set(attributes[0].subtree)|{root}
