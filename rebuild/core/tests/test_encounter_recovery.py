@@ -58,6 +58,9 @@ class EncounterRecovery(V3Fixture, TestCase):
         target, mapping = self.fresh_target(template, version)
         before = copy.deepcopy(old.__dict__); original = private_path(template.original_path).read_bytes()
         manifest, fields = copy.deepcopy(version.import_manifest), copy.deepcopy(version.fields)
+        old_page = self.client.get(f'/encounters/{old.pk}/')
+        self.assertContains(old_page, f'/encounters/{old.pk}/recover/')
+        self.assertContains(old_page, old.notes, html=False)
         response = self.client.get(f'/encounters/{old.pk}/recover/')
         self.assertContains(response, old.notes, html=False)
         self.assertContains(response, 'signed transcript context are not copied')
@@ -67,6 +70,12 @@ class EncounterRecovery(V3Fixture, TestCase):
         self.assertEqual((new.patient_id, new.service_date, new.notes, new.template_version_id),
                          (old.patient_id, old.service_date, old.notes, mapping.pk))
         self.assertEqual((new.answers, new.template_review, new.revision, new.status), ({}, {}, 0, 'draft'))
+        new_page = self.client.get(f'/encounters/{new.pk}/')
+        self.assertContains(new_page, 'data-source-recovery')
+        self.assertContains(new_page, f'/encounters/{old.pk}/')
+        self.assertContains(new_page, old.notes, html=False)
+        self.assertContains(new_page, 'Earlier answers, code acceptances and reviewed transcript context were not copied')
+        self.assertContains(new_page, 'before generating')
         old.refresh_from_db(); version.refresh_from_db()
         for attr in ('notes', 'answers', 'template_review', 'revision', 'status', 'template_version_id'):
             self.assertEqual(getattr(old, attr), before[attr])
@@ -109,7 +118,17 @@ class EncounterRecovery(V3Fixture, TestCase):
         self.assertEqual(response.status_code, 404); self.assertNotIn(old.notes.encode(), response.content)
         self.client.force_login(self.user)
         self.user.is_staff=True; self.user.save(update_fields=['is_staff'])
-        with override_settings(ADMIN_SITE=True), patch.object(type(self.user), 'is_verified', return_value=True):
+        # OTPMiddleware attaches is_verified to this request's user instance.
+        # Use its normal confirmed-device/session contract, not a nonexistent
+        # method patched onto the User model class.
+        from django_otp import DEVICE_ID_SESSION_KEY
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        device = TOTPDevice.objects.create(user=self.user, name='Synthetic recovery admin', confirmed=True)
+        session = self.client.session
+        session[DEVICE_ID_SESSION_KEY] = device.persistent_id
+        session.save()
+        with override_settings(ADMIN_SITE=True, ROOT_URLCONF='quillmd.urls'):
+            self.assertEqual(self.client.get('/console/').status_code, 200, 'Authorized verified administrator is a positive control')
             self.assertEqual(self.client.get(f'/encounters/{old.pk}/recover/').status_code, 404)
         self.assertEqual(Encounter.objects.count(), 1); self.assertFalse(AuditEvent.objects.filter(action=recovery.ACTION).exists())
 
