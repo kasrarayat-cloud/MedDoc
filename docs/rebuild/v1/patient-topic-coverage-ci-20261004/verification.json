@@ -1,0 +1,125 @@
+{
+  "base_commit": "b65c594e1c1be689f2eb89657abcc57b36219fd2",
+  "scope": "Test fixture only; same original, notes and clinical expectations; no application guard changes.",
+  "original": {
+    "tests": 3,
+    "failures": 3,
+    "exit_code": 1,
+    "seconds": 11.931,
+    "test_database_destroyed": true,
+    "captures_sha256": "d8ec6b70983ff5766de55d80f664cb8fb956fcb2f3be333bc0aa83f978d27de0",
+    "test_log_sha256": "3b4fe9dadfa0c497f0a47a88fa8583912a722cc52f1a983ec259efb0f437775a",
+    "records": [
+      {
+        "http_status": 400,
+        "posted_mapping": "9a0abec4-0e62-43a9-8bc2-5a2173e17a11",
+        "checked_every_field": "on",
+        "jobs": [],
+        "encounters": [],
+        "reservations": 0,
+        "usage": 0,
+        "versions": [
+          {
+            "version": "9a0abec4-0e62-43a9-8bc2-5a2173e17a11",
+            "number": 1,
+            "original_sha256": "624c581dabf815909f8247047e25adbe46183477c8db530caa855506b6c188ff",
+            "contract": "v3",
+            "confirmed": null,
+            "coverage": null
+          }
+        ]
+      },
+      {
+        "http_status": 400,
+        "posted_mapping": "a64d0130-410d-4ea6-a511-dac19c94382c",
+        "checked_every_field": "on",
+        "jobs": [],
+        "encounters": [],
+        "reservations": 0,
+        "usage": 0,
+        "versions": [
+          {
+            "version": "a64d0130-410d-4ea6-a511-dac19c94382c",
+            "number": 1,
+            "original_sha256": "3e2c65ed9e91596d833e9b5304d2952740d9d5bb8b2c2cbc643c960aa79943de",
+            "contract": "v3",
+            "confirmed": null,
+            "coverage": null
+          }
+        ]
+      },
+      {
+        "http_status": 400,
+        "posted_mapping": "97b8cb1c-2eaf-4c0e-aaeb-929b7089e498",
+        "checked_every_field": "on",
+        "jobs": [],
+        "encounters": [],
+        "reservations": 0,
+        "usage": 0,
+        "versions": [
+          {
+            "version": "97b8cb1c-2eaf-4c0e-aaeb-929b7089e498",
+            "number": 1,
+            "original_sha256": "975786c7f1b9dc0e685ad819a7496dc3cb21a2a76588ef4028d157d9a174da30",
+            "contract": "v3",
+            "confirmed": null,
+            "coverage": null
+          }
+        ]
+      }
+    ]
+  },
+  "recovery": {
+    "tests": 4,
+    "failures": 0,
+    "exit_code": 0,
+    "seconds": 37.452,
+    "test_database_destroyed": true,
+    "provider_calls": 0,
+    "captures_sha256": "2a9ea8c39bb1e5bcbbd36194d63138d5efab8c047bfbd0344fd1a84932f7386f",
+    "test_log_sha256": "96017ffc58d8316cffd7da33d5b6526566189f5d0fb8d694b7479f9f121b97db",
+    "confirmation_statuses": [
+      302,
+      302,
+      302,
+      400
+    ],
+    "source_file_sha256": "088566618130e459035780fb3fb67c5c74d788a38a4b9fbb7a616988153af93e"
+  },
+  "workflow": {
+    "source_sha256": "1fa178c1d3df43d5e334a0c9b9d43f94677ea7e9654816b6f5319c373127647c",
+    "export_sha256": "37abc14cfd7bae7524478586aa6842c4a157952ab382d37abcc7a4f876654b3c",
+    "automatic_complete": false,
+    "coverage_review": [
+      {
+        "id": "3bbc44b305dfd485e87588ef13ec20aa2966307a06f5e46bbe1ea72abf730f58",
+        "disposition": "leave_unchanged",
+        "reviewed_by": "b845b127-0318-4cbe-9ca1-514b60f0dc2a",
+        "source_sha256": "1fa178c1d3df43d5e334a0c9b9d43f94677ea7e9654816b6f5319c373127647c"
+      }
+    ],
+    "automatic_supported_fields": [
+      "Examination",
+      "Assessment",
+      "Plan"
+    ],
+    "manual_corrections": [
+      "Chief complaint",
+      "History of present illness",
+      "Medications",
+      "Allergies",
+      "Smoker"
+    ],
+    "protected_consent_blank": true,
+    "protected_consent_original_xml_preserved": true,
+    "original_bytes_preserved": true,
+    "full_workflow_json_sha256": "f730f8da515499b44585051ea71e3e8da15d4c125bf441e3c91a54a60cf3f871"
+  },
+  "raw_evidence_directory": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/patient-ci-20261004",
+  "qualification_limits": [
+    "Mocked provider; no live-provider or voice qualification.",
+    "Five manual clinical corrections are recovery, not automatic correctness.",
+    "Original three failures retained; no original Word or note denominator replacement.",
+    "Full coherent-candidate CI remains the integration owner's separate gate."
+  ]
+}

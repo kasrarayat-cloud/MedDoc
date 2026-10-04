@@ -1,0 +1,9 @@
+# Patient-topic workflow admission recovery — 2026-10-04
+
+The original three persisted patient-topic workflows at `b65c594e1c1be689f2eb89657abcc57b36219fd2` each stopped at mapping confirmation HTTP 400 before their clinical controls could run. The unchanged original contains a protected **Consent obtained** destination at `word/document.xml#b/tbl[0]/tr[8]/tc[1]`. That omission is an intentional generation blocker. The original failures, source hashes, complete responses and zero-job state remain in protected evidence.
+
+The test fixture now reviews that exact source-bound exclusion through the actual `v3_coverage` route before confirmation, using the verified shared consent fixture helper. The review creates a new immutable mapping version with identical original and fields; automatic completeness remains false. A separate fourth method proves the unchanged form and an incomplete review still refuse confirmation without a job or charge. No clinical source, expected answer, source guard or generation implementation changed.
+
+All four methods passed in 37.452 seconds, actual exit 0 and database destroyed. The three original clinical workflows now test worker output, source-actor refusal, related-allergy refusal, clinician correction, finalization and export. The positive workflow has three automatic supported destinations and five explicit clinician corrections. Consent receives no generated text; its physical XML subtree and the entire uploaded original remain unchanged. These are mocked-provider regression controls, not live model, microphone, native Word or first-pass automatic corpus qualification.
+
+`verification.json` binds the unchanged failures, corrected test source and protected route/export evidence. The serialized QA slot was released after the actual child exit and database destruction. No installed state, provider account or external service was accessed.
