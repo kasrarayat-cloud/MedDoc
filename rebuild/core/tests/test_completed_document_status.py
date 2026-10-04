@@ -63,7 +63,8 @@ class CompletedDocumentStatus(SimpleTestCase):
         for source in ('Consent form signed and dated: No',
                 'Consent form signed and dated: not yet', 'Consent form signed and dated: awaiting signature',
                 'Consent form will be signed and dated: Yes', 'If consent form signed and dated: Yes',
-                'Consent form signed and dated?: Yes', 'Consent form signed and dated: Yes, entered in error',
+                'Consent form signed and dated?: Yes', 'Consent form signed and dated: Yes?',
+                'Consent form signed and dated?: Yes.', 'Consent form signed and dated: Yes, entered in error',
                 'The patient signed and dated: Yes', 'Her father signed and dated: Yes',
                 'The manager signed and dated: Yes', 'Consent form signed by her father: Yes'):
             with self.subTest(source=source):self.check(source + '\nPlan: Rest.', 'conflict')
@@ -72,6 +73,7 @@ class CompletedDocumentStatus(SimpleTestCase):
         metadata = 'Consent form signed and dated: Yes\n'
         for prefix, pick, text in (
                 ('Her father has ankle pain.\n', 'Plan: Rest.', 'Rest.'),
+                ('The doctor underwent colonoscopy.\n', 'Plan: Rest.', 'Rest.'),
                 ('The doctor underwent colonoscopy.\n', 'Plan: She will rest.', 'She will rest.'),
                 ('', 'Plan: She will rest.', 'She will rest.'),
                 ('', 'Plan: I will rest.', 'I will rest.')):
@@ -79,6 +81,15 @@ class CompletedDocumentStatus(SimpleTestCase):
         for tail in ('\nCorrection: the plan was entered in error.',
                      '\nThe patient will not rest.', '\nIf the patient rests, call the doctor.'):
             with self.subTest(tail=tail):self.check(metadata + 'Plan: Rest.' + tail, 'conflict')
+
+    def test_a_status_never_reanchors_human_scope_but_an_explicit_patient_clause_can(self):
+        metadata = 'Consent form signed and dated: Yes\n'
+        for lead in ('The doctor underwent colonoscopy.', 'The nurse underwent colonoscopy.',
+                     'Alex underwent colonoscopy.', 'Her husband underwent colonoscopy.'):
+            with self.subTest(lead=lead):
+                self.check(lead + '\n' + metadata + 'Plan: Rest.', 'conflict')
+                self.check(lead + '\nThe patient reports ankle pain.\n' + metadata + 'Plan: Rest.')
+        self.check('The patient reports ankle pain.\n' + metadata + 'Plan: Rest.')
 
     def test_unknown_relation_and_signing_destination_gain_no_automatic_permission(self):
         notes = 'Consent form signed and dated: Yes\nPlan: Rest.'
