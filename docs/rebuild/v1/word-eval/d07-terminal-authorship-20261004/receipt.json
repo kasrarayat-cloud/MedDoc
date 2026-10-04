@@ -1,0 +1,15 @@
+{
+  "word_sha256": "92e856ecd22b3656d965cd8a93f2652121f150b93c6bfbfc702395647a900f44",
+  "tests_sha256": "8cd69cf66c5f3cc57eb7291fa6668d954481f0b9359294ab38cf6a590fb23bd6",
+  "exact_root_originals": 4,
+  "unsafe_first_exports_preserved": 2,
+  "exact_old_mapping_refusals": 2,
+  "seven_method_actual_exit": 0,
+  "affected_methods": 17,
+  "affected_actual_exit": 0,
+  "affected_seconds": 41.48,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "artifact_seal_sha256": "40af57728d5de6489791628119b54a4eafb62eca02df0d7f66a452dcababab8c"
+}

@@ -1076,6 +1076,27 @@ class TerminalChoiceWriteIns(unittest.TestCase):
         signature=deepcopy(signature);signature.update(kind='text',label='Ordinary narrative');signature.pop('write_protected',None);signature.pop('destination_roles',None)
         with self.assertRaises(word_v3.V3Failure):word_v3.fill(protected,[signature],{signature['key']:'Dr Synthetic Finalizer'})
 
+    def test_prospective_author_and_reserved_area_do_not_gain_a_conditional_writer(self):
+        for question in ('Witness must write the following:','Alex Reed shall write this response:',
+                'This area is for Alex Reed to enter the answer:',
+                'This section is for Dr. Alex Reed to record symptoms:',
+                'This box is reserved for another person to supply a statement:',
+                'Answer to be entered by Alex Reed:'):
+            with self.subTest(question=question):
+                raw=self.form(caption='Other known:',question=question);result=word_v3.inspect(raw)
+                self.assertFalse([f for f in result['fields']if f.get('source_questions')and f['source_questions'][0]['relation']=='adjacent_checkbox_answer'])
+                choices=[f for f in result['fields']if f.get('options')and 'Other known' in f['options']]
+                self.assertTrue(choices)
+                for choice in choices:
+                    forged=deepcopy(choice);forged.pop('write_protected',None);forged.pop('destination_roles',None)
+                    with self.assertRaises(word_v3.V3Failure):word_v3.fill(raw,[forged],{forged['key']:'Other known'})
+                self.assertEqual(word_v3.fill(raw,result['fields'],{}),raw)
+        for question in ('Review of systems:','Initial reading:','Signed consent receipt:',
+                'Medication must include the following:','Patient must avoid the following:'):
+            raw=self.form(caption='Other known:',question=question);result,blank,owner=self.mapped(raw)
+            out=word_v3.fill(raw,result['fields'],{owner['key']:'Other known',blank['key']:'Synthetic observed detail'})
+            self.assertEqual(word_v3.effective_values(raw,result['fields'],{owner['key']:'Other known',blank['key']:'Synthetic observed detail'})[blank['key']],'Synthetic observed detail')
+
     def test_unresolved_tail_and_human_source_do_not_gain_a_writer(self):
         for caption,question in (('Other details: More instructions','Current symptoms:'),('Other','Current symptoms:'),
                 ('Other: _____ Location: _____','Current symptoms:'),('Other (I certify this document):','Current symptoms:'),

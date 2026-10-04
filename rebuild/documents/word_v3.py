@@ -6325,12 +6325,21 @@ class Detector:
         # A receipt/status label lacks that relation. Read the whole caption:
         # neither a later clinical question nor a neighboring answer belongs
         # to this reservation. A period in an author's name stays permissible.
-        comment = r"(?:comments|concerns|statements?)"
-        active = (r"^\s*this section is (?:reserved\s+)?for\s+[^:;?!\r\n]+?\s+to\s+"
-                  r"[^.;:?!\r\n]+?\b" + comment + r"\b[^.;:?!\r\n]*\s*[:.]?\s*$")
-        passive = (r"^\s*" + comment + r"\s+to\s+be\s+[^.;:?!\r\n]+?\s+by\s+"
+        response = r"(?:comments?|concerns?|statements?|answers?|responses?)"
+        # A physical area assigned to an author + infinitive appoints that
+        # author whatever the particular writing verb or answer subject is.
+        # Medication/status captions have neither this area subject nor that
+        # complete agentive relationship.
+        active = (r"^\s*this (?:section|area|space|box|field) is (?:reserved\s+)?for\s+"
+                  r"[^:;?!\r\n]+?\s+to\s+[^.;:?!\r\n]+?\s*[:.]?\s*$")
+        passive = (r"^\s*" + response + r"\s+to\s+be\s+[^.;:?!\r\n]+?\s+by\s+"
                    r"[^:;?!\r\n]+?\s*[:.]?\s*$")
-        return re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I)
+        # An explicit subject obligated to write this response is its author;
+        # clinical obligations about medication/signs are different arguments.
+        prospective = (r"^\s*[^.;:?!\r\n]+?\s+(?:must|shall|will|is\s+to)\s+write\s+"
+                       r"(?:the\s+following|(?:this|the|these)\s+" + response + r")\s*[:.]?\s*$")
+        return (re.fullmatch(active, text, re.I) or re.fullmatch(passive, text, re.I)
+                or re.fullmatch(prospective, text, re.I))
 
     def manual_numeric_parts(self, chosen):
         """Visible, empty, plain numeric parts available for explicit human mapping only."""
