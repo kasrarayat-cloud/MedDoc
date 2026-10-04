@@ -1,0 +1,51 @@
+{
+  "scope": "Prospective original native P01 D01,D02 application replay after final coherent freeze; no execution in this preparation",
+  "driver": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-final-plan-prepared-20261004/run_dev_application_gate_native_v1.py",
+  "driver_sha256": "98db3731cdb4121fa384d11f0d044dd3c3881740148121ee70a1ee52d83a5a54",
+  "command": [
+    "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+    "-B",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-final-plan-prepared-20261004/run_dev_application_gate_native_v1.py",
+    "<readonly-final-C-worktree>",
+    "<full-final-C-commit>",
+    "--freeze",
+    "<prospectively-sealed-final-C-freeze.json>",
+    "--ids",
+    "D01,D02"
+  ],
+  "source_requirements": {
+    "source_clean": true,
+    "full_commit_matches_freeze": true,
+    "word_thresholds": "54/60 overall and18/20 holdout unchanged",
+    "provider_calls": 0,
+    "GT_scorer_profiles": "existing original fixed sealed inputs, unchanged",
+    "D01_layout_source": "96daa15b403f41547901f0febac2e37615b31d1a or byte-identical integrated descendant",
+    "layout_sha256": "400998e21476dd9725c18eb75570bb3495910dc44308be835cb4867fba1a7bd5"
+  },
+  "bounds": {
+    "child_seconds": 900,
+    "outer_seconds": 1200,
+    "db_and_renderer_serialized": true,
+    "direct_catalog_absence_after_actual_exit": true,
+    "renderer_socket_removed_and_children_reaped": true
+  },
+  "expected_archive": {
+    "directory": "unique dev-native-application-<C12>-<time_ns> owned by Ops, never overwrite old directory",
+    "before_readback_assertion": "D01/<profile>-export.docx and <profile>-export-before-assertions.json; reviewed mapping/answers and original archive retained",
+    "native_reader": "unchanged original physical mapping table-row index, including row14 and later",
+    "assertion": "one original28-row table with original table properties/header semantics, all source-bound answers and untargeted cells preserved"
+  },
+  "retained_first_failure": {
+    "directory": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-final-plan-prepared-20261004/dev-native-application-481b65adb8ff-1791113822219658957",
+    "native_ordinary_export_sha256": "368cc103e724f4a75d364957a112ba70e74891281e5491ae39abca4e1c90e1f2",
+    "structure": "original1x28 table changed to2x14 tables; original row14+ readback IndexError",
+    "recovery": "all58 manual values,26 untargeted cell texts and28 SDTs remained; recovery is separate from automatic/fidelity qualification",
+    "fixed_automatic_mapping": "88/92correct,2missing2wrong0extras; strictfalse unchanged"
+  },
+  "not_claimed": [
+    "new actual native application or PDF replay",
+    "native Microsoft Word inspection",
+    "automatic strict corpus pass",
+    "whole54/60 or18/20 acceptance"
+  ]
+}

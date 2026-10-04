@@ -1,0 +1,57 @@
+{
+  "scope": "Actual persisted template reinspection review correction; not full corpus/private installation acceptance",
+  "source_commit": "c8f3f4705565d7ab4da9e98d594c4b143583472b",
+  "source_path": "/opt/meddoc-pro/.worktrees/v1-word-upgrade-dup-c8f3f470",
+  "source_hashes": {
+    "rebuild/core/import_binding.py": "d1dc63785444249baa48652831be08dbd774f88d618e2b70c6c15f0eeb016f23",
+    "rebuild/core/models.py": "03cd2bcbfd109676de24664379cbaa2ca8a4460595cad3e1d2564a273d3153dc",
+    "rebuild/core/views.py": "cd6c8811acd8b33d6973de4ac92d3402c6d1dbb4f346d62764d5d06cea754899",
+    "rebuild/core/tests/test_template_reinspection.py": "c367e9176454024e25dc26f37f30b24505b079376a2d8754b84e341782bdcbc2"
+  },
+  "first_failure": {
+    "source_commit": "1f68ed8f012383a0966f58289f1a985eda92e072",
+    "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/template-upgrade-20261004/duplicate-before-1f68/result.json",
+    "result_sha256": "4690f5500ea974bfa3035d4da4152e38a4c4d78c1de85c930140ca2899eb6887",
+    "original_archive": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/template-upgrade-20261004/duplicate-before-1f68/qa/word-artifacts/test_original_manual_origin_swap/original-duplicate-failure",
+    "actual_result": "302/confirmedtrue, one expected400 failure, no jobs/reservations/providers",
+    "test_seconds": 5.891,
+    "outer_seconds": 17.031996409001295,
+    "actual_exit": 1,
+    "first_root_failure_binary_archive_limitation": "Rootoriginalf57driver retainedsource/actual302trace; nooriginalDOCX/fieldsseparatearchive. This new reproduction is separately identified."
+  },
+  "corrected": {
+    "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/template-upgrade-20261004/duplicate-after-c8f3/result.json",
+    "result_sha256": "9e68e739ecda3f49023ca24b164953f5e5fd41945f5b00b5e8b96e34136bc62b",
+    "methods": 29,
+    "passed": 29,
+    "test_seconds": 125.5,
+    "outer_seconds": 134.34480529299617,
+    "actual_exit": 0,
+    "controls": [
+      "unchanged forged manual origin swap refuses",
+      "fresh source-compiled manual duplicate refuses",
+      "duplicate mapping keys refuse",
+      "removed/readded manual field then ordinary rename retains stable key and actual final export",
+      "empty or malformed reinspection markers require review and refuse source verification",
+      "existing valid remove/readd and automatic ordinary label correction",
+      "original FF checkbox/dropdown/mixedSDT/glyph/header/table_rows anchors remain reviewable",
+      "historical original/export byte hashes read without invokingcurrentprocessor",
+      "crossdepartment denial and corruptoriginal refusal"
+    ]
+  },
+  "artifact_seal": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/template-upgrade-20261004/duplicate-artifact-seal.json",
+  "artifact_seal_sha256": "61ef7214c945461bb9123f670c15784ecc52d5a881e9b0d102a20614bbff4eb8",
+  "sealed_file_count": 63,
+  "database_catalog": "both normal/testnames directlyabsent after each boundedprocess; catalograw receipts included",
+  "children_reaped": true,
+  "provider_calls": 0,
+  "renderer_calls": 0,
+  "source_clean_and_unchanged": true,
+  "independent_finished_diff_refutation": "pending root",
+  "forward_0038_guard": "separate Operations chain finished; coherent integration/test amendment pending",
+  "old_same_template_provenance_0035": "unchanged",
+  "Word_generation_pricing_schema_changed": false,
+  "historical_download_evidence_limit": "Real stored current-processor predecessor; no archived finalized old-fingerprint export claim",
+  "qualification": false,
+  "thresholds": "54/60overall+18/20holdout unchanged; these focused methods do not score that gate"
+}
