@@ -1088,7 +1088,14 @@ BATCH_PRICED_MODULES = {
 # identities, proof limits and affected119 gate are recorded separately in
 # docs/rebuild/v1/financial-renewal-20261004/ELICITED-RENEWAL.md.
 # Old campaigns stay closed. This is no voice, corpus or invoice qualification.
-ORDINARY_PRICED_SHA256 = '2819cea85a4e1a911603dd55b15dd21244f8a24064677c35ae61a2b72c4de1bc'
+# Financial renewal 2026-10-04, final bounded nominal-denial correction:
+# exact e238 source and four genuine OLD/e238 offline reconstructions retain
+# the unchanged SDK requests, quotes, usage and original QA settlement rows.
+# Independent full-HPI/partial-omission controls qualify the finished semantic
+# change. All other 13 module ASTs and four exact inputs match accepted source.
+# Full proof and limits: docs/rebuild/v1/FINANCIAL-N01-RENEWAL-20261004.md.
+# This is no reviewed-voice, corpus or invoice qualification.
+ORDINARY_PRICED_SHA256 = '90cb7342ff9cbf1670947686cef085e0aa3083c96be6fb3283d5987e925365c5'
 
 
 # Financial renewal 2026-10-04: genuine paid campaign-3 children 002/003 on
@@ -1105,7 +1112,7 @@ ORDINARY_PRICED_DEPENDENCY_PATHS = (
 )
 ORDINARY_PRICED_DEPENDENCIES = {
     'core/generation.py': '840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227',
-    'core/ordinary_source_scope.py': '259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e',
+    'core/ordinary_source_scope.py': '42ef86c3e4f69222040edc6a630e694eac424b28a8066a311d90e00afd0a4338',
     'core/reviewed_source.py': '8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157',
     'core/reviewed_procedure_source.py': 'aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0',
     'core/source_scope.py': '5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1',
