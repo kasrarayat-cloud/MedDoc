@@ -226,9 +226,9 @@ class TemplateReinspection(V3Fixture, TestCase):
         from documents.test_word_v3 import ff_field
         document = Document(); document.add_paragraph('Synthetic clinical form')
         paragraph = document.add_paragraph('Activity: ')
-        ff_field(paragraph, 'FORMDROPDOWN', options=('Rest', 'Exercise'), name='Activity')
+        ff_field(paragraph, 'dropdown', options=('Rest', 'Exercise'), name='Activity')
         paragraph = document.add_paragraph('Fever: ')
-        ff_field(paragraph, 'FORMCHECKBOX', checked=False, name='Fever')
+        ff_field(paragraph, 'checkbox', checked=False, name='Fever')
         stream = io.BytesIO(); document.save(stream)
         template, current = self.uploaded(data=stream.getvalue(), name='Synthetic legacy field locations')
         self.assertEqual({field['kind'] for field in current.fields}, {'choice', 'checkbox'})
