@@ -4398,8 +4398,15 @@ class Detector:
                         for text in clauses)
             if scalar is not None and scalar.kind == 'date' and question is not None:
                 temporal = DATE_LABEL.sub(' ', LIST_MARKER.sub('', self.text(question.el).strip()))
+                # The temporal qualifier does not remove an appointed actor's
+                # finite signing predicate. A bare verb needs its complete
+                # subject/auxiliary frame, not an inferred name or role.
+                prospective_signing = re.fullmatch(r'\s*[^:;?!\r\n]+?\s+'
+                    r'(?:' + SOURCE_ACTION_AUXILIARY + r'\s+)+'
+                    r'(?:(?:required\s+)?to\s+)?(?:sign|initial)'
+                    r'(?:\s+(?!of\b)[^:;?!\r\n]+)?\s*[:.]?', temporal, re.I)
                 human = human or bool(self.checkbox_source_action(temporal, governing=True)
-                    or signing_place(temporal) or BOX_SIGNING_VERB.search(temporal)
+                    or prospective_signing or signing_place(temporal) or BOX_SIGNING_VERB.search(temporal)
                     and not self.ordinary_source_kind([temporal], 'signature'))
             if human:
                 self.protected_regions.add(cell.id)

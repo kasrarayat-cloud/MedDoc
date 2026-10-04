@@ -1407,6 +1407,48 @@ class ScalarCheckboxAlternatives(unittest.TestCase):
             out=word_v3.fill(raw,mapping['fields'],{scalar['key']:'04-Oct-2026',alternative['key']:False})
             self.assertIn('04-Oct-2026',Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text)
 
+    def test_temporal_actor_and_finite_signing_predicate_protect_both_destinations(self):
+        for family in('glyph','ff','sdt'):
+            for caption in('Date Alex Reed should sign:','Date Dr. Alex Reed will initial:',
+                           'Date Alex Reed is required to sign:','Date Alex Reed should not sign:',
+                           'Date Alex Reed could initial this page:'):
+                with self.subTest(family=family,caption=caption):
+                    raw=self.form(family=family,caption=caption);mapping=word_v3.inspect(raw)
+                    self.assertFalse([f for f in mapping['fields']if any(
+                        r.get('relation')=='scalar_checkbox_alternative'
+                        for r in f.get('source_questions',[]))])
+                    detector=word_v3.Detector(word_v3.open_package(raw));index=detector.index
+                    cell=Document(io.BytesIO(raw)).tables[0].cell(0,0).tables[0].cell(0,0)
+                    scalar_slot=index.by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]']
+                    option_slot=index.by_id[scalar_slot.id.rsplit('/',1)[0]+'/p[1]']
+                    box=detector.box_units(option_slot)[0][0]
+                    anchor=index.by_id[box['part']+'#'+box['slot']]if family!='glyph'else option_slot
+                    forged_scalar=word_v3.area_to_field(901,word_v3.Area('date','Clinical date',scalar_slot,
+                        {'type':'span','start':len(caption),'end':len(caption),'shape':'after_label'}))
+                    forged_box=word_v3.area_to_field(902,word_v3.Area('checkbox','Clinical value',anchor,
+                        {'type':'checkboxes','boxes':[box]},options=['Or Unknown']))
+                    for field,answer in((forged_scalar,'04-Oct-2026'),(forged_box,True)):
+                        with self.assertRaises(word_v3.V3Failure):
+                            word_v3.fill(raw,[field],{field['key']:answer})
+                    neighbor=next(f for f in mapping['fields']if f['locator']['slot'].startswith(
+                        scalar_slot.path.rsplit('/tc[',1)[0]+'/tc[1]/')and f.get('options')==['Present','Absent'])
+                    out=word_v3.fill(raw,mapping['fields'],{neighbor['key']:'Present'})
+                    self.assertEqual(Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,0)._tc.xml,cell._tc.xml)
+                    self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),neighbor),[True,False])
+                    self.assertEqual(word_v3.fill(raw,mapping['fields'],{}),raw)
+
+    def test_temporal_ordinary_predicates_and_recorded_receipts_stay_writable(self):
+        for family in('glyph','ff','sdt'):
+            for caption in('Date report should arrive:','Date observations were recorded:',
+                           'Initial observations date:','Signed referral received date:'):
+                with self.subTest(family=family,caption=caption):
+                    raw=self.form(family=family,caption=caption);mapping,scalar,alternative=self.pair(raw)
+                    self.assertEqual(scalar['kind'],'date')
+                    out=word_v3.fill(raw,mapping['fields'],{scalar['key']:'04-Oct-2026',alternative['key']:False})
+                    self.assertIn('04-Oct-2026',Document(io.BytesIO(out)).tables[0].cell(0,0).tables[0].cell(0,0).paragraphs[0].text)
+                    out=word_v3.fill(raw,mapping['fields'],{alternative['key']:True})
+                    self.assertEqual(word_v3.constrained_option_states(word_v3.SlotIndex(word_v3.open_package(out)),alternative),[True])
+
 
 class NamedSelectionInstructions(unittest.TestCase):
     def form(self, instruction='Modality – Select all relevant options.', *, native=False,
