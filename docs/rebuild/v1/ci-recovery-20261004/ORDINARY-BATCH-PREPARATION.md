@@ -176,3 +176,55 @@ and all child processes finished. No generation job or SDK request was reached.
 The original second output remains in
 `operations/ordinary-batch-mocked-1bf44a11-20261004T100608Z/`, application log
 SHA256 `f7d16aadb24cd7020d8c5a950108efb0ee1ef6d7364bbb8865522d7c54d354b9`.
+
+## Third actual mocked rehearsal
+
+The fresh third rehearsal passed on the exact clean source
+`7a22e3c2660b47b26276fe745f62bf9d3cb5cbb6`. The application child exited 0 in
+36.340677 seconds; its one persisted route method passed in 26.711 seconds.
+The supervisor and outer process exited 0, with outer duration 38.546933
+seconds. The two direct catalogue checks proved both owned normal and test
+databases absent. Tracked source was unchanged, and all recorded process IDs
+were absent before the serialized slot was released.
+
+The unchanged original and inspector-derived 101-field mapping were uploaded
+and confirmed through the application. Mapping corrections were zero;
+`automatic_complete=false` and required mapping review remained honest. Two
+actual SDK bodies contained 100 and 1 destinations. The first child staged its
+answer while leaving the encounter's adopted answers empty. The second staged
+its answer, and the separate finish adopted the complete two-child union.
+First-pass answers were exactly two supported answers and 99 missing answers,
+with zero clinician answer corrections. Explicit acceptance of those two and
+99 reviewed blanks led to persisted finalization and owner download HTTP 200.
+A verified clinician in a separate organization and department received HTTP
+404 on the same mounted export route.
+
+The final export is SHA256
+`2754342f6e70b9fa642245669fcb28500c349cb86fc04e987d0de702e4df3154`.
+The source-bound readback found both complete answers in their assigned fields,
+99 other answer fields blank, no outside-written-field changes and unchanged
+ZIP members; only `word/document.xml` changed. Native Microsoft Word and served
+built-asset inspection were not performed by this rehearsal.
+
+Both reservations settled and each child produced one receipt and one Usage
+row. The aggregate hold was $0.925248. Each local mocked response reported
+$0.000700 cost and produced $0.001050 test charge. These technical values are
+mocked accounting evidence, not provider charges, invoice reconciliation or
+live model access. The two attempts belong only to the owned rehearsal ledger;
+they add zero real API attempts. The actual SDK body hashes are
+`d7d080af9efeee0451eed25d10e1e6e521e5be84399d2662f6f3857670288e3d`
+and `50c5c81a02c43fed6d44ed11738d85fb6fef05deec419d7ecb3d6d4762287523`.
+
+The append-only protected evidence is under
+`operations/ordinary-batch-mocked-7a22e3c2-20261004T101727Z/` inside the existing
+storage-resume runtime. Its `success-adjudication.json` is SHA256
+`026f3842bfd2720fb78ea25c74984c51caec2f2694602aad2ed50004e8880fe4`,
+and the raw application log is SHA256
+`cdd42391bf1ddffcad68088ee5c366ac0c72bdf59a592ed01d20a8853560bbe4`.
+It retains the original, mapping, request/response bodies, receipts, aggregate
+state, pre-assertion child states, review, export and process/source/catalogue
+readbacks separately. The first two failed stages remain unchanged.
+
+This closes the mocked application rehearsal. The distinct third paid campaign
+remains unexecuted, and final meaningful-source/price qualification, exact CI,
+whole-document Word gates and private-install gates remain separate.
