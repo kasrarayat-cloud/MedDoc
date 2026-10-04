@@ -463,7 +463,7 @@ def sole_independent(reading, unit, chosen, label):
         word that may describe the state it denies ('There is no swelling.' beside 'The knee is swollen.') - round 5,
         R1: a general noun, a synonym or another spelling shares no word with it, so only the class tells, fail closed.
     The lines it selected are its answer. Read only for a single-patient release; nothing else is changed by it."""
-    from .ordinary_source_scope import effective
+    from .ordinary_source_scope import effective, clinical_denial_apart
     reading = effective(reading, unit, chosen, label)
     from .v3_actors import SOLE_CLINICAL, sole_bears_on
     units, actors = reading['units'], reading['actors']
@@ -512,7 +512,10 @@ def sole_independent(reading, unit, chosen, label):
         # insulin.', 'Chief complaint: diarrhoea.' beside 'She has no diarrhea.') - or, for a clinical or allergy denial,
         # carrying a word that may describe the state it denies ('The knee is swollen.' beside 'There is no swelling.').
         # The model's 'independent' for that line is not believed: nothing in the note shows it apart.
-        if bears and (theirs['classes'] & bears or (denies and theirs['descriptive'] and bears & SOLE_CLINICAL)):
+        distinct_denial = clinical_denial_apart(reading, unit, other)
+        other_distinct_denial = clinical_denial_apart(reading, other, unit)
+        if (bears and (theirs['classes'] & bears or (denies and theirs['descriptive'] and bears & SOLE_CLINICAL))
+                and not distinct_denial):
             return False
         # (round 5, R2; refutation round 6, L1:F3) a line that denies, ends, restricts or doubts something holds every
         # answer whose topic class BEARS on its own, in either direction (`v3_actors.sole_bears_on`), not only one
@@ -526,11 +529,11 @@ def sole_independent(reading, unit, chosen, label):
         if 'class' in theirs['reach'] and (shared_class or mine['classes'] & sole_bears_on(theirs['classes'])
                                            or theirs['classes'] & sole_bears_on(mine['classes'])):
             from .source_scope import distinct_observation_and_assessment
-            if not distinct_observation_and_assessment(reading, unit, other, label):
+            if not (other_distinct_denial or distinct_observation_and_assessment(reading, unit, other, label)):
                 return False
         if owner is not None and owner == label:
             return False
-        if shared_class and oid != first and owner is None:
+        if shared_class and oid != first and owner is None and not (distinct_denial or other_distinct_denial):
             return False
         if mine['reach'] and shared_key:
             return False

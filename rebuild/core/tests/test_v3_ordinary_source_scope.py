@@ -36,7 +36,7 @@ class OrdinarySourceScope(SimpleTestCase):
 
     def test_retained_complete_actual_wire_preserves_originals_and_supported_bytes(self):
         answers = r.validated(raw(CASE['notes'], CASE['fields'], CASE['model_body'], g.SONNET_5_5))
-        expected = {'v3_1': 'supported', 'v3_2': 'conflict', 'v3_3': 'missing', 'v3_4': 'supported',
+        expected = {'v3_1': 'supported', 'v3_2': 'supported', 'v3_3': 'missing', 'v3_4': 'supported',
                     'v3_5': 'supported', 'v3_6': 'supported', 'v3_7': 'supported', 'v3_8': 'supported',
                     'v3_9': 'supported', 'v3_10': 'missing', 'v3_11': 'missing'}
         self.assertEqual({k: a['status'] for k, a in answers.items()}, expected)

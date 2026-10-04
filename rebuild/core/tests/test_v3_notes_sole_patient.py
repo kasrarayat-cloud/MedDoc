@@ -87,10 +87,12 @@ class SinglePatientRelease(Floors, SimpleTestCase):
         self.assert_filled(without, fields, {'v3_6': ['She is a nonsmoker.']}, {'v3_6': 'No'}, choices=NO)
         self.assert_filled(without, fields, {'v3_4': ['She takes ibuprofen as needed.']},
                            {'v3_4': 'She takes ibuprofen as needed.'})
-        # (round 5, R1) the history's symptom denial is held: two other lines name a symptom ('headaches'), and only
-        # meaning says a headache is not the visual change, nausea or weakness it denies - fail closed, as the base
-        self.assert_held(N01, fields, {'v3_2': ['The headaches started two months ago and are worse in the morning.',
-                                                'She denies visual changes, nausea, or weakness.']}, 'v3_2')
+        # A bounded clinical meaning proof qualifies only the explicit
+        # headache versus visual-change/nausea/weakness arguments. General
+        # pain, unknown terms and possible aliases retain the broad floor.
+        history = ['The headaches started two months ago and are worse in the morning.',
+                   'She denies visual changes, nausea, or weakness.']
+        self.assert_filled(N01, fields, {'v3_2': history}, {'v3_2': '\n'.join(history)})
         self.assert_filled(N03, order_form(), {'v3_2': ['She attends the clinic every week.']},
                            {'v3_2': 'She attends the clinic every week.'})
         # The explicit-subject form of the same statement stays filled (its completeness comes from `syntax_complete`,
