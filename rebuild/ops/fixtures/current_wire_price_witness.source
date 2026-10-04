@@ -48,7 +48,9 @@ if root.is_symlink() or not root.parent.resolve(strict=True).is_relative_to(owne
  raise ValueError('Output must be a new directory in the task-owned evidence area.')
 root.mkdir(mode=0o700,exist_ok=False)
 source_tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=source,text=True).strip()
-modules=['core/v3_field_relations.py','core/generation_batch.py','core/batch_jobs.py','core/generation.py','core/billing.py','core/transcript_context.py']
+modules=['core/v3_field_relations.py','core/generation_batch.py','core/batch_jobs.py','core/generation.py','core/billing.py','core/transcript_context.py',
+ 'core/ordinary_source_scope.py','core/reviewed_source.py','core/reviewed_procedure_source.py','core/source_scope.py',
+ 'core/v3_actors.py','core/v3_syntax.py','core/v3_literal_facts.py','core/reviewed_speaker.py']
 source_bytes={p:hashlib.sha256((source/'rebuild'/p).read_bytes()).hexdigest()for p in modules}
 connections=[]
 def denied(sock,address):
