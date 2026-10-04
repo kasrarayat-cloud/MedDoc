@@ -219,3 +219,68 @@ Latest actual preflight is GO at12:02:05 UTC with unchanged thresholds. At
 12:33 the expanded root filesystem has633927315456 bytes total and
 314061688832 available. No deliberate cleanup, expansion, production service
 change or public/real-patient cutover occurred.
+
+## Current integrated work and qualification, 2026-10-04 13:43 UTC
+
+Current integration before this entry is3534c2b7cf8877a2d9d1ba67e8e30ca5e7e200b9,
+clean and unpushed beyond7907. It includes the genuine-paid-source financial
+renewal c36c67b2 after root39 and independent115 refutation controls passed.
+The full119-selector packet remains prepared for a coherent final source.
+The browser/profile helper repairs include the actual synthetic-only health
+identity, configured Sonnet5.5/auto/ordinary-v4 and warning-badge rendering
+control; no browser run or final CI pass is claimed yet. Installed dedac and
+the old789 fixture demonstration remain unchanged.
+
+Distinct prospective campaign4 completed all19 declared paid attempts on
+immutable5bf3024508c65d99d2e8573fd87e920a754a65e1: one model check,14 qualified
+text cases and two transcription/generation pairs. Normal status reports all
+three stages passed, zero open/unknown attempts and no reopenings. The exact
+requests and responses name claude-sonnet-5-5 with20k output/between-tools.
+Its14 retained text cases yield35/36 desired supported answers, one N01
+conservative over-hold and40/40 correct intended holds; zero unsafe/contract
+findings,14 faithful mechanical exports and all manifest artifact hashes
+verified. These are retained exposed clinical cases, not the60/20 Word corpus.
+
+The new SOAP voice pair yielded three useful adopted answers, with the whole
+Subjective candidate containing invalidated6/10 plus3/10 held and explicitly
+reviewed blank. Independent review verified all30 bound artifacts, three
+prospective transcript edits, physical multiline export readback, preserved
+neighbor/ZIP bytes, unique settlement and charge arithmetic. The new procedure
+pair yielded ten useful adopted answers; C08 remains held because the source
+still states both zero blood loss and less than one milliliter. Both actual
+processes exited0 and were reaped; procedure independent artifact/accounting
+consolidation is underway. No human microphone/native Word acceptance or
+clinician answer correction credit is claimed. Raw audio, ASR, reviewed edits,
+requests, responses, first answers and exports remain distinct and retained.
+
+Campaign4 calculated exposure is0.195442758800USD; cumulative195 historical
+attempts have calculated exposure2.147100264000USD. These are usage calculations,
+not provider invoices or authentic Stripe reconciliation. No new sends remain
+planned in campaign4. Old campaigns/failed exports and classification outcomes
+remain unchanged. Future candidate-source transfer requires its own explicit
+finished dependency/mapping/export proof;5bf is not relabeled as that candidate.
+
+D01 original1-table/28-row preservation passed root6 and independent90 finite
+controls after the old two-table export failure; no native Word claim follows.
+Template reuse after engine change now has a fresh-original sibling/review
+repair under affected application tests. A corrected actual physical-anchor
+probe demonstrated current mapping confirmation accepted a nonexistent cell
+(302/confirmed), without writing/exporting or a provider call. Its immutable
+failure is retained. The shared physical-review boundary is being repaired
+and independently refuted before integration; old provenance, drafts, answers
+and finalized download bytes stay with their original versions.
+
+The next actual work is that finished source refutation, serialized119
+financial and17 fixed DEV33 packets, exact requiredCI and the gated new private
+fixture demonstration with mounted/persisted doctor/admin checks. The fixed
+54/60 overall and18/20 holdout requirements remain unmet;7 rights-held originals
+still remain in the60 denominator. No private installed migration, public
+cutover or real-patient processing occurred. B2 remains expired; valid Sep27
+restore evidence and the prepared owner renewal handoff remain separate.
+
+Actual preflight GO remains20261004T120205Z with unchanged thresholds. Root
+filesystem633927315456 bytes total and312932876288 available at13:27:52 UTC,
+34936736 free inodes. No deliberate cleanup or expansion occurred. Recovery
+checkpoint20261004T133236Z hashes all four writers' current states and dirty
+patches; its SHA256 is5f95c54748a8739ec61bf0a908a65dce00d1415d7ad665b7a3362e2107634100.
+The unidentified platform-blocked action remains stopped and unreconstructed.
