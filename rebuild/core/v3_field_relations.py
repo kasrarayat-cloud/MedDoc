@@ -587,13 +587,33 @@ def elicited_reference_holds(reading, field, elicited_ids):
         if unit['id'] in elicited_ids:
             continue
         for target in doc:
-            if (target.pos_ != 'NOUN' or target.dep_ != 'dobj'
+            if (target.pos_ != 'NOUN' or target.dep_ not in ('dobj', 'nsubjpass', 'nsubj')
                     or not (g.V3_RECORD_REFERENCE.fullmatch(target.text) or a._lemma(target) == 'report')
                     or not any('Dem' in t.morph.get('PronType') or 'Def' in t.morph.get('Definite')
                                for t in target.children if t.dep_ == 'det')
                     or any(t.dep_ == 'poss' for t in target.children)):
                 continue
             action = target.head
+            if target.dep_ == 'nsubj':
+                # The pointed assertion is the grammatical subject of its
+                # own truth predicate, not an adjective elsewhere in a note.
+                # Negating that predicate retracts the assertion; "not
+                # false" and author/access metadata do not supply this edge.
+                if (a._lemma(action) == 'be' and a._negates(action)
+                        and any(t.dep_ == 'acomp' and t.pos_ == 'ADJ' and a._lemma(t) == 'true'
+                                for t in action.children)):
+                    return True
+                continue
+            if target.dep_ == 'nsubjpass' and a._lemma(action) == 'make' and a._negates(action):
+                # A passive patient assertion differs from a document's
+                # author. "Not made by the clinician" does not deny what
+                # the patient said. An omitted maker leaves the retraction
+                # attached to the pointed statement itself.
+                agents = [t for prep in action.children if prep.dep_ == 'agent'
+                          for t in prep.children if t.dep_ == 'pobj']
+                if not agents or any(a.this_patient(t) for t in agents):
+                    return True
+                continue
             # A direct denial of that assertion, or denial of making it.
             # The closed creation complement cannot borrow a separate read,
             # request or appointment action merely because it names a report.

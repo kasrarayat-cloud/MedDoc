@@ -1,0 +1,24 @@
+{
+  "base": "6fee1665edb3d1b4d3fb346f2de36a351604730f",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-passive-6fee1665",
+  "child_pid": 3015400,
+  "exit_code": 0,
+  "timed_out": false,
+  "reaped": true,
+  "source_before": {
+    "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+    "rebuild/core/v3_field_relations.py": "697c210551bf572dd1a7446be0eb7f6f1a578ba2732e3ebe1b6511113b127599",
+    "rebuild/core/tests/test_elicited_passive_reference.py": "0f24f5c4c6b0634e713143e96cc1889116c97ec970e749c5a05bd63245a0203d",
+    "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0",
+    "rebuild/core/tests/test_elicited_source_reference.py": "bf4afdc5ae131d8450d5d5661dbe92e20bffaf7d02d4dc705b2801fbe905718d"
+  },
+  "source_after": {
+    "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+    "rebuild/core/v3_field_relations.py": "697c210551bf572dd1a7446be0eb7f6f1a578ba2732e3ebe1b6511113b127599",
+    "rebuild/core/tests/test_elicited_passive_reference.py": "0f24f5c4c6b0634e713143e96cc1889116c97ec970e749c5a05bd63245a0203d",
+    "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0",
+    "rebuild/core/tests/test_elicited_source_reference.py": "bf4afdc5ae131d8450d5d5661dbe92e20bffaf7d02d4dc705b2801fbe905718d"
+  },
+  "source_unchanged": true,
+  "elapsed_seconds": 29.438654727011453
+}
