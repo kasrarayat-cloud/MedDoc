@@ -1,0 +1,36 @@
+{
+  "database_access": false,
+  "elapsed_seconds": 0.3547269310001866,
+  "exit_code": 0,
+  "installed_services_access": false,
+  "provider_calls": 0,
+  "qualification": "Pure and simulated backend controls only; actual PostgreSQL capture and installed transition unverified.",
+  "raw_log_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-install-adapter-20261004/tests.log",
+  "raw_log_sha256": "67b2655d7f904d5fe0292fc08686810e1ec8a6a09920ad058635e14d61e3125f",
+  "raw_result_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-install-adapter-20261004/result.json",
+  "source_sha256_after": {
+    "rebuild/ops/capture_v1_install_schema.py": "47b9aeada99974cc056f305f8f9ec8ed33477b0cf8ab50dc0394f03aa64115ae",
+    "rebuild/ops/ordinary_generation_activation.py": "3715d6e91add64bd435e0ef4ee8888bd83b9f6e7b83593e2637f3d1c2583e7c2",
+    "rebuild/ops/tests/test_v1_private_install_adapter.py": "389028f0b40ca1e42c50a120012a33d4d79af76f6fb3650d08edfc6aa516c2f8",
+    "rebuild/ops/v1_install_catalog.py": "6974c3a200ab496439026a98e314ced7184aa529ebcf6cbbf8b814889184f92a",
+    "rebuild/ops/v1_install_participants.py": "99b4dd640c5d47cbff10f6699393ff9aa761afc02c9c33760be0858b0d095426",
+    "rebuild/ops/v1_private_install_adapter.py": "ac4565ba32412a7f723f3e7a7f5a2494eda9a6b332fb53c9f0a0811e8666e041",
+    "rebuild/ops/v1_private_install_preparation.py": "42a1c6a2352c18f39b8ffc81413d58e7dc7f9f028d6e4586b3555f2807f74e45",
+    "rebuild/ops/v1_private_install_runtime.py": "a133ee76b53b2f9e2d04f7829a1a34adbf675f1d284cf25574c54a74a825282f",
+    "scripts/activate-v1-private-install.py": "d9e1ea127733bce267763f1a82ec4f0456f9cbff6a74b978a900604d6126f07b"
+  },
+  "source_sha256_before": {
+    "rebuild/ops/capture_v1_install_schema.py": "47b9aeada99974cc056f305f8f9ec8ed33477b0cf8ab50dc0394f03aa64115ae",
+    "rebuild/ops/ordinary_generation_activation.py": "3715d6e91add64bd435e0ef4ee8888bd83b9f6e7b83593e2637f3d1c2583e7c2",
+    "rebuild/ops/tests/test_v1_private_install_adapter.py": "389028f0b40ca1e42c50a120012a33d4d79af76f6fb3650d08edfc6aa516c2f8",
+    "rebuild/ops/v1_install_catalog.py": "6974c3a200ab496439026a98e314ced7184aa529ebcf6cbbf8b814889184f92a",
+    "rebuild/ops/v1_install_participants.py": "99b4dd640c5d47cbff10f6699393ff9aa761afc02c9c33760be0858b0d095426",
+    "rebuild/ops/v1_private_install_adapter.py": "ac4565ba32412a7f723f3e7a7f5a2494eda9a6b332fb53c9f0a0811e8666e041",
+    "rebuild/ops/v1_private_install_preparation.py": "42a1c6a2352c18f39b8ffc81413d58e7dc7f9f028d6e4586b3555f2807f74e45",
+    "rebuild/ops/v1_private_install_runtime.py": "a133ee76b53b2f9e2d04f7829a1a34adbf675f1d284cf25574c54a74a825282f",
+    "scripts/activate-v1-private-install.py": "d9e1ea127733bce267763f1a82ec4f0456f9cbff6a74b978a900604d6126f07b"
+  },
+  "source_unchanged": true,
+  "technical_deadline_seconds": 180,
+  "test_methods": 18
+}
