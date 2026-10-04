@@ -83,3 +83,51 @@ Latest protected checkpoint:
 SHA256 `6532d080a14b37513d31feeead2fd59e3eed7d197dc63a389abce11e05b2006d`.
 Root available capacity at01:08UTC remains over332GB, free inodes over35million;
 no continuation cleanup or filesystem expansion is performed.
+
+## Current continuation evidence, 2026-10-04 10:00UTC
+
+The preceding dated state remains historical evidence. Current integration is
+`ef0169e55f62aefdeecbbfb4201f0c745d4937b1`, clean before this documentation,
+on the recovered branch; it remains unpushed beyond7907. Installed dedac and
+the old789c fixture demonstration remain unchanged.7907's exact CI failed,
+with complete original failures and the core1 timeout retained; there is no
+current exact-revision citation. The bounded Python CI deadline is now60min.
+
+D07's scalar/Unknown writer and its temporal signing repair are integrated
+after184 independent controls passed, including six exact previously unsafe
+maps/answers. D07 source score is23/28, five missed, zero wrong, four extras;
+the previous named-selection baseline is21/28, not the withdrawn22/28 prose.
+D03 remains45/88; its physically printed parent/subgroup layout is under repair.
+D08 remains29/41 with the ICU/SDU grouping gap; same-state False FF writes now
+preserve the original DOCX exactly. D09's47/47 mapping and ordinary/long exports
+passed mechanical and PDF checks. D10 measured183/198 automatic and186/198
+after explicit recovery; D30 measured61/62 automatic and62/62 after recovery.
+The unchanged54/60 and18/20 gates remain unmet; manual recovery is separate.
+
+Actual7907 provider evidence now totals157 cumulative attempts with calculated
+exposure1.717575505200USD, zero current open/unknown attempts, and no invoice
+reconciliation. QA requests and responses verify `claude-sonnet-5-5`; installed
+service configuration still reports4.6. The qualified7907 ordinary profile
+gave27/36 desired supported answers and40/40 intended holds. Live reviewed
+voice gave10/13 available useful answers, three avoidable holds and two intended
+holds. Later integrated clinical source replays35/36 desired supported and
+40/40 held in the14 retained responses, with zero unsafe answers. This replay
+is offline; the distinct prospectively committed-2 campaign has not started.
+C08 remains held and no human microphone acceptance is claimed.
+
+The two-child batch adapter and bounded mocked application rehearsal are
+prepared. Its first actual rehearsal failed before upload/request because the
+rehearsal configuration's price differed from the declared normal QA price.
+Both owned normal/test databases were verified absent after the failed run;
+the unchanged source, raw result and cause investigation are retained. This
+mocked rehearsal contributes no provider attempt or actual provider cost.
+Canonical-2 and-3 declarations remain prospective and their live runtimes absent.
+
+Root filesystem capacity is633927315456 bytes with318679162880 available at
+09:55UTC; no expansion procedure, shared mount change or cleanup was needed.
+Latest actual preflight remains GO091254; its preceding parser defect report
+is explicitly withdrawn with raw cache0B evidence preserved. No threshold was
+changed. B2 policy remains expired; valid Sep27 restoration evidence is reused.
+Next work is the focused Word hierarchy repairs, mocked batch integration,
+final-source paid qualification and financial proof, coherent exact CI, then
+the gated private demonstration and served verification.
