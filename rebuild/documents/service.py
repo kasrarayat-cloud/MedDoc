@@ -199,8 +199,8 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
             if not export.is_file() or export.is_symlink() or not 0 < export.stat().st_size <= MAX_OUTPUT:
                 raise DocumentError("The document export is invalid.", "invalid_export")
             if suffix == ".docx" and response.get("contract") != "v3":
-                # Output-only WM pagination: each limb repeats its own heading/units; long location
-                # rows may flow across pages. Applied before hashing, so the recorded export_sha256
+                # Output-only WM pagination preserves the original table and physical row destinations;
+                # long location rows may flow across pages. Applied before hashing, so export_sha256
                 # describes the stored bytes and the uploaded original is never rewritten.
                 from .layout import repair_export
                 response["layout"] = repair_export(export)
