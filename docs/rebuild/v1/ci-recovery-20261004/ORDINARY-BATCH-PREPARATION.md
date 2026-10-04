@@ -124,3 +124,36 @@ name prefixed by `test_`. Neither is opened until the grant.
 
 No provider send, installation, private-demo launch, public change, real-patient
 processing or financial source-pin renewal follows from a mocked pass.
+
+## First actual rehearsal and retained refusal
+
+Root granted one mocked rehearsal on the exact clean
+`0a01ce7c15c90c0a850ab0394966db97b17ab285` source. It stopped before upload at
+the unchanged batch price guard: actual application child exit 1 in 11.652560
+seconds, one test error in 2.657 seconds; actual outer exit 1 in 13.762491
+seconds. The two direct catalogue checks exited 0 and proved both owned normal
+and test databases absent afterward. Source inventories were unchanged, child
+processes finished, and no HTTP transport or provider request was reached.
+The original failure remains under
+`operations/ordinary-batch-mocked-0a01ce7c-20261004T095536Z/`, with application
+log SHA256 `ad762bee4fee23b06a9bbf29c6fc9c2480e8d044d9d9b2f0e2c5a89b3e70f94b`.
+
+The initial hypothesis that the batch planner transformed the ordinary price
+was withdrawn after reading its actual configuration copy and child job
+construction. A distinct socket/database-denied comparison on the same source
+reproduced price `configured-v1:240ad0521f69c2b673e505f081f15b269d21073a9802055daed7167c9b20e0f1`
+with the fixture launcher's absent Deepgram minute setting. Supplying the normal
+standing runner's `sonnet5_qa.PRICE_SETTINGS` (minute `0.0043`, second empty and
+discount `0`) produced the exact declared
+`configured-v1:f714798b73422cc8efe10325a2d9fedb2014bdd771f193df87c117d24aec89e8`.
+Both configurations were copied unchanged into their plans, and both produced
+the same two SDK request hashes and 100+1 child sizes. The pure comparison exited
+0 in 3.880079 seconds; log SHA256
+`44e84fd71217260419c03dbd3bd74a0c584698c801a9ed894e0f9b7c508ba83d`.
+
+The narrow repair scopes that existing normal price environment across the
+rehearsal method. It changes no application compiler, batch adapter, declaration,
+price guard, rate, source, expected answer or acceptance threshold. The third
+declaration remains byte-identical; no fourth declaration is necessary. A new
+actual rehearsal requires root review, a newly frozen source and a fresh output
+directory. The original failed run is never rerun in place.
