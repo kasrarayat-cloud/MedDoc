@@ -3,9 +3,12 @@ from copy import deepcopy
 import dataclasses
 import hashlib
 import io
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+
+from django.test import SimpleTestCase
 
 from ops import provider_campaign as pc, standing_qa as st, standing_qa_elicited as e
 from .test_standing_qa import Base, RUNNER_COMMIT, repository
@@ -67,7 +70,7 @@ class ElicitedFixedStage(Base):
         for case in inputs['cases']:
             fields=inputs['forms'][case['form']]['fields']
             answers={f['key']:{'status':'supported','text':case['desired_supported'][f['label']]}if f['label']in case['desired_supported']else{'status':'conflict','text':''}for f in fields}
-            for outcome in e.usefulness(case,fields,answers).values():counts[outcome]=counts.get(outcome,0)+1
+            for outcome in e.usefulness(case,fields,e.stages.steps.field_outcomes(answers)).values():counts[outcome]=counts.get(outcome,0)+1
         self.assertEqual(counts,{'supported_correct':8,'held_correct':3})
 
     def test_wrong_adopted_answer_is_unsafe_and_missing_positive_is_overheld(self):
@@ -125,3 +128,52 @@ class ElicitedFixedStage(Base):
         st.settle(campaign)
         self.assertEqual(campaign.ledger.stage_state(e.STAGE)['state'],'failed')
         with self.assertRaises(pc.Refused):campaign.stage_open(e.STAGE)
+
+
+class ElicitedNormalizedGrading(SimpleTestCase):
+    """The actual worker normalizes conflict to held before passing first results to its judge."""
+    def setUp(self):
+        raw = e.MANIFEST.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), e.MANIFEST_SHA256)
+        self.inputs = json.loads(raw)
+
+    def grade(self, case_id, raw_answers):
+        case = next(case for case in self.inputs['cases'] if case['id'] == case_id)
+        fields = self.inputs['forms'][case['form']]['fields']
+        return e.usefulness(case, fields, e.stages.steps.field_outcomes(raw_answers))
+
+    def test_actual_conflict_normalization_keeps_all_three_negative_holds(self):
+        for case_id in ('E03', 'E04', 'E05'):
+            with self.subTest(case=case_id):
+                self.assertEqual(self.grade(case_id, {'v3_1': {'status': 'conflict', 'text': ''}}),
+                                 {'v3_1': 'held_correct'})
+
+    def test_actual_positive_normalization_keeps_eight_exact_answers(self):
+        for case in self.inputs['cases'][:2]:
+            fields = self.inputs['forms'][case['form']]['fields']
+            raw = {f['key']: {'status': 'supported', 'text': case['desired_supported'][f['label']]}
+                   for f in fields}
+            self.assertEqual(set(self.grade(case['id'], raw).values()), {'supported_correct'})
+        case = self.inputs['cases'][0]
+        self.assertEqual(self.grade('E01', {'v3_1': {'status': 'supported', 'text': 'Wrong answer.'}}),
+                         {'v3_1': 'unsupported_accepted'})
+        self.assertEqual(self.grade('E01', {'v3_1': {'status': 'conflict', 'text': ''}}),
+                         {'v3_1': 'over_held'})
+
+    def test_negative_nonempty_hold_and_supported_answer_still_fail(self):
+        text = self.inputs['cases'][2]['notes']
+        for status in ('conflict', 'held', 'missing', 'supported'):
+            with self.subTest(status=status):
+                self.assertEqual(self.grade('E03', {'v3_1': {'status': status, 'text': text}}),
+                                 {'v3_1': 'unsupported_accepted'})
+        self.assertEqual(self.grade('E03', {'v3_1': {'status': 'supported', 'text': ''}}),
+                         {'v3_1': 'unsupported_accepted'})
+
+    def test_missing_or_unrecognized_answer_shape_never_gets_hold_credit(self):
+        self.assertEqual(self.grade('E03', {}), {'v3_1': 'unsupported_accepted'})
+        for status in ('left_blank', 'edited', 'unknown', None):
+            with self.subTest(status=status):
+                self.assertEqual(self.grade('E03', {'v3_1': {'status': status, 'text': ''}}),
+                                 {'v3_1': 'unsupported_accepted'})
+        with self.assertRaises(KeyError):
+            self.grade('E03', {'v3_1': {}})

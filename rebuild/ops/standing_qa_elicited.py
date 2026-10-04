@@ -162,7 +162,7 @@ def usefulness(case, fields, answers):
                 and row.get('text') == expected[label] else 'unsupported_accepted'
                 if row.get('status') == 'supported' or row.get('text') else 'over_held')
         else:
-            result[field['key']] = ('held_correct' if row.get('status') in ('conflict','missing')
+            result[field['key']] = ('held_correct' if row.get('status') in ('held','missing')
                 and not row.get('text') else 'unsupported_accepted')
     return result
 
