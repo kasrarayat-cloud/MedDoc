@@ -766,16 +766,31 @@ class V3PrintedTicks(V3Fixture, TestCase):
         self.template, version = self.uploaded(data=self.checklist_original, name="Synthetic checklist")
         consent = self.by_label(version)["Consent obtained"]
         self.assertTrue(consent["write_protected"])
+        self.assertEqual((consent["locator"]["part"], consent["locator"]["slot"]),
+                         ("word/document.xml", "b/p[2]/sdt[0]"))
+        self.assertEqual(consent["locator"]["target"], {"type": "checkboxes", "boxes": [
+            {"kind": "sdt", "part": "word/document.xml", "slot": "b/p[2]/sdt[0]"}]})
         response = self.client.post(f"/templates/{self.template.pk}/", {
             "action": "v3_confirm", "mapping_version": version.pk, "checked_every_field": "on"})
         self.assertEqual(response.status_code, 400, "the original human action requires explicit coverage review")
         self.assertFalse(MappingConfirmation.objects.filter(version=version).exists())
         issues = version.import_manifest["coverage"]["selected_engine_issues"]
-        self.assertTrue(issues)
+        self.assertEqual([(issue["code"], issue["part"], issue["slot"]) for issue in issues],
+                         [("human_signing_action", "word/document.xml", "b/p[2]")])
+        issue = issues[0]
+        self.assertEqual(issue["detail"], consent["review_reason"] + " Location: word/document.xml#b/p[2]")
         response = self.client.post(f"/templates/{self.template.pk}/", {
             "action": "v3_coverage", "mapping_version": version.pk,
-            **{"exclude_" + issue["id"]: "on" for issue in issues}})
+            "exclude_" + issue["id"]: "on"})
         self.assertEqual(response.status_code, 302)
+        reviewed = self.latest(self.template)
+        self.assertEqual(reviewed.number, version.number + 1)
+        self.assertEqual((reviewed.fields, reviewed.document_backend, reviewed.import_manifest),
+                         (version.fields, version.document_backend, version.import_manifest))
+        self.assertEqual(reviewed.corrections["coverage_review"], [{"id": issue["id"],
+            "disposition": "leave_unchanged", "source_sha256": self.template.sha256,
+            "reviewed_by": str(self.user.pk)}])
+        self.assertFalse(reviewed.import_manifest["coverage"]["automatic_complete"])
         self.version = self.confirm(self.template)
         self.assertEqual(private_path(self.template.original_path).read_bytes(), self.checklist_original)
         self.by = self.by_label(self.version)
