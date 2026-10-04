@@ -1,0 +1,17 @@
+test_all_eight_correct_answers_and_three_safe_holds_are_scored_separately (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_all_eight_correct_answers_and_three_safe_holds_are_scored_separately) ... ok
+test_arbitrary_send_id_path_form_and_pricing_are_refused (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_arbitrary_send_id_path_form_and_pricing_are_refused) ... ok
+test_blank_original_bytes_and_actual_detected_catalogues_match_manifest (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_blank_original_bytes_and_actual_detected_catalogues_match_manifest) ... ok
+test_canonical_five_is_exact_twenty_four_at_distinct_places (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_canonical_five_is_exact_twenty_four_at_distinct_places) ... ok
+test_changed_missing_or_reordered_source_plan_is_refused (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_changed_missing_or_reordered_source_plan_is_refused) ... ok
+test_complete_fixed_plan_has_five_unique_once_only_send_ids (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_complete_fixed_plan_has_five_unique_once_only_send_ids) ... ok
+test_mapping_manifest_cannot_hide_changed_source_or_omissions (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_mapping_manifest_cannot_hide_changed_source_or_omissions) ... ok
+test_new_stage_requires_whole_count_and_its_declared_synthetic_manifest (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_new_stage_requires_whole_count_and_its_declared_synthetic_manifest) ... ok
+test_old_campaign_has_no_new_stage_and_comparison_denominators_stay_fixed (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_old_campaign_has_no_new_stage_and_comparison_denominators_stay_fixed) ... ok
+test_unknown_attempt_is_terminal_and_is_never_planned_again (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_unknown_attempt_is_terminal_and_is_never_planned_again) ... ok
+test_unsafe_new_result_stops_but_old_worker_record_stays_immutable (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_unsafe_new_result_stops_but_old_worker_record_stays_immutable) ... ok
+test_wrong_adopted_answer_is_unsafe_and_missing_positive_is_overheld (ops.tests.test_standing_qa_elicited.ElicitedFixedStage.test_wrong_adopted_answer_is_unsafe_and_missing_positive_is_overheld) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 8.648s
+
+OK
