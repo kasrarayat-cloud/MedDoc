@@ -1,0 +1,14 @@
+{
+  "renderer_pid": 1343224,
+  "renderer_pid_absent": true,
+  "socket_removed": true,
+  "task_renderer_containers": [],
+  "source_clean": true,
+  "actual_outer_exit": 1,
+  "test_exit": 0,
+  "elapsed_seconds": 52.487,
+  "timed_out": false,
+  "renderer_container_prefix": "quillmd-layout-",
+  "all_renderer_containers": [],
+  "container_proof": "Correct source-derived prefix; the previous task-name filter was too narrow and is not relied upon"
+}

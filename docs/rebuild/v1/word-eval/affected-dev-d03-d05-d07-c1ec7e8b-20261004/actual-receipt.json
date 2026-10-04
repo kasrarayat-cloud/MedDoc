@@ -1,0 +1,181 @@
+{
+  "candidate": "c1ec7e8bd86ea561e9013ce0b9f103595ad24f84",
+  "attempt": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-application-c1ec7e8bd86e-1791096038431234034",
+  "actual_child_exit": 0,
+  "child_methods": 3,
+  "child_elapsed_seconds": 34.048,
+  "actual_outer_exit": 1,
+  "outer_elapsed_seconds": 52.487,
+  "timed_out": false,
+  "cases": {
+    "D03": {
+      "mapping": {
+        "n": 88,
+        "ok": 45,
+        "missed": 32,
+        "wrong": 11,
+        "extras": 2,
+        "strict": false
+      },
+      "automatic_success": false,
+      "manual_mapping_corrections": 0,
+      "coverage_post_status": 302,
+      "mapping_confirmation_status": 302,
+      "profiles": {
+        "empty": {
+          "passed": false,
+          "fixed_protocol_passed": false,
+          "export_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+          "failures": [
+            "Fixed independent original-destination choice reader failed"
+          ]
+        },
+        "ordinary": {
+          "passed": false,
+          "fixed_protocol_passed": null,
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ]
+        },
+        "long": {
+          "passed": false,
+          "fixed_protocol_passed": null,
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ]
+        }
+      }
+    },
+    "D05": {
+      "mapping": {
+        "n": 6,
+        "ok": 6,
+        "missed": 0,
+        "wrong": 0,
+        "extras": 2,
+        "strict": false
+      },
+      "automatic_success": false,
+      "manual_mapping_corrections": 0,
+      "coverage_post_status": 302,
+      "mapping_confirmation_status": 302,
+      "profiles": {
+        "empty": {
+          "passed": false,
+          "fixed_protocol_passed": false,
+          "export_sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a",
+          "failures": [
+            "Fixed independent original-destination choice reader failed"
+          ]
+        },
+        "ordinary": {
+          "passed": false,
+          "fixed_protocol_passed": null,
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ]
+        },
+        "long": {
+          "passed": false,
+          "fixed_protocol_passed": null,
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ]
+        }
+      }
+    },
+    "D07": {
+      "mapping": {
+        "n": 28,
+        "ok": 14,
+        "missed": 8,
+        "wrong": 6,
+        "extras": 4,
+        "strict": false
+      },
+      "automatic_success": false,
+      "manual_mapping_corrections": 0,
+      "coverage_post_status": 302,
+      "mapping_confirmation_status": 302,
+      "profiles": {
+        "empty": {
+          "passed": true,
+          "fixed_protocol_passed": true,
+          "export_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+          "failures": []
+        },
+        "ordinary": {
+          "passed": false,
+          "fixed_protocol_passed": null,
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ]
+        },
+        "long": {
+          "passed": false,
+          "fixed_protocol_passed": null,
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ]
+        }
+      }
+    }
+  },
+  "fixed_profile_refusal_causes": {
+    "D03": "Fixed Yes does not match complete original printed Yes \u2192 If yes, focus on your worst headache type while answering the following questions. No alternative answer substituted.",
+    "D05": "Fixed Version value targets a protected original physical destination. No source guard relaxed.",
+    "D07": "Fixed two-source answer is refused by current one-choice item2. Appendix-based cardinality remains unresolved; no answer removed."
+  },
+  "source_unchanged": true,
+  "harness_unchanged": true,
+  "database_after": {
+    "verified": true,
+    "requested_database": "quillmd_qa_sol_word_dev1342444",
+    "checked_names": [
+      "quillmd_qa_sol_word_dev1342444",
+      "test_quillmd_qa_sol_word_dev1342444"
+    ],
+    "present": [],
+    "all_absent": true,
+    "provider_calls": 0
+  },
+  "process_teardown": {
+    "worker_exit": 0,
+    "renderer_exit": -2,
+    "socket_removed": true,
+    "timed_out": false
+  },
+  "independent_teardown": {
+    "renderer_pid": 1343224,
+    "renderer_pid_absent": true,
+    "socket_removed": true,
+    "task_renderer_containers": [],
+    "source_clean": true,
+    "actual_outer_exit": 1,
+    "test_exit": 0,
+    "elapsed_seconds": 52.487,
+    "timed_out": false,
+    "renderer_container_prefix": "quillmd-layout-",
+    "all_renderer_containers": [],
+    "container_proof": "Correct source-derived prefix; the previous task-name filter was too narrow and is not relied upon"
+  },
+  "provider_calls": 0,
+  "raw_exports_archived_before_assertions": true,
+  "full_gate": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75,
+    "fixed_pass_credit": 0,
+    "manual_recovery_automatic_credit": 0,
+    "holdout_evaluated": false,
+    "original_denominators_preserved": true
+  }
+}
