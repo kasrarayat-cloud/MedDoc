@@ -5747,7 +5747,8 @@ class Detector:
             if len(named) != 1:
                 continue
             caption = named[0]; printed, pieces = self.ptext(caption.el)
-            role = signing_place(clean_label(printed.partition('(')[0]))
+            head = clean_label(printed.partition('(')[0])
+            role = signing_place(head); action = self.checkbox_source_action(head, governing=True)
             if (not self.parenthetical_write_request(printed) or self.blank_spans(printed, pieces)
                     or not self.tab_source_visible(caption) or self.question_box_paragraph(caption.el)[2]
                     or not role and self.row_label(cell.parent, cell.info['row'], cell.info['col'])
@@ -5757,9 +5758,11 @@ class Detector:
             area = Area(role or 'long_text', clean_label(printed), cell, {'type': 'cell_append'},
                         context=self.context_for(caption, complete=True), complete_source=True,
                         source_questions=[self.write_request_source(caption)], label_slot=caption)
-            if role:
+            if role or action:
                 area.source_action = True
-                area.protection = 'This printed signing destination is human-owned. Complete it through the explicit human signing workflow.'
+                area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
+                                   if role or action == 'human_signing_action' else
+                                   'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
             self.add(area)
     # Printed advice to the patient, never a request for the clinician's answer: it speaks to its reader as 'you'
     # ('... at your next appointment', '... when you phone us'), sends its reader to a clinician ('... to the nurse'), or
@@ -6594,15 +6597,19 @@ class Detector:
                     continue
                 if in_container and not requested and self.mapped_beside_label(ps) and all(self.plain_spacing_paragraph(b) for b in blanks):
                     continue
-                role = signing_place(clean_label(txt.partition('(')[0])) if requested else ''
+                head = clean_label(txt.partition('(')[0]) if requested else ''
+                role = signing_place(head) if requested else ''
+                action = self.checkbox_source_action(head, governing=True) if requested else ''
                 kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
                     ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
                 area = Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),
                             extra_slots=blanks[1:], label_slot=ps, complete_source=requested,
                             source_questions=[self.write_request_source(ps)] if requested else [])
-                if role:
+                if role or action:
                     area.source_action = True
-                    area.protection = 'This printed signing destination is human-owned. Complete it through the explicit human signing workflow.'
+                    area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
+                                       if role or action == 'human_signing_action' else
+                                       'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
                 self.add(area)
                 self.claimed.add(id(ps.el))
                 for b in blanks:

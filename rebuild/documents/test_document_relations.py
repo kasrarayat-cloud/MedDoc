@@ -77,6 +77,25 @@ class DocumentRelations(unittest.TestCase):
                 field.pop('write_protected', None); field.pop('review_reason', None)
                 with self.assertRaises(w.V3Failure): w.fill(raw, [field], {field['key']: 'Dr Synthetic Finalizer'})
 
+    def test_terminal_document_act_caption_is_protected_but_recorded_status_stays_answerable(self):
+        for caption, human in (('Attestation (specify)', True), ('Declaration (please describe)', True),
+                               ('Review (specify)', True), ('Attestation status (specify)', False),
+                               ('Recorded attestation status (specify)', False), ('Review of systems (specify)', False)):
+            for below in (False, True):
+                with self.subTest(caption=caption, below=below):
+                    doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0); cell.text = caption
+                    if below: cell.add_paragraph(); cell.add_paragraph('Unchanged neighboring question')
+                    raw = data(doc); field = next(f for f in w.inspect(raw)['fields'] if f.get('source_questions'))
+                    self.assertEqual(bool(field.get('write_protected')), human)
+                    altered = copy.deepcopy(field); altered['label'] = 'Clinical value'; altered['kind'] = 'text'
+                    altered.pop('write_protected', None); altered.pop('review_reason', None)
+                    if human:
+                        with self.assertRaises(w.V3Failure): w.fill(raw, [altered], {field['key']: 'Dr Synthetic Finalizer'})
+                    else:
+                        answer = 'Reviewed recorded value'; final = Document(io.BytesIO(w.fill(raw, [altered], {field['key']: answer})))
+                        self.assertIn(answer, final.tables[0].cell(0, 0).text)
+                        self.assertEqual(final.tables[0].cell(0, 0).paragraphs[0]._p.xml, cell.paragraphs[0]._p.xml)
+
     def test_ordinary_signed_receipt_and_initial_reading_requests_still_take_complete_text(self):
         for caption in ('Signed receipt (specify)', 'Initial reading (specify)'):
             for below in (False, True):
