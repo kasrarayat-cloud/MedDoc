@@ -20,6 +20,8 @@ MODEL = 'claude-sonnet-5-5'
 CONTRACT = 'ordinary-field-relations-v4'
 REQUIRED_SOURCE = frozenset({
     'rebuild/core/generation.py', 'rebuild/core/jobs.py', 'rebuild/core/views.py',
+    'rebuild/core/models.py', 'rebuild/core/reviewed_source.py',
+    'rebuild/templates/encounter_input.html', 'rebuild/templates/template_detail_v3.html',
     'rebuild/core/import_binding.py', 'rebuild/core/v3_mapping.py', 'rebuild/documents/word_v3.py',
     'rebuild/quillmd/settings.py', 'rebuild/quillmd/application_profile.py', 'rebuild/requirements.txt',
     'rebuild/ops/ordinary_generation_activation.py', 'rebuild/ops/v1_private_install_preparation.py',
@@ -37,7 +39,7 @@ def sha(raw):
 
 
 def source_contract(declaration, schema_bytes, source_bytes):
-    """Bind all declared candidate bytes plus the immutable installed migration prefix."""
+    """Validate declared bytes and the installed migration prefix, not full-tree completeness."""
     require(isinstance(declaration, dict) and set(declaration) == {
         'format', 'baseline', 'target', 'schema_sha256', 'source_sha256', 'data_mode',
         'payment_mode', 'public_maintenance', 'cpt_enabled'}, 'Declaration shape differs.')
@@ -58,7 +60,7 @@ def source_contract(declaration, schema_bytes, source_bytes):
     sources = declaration['source_sha256']
     require(isinstance(sources, dict) and isinstance(source_bytes, dict)
             and set(sources) == set(source_bytes) and REQUIRED_SOURCE <= set(sources),
-            'Complete declared source bytes required.')
+            'Required declared source bytes missing or mismatched.')
     expected_migrations = {
         'rebuild/core/migrations/' + name + '.py'
         for name in {**schema['baseline_prefix_sha256'], **schema['forward_migration_sha256']}}

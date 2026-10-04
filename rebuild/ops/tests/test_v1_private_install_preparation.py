@@ -77,6 +77,14 @@ class PrivateV1PreparationTests(unittest.TestCase):
             declaration['source_sha256'][path] = p.sha(sources[path])
             with self.subTest(name=name), self.assertRaises(ValueError):
                 p.source_contract(declaration, self.schema_bytes, sources)
+        # Both supplied dictionaries can agree while a critical runtime input
+        # is omitted. Required paths must refuse even that self-consistent subset.
+        for path in ('rebuild/core/models.py', 'rebuild/core/reviewed_source.py',
+                     'rebuild/templates/encounter_input.html', 'rebuild/templates/template_detail_v3.html'):
+            sources = {key: value for key, value in self.sources.items() if key != path}
+            declaration = copy.deepcopy(self.declaration); declaration['source_sha256'].pop(path)
+            with self.subTest(missing=path), self.assertRaises(ValueError):
+                p.source_contract(declaration, self.schema_bytes, sources)
         extra = 'rebuild/core/migrations/0038_unreviewed.py'
         sources = {**self.sources, extra: b'# omitted migration'}
         declaration = copy.deepcopy(self.declaration); declaration['source_sha256'][extra] = p.sha(sources[extra])

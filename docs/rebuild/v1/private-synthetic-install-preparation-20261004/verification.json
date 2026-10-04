@@ -15,8 +15,8 @@
     "log_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/import-ci-20261004/private-preparation-unit.log"
   },
   "source_sha256": {
-    "rebuild/ops/v1_private_install_preparation.py": "048ea89a793977a381c265efb4b4731a942fa86cd46bd454e3d7ae7f4ecdc91b",
-    "rebuild/ops/tests/test_v1_private_install_preparation.py": "b34ee8785d018edd08a7a142c0cc85353271379e2ff6e9310a8a93b09bcf6969"
+    "rebuild/ops/v1_private_install_preparation.py": "42a1c6a2352c18f39b8ffc81413d58e7dc7f9f028d6e4586b3555f2807f74e45",
+    "rebuild/ops/tests/test_v1_private_install_preparation.py": "876863a18beac66055ce56bc652b7dc56fedabecc0c576521f23acb544f27e0e"
   },
   "fixed_gate": {
     "overall_total": 60,
@@ -48,5 +48,43 @@
   "retained_external_handoff_sha256": {
     "seven-held-originals.json": "447f8f474f84d1e60fb8cc9b2ba4d92df2b09c8f64aba9384ec3d83274308ef8",
     "acceptance-metadata.json": "b3a29aad23fdee36147495ba53569d669f8f740a6d94457590ea6809c80dbd0e"
+  },
+  "refinement": {
+    "base": "260f2069503595e45e41361343ee5b0f7da5f2a5",
+    "tests": 12,
+    "seconds": 2.065,
+    "exit_code": 0,
+    "database_used": false,
+    "provider_calls": 0,
+    "log_sha256": "cd415149dbafd3de6f37d521ffd1da40a4df780f324be391fa118b248d03db97",
+    "critical_missing_declared_source_controls": [
+      "rebuild/core/models.py",
+      "rebuild/core/reviewed_source.py",
+      "rebuild/templates/encounter_input.html",
+      "rebuild/templates/template_detail_v3.html"
+    ],
+    "claim": "Declared-byte and minimum-path validation only; normal driver must discover full actual Git source scope.",
+    "old_selector_expectation": {
+      "exit_code": 1,
+      "log_sha256": "75d8576fd0504679220ec2418391d431d341373cfdad99a4f96aa2be5c41955d",
+      "cause": "Original fixed document expectation omitted actual documents.test_ruled_paragraph_recovery."
+    },
+    "recursive_ops_discovery": {
+      "same_recursive_start_and_pattern_family_as_ci": true,
+      "pattern_only_narrowed_for_readonly_discovery": "test_v1_private_install_preparation.py",
+      "tests": 5,
+      "unique_tests": 5,
+      "loader_errors": [],
+      "ids": [
+        "tests.test_v1_private_install_preparation.PrivateV1PreparationTests.test_current_fifty_three_maximum_and_manual_recovery_cannot_satisfy_installed_gate",
+        "tests.test_v1_private_install_preparation.PrivateV1PreparationTests.test_exact_citation_model_usefulness_and_merged_install_checks_are_separate",
+        "tests.test_v1_private_install_preparation.PrivateV1PreparationTests.test_exact_source_prefix_graph_and_synthetic_boundary_cannot_be_relabelled",
+        "tests.test_v1_private_install_preparation.PrivateV1PreparationTests.test_fixture_exception_is_separate_has_no_installed_units_or_execution_authority",
+        "tests.test_v1_private_install_preparation.PrivateV1PreparationTests.test_old_financial_columns_files_new_table_population_and_cotenants_are_preserved"
+      ],
+      "tests_executed": false,
+      "database_used": false,
+      "provider_calls": 0
+    }
   }
 }
