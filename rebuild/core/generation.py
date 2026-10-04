@@ -3397,7 +3397,7 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
             warnings.setdefault(unit['id'], {**unit, 'syntax_incomplete': True})
         subject = reading['subjects'][unit['id']]
         own = reading['parsed'][unit['id']]
-        if (unit['id'] in reading['unresolved_subjects'] or (subject and subject != label)
+        if ((unit['id'] in reading['unresolved_subjects'] and unit['id'] not in ordinary.get('owned_subject_ids', ())) or (subject and subject != label)
                 or (own and own[0] != label)):
             warnings[unit['id']] = unit
         before, changer = reading['neighbours'][unit['id']]
@@ -4232,7 +4232,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if notes[unit['start']:unit['end']]!=quote: raise ValidationError('Evidence offset mismatch.')
             evidence.append({k:unit[k] for k in ('quote','start','end')})
             if unit['correction_value'] and corrected_quantity(unit,field) is None: guarded=True
-            if v3 and unit['id'] in governance[11]['preceding']['unresolved_subjects']: guarded=True
+            if (v3 and unit['id'] in governance[11]['preceding']['unresolved_subjects']
+                    and unit['id'] not in ordinary.get('owned_subject_ids', ())): guarded=True
             # Fragments still hold. Contract v3 also recognizes complete syntax
             # beyond the historical verb list, without changing any context guard.
             if v3:

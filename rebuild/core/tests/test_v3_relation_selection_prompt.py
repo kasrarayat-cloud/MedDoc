@@ -78,13 +78,19 @@ class SourceHeadingAndSelection(SimpleTestCase):
                         self.assertEqual([e['quote'] for e in answers[key]['evidence']],
                             ['The clinician explicitly documents a left ankle strain.'])
                         continue
-                    if case['attempt'] == '005' and key in ('v3_7', 'v3_8', 'v3_10'):
-                        # A new offline revalidation can recover three faithful
+                    if case['attempt'] == '005' and key in ('v3_6', 'v3_7', 'v3_8', 'v3_10', 'v3_11'):
+                        # A new offline revalidation can recover five faithful
                         # observations. The historical first result is retained
                         # verbatim, not replaced or regraded as a provider run.
                         self.assertEqual(first['status'], 'conflict')
                         self.assertEqual(answers[key]['status'], 'supported', (key, answers[key]))
                         self.assertTrue(answers[key]['evidence'])
+                        if key == 'v3_11':
+                            self.assertEqual(answers[key]['text'],
+                                'Recommendation, follow-up with the referring clinician in two weeks.')
+                        if key == 'v3_6':
+                            self.assertEqual(answers[key]['text'],
+                                'Sigmoid diverticulosis and small internal hemorrhoids.\nNo polyps were seen.')
                         continue
                     self.assertEqual({name: answers[key].get(name) for name in ('status', 'text', 'evidence')}, first)
 
@@ -169,7 +175,7 @@ class ReviewedSourceOwnership(SimpleTestCase):
         known = {u['id']: u for u in units}
         by_key = {f['key']: f for f in self.fields}
         supported = {'Procedure', 'Anesthesia', 'Bowel preparation score', 'Indication',
-                     'Polyps', 'Specimens', 'Immediate complications'}
+                     'Polyps', 'Specimens', 'Immediate complications', 'Findings', 'Recommendation'}
         for mode in ('complete-declared-union', 'bare-own-heading-independent'):
             with self.subTest(mode=mode):
                 wire = json.loads(case['response_text'])
@@ -187,7 +193,11 @@ class ReviewedSourceOwnership(SimpleTestCase):
                 result['patient_default_context'] = proof(notes)
                 answers = r.validated(result)
                 selected = {item['key']: item['unit_ids'] for item in wire['fields']}
-                self.assertEqual(sum(a['status'] == 'supported' for a in answers.values()), 7)
+                # The immutable original response and its seven earlier useful
+                # answers remain recorded. Complete reviewed source can now
+                # prove Findings and the own Recommendation; garbled Extent
+                # and C08's blood-loss ambiguity still hold.
+                self.assertEqual(sum(a['status'] == 'supported' for a in answers.values()), 9)
                 adopted = {}
                 for field in self.fields:
                     answer = answers[field['key']]

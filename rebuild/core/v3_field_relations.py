@@ -463,6 +463,8 @@ def sole_independent(reading, unit, chosen, label):
         word that may describe the state it denies ('There is no swelling.' beside 'The knee is swollen.') - round 5,
         R1: a general noun, a synonym or another spelling shares no word with it, so only the class tells, fail closed.
     The lines it selected are its answer. Read only for a single-patient release; nothing else is changed by it."""
+    from .ordinary_source_scope import effective
+    reading = effective(reading, unit, chosen, label)
     from .v3_actors import SOLE_CLINICAL, sole_bears_on
     units, actors = reading['units'], reading['actors']
     mine = actors[unit['id']]['sole']
@@ -628,6 +630,13 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         if (item.conflict or disagrees(item, units) or any(relation in ('contrary', 'unresolved')
                 or (relation == 'qualifier' and u['id'] not in chosen)
                 for u, relation in zip(units, item.context))): return refused
+        if value['contract'] == CONTRACT:
+            from .ordinary_source_scope import apply
+            reading = apply(reading)
+        scoped_roles = reading.get('_ordinary_scoped_roles', {})
+        scoped_owned = {uid for uid in chosen if scoped_roles.get(uid, {}).get('owner') == g.question_key(label)}
+        if any(uid in scoped_roles and uid not in scoped_owned for uid in chosen): return refused
+        reading = {**reading, 'unresolved_subjects': reading['unresolved_subjects'] - scoped_owned}
         if len(group) > 1:
             contexts = [g.question_key(f.get('context') or '') for f in catalogue if f['key'] in group]
             # Source ordinals distinguish controls, not indistinguishable questions.
@@ -704,13 +713,13 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         named_nominal=bool(reviewed and any(u['id'] in reading.get('nominal_patient',())
             and u['quote'].casefold().startswith(prefix) for u in ordered))
         headed = own_heading_reference(reading,field,chosen,related,literal_ids)
-        self_reference = bool(headed or reviewed_source.self_reference(reading, field, chosen, reviewed_ids)
+        self_reference = bool(headed or reviewed_source.self_reference(reading, field, chosen, reviewed_ids | scoped_owned)
             or (chosen and related and len(group) == 1
             and (related == chosen or (reviewed and related <= chosen) or named_nominal)
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and (reading['patients'].get(u['id']) or reviewed) for u in ordered)))
         return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference,
-                'syntax_ids': literal_ids, 'shared_ids': reviewed_ids}
+                'syntax_ids': literal_ids, 'shared_ids': reviewed_ids, 'owned_subject_ids': scoped_owned}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
 

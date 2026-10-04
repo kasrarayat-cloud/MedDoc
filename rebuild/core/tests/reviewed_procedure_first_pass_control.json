@@ -1,0 +1,631 @@
+{
+  "provenance": "Retained actual reviewed voice 033 source and response, exposed offline control; raw ASR, seven explicit edits and first adopted output remain separate. No provider repeat.",
+  "notes": "Fictional software test only. Patient name, sample colonoscopy. Date of birth, 01/02/1980. Patient ID, SYN-COLON-AI-20260921. Procedure date, 09/21/2026. Endoscopist. Dr Synthetic Example. Procedure. Diagnostic colonoscopy. Anesthesia. Monitored anesthesia care. Bowel preparation score. BBPS eight. The scope was advanced to the cecum. Indication. Rectal bleeding. Sigmoid diverticulosis and small internal hemorrhoids. No polyps were seen. No specimens were collected. Estimated blood loss was zero milliliters. Less than one milliliter. There were no immediate complications. Recommendation, follow-up with the referring clinician in two weeks.",
+  "fields": [
+    {
+      "context": "Synthetic procedure findings worksheet > Procedure",
+      "key": "v3_1",
+      "kind": "text",
+      "label": "Procedure",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Anesthesia",
+      "key": "v3_2",
+      "kind": "text",
+      "label": "Anesthesia",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Bowel preparation score",
+      "key": "v3_3",
+      "kind": "text",
+      "label": "Bowel preparation score",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Extent reached",
+      "key": "v3_4",
+      "kind": "text",
+      "label": "Extent reached",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Indication",
+      "key": "v3_5",
+      "kind": "text",
+      "label": "Indication",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[4]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Findings",
+      "key": "v3_6",
+      "kind": "long_text",
+      "label": "Findings",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[5]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Polyps",
+      "key": "v3_7",
+      "kind": "text",
+      "label": "Polyps",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[6]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Specimens",
+      "key": "v3_8",
+      "kind": "text",
+      "label": "Specimens",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[7]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Estimated blood loss",
+      "key": "v3_9",
+      "kind": "text",
+      "label": "Estimated blood loss",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[8]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Immediate complications",
+      "key": "v3_10",
+      "kind": "text",
+      "label": "Immediate complications",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[9]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    },
+    {
+      "context": "Synthetic procedure findings worksheet > Recommendation",
+      "key": "v3_11",
+      "kind": "text",
+      "label": "Recommendation",
+      "locator": {
+        "contract": "v3",
+        "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[10]/tc[1]",
+        "target": {
+          "type": "cell"
+        }
+      }
+    }
+  ],
+  "model_body": {
+    "fields": [
+      {
+        "key": "v3_1",
+        "unit_ids": [
+          9
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            9
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_2",
+        "unit_ids": [
+          11
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            11
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_3",
+        "unit_ids": [
+          13
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            13
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_4",
+        "unit_ids": [
+          14
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            14
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_5",
+        "unit_ids": [
+          16
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            16
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_6",
+        "unit_ids": [
+          17,
+          18
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            17,
+            18
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_7",
+        "unit_ids": [
+          18
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            18
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_8",
+        "unit_ids": [
+          19
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            19
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            20,
+            21,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_9",
+        "unit_ids": [
+          20,
+          21
+        ],
+        "conflict": true,
+        "context": {
+          "answer": [
+            20,
+            21
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            22,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_10",
+        "unit_ids": [
+          22
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            22
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            23
+          ]
+        }
+      },
+      {
+        "key": "v3_11",
+        "unit_ids": [
+          23
+        ],
+        "conflict": false,
+        "context": {
+          "answer": [
+            23
+          ],
+          "qualifier": [],
+          "contrary": [],
+          "unresolved": [],
+          "independent": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22
+          ]
+        }
+      }
+    ]
+  },
+  "original_statuses": {
+    "v3_1": "supported",
+    "v3_10": "supported",
+    "v3_11": "conflict",
+    "v3_2": "supported",
+    "v3_3": "supported",
+    "v3_4": "conflict",
+    "v3_5": "supported",
+    "v3_6": "conflict",
+    "v3_7": "supported",
+    "v3_8": "supported",
+    "v3_9": "conflict"
+  },
+  "review_span": {
+    "start": 0,
+    "end": 647,
+    "reviewed_sha256": "bb44d3c6608e7965492e21e71ee164714966ba946987833172a57f5b07422d97"
+  },
+  "input_hashes": {
+    "request.json": "c89ee91921bab4a65b0ada7004edb64b7794397b07c18b77248e798b36e48386",
+    "provider-result.json": "7ec24c5850b1ddfa83589095cf0e8ae13e90c69950bae792eed45479a0c608cd",
+    "answers-adopted.json": "a43e856859c6c6498ef8a4a24d3c19025ce06c19c5ccfce85ebd92894a2c6f03",
+    "case/mapping.json": "965d2c3b1045cb922394d929f3c3733c8ff61715ed8fe45f9917e787fedc2f97",
+    "case/notes.txt": "bb44d3c6608e7965492e21e71ee164714966ba946987833172a57f5b07422d97"
+  }
+}

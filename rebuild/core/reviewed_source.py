@@ -73,7 +73,7 @@ def complete_ids(reading, field, ordered):
         return bool(t.pos_ == 'PROPN' and t.text.isalpha() and t.text.isupper()
             and 2 <= len(t.text) <= 6 and any(c.dep_ == 'nummod' and c.like_num for c in t.children))
 
-    def owned(unit, doc):
+    def owned(unit, doc, *, caption=False):
         info = reading['actors'][unit['id']]
         if (not proof['start'] <= unit['start'] < unit['end'] <= proof['end']
                 or foreign_before[unit['id']] or not info.get('readable') or info.get('other_floor')
@@ -86,7 +86,7 @@ def complete_ids(reading, field, ordered):
         return bool(doc is not None and len(list(doc.sents)) == 1
             and not any((t.pos_ == 'PRON' and not (t.dep_ == 'expl' and a._fold(t.text) == 'there'))
                 or (t.pos_ == 'PROPN' and not initialism(t))
-                or a.names_person(t) or a.names_carer(t)
+                or (not caption and (a.names_person(t) or a.names_carer(t)))
                 or t.text in ('"', '“', '”', '‘', '’') for t in doc)
             and not any(t.tag_ == 'MD' for t in doc)
             and not any(g.SELF_CORRECTION.search(s) or g.INHERITED_SCOPE.search(s)
@@ -103,12 +103,19 @@ def complete_ids(reading, field, ordered):
 
     result = set()
     selected = {u['id'] for u in ordered}
+    from .source_scope import _date_scope_backward_dependency
+    source_dependency = _date_scope_backward_dependency(reading, ordered)
     for unit in ordered:
         _, doc = by_id[unit['id']]
         if unit['id'] in qualified_speakers and speakers[unit['id']] == label:
             result.add(unit['id'])
             continue
-        if not owned(unit, doc):
+        from .reviewed_procedure_source import caption, complete
+        care_caption = bool(doc is not None and caption(doc, field))
+        if not owned(unit, doc, caption=care_caption):
+            continue
+        if not source_dependency and (care_caption or complete(doc, field, nominal=nominal)):
+            result.add(unit['id'])
             continue
         position = reading['position'][unit['id']]
         previous = units[position - 1]['id'] if position else None
