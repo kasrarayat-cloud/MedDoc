@@ -1,0 +1,215 @@
+{
+  "contract": "new3-independent-accounting-v1",
+  "source": "04fb7603282dc47eda98058c6d790f407951acba",
+  "result_sha256": "5f510fac45ccefdd7a8369db94e31783c8c73ce4ceef1723d7a548289b99c4e8",
+  "actual_exit": 0,
+  "elapsed_seconds": 1.8863870260029216,
+  "bound_seconds": 60,
+  "reap_grace_seconds": 10,
+  "request_and_receipt_hashes": {
+    "ledger/001-attempt.json": "5b0378b2468a79bb1a8ab965cae782910a2e317ae0ba0cdb4653f1f76ed6a8eb",
+    "ledger/001-outcome.json": "fd5415b703852b2c4839de8efcb6d45ee5bae46f455d2fadad0f10dbe32eb658",
+    "evidence/001/manifest.json": "424a37a346c0d739f0349f97658c0e7693ee750ce97edcd7ced9113c1700c83e",
+    "evidence/001/answers-adopted.json": "728487553de987ebdcef08b99c0d4ad7c512d3d79b9af18398f3cddebe8be481",
+    "evidence/001/answers-reviewed.json": "c06a42e588b72bba93bf814759982eab6af8d8114a2e1283b6ec64cfde4b1cc3",
+    "evidence/001/audit-billing.json": "7b395a827b877681d79e37ae4ee812acae5fb9f32551af7e43bae2aa0d891e60",
+    "evidence/001/case/case.json": "cd008ae43471af5625a881678cacb5d82067ed36b6a15c42581de66d802f0760",
+    "evidence/001/case/notes.txt": "22b351f1acfccc80aeedf7ab5b8485f57fc06341630f531f279185251990abf5",
+    "evidence/001/case/sonnet5-model-check.docx": "e0a3bdf4e98f07612d94572d877bacd91aab60dfd8f80e672b0d30d36c7ffeae",
+    "evidence/001/export.docx": "cdf101e4097322984fcefbf9ae9dc84b892f1978d61cfa31ceb2976512a5236a",
+    "evidence/001/export.json": "bbdfe87fe059c7546b4878257b6c9ed4f5dfd0579a38fa68f366f7bf5890b833",
+    "evidence/001/provider-response.body": "090b9ee54e95b3c0e3ec49f792b6a96534f94d4e10b8b310fd4f1cbfabb33881",
+    "evidence/001/provider-response.json": "03a4c5553eb4872011303358fde4c584bf44ff4a8f5cd294aff8b8601ef9492b",
+    "evidence/001/provider-result.json": "7fd453ca7a0458880961a016b83253ea7490b0a18dd948dc0763aae5d7fbc270",
+    "evidence/001/records-after-run.json": "8e447354139987000659efba3788a0f070c4a77bffaf51fab0be74235c0138f4",
+    "evidence/001/request.json": "105764271f2d04ecd086deca3569f647c4b8ce51377a13dc007e16c7b69a0747",
+    "ledger/002-attempt.json": "5d98895b7fde35c044fcf1f354cee9982fb6d7ddc95d12109e7b019169580648",
+    "ledger/002-outcome.json": "8960e3b141a02b9d445f09d67bfe7be0985ddae5fdf57089843ecb3ab1a79bf5",
+    "evidence/002/manifest.json": "eec0ad735501b1689c195cd2f8233fa0624a3fefe65e8fe40821a13dc6d9fb32",
+    "evidence/002/answers-after-child.json": "7dbbefd8744a4023575d71535f93060447b449d849dd9d8789f1dc0ad2a6fce2",
+    "evidence/002/audit-billing.json": "d64d24691bdb6fd63c9db539e459d8125597b2b989b15158a4c7ced34012ac83",
+    "evidence/002/audit-expected-intermediate.json": "3b694d89a1f02a88e8a57a2b4998d29fa145deea81f8740be3144c37a40b0652",
+    "evidence/002/batch-plan.json": "7c70e05b1d74df1c1748055a9ffa549e06c087d5bdc2f846f7cbd481863a9938",
+    "evidence/002/case/form.docx": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+    "evidence/002/case/mapping.json": "f61260af1d120812eb16de40b11d392bdba50e252e7ec63dc05781843e96ce0c",
+    "evidence/002/case/notes.txt": "de970e31aebb017775b8d2678f1b1e3871a4f622ade997c436f6195693cc8ba5",
+    "evidence/002/classification.json": "b83dea30bc2e88ec9fbfe474e41ea868abfa15432a3b75fc7b44497f84bc66be",
+    "evidence/002/compiled-child-request.json": "45566576d02beb25ab656c5194f8798e0517512676bb70c59480da44034d8bf5",
+    "evidence/002/product-result.json": "f4af418a6465a6d6c70a176a1868d748053c7228b7028f2085ba3f01a5316674",
+    "evidence/002/provider-response.body": "ec32d38f03a3ab5898947c63cd9d2c033da920984848c73f032f744035b94706",
+    "evidence/002/provider-response.json": "315ad8dabcd303da8ba903430a1d9922d69b74cbdd9e55994d10255d21029891",
+    "evidence/002/provider-result.json": "ae00b14959c3a3fcd14360609b96bc876f698a7917a0032ab2b84ccaf73ff0c6",
+    "evidence/002/request.json": "c29b77b1916c899dfde6838797bb46674232ac3b82718a0c7d387a5526e796d8",
+    "ledger/003-attempt.json": "802c47eb97a75fdf07f76fe79211972366f53ef0b1f4f9f11bf433724c1c382f",
+    "ledger/003-outcome.json": "da1393e0fc26043417aa0634b42024bc59ad0eeaf5f4937936d6a5f12ee6a306",
+    "evidence/003/manifest.json": "27af2b576272a21b1e8b14b686bfb934969e2732efbd62c5932b63e914289e70",
+    "evidence/003/aggregate-state.json": "923a3ee6293a7da8432ef01150307bcf758b331f23a44073ae259a4e5061b707",
+    "evidence/003/answers-adopted.json": "0d9f93a1b00f502333108bedba9b1387a52bd7b470fb0e6eece83d6a59cc3ab3",
+    "evidence/003/answers-after-child.json": "7dbbefd8744a4023575d71535f93060447b449d849dd9d8789f1dc0ad2a6fce2",
+    "evidence/003/answers-reviewed.json": "82a52a50f843122a5c886327a3e0259ba1fcab8ab1ec7386fd4705abce421362",
+    "evidence/003/audit-billing.json": "93ccf5365410b141b08fa3c3c9a3739a9a7cb256d0eec9a998794006097542bd",
+    "evidence/003/batch-plan.json": "7c70e05b1d74df1c1748055a9ffa549e06c087d5bdc2f846f7cbd481863a9938",
+    "evidence/003/case/form.docx": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+    "evidence/003/case/mapping.json": "f61260af1d120812eb16de40b11d392bdba50e252e7ec63dc05781843e96ce0c",
+    "evidence/003/case/notes.txt": "de970e31aebb017775b8d2678f1b1e3871a4f622ade997c436f6195693cc8ba5",
+    "evidence/003/classification.json": "40616feba00ab88be4e701d67b907ce75f9494214f8e24b30119bcee3b893d67",
+    "evidence/003/compiled-child-request.json": "45f11c5beffe57b49c70ca55161bdd9ebdffc1f1abf2440124d200c443b04c0a",
+    "evidence/003/export.docx": "2754342f6e70b9fa642245669fcb28500c349cb86fc04e987d0de702e4df3154",
+    "evidence/003/export.json": "8ec9473a4381882d749c560c2245c1f2dca74ade7842efa79bbdbb64bb3cd040",
+    "evidence/003/product-result.json": "b5c466529a6a5cf883ec503bc7e4f4462a68e2577fc50e1cadaab106456293bb",
+    "evidence/003/provider-response.body": "e1fe565a100f08e5b94d29c69f36e7dfe64b3917008c0ac4b71377643e64c0ba",
+    "evidence/003/provider-response.json": "89a967e7e92c0ca8cd43454230365435d6f6f2bae2aafb7152dea817ea81e3d1",
+    "evidence/003/provider-result.json": "f606d9a55d65e94aad8a463f0e8bfe379d2fdfa087d87fba94e854dbba9c631a",
+    "evidence/003/request.json": "85af62eb27c8e09702cfe29762cb8ef95827236666574fc400b19dfae067e47b",
+    "ledger/stage-model_check-passed.json": "b6de66479c9b46c8f5bb510febd5fd39601c3098b3e7174535e429db5d907dc7",
+    "ledger/stage-ordinary_batch-passed.json": "83f02b80b590552e9f492f81fdd055285035f334d47a098e88507f975947b0bd",
+    "runs/0001-run.json": "b58c872725431eb22d7b4d5e44c68b97a3ab33bd235ac695ce29c043aee88859",
+    "runs/0001-closed.json": "e0f7eb68f586a759a10532fbc4b15a36e7d076bbe8dd90767df7416ef8fba482",
+    "runs/0002-run.json": "cbb07a4b3da09111f130a31eb1001edec591819255fb46c7fccc84599bdd45d4",
+    "runs/0002-closed.json": "4f0a8de71f2f2e142bf6cd0e775118a1ee6e2efca137021febfa41bb62ee0a01",
+    "preflight/001/result.json": "62ae3f133ee380c3dec65510f7ec85b82d924b3571c537abb4e95c36b7a027a9",
+    "batch-admission/run-0002/generation-response.body": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "batch-admission/run-0002/page-quote.json": "cb48d939b3ee219b34fabc9c616fd7f59fd10564e5f93b3c9879931690bb0a71",
+    "batch-admission/run-0002/original.docx": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+    "batch-admission/run-0002/mapping-confirm-response.json": "1aba7b6bd32b2f04da9fe39fb3fa438d4e6b8435af59e1f621c82acf3639c850",
+    "batch-admission/run-0002/mapping-confirm-response.body": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "batch-admission/run-0002/encounter-create-response.json": "4be4fca660c268bd17385852736a00f147b9177ec30ee8d94acdf140c7dce2e5",
+    "batch-admission/run-0002/generation-response.json": "90b66efcbca0c364070ee46347f2d8d0a8d25e780cec45dee3d356b977ab91b0",
+    "batch-admission/run-0002/encounter-create-response.body": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "batch-admission/run-0002/notes.txt": "de970e31aebb017775b8d2678f1b1e3871a4f622ade997c436f6195693cc8ba5",
+    "batch-admission/run-0002/initial-mapping.json": "b1054b5079a270199afc118335453c95c9fd74848aa80172ad88040654992199",
+    "qa-state/files/receipts/bd6ff6a7475024c500c8e3dc3bb61c5df50161a1f27a1e1f.json": "7fd453ca7a0458880961a016b83253ea7490b0a18dd948dc0763aae5d7fbc270",
+    "qa-state/files/receipts/b2e78aa91619b09523a87ab257e7c54e33022b08c5db74a0.json": "b5c466529a6a5cf883ec503bc7e4f4462a68e2577fc50e1cadaab106456293bb",
+    "qa-state/files/receipts/be890083ca8b040455a3035b0a5a201a529df942a87965a0.json": "f4af418a6465a6d6c70a176a1868d748053c7228b7028f2085ba3f01a5316674"
+  },
+  "additional_preflight_access_evidence": {
+    "preflight/001/request.json": "ec53ea7ad678b67e8815e7dd3ab3e72c6570c61868b8c30244e88a90c603633f",
+    "preflight/001/provider-response.json": "26d7fb3c7ad9878b4ae6cfa94428449778fc893a01d64645e56741ad33805fee",
+    "preflight/001/provider-response.body": "7c35f7266eb3b1160d6642b43a9c38cd02723e88f7ea7aedea56250674e17213"
+  },
+  "14_module_ast_inventory": {
+    "core/v3_field_relations.py": {
+      "byte_sha256": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "whole_ast_sha256": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+      "attempt_watched_hashes_match": true
+    },
+    "core/generation_batch.py": {
+      "byte_sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+      "whole_ast_sha256": "3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152",
+      "attempt_watched_hashes_match": true
+    },
+    "core/batch_jobs.py": {
+      "byte_sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+      "whole_ast_sha256": "b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74",
+      "attempt_watched_hashes_match": true
+    },
+    "core/generation.py": {
+      "byte_sha256": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "whole_ast_sha256": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "attempt_watched_hashes_match": true
+    },
+    "core/billing.py": {
+      "byte_sha256": "7d408d239a71aa131d0f971edadc12ec808a3f5877154f37804756aec4db2810",
+      "whole_ast_sha256": "eefd463e1ec163193f55c4ffac8d5b67a186bb3a920e3adff0ec7080b3b7f141",
+      "attempt_watched_hashes_match": true
+    },
+    "core/transcript_context.py": {
+      "byte_sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "whole_ast_sha256": "e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff",
+      "attempt_watched_hashes_match": true
+    },
+    "core/ordinary_source_scope.py": {
+      "byte_sha256": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "whole_ast_sha256": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+      "attempt_watched_hashes_match": true
+    },
+    "core/reviewed_source.py": {
+      "byte_sha256": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "whole_ast_sha256": "8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157",
+      "attempt_watched_hashes_match": true
+    },
+    "core/reviewed_procedure_source.py": {
+      "byte_sha256": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "whole_ast_sha256": "aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0",
+      "attempt_watched_hashes_match": true
+    },
+    "core/source_scope.py": {
+      "byte_sha256": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "whole_ast_sha256": "5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1",
+      "attempt_watched_hashes_match": true
+    },
+    "core/v3_actors.py": {
+      "byte_sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "whole_ast_sha256": "bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275",
+      "attempt_watched_hashes_match": true
+    },
+    "core/v3_syntax.py": {
+      "byte_sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "whole_ast_sha256": "d38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96",
+      "attempt_watched_hashes_match": true
+    },
+    "core/v3_literal_facts.py": {
+      "byte_sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "whole_ast_sha256": "5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034",
+      "attempt_watched_hashes_match": true
+    },
+    "core/reviewed_speaker.py": {
+      "byte_sha256": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "whole_ast_sha256": "4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91",
+      "attempt_watched_hashes_match": true
+    }
+  },
+  "pure_probe_sha256": "f87b3844c0bcb6dfba355f1bb2542c26bdfe7a6098ef5ad8002f1ece272b625b",
+  "pure_probe_log_sha256": "489e0c343701fcfaec309662a9644cafb39fe7f95bcb2a255936b0ab75dfe851",
+  "preserved_instrument_failures": [
+    {
+      "script": "reconcile-first.py",
+      "script_sha256": "1f422d44ee7e86fbe7ebfd1fe18383b273e39de09b380c4d8738c39dfea1b075",
+      "log_sha256": "8c862952ab451c5db4e5c463bcd0f602bdd0a662581ae0199cd947d71a6e5f5e",
+      "actual_exit": 1,
+      "reason": "Raw usage lacks only SDK-added server_tool_use:null; all raw usage values match SDK/outcome."
+    },
+    {
+      "script": "reconcile-second.py",
+      "script_sha256": "bed86dda4672c46963d9b97edbf4363e09b6f76d825ef2c3dfe2bf4cd150d952",
+      "log_sha256": "cc1f259028a8ee8133043aca8af58c8ced3d0f2b119728a9458229dab5d04ce4",
+      "actual_exit": 1,
+      "reason": "Batch normal closed_as is passed, while model checker uses decided/PASS."
+    },
+    {
+      "script": "reconcile-third.py",
+      "script_sha256": "c18962c08cba0a2838fd96a71852cb86da79d21ed7ee9ca2bf60b4edcf6f8646",
+      "log_sha256": "04ec3041eaf8c9d0dab73bb90b04b4260763401c2ebf73568d955f357332e5f3",
+      "actual_exit": 1,
+      "reason": "unsettled_provider_receipts is an empty list, not numeric zero."
+    }
+  ],
+  "raw_sdk_request_reserialization_limit": [
+    {
+      "attempt": 1,
+      "parsed_dictionary_compact_reserialization_byte_count_equals_capture": true,
+      "parsed_dictionary_compact_reserialization_hash_matches_capture": false,
+      "adjudication": "Request recorder pretty/sorted JSON does not retain original SDK object key insertion order. This probe confirms captured dictionary and byte count, preserves original body digest, and does not claim independently reconstructed raw SDK bytes."
+    },
+    {
+      "attempt": 2,
+      "parsed_dictionary_compact_reserialization_byte_count_equals_capture": true,
+      "parsed_dictionary_compact_reserialization_hash_matches_capture": false,
+      "adjudication": "Request recorder pretty/sorted JSON does not retain original SDK object key insertion order. This probe confirms captured dictionary and byte count, preserves original body digest, and does not claim independently reconstructed raw SDK bytes."
+    },
+    {
+      "attempt": 3,
+      "parsed_dictionary_compact_reserialization_byte_count_equals_capture": true,
+      "parsed_dictionary_compact_reserialization_hash_matches_capture": false,
+      "adjudication": "Request recorder pretty/sorted JSON does not retain original SDK object key insertion order. This probe confirms captured dictionary and byte count, preserves original body digest, and does not claim independently reconstructed raw SDK bytes."
+    }
+  ],
+  "credential_or_signing_key_files_read": false,
+  "source_or_scanner_pins_changed": false,
+  "API_event_counts": {
+    "metered_ledger_POST_sends": 3,
+    "separate_unmetered_model_access_GETs": 1,
+    "invoice_reconciled": false
+  },
+  "historical_scope": "Prior157 ledger attempts plus this3 equals160/$1.866631505200. This fixed campaign3 accounting boundary excludes later campaign2 sends."
+}
