@@ -1777,6 +1777,62 @@ class Detector:
                 return False
         return True
 
+    def response_matrix_corner(self, tbl_slot, r):
+        """A fixed empty corner above one complete, aligned response axis.
+
+        The empty first cell alone proves nothing. The original must print distinct
+        response headers over at least two consecutive captioned rows, each with
+        exactly one visible checkbox in every response column. A merge, gap,
+        additional caption/control or marked corner cannot establish this axis.
+        """
+        key = ("response-matrix-corner", id(tbl_slot), r)
+        if key in self._grid:
+            return self._grid[key]
+        self._grid[key] = None
+        rows = self.grid(tbl_slot)
+        if not rows or r != min(rows):
+            return None
+        cells = sorted(rows[r], key=lambda cell: cell.info["col"])
+        width = self.grid_cols(tbl_slot)
+        if (len(cells) < 3 or width != len(cells)
+                or any(c.info["col"] != i or c.info["span"] != 1 or c.info["vmerge"]
+                       for i, c in enumerate(cells))):
+            return None
+        corner = cells[0]
+        if (not self.is_empty_cell(corner) or not self.cell_is_plain(corner)
+                or not corner.children or any(p.kind != "p" or not self.plain_spacing_paragraph(p)
+                                              or not self.tab_source_visible(p) for p in corner.children)):
+            return None
+        headers = [self.cell_text(c) for c in cells[1:]]
+        if (len(set(h.casefold() for h in headers)) != len(headers)
+                or not all(response_word(h) for h in headers)):
+            return None
+        for cell in cells[1:]:
+            if (not cell.children or any(p.kind != "p" or not self.tab_source_visible(p)
+                                        or self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                                        for p in cell.children)):
+                return None
+        complete = 0
+        for row in sorted(rr for rr in rows if rr > r):
+            body = sorted(rows[row], key=lambda cell: cell.info["col"])
+            if (row != r + complete + 1 or len(body) != width
+                    or any(c.info["col"] != i or c.info["span"] != 1 or c.info["vmerge"]
+                           for i, c in enumerate(body))):
+                break
+            label = body[0]
+            if (not self.is_label_cell(label, complete=True) or not label.children
+                    or any(p.kind != "p" or not self.tab_source_visible(p)
+                           or self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                           for p in label.children)):
+                break
+            if any(not self.is_box_cell(c) or not list(self.own_paragraphs(c))
+                   or any(not self.tab_source_visible(p) for p in self.own_paragraphs(c)) for c in body[1:]):
+                break
+            complete += 1
+        if complete >= 2:
+            self._grid[key] = corner
+        return self._grid[key]
+
     def row_kind(self, tbl_slot, r) -> str:
         """data (has an empty/box/object cell) | divider (one text cell spanning the table) | label (text only)."""
         key = ("rowkind", id(tbl_slot), r)
@@ -1803,6 +1859,8 @@ class Detector:
         if len(texts) == 1 and texts[0].info["span"] >= max(2, width - 1) and all(
                 c is texts[0] or self.is_empty_cell(c) for c in cells):
             kind = "divider"
+        if self.response_matrix_corner(tbl_slot, r) is not None:
+            kind = "label"
         self._grid[key] = kind
         return kind
 
@@ -6178,6 +6236,14 @@ class Detector:
                     i += 1
 
     # 5. tables ----------------------------------------------------------------------------------------------------
+    def is_box_cell(self, c) -> bool:
+        """The existing printed-box reading, plus one unprinted native field."""
+        return (self.cell_text(c) in (BOX, CHECKED) and not self.region_hidden(c.el)) or (
+                len(c.children) == 1 and c.children[0].kind == "p"
+                and self.tab_source_visible(c.children[0])
+                and self.ptext(c.children[0].el)[0].strip() in (BOX, CHECKED)
+                and len(self.box_units(c.children[0])) == 1)
+
     def is_option_cell(self, c) -> bool:
         """An empty cell, or one holding only a checkbox (to be ticked), under an option column."""
         if self.cell_has_claim(c.el):
@@ -6185,7 +6251,7 @@ class Detector:
         txt = self.cell_text(c)
         if self.region_hidden(c.el):
             return False                # a checkbox its reading does not show (round 3 F1)
-        return is_blank_text(txt) and self.is_empty_cell(c) or txt in (BOX, CHECKED)
+        return is_blank_text(txt) and self.is_empty_cell(c) or self.is_box_cell(c)
 
     def plain_layout_properties(self, table, cell):
         """Resolve the bounded direct/default style set, without assuming a background."""
@@ -6352,6 +6418,14 @@ class Detector:
     def rule_tables(self):
         for tslot in [s for s in self.index.slots if s.kind == "tbl"]:
             rows = self.grid(tslot)
+            for r in rows:
+                corner = self.response_matrix_corner(tslot, r)
+                if corner is not None:
+                    self.claimed.update(id(node) for node in corner.el.iter())
+                    self.protected_regions.add(corner.id)
+                    self.notes.append("The empty corner at " + corner.id +
+                                      " is fixed spacing above this table's response columns, not an answer. "
+                                      "Use each row's checkbox choices; reinspect an older mapping that writes here.")
             if self.presentation_heading_table(tslot):
                 self.claimed.update(id(node) for node in tslot.el.iter())
                 continue
@@ -6363,7 +6437,7 @@ class Detector:
             box_cols = {}
             for r in ordered:
                 for c in rows[r]:
-                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.cell_text(c) in (BOX, CHECKED) \
+                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.is_box_cell(c) \
                             and not self.region_hidden(c.el):
                         box_cols.setdefault(c.info["col"], []).append((r, c))
             # empty cells in a column whose answers are boxes are filler (a sub-heading row), not answers
@@ -6394,7 +6468,7 @@ class Detector:
                     header = option_text(self.column_header(tslot, c.info["col"], r).strip("√✓✔*† "))
                     if id(c) in filler:
                         continue
-                    boxed = self.cell_text(c) in (BOX, CHECKED)
+                    boxed = self.is_box_cell(c)
                     short = len(header.split()) <= 3 and len(header) <= 24 and \
                         (is_option_word(header) or not FIELDISH.search(header))
                     response = boxed and len(header) <= 60 and not question_header(header)
@@ -6425,7 +6499,7 @@ class Detector:
                 # prints them as answers: a spanning response header over them, or answer words among them ('Yes' /
                 # 'No' / 'UNKNOWN' / 'SERVICE NOT AVAILABLE', 'Agree' .. 'REFUSED'). 'Diagnosed | Medicated' over
                 # boxes are two facts about each row, never one answer (R4-F6): left to the column rules, which hold.
-                boxed_run = all(self.cell_text(c) in (BOX, CHECKED) for c, _ in run)
+                boxed_run = all(self.is_box_cell(c) for c, _ in run)
                 optionish = all(is_option_word(h) for h in headers) or shared[tuple(headers)] >= 3 and (
                     not boxed_run or any(response_word(h) for h in headers)
                     or self.spanned_response_columns(tslot, r, run))
