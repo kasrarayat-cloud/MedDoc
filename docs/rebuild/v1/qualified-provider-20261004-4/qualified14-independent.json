@@ -1,0 +1,2000 @@
+{
+  "scope": "canonical4 immutable boundary after model1+qualified14, before voice",
+  "source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "completed_attempts": 15,
+  "qualified_text_cases": 14,
+  "field_denominator": 76,
+  "desired_status_denominators": {
+    "supported": 36,
+    "missing": 29,
+    "held": 11
+  },
+  "actual_first_pass_status_counts": {
+    "supported": 35,
+    "missing": 20,
+    "conflict": 21
+  },
+  "desired_supported": 36,
+  "correct_supported": 35,
+  "expected_held": 40,
+  "remaining_overhold": {
+    "case": "N01",
+    "field": "v3_2/HPI",
+    "count": 1,
+    "source_scope": "Exact current-patient headaches duration/morning and separate visual/nausea/weakness denial; conservative class-wide governance remains. No clarification, ontology or expected-answer rewrite."
+  },
+  "unsafe_observed": 0,
+  "contract_failures": 0,
+  "manual_answer_corrections_credited": 0,
+  "classification_scope": "All76 original desired support/hold expectations unchanged. Semantic source texts were read; remaining never constraints are listed explicitly, not declared machine-verified.",
+  "semantic_positive_checks": [
+    "as-needed ibuprofen, start amitriptyline10mg/night and6weekfollowup preserved",
+    "N04 probable meniscus tear uncertainty/right knee/3weeks preserved",
+    "N05 possible stable angina and explicitpatient assessment distinctfromfatherheartattack",
+    "N06 consent human location remains excluded/protected;10day suture plan preserved",
+    "N08/N09 side-specificdestinations distinct",
+    "N10negative smoking/allergy certainty retained",
+    "N11/N12 currentrash surviveddistinctallergy correction while allergyheld",
+    "N13 suicide/medication contradiction andN16 mood/allergy contradiction held",
+    "N07 unpunctuated foreign/ownership ambiguity remains conservativeheld,not ordinaryproseusefulness credit"
+  ],
+  "accounting": [
+    {
+      "attempt": 1,
+      "provider_cost": "0.002862",
+      "QA_customer_charge": "0.004293000000",
+      "customer_limit": "0.157344000000",
+      "unique_job": "3d08d448-9610-4ac4-8e8e-474667878a77",
+      "request_id": "req_011CfhDDFozGQH9CRc6UpkrR",
+      "provider_message_id": "msg_011CfhDDGPiQTgKBkEzod5Ni",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 841,
+        "output_tokens": 118,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 8000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "f2094bd11134fd3c040f9436f03691c7e7b70707d98ebb0f91d292c5fe6ab77a",
+      "hashes_match": 13
+    },
+    {
+      "attempt": 2,
+      "provider_cost": "0.01917",
+      "QA_customer_charge": "0.028755000000",
+      "customer_limit": "0.371676000000",
+      "unique_job": "8ec357e6-19f1-4849-be00-3cd24b6e7daa",
+      "request_id": "req_011CfhDNcwzB4JRHzCRGYdBn",
+      "provider_message_id": "msg_011CfhDNdw2AQ7BgqoK7nUkA",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 5305,
+        "output_tokens": 856,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "31a95c1689d574a1d249f6fc81fe47cbeca22542e668c897986ab08da12d0afc",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 3,
+      "provider_cost": "0.006916",
+      "QA_customer_charge": "0.010374000000",
+      "customer_limit": "0.353196000000",
+      "unique_job": "9831f444-9480-43aa-a2ef-1dd09c9028d5",
+      "request_id": "req_011CfhDWw9bEa9mL6L1hNuZv",
+      "provider_message_id": "msg_011CfhDWwasmNXxRZ6TMjqgD",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2378,
+        "output_tokens": 216,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "266894b66e94886f7e54b08b798b34ff9b048b390d46571cee7e1043f97221a2",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 4,
+      "provider_cost": "0.006004",
+      "QA_customer_charge": "0.009006000000",
+      "customer_limit": "0.352347000000",
+      "unique_job": "025acc40-e728-423b-9ce4-d1a318113bd7",
+      "request_id": "req_011CfhDfx1BKxUppcZN7mnhy",
+      "provider_message_id": "msg_011CfhDfy8QRqRG1AK89Jpu9",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2267,
+        "output_tokens": 147,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "c6e6b244b8740c4b339436b30da3211273705bd695f274c03bfc9f6f49612846",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 5,
+      "provider_cost": "0.018306",
+      "QA_customer_charge": "0.027459000000",
+      "customer_limit": "0.370560000000",
+      "unique_job": "7f37d65d-a4f5-44ff-82a2-03a49e31aa15",
+      "request_id": "req_011CfhDr2M9x4MryXuQikWW2",
+      "provider_message_id": "msg_011CfhDr3HDVgvkvJYCsM9k6",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 5158,
+        "output_tokens": 799,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "adc0647e697c9d6c6efe575602b2052ef2d722f5f043d05b268d46f8e0423c36",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 6,
+      "provider_cost": "0.018778",
+      "QA_customer_charge": "0.028167000000",
+      "customer_limit": "0.370854000000",
+      "unique_job": "49e6fd04-7428-43bf-8235-78f09d3715bf",
+      "request_id": "req_011CfhE6Dw3iAGN5wyxi9F2g",
+      "provider_message_id": "msg_011CfhE6F7z57fqy2LcJeTBq",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 5214,
+        "output_tokens": 835,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "81ba1ef8499a3223e69a5adb4ca815866ab90ddb2741ac30b35ef5fcfcedc497",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 7,
+      "provider_cost": "0.017882",
+      "QA_customer_charge": "0.026823000000",
+      "customer_limit": "0.369837000000",
+      "unique_job": "08e6329d-208a-4d41-869c-61aae3baadc6",
+      "request_id": "req_011CfhEF4JrgG8td3fEFDq5T",
+      "provider_message_id": "msg_011CfhEF4ewkj8HMGJQQYZKq",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 5051,
+        "output_tokens": 778,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "95adedc186b2240b0fbc6f9bbb649c9942f1db2cc803cfedf973ba5856684520",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 8,
+      "provider_cost": "0.016684",
+      "QA_customer_charge": "0.025026000000",
+      "customer_limit": "0.368514000000",
+      "unique_job": "2f26ab8e-08f8-44a9-ac84-b662a478343b",
+      "request_id": "req_011CfhEYrSjVV5FocmmKxdAj",
+      "provider_message_id": "msg_011CfhEYsbwJ3CfSKZFoaemn",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 4842,
+        "output_tokens": 700,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "e2835f4aa33b40dc41473bfb902d63345c522672fb3f5b1152d7bb2aff1771ce",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 9,
+      "provider_cost": "0.005588",
+      "QA_customer_charge": "0.008382000000",
+      "customer_limit": "0.350976000000",
+      "unique_job": "5e4aaff4-c208-4675-a96a-7bcf294b5b54",
+      "request_id": "req_011CfhEtkcZKdRwrsZeXBVwH",
+      "provider_message_id": "msg_011CfhEtmXcZKTZV1E8nqQHp",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2074,
+        "output_tokens": 144,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "f0598baf27cc7e3856cdbedddd6484523194549aa66ea8069a89868ee7fd73b4",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 10,
+      "provider_cost": "0.005568",
+      "QA_customer_charge": "0.008352000000",
+      "customer_limit": "0.350919000000",
+      "unique_job": "477de0f4-6608-4beb-a01d-fd9916ff5962",
+      "request_id": "req_011CfhF554Lht677GKFRNn9g",
+      "provider_message_id": "msg_011CfhF56DoB9Dj363R6Xuvw",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2064,
+        "output_tokens": 144,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "dea443337999672eb18af5556247e2b3529e2f6bf3b7d7a5bff4a86bbfd2ddac",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 11,
+      "provider_cost": "0.006626",
+      "QA_customer_charge": "0.009939000000",
+      "customer_limit": "0.352926000000",
+      "unique_job": "cb5d752f-c19e-4f50-b8e0-bb2be8f35ebb",
+      "request_id": "req_011CfhFJez9PQKA4SQN8YQyK",
+      "provider_message_id": "msg_011CfhFJfyAkHcFPrk3s4ixL",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2463,
+        "output_tokens": 170,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "b9ca4775ea3ae9a2abbb93374d62c24731a165271763cc753df34497dec44573",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 12,
+      "provider_cost": "0.008008",
+      "QA_customer_charge": "0.012012000000",
+      "customer_limit": "0.354669000000",
+      "unique_job": "199b3f8c-bb60-4d31-bc63-e6eaf377a695",
+      "request_id": "req_011CfhFoZYGzHTeXMpjXD6Zb",
+      "provider_message_id": "msg_011CfhFoagjVk9B9G7LGyxPt",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2739,
+        "output_tokens": 253,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "d368e776c782994c94c3892c41f39416ddbdfc3659b4115a55fc01636c7110c8",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 13,
+      "provider_cost": "0.00817",
+      "QA_customer_charge": "0.012255000000",
+      "customer_limit": "0.354966000000",
+      "unique_job": "be5d4bb5-f4d2-4be2-aaa7-022983d02a9d",
+      "request_id": "req_011CfhFyLqL8Ve6JnFp4EhBa",
+      "provider_message_id": "msg_011CfhFyMn8fzbpBrsJvRbjo",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2785,
+        "output_tokens": 260,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "0ee2d47d0c5b3db66ca8ca6dcdd0772b23c816ee085135a5d7c2f7e02ffb812a",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 14,
+      "provider_cost": "0.006468",
+      "QA_customer_charge": "0.009702000000",
+      "customer_limit": "0.353463000000",
+      "unique_job": "4c80ad28-1793-4a92-a330-b6c06d367f86",
+      "request_id": "req_011CfhGABkBdxQvwbKz36pFF",
+      "provider_message_id": "msg_011CfhGAD5oNrU3yzYLBBeQq",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2469,
+        "output_tokens": 153,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "55af5819ccef7b1bf6f66fc4bdcbc55ba56155b0a56c553da8d6a3584297ad64",
+      "hashes_match": 16
+    },
+    {
+      "attempt": 15,
+      "provider_cost": "0.006496",
+      "QA_customer_charge": "0.009744000000",
+      "customer_limit": "0.353355000000",
+      "unique_job": "57f706e2-4298-44e8-80d8-30ee9c12dc39",
+      "request_id": "req_011CfhGtbDjtMxuqBjnK5oHN",
+      "provider_message_id": "msg_011CfhGtcfZG4XWkdipRBZUH",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 2453,
+        "output_tokens": 159,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "all_row_audit_checks": true,
+      "manifest_sha256": "a49f38cca46984972cc04d2c65a2b7216ebb32115ad8d4ab6d6d9eb5f85a46d4",
+      "hashes_match": 16
+    }
+  ],
+  "provider_cost_total": "0.153526",
+  "QA_customer_charge_total": "0.230289000000",
+  "notes14_provider_cost": "0.150664",
+  "open_at_recorded_boundary": 0,
+  "unknown_at_recorded_boundary": 0,
+  "duplicate_receipts": 0,
+  "duplicate_jobs": 0,
+  "cumulative_attempts_at_boundary": 191,
+  "cumulative_calculated_exposure": "2.105183505200",
+  "status_snapshot_sha256": "8c97d634e4a7277a6ae9436c830e21dc8cb4bca17da2b9ed32b1484afd545abf",
+  "watched_manifest_files": 21,
+  "notes21_watched_files_identical_across14": true,
+  "model_check_watch_scope": 16,
+  "all_actual_stage_watch_paths_verified": true,
+  "notes_cases": [
+    {
+      "case": "N01",
+      "attempt": 2,
+      "original_notes_sha256": "5cd8b1700109f2187c5ab494cc71ef66c3a13a9c60d258ceb0181322f7e80dc8",
+      "mapping_sha256": "30ee28ccf480063e8753bc1254a3642d47d17fa474c33c5e2bde5be9ca6b037b",
+      "original_docx_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "first_pass": {
+        "held_correct": 3,
+        "over_held": 1,
+        "supported_correct": 7
+      },
+      "manual_mapping_review": {
+        "automatic_complete": false,
+        "corpus_qualification": false,
+        "coverage_review": [
+          {
+            "disposition": "leave_unchanged",
+            "id": "8bc98dd6dd88823b77b44207e9c63e850742390ac50cad702d71b8185e9a4da8",
+            "reviewed_by": "16dce12c-352a-44c0-b844-52fd4b969ebf",
+            "source_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa"
+          }
+        ],
+        "manifest_sha256": "64aaa64aabc46ab5954df14e442025f96210707703254bda1589be9dfe3086a5",
+        "manual_mapping_review": true,
+        "original_version": "11ef8221-c71a-4f3c-99b5-b0dc54392020",
+        "reviewed_version": "0060c158-f3a3-4abf-bdc5-6c0a122bf7f5"
+      },
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "This is a 30-year-old female seen for headaches.",
+          "quoted_evidence": [
+            {
+              "end": 48,
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_10",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_11",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "missing",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "supported",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 115,
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49
+            },
+            {
+              "end": 163,
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "supported without the denial sentence when the denial sentence was selected"
+          ]
+        },
+        {
+          "key": "v3_3",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_4",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "She takes ibuprofen as needed.",
+          "quoted_evidence": [
+            {
+              "end": 194,
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "text without \"as needed\""
+          ]
+        },
+        {
+          "key": "v3_5",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "No known drug allergies.",
+          "quoted_evidence": [
+            {
+              "end": 219,
+              "quote": "No known drug allergies.",
+              "start": 195
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_6",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "No",
+          "quoted_evidence": [
+            {
+              "end": 239,
+              "quote": "She is a nonsmoker.",
+              "start": 220
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_7",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "Neurological examination is normal.",
+          "quoted_evidence": [
+            {
+              "end": 275,
+              "quote": "Neurological examination is normal.",
+              "start": 240
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_8",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "tension-type headache.",
+          "quoted_evidence": [
+            {
+              "end": 312,
+              "quote": "Assessment is tension-type headache.",
+              "start": 276
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_9",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+          "quoted_evidence": [
+            {
+              "end": 359,
+              "quote": "Plan is to start amitriptyline 10 mg at night.",
+              "start": 313
+            },
+            {
+              "end": 392,
+              "quote": "She will follow up in six weeks.",
+              "start": 360
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "a3f8194cd0d1984c7367fb4f3ee9e1f356f4428d795929005e97f8a58f8370b7"
+    },
+    {
+      "case": "N02",
+      "attempt": 3,
+      "original_notes_sha256": "86097be73b68d058a57b63f195a860d6d3c6feb7ff0409d4a6a923b8385a26de",
+      "mapping_sha256": "cc9973b2ac1e98b229048232152e39d215eddf62756cf7a05d45cca3db9e8350",
+      "original_docx_sha256": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+      "first_pass": {
+        "held_correct": 1,
+        "supported_correct": 2
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "The patient describes the pain as a tight band around her head.",
+          "quoted_evidence": [
+            {
+              "end": 63,
+              "quote": "The patient describes the pain as a tight band around her head.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "the same sentence supported in a second \"Other:\" field"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "The patient sees zigzag lines before the headache begins.",
+          "quoted_evidence": [
+            {
+              "end": 121,
+              "quote": "The patient sees zigzag lines before the headache begins.",
+              "start": 64
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "supported from the pain-description sentence"
+          ]
+        },
+        {
+          "key": "v3_3",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "394ebf28b891bbdde3487f04875b9f11539e0ebf2e36f2f805c725b3b0c2454a",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "e7f4b0ded2ebd2b3c000a7f3048bacc87c1688474a4f41ddbb8818fa2cb5e8cd"
+    },
+    {
+      "case": "N03",
+      "attempt": 4,
+      "original_notes_sha256": "7f879a7ff4e642a2a4fac8e941781e0bba083b56efea1c5cc20a4c5d92ffab28",
+      "mapping_sha256": "a2c636fb33ad92f01756bf88bd5a060271aebb86122614143214be8ad2933f49",
+      "original_docx_sha256": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+      "first_pass": {
+        "supported_correct": 2
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "The patient is subject to a Community Treatment Order (CTO).",
+          "quoted_evidence": [
+            {
+              "end": 60,
+              "quote": "The patient is subject to a Community Treatment Order (CTO).",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "text that drops \"subject to\" or the named order"
+          ]
+        },
+        {
+          "key": "v3_2",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "She attends the clinic every week.",
+          "quoted_evidence": [
+            {
+              "end": 95,
+              "quote": "She attends the clinic every week.",
+              "start": 61
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "34f13d96b2586a7494ef37141b663ba69aa93d015f4e182fad27cd55c6195ea3",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "b0557e46bf8a03556246b526f4cf586b3370856664896a6cff0b8f8a95cf1e62"
+    },
+    {
+      "case": "N04",
+      "attempt": 5,
+      "original_notes_sha256": "b2962b041211a49bebf2e5351807f2319ca3fc7cabf89dbbf67980989c2d60e8",
+      "mapping_sha256": "30ee28ccf480063e8753bc1254a3642d47d17fa474c33c5e2bde5be9ca6b037b",
+      "original_docx_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "first_pass": {
+        "held_correct": 4,
+        "supported_correct": 7
+      },
+      "manual_mapping_review": {
+        "automatic_complete": false,
+        "corpus_qualification": false,
+        "coverage_review": [
+          {
+            "disposition": "leave_unchanged",
+            "id": "8bc98dd6dd88823b77b44207e9c63e850742390ac50cad702d71b8185e9a4da8",
+            "reviewed_by": "16dce12c-352a-44c0-b844-52fd4b969ebf",
+            "source_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa"
+          }
+        ],
+        "manifest_sha256": "64aaa64aabc46ab5954df14e442025f96210707703254bda1589be9dfe3086a5",
+        "manual_mapping_review": true,
+        "original_version": "c041f604-2031-4e2c-bd4d-99d6e4a46cbc",
+        "reviewed_version": "81286c61-e79b-43f5-84b7-27e899618f5e"
+      },
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+          "quoted_evidence": [
+            {
+              "end": 75,
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_10",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_11",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "missing",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+          "quoted_evidence": [
+            {
+              "end": 75,
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_3",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 129,
+              "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+              "start": 76
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "the combined sentence supported in BOTH Past medical history and Medications"
+          ]
+        },
+        {
+          "key": "v3_4",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 129,
+              "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+              "start": 76
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "the combined sentence supported in BOTH Past medical history and Medications"
+          ]
+        },
+        {
+          "key": "v3_5",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "penicillin.",
+          "quoted_evidence": [
+            {
+              "end": 152,
+              "quote": "Allergies: penicillin.",
+              "start": 130
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_6",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "No",
+          "quoted_evidence": [
+            {
+              "end": 164,
+              "quote": "Smoker: No.",
+              "start": 153
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_7",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "On examination there is a small effusion and medial joint line tenderness.",
+          "quoted_evidence": [
+            {
+              "end": 239,
+              "quote": "On examination there is a small effusion and medial joint line tenderness.",
+              "start": 165
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_8",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "a probable medial meniscus tear.",
+          "quoted_evidence": [
+            {
+              "end": 286,
+              "quote": "Assessment is a probable medial meniscus tear.",
+              "start": 240
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "text without \"probable\""
+          ]
+        },
+        {
+          "key": "v3_9",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "an MRI of the right knee and physiotherapy referral.",
+          "quoted_evidence": [
+            {
+              "end": 347,
+              "quote": "Plan is an MRI of the right knee and physiotherapy referral.",
+              "start": 287
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "ba9a94e751d5602f37311edd841e0a9a831a62b5456360680ab42b97b62953e2",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "db2eb6d65bcc766ad1ade1f74d1e43dc6775b60bccf535f3c8a75c17e5aaf5dd"
+    },
+    {
+      "case": "N05",
+      "attempt": 6,
+      "original_notes_sha256": "5d800460e287a04e57636a0e8f47e23c1f563f6770c259da10899b296b1eccce",
+      "mapping_sha256": "30ee28ccf480063e8753bc1254a3642d47d17fa474c33c5e2bde5be9ca6b037b",
+      "original_docx_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "first_pass": {
+        "held_correct": 4,
+        "supported_correct": 7
+      },
+      "manual_mapping_review": {
+        "automatic_complete": false,
+        "corpus_qualification": false,
+        "coverage_review": [
+          {
+            "disposition": "leave_unchanged",
+            "id": "8bc98dd6dd88823b77b44207e9c63e850742390ac50cad702d71b8185e9a4da8",
+            "reviewed_by": "16dce12c-352a-44c0-b844-52fd4b969ebf",
+            "source_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa"
+          }
+        ],
+        "manifest_sha256": "64aaa64aabc46ab5954df14e442025f96210707703254bda1589be9dfe3086a5",
+        "manual_mapping_review": true,
+        "original_version": "f1865ce3-f34c-42c8-8912-02c940baa5db",
+        "reviewed_version": "30e25af9-725c-4fd8-b933-4c46aa3daabe"
+      },
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "Patient presents with chest tightness on exertion for one month.",
+          "quoted_evidence": [
+            {
+              "end": 64,
+              "quote": "Patient presents with chest tightness on exertion for one month.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_10",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_11",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "missing",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "Patient presents with chest tightness on exertion for one month.",
+          "quoted_evidence": [
+            {
+              "end": 64,
+              "quote": "Patient presents with chest tightness on exertion for one month.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_3",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 126,
+              "quote": "He has high cholesterol.",
+              "start": 102
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_4",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 149,
+              "quote": "He takes rosuvastatin.",
+              "start": 127
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_5",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "none known.",
+          "quoted_evidence": [
+            {
+              "end": 172,
+              "quote": "Allergies: none known.",
+              "start": 150
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_6",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "Yes",
+          "quoted_evidence": [
+            {
+              "end": 185,
+              "quote": "Smoker: Yes.",
+              "start": 173
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_7",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "normal.",
+          "quoted_evidence": [
+            {
+              "end": 208,
+              "quote": "Examination is normal.",
+              "start": 186
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_8",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "possible stable angina.",
+          "quoted_evidence": [
+            {
+              "end": 246,
+              "quote": "Assessment is possible stable angina.",
+              "start": 209
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "text without \"possible\""
+          ]
+        },
+        {
+          "key": "v3_9",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "an exercise stress test and aspirin 81 mg daily.",
+          "quoted_evidence": [
+            {
+              "end": 303,
+              "quote": "Plan is an exercise stress test and aspirin 81 mg daily.",
+              "start": 247
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "bc967100f1cdcaec1a3f7f590bdf22f27194fe4e1da6840a74ef3d7b768832fd",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "a988709bcac1153142c828860c43807dc7c819ef32f4aa5194b667b4906b2ab1"
+    },
+    {
+      "case": "N06",
+      "attempt": 7,
+      "original_notes_sha256": "8dd630782f9d068042395865bd9281d4238723a3aa65d2d0e20f5a19d0783527",
+      "mapping_sha256": "30ee28ccf480063e8753bc1254a3642d47d17fa474c33c5e2bde5be9ca6b037b",
+      "original_docx_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "first_pass": {
+        "held_correct": 9,
+        "supported_correct": 2
+      },
+      "manual_mapping_review": {
+        "automatic_complete": false,
+        "corpus_qualification": false,
+        "coverage_review": [
+          {
+            "disposition": "leave_unchanged",
+            "id": "8bc98dd6dd88823b77b44207e9c63e850742390ac50cad702d71b8185e9a4da8",
+            "reviewed_by": "16dce12c-352a-44c0-b844-52fd4b969ebf",
+            "source_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa"
+          }
+        ],
+        "manifest_sha256": "64aaa64aabc46ab5954df14e442025f96210707703254bda1589be9dfe3086a5",
+        "manual_mapping_review": true,
+        "original_version": "df679e72-b3f0-4cff-a27d-3cd68ab7d966",
+        "reviewed_version": "74e3c2fa-e58b-4402-be68-24845a1068a3"
+      },
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "The patient was seen for removal of a skin lesion on the left forearm.",
+          "quoted_evidence": [
+            {
+              "end": 70,
+              "quote": "The patient was seen for removal of a skin lesion on the left forearm.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_10",
+          "desired": "held",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "checked while the consent line sits inside the procedure paragraph"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "missing",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 70,
+              "quote": "The patient was seen for removal of a skin lesion on the left forearm.",
+              "start": 0
+            },
+            {
+              "end": 203,
+              "quote": "The lesion was excised under local anesthesia and closed with sutures.",
+              "start": 133
+            },
+            {
+              "end": 237,
+              "quote": "She tolerated the procedure well.",
+              "start": 204
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_3",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_4",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_5",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_6",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_7",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "supported with the excision sentence"
+          ]
+        },
+        {
+          "key": "v3_8",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_9",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "suture removal in ten days.",
+          "quoted_evidence": [
+            {
+              "end": 273,
+              "quote": "Plan is suture removal in ten days.",
+              "start": 238
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "the tolerance sentence adopted as plan",
+            "the tolerance sentence silently dropped from a two-unit selection and the rest supported"
+          ]
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "0c22eb73d58085d9bdc4efe37fda9871df28aa29b551891dc8202fc5e9f9ea96",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "285fc71b3e3821c3498eb673dacc6614315ff78f4069b204cb6e7177f4d81629"
+    },
+    {
+      "case": "N07",
+      "attempt": 8,
+      "original_notes_sha256": "430e8c11dbfb8144bd8573937ad5c0e90a276b6b116621ce2c8b47e4246f2ae1",
+      "mapping_sha256": "30ee28ccf480063e8753bc1254a3642d47d17fa474c33c5e2bde5be9ca6b037b",
+      "original_docx_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "first_pass": {
+        "held_correct": 11
+      },
+      "manual_mapping_review": {
+        "automatic_complete": false,
+        "corpus_qualification": false,
+        "coverage_review": [
+          {
+            "disposition": "leave_unchanged",
+            "id": "8bc98dd6dd88823b77b44207e9c63e850742390ac50cad702d71b8185e9a4da8",
+            "reviewed_by": "16dce12c-352a-44c0-b844-52fd4b969ebf",
+            "source_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa"
+          }
+        ],
+        "manifest_sha256": "64aaa64aabc46ab5954df14e442025f96210707703254bda1589be9dfe3086a5",
+        "manual_mapping_review": true,
+        "original_version": "5dee6c9d-02d1-4ac6-9fc0-f857cfe3a26d",
+        "reviewed_version": "5b47bdb4-565b-4adb-9d71-823fd76d98af"
+      },
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_10",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_11",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "missing",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_3",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_4",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_5",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_6",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_7",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_8",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_9",
+          "desired": "missing",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 284,
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "8ece93148f88e5252691b23f3ecd487354a68c890259217138c046792a1359a9"
+    },
+    {
+      "case": "N08",
+      "attempt": 9,
+      "original_notes_sha256": "7221ee4e7e0f91ccb82eb8b03d0bc02c1b98526f13bb620d7f07730a5d292318",
+      "mapping_sha256": "eb7934523361fe162045db6caa6d07dcb831862b7493198f971b899fae68f857",
+      "original_docx_sha256": "60c486ab1aa18b18ace4e4b04be4bca002325365a89d460c2f6ef393f85c9b61",
+      "first_pass": {
+        "held_correct": 1,
+        "supported_correct": 1
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "The patient has left knee pain.",
+          "quoted_evidence": [
+            {
+              "end": 31,
+              "quote": "The patient has left knee pain.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "eee0e36455df97ef0f1a56688ee44bdc1eb476440ddd484792e417af5c4a646e",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "7538aab6793d486300425bf17a27724039d2380a0485503d960f01d4c87450a0"
+    },
+    {
+      "case": "N09",
+      "attempt": 10,
+      "original_notes_sha256": "b8c55ddde424498a5606eb719c9f38b5d8b78639f33b593ac858cf409c417e37",
+      "mapping_sha256": "66826e740c032db92214a50cfbda624a201a56bcf929ea85dbd7764533c06073",
+      "original_docx_sha256": "79310a2ba7ef95bda06621a9baf9b426ae3f21fd82296ffbb690dcbfcdc882f8",
+      "first_pass": {
+        "held_correct": 1,
+        "supported_correct": 1
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "The patient has right knee pain.",
+          "quoted_evidence": [
+            {
+              "end": 32,
+              "quote": "The patient has right knee pain.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "missing",
+          "actual": "missing",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "d9788f468ba421df479dd076ff470f3eb87febd045596449bebb1c9572197a90",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "c61416725421cbf6ab0c5eb6a8e41a6a3d4033b179aec2470bef4eb6790a64e7"
+    },
+    {
+      "case": "N10",
+      "attempt": 11,
+      "original_notes_sha256": "9a547b77182944f5bb72bd5c55b4110992148fcd6e64220344a883e32b9c7f50",
+      "mapping_sha256": "6db1c22d46e810a0eb4839c897431cb9838910e2575c82cb7f7b089b26149c96",
+      "original_docx_sha256": "7b8edc65f832ceb8094b8ac6f89153b048976f542d5598f6840117e48edd43d6",
+      "first_pass": {
+        "supported_correct": 2
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "No",
+          "quoted_evidence": [
+            {
+              "end": 27,
+              "quote": "The patient does not smoke.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "none known.",
+          "quoted_evidence": [
+            {
+              "end": 50,
+              "quote": "Allergies: none known.",
+              "start": 28
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "87dce7987580f043d87ad25aa73fa994a06a8b6c6ca3f8341994573ca0db6969",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "73c112e78f262ee0dea3abc58142e8e4f1c6fa74cd67a9e5c6339cafda20fc2c"
+    },
+    {
+      "case": "N11",
+      "attempt": 12,
+      "original_notes_sha256": "3ac4a214cb543a9dcd3d7994c929b0fd4252541b61c90d5f8407bc7cd898253e",
+      "mapping_sha256": "c35928c313c04360c17d20c6c2ee58ded1b4acb41032b456c148d80021a24949",
+      "original_docx_sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+      "first_pass": {
+        "held_correct": 1,
+        "supported_correct": 2
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "Patient presents with a rash on both forearms.",
+          "quoted_evidence": [
+            {
+              "end": 46,
+              "quote": "Patient presents with a rash on both forearms.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 96,
+              "quote": "Allergies: penicillin. Sorry, I mean amoxicillin.",
+              "start": 47
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "supported text naming both penicillin and amoxicillin as the answer"
+          ]
+        },
+        {
+          "key": "v3_3",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "No",
+          "quoted_evidence": [
+            {
+              "end": 108,
+              "quote": "Smoker: No.",
+              "start": 97
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "e5c455868ef1e9f47e6fc28951e81592fed3c620d1ef3dbd964d15b184c2d08b"
+    },
+    {
+      "case": "N12",
+      "attempt": 13,
+      "original_notes_sha256": "e54755563b294d9dd45b35ebe4d0c45b3cd966ad9980c7cc89178df04ffb0da0",
+      "mapping_sha256": "c35928c313c04360c17d20c6c2ee58ded1b4acb41032b456c148d80021a24949",
+      "original_docx_sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+      "first_pass": {
+        "held_correct": 1,
+        "supported_correct": 2
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "Patient presents with a rash on both forearms.",
+          "quoted_evidence": [
+            {
+              "end": 46,
+              "quote": "Patient presents with a rash on both forearms.",
+              "start": 0
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 70,
+              "quote": "Allergies: penicillin.",
+              "start": 48
+            },
+            {
+              "end": 97,
+              "quote": "Sorry, I mean amoxicillin.",
+              "start": 71
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": [
+            "supported text naming both penicillin and amoxicillin as the answer"
+          ]
+        },
+        {
+          "key": "v3_3",
+          "desired": "supported",
+          "actual": "supported",
+          "text": "No",
+          "quoted_evidence": [
+            {
+              "end": 110,
+              "quote": "Smoker: No.",
+              "start": 99
+            }
+          ],
+          "reviewed_status": "supported",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "e853ff2a85687fe37ae0da8c59d53395429ad62687fdd0717fd0a8261fa2bdad",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "bf9c644591417cdf95a26c277bc781561fdbba6d3f66e23d20fb8987ea5714ad"
+    },
+    {
+      "case": "N13",
+      "attempt": 14,
+      "original_notes_sha256": "db36c9e014d3b83db681af6bc08778f17cf1a176dbda5e71ff15d9144fff6233",
+      "mapping_sha256": "6356f16e130da1e121781e2b33c5d0674b3877bf5496983ba7d2610013669f7a",
+      "original_docx_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+      "first_pass": {
+        "held_correct": 2
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "7be88c899899e5e3d0acb83714737651dc6d3c2521784b05590b669edb0fb306"
+    },
+    {
+      "case": "N16",
+      "attempt": 15,
+      "original_notes_sha256": "6280130b446902a845a48df0416d3dac280b58370e349fc19d6d03196b81219e",
+      "mapping_sha256": "d01b3b556507ee68fdd11f56c44978e3f261a3a206090a977cebb238031ecdad",
+      "original_docx_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+      "first_pass": {
+        "held_correct": 2
+      },
+      "manual_mapping_review": null,
+      "fields": [
+        {
+          "key": "v3_1",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 29,
+              "quote": "The patient is not depressed.",
+              "start": 0
+            },
+            {
+              "end": 52,
+              "quote": "Her mood is depressed.",
+              "start": 30
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        },
+        {
+          "key": "v3_2",
+          "desired": "held",
+          "actual": "conflict",
+          "text": "",
+          "quoted_evidence": [
+            {
+              "end": 92,
+              "quote": "The patient is allergic to penicillin.",
+              "start": 54
+            },
+            {
+              "end": 109,
+              "quote": "Allergies: none.",
+              "start": 93
+            }
+          ],
+          "reviewed_status": "left_blank",
+          "manual_answer_correction_credited": false,
+          "remaining_unmachinechecked_gold_constraints": []
+        }
+      ],
+      "native_Word_inspection": false,
+      "export_sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+      "stored_physical_readback_PASS": true,
+      "independent_ZIP_preservation_PASS": true,
+      "root_inspection_sha256": "2f59a3f4bd6f238112507a23a325f158a5a04ca0be8ce377d333d7c9d8c33031"
+    }
+  ],
+  "invoice_reconciled": false,
+  "all_voice_complete": false,
+  "native_Word_inspection": false,
+  "provider_calls": 0,
+  "database_queries": 0,
+  "credentials_read": 0
+}

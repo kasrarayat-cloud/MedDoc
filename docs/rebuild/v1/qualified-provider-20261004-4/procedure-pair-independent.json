@@ -1,0 +1,116 @@
+{
+  "scope": "completed canonical4 procedure pair018/019 only",
+  "source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "artifact_hashes": [
+    {
+      "attempt": 18,
+      "manifest_sha256": "4d882734b4770d5f0fb381aa6ebc1e21d5e70f45ca583bf11e3eccdffc64b43c",
+      "all_artifact_hashes_match": true,
+      "artifacts": 16
+    },
+    {
+      "attempt": 19,
+      "manifest_sha256": "0055fd8ca2f6ad230c80ec1118fc2f18124654ed1b846871fca11a05c62d3122",
+      "all_artifact_hashes_match": true,
+      "artifacts": 14
+    }
+  ],
+  "accounting": [
+    {
+      "attempt": 18,
+      "cost": "0.0042888064",
+      "QA_charge": "0.006433209600",
+      "receipt_request_id": "01a10720-28a3-7173-a0c8-a6543f69a83a",
+      "all_audit_checks": true,
+      "no_held_reservation": true,
+      "invoice_reconciled": false
+    },
+    {
+      "attempt": 19,
+      "cost": "0.023404",
+      "QA_charge": "0.035106000000",
+      "receipt_request_id": "req_011CfhHUoTtNDboW2xwo3KT8",
+      "all_audit_checks": true,
+      "no_held_reservation": true,
+      "invoice_reconciled": false
+    }
+  ],
+  "pair_provider_cost": "0.0276928064",
+  "pair_QA_charge": "0.041539209600",
+  "first_pass_supported": 10,
+  "held": 1,
+  "missing": 0,
+  "demonstrated_unsafe": [],
+  "clinician_answer_corrections_credited": 0,
+  "raw_ASR_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+  "reviewed_text_sha256": "bb44d3c6608e7965492e21e71ee164714966ba946987833172a57f5b07422d97",
+  "audio_sha256": "dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c",
+  "explicit_transcript_edits": 4,
+  "semantic_adjudication": {
+    "Procedure": "Diagnostic colonoscopy is explicitly named in the reviewed current-patient procedure source.",
+    "Anesthesia": "Monitored anesthesia care explicitly documented; no extra sedation or drug inferred.",
+    "Bowel preparation score": "BBPS eight preserved exactly.",
+    "Extent": "Scope was advanced to the cecum is an explicit frozen transcript correction, retained independently of raw ASR.",
+    "Indication": "Rectal bleeding source preserved; frozen review adds only the Indication heading.",
+    "Findings": "Sigmoid diverticulosis, small internal hemorrhoids and absence of polyps source preserved.",
+    "Polyps": "Exact explicit absence; no false positive finding.",
+    "Specimens": "Exact explicit absence of collected specimens; no inferred biopsy.",
+    "Immediate complications": "No immediate complications; timeframe retained without claiming no later complications.",
+    "Recommendation": "Follow-up with the referring clinician in two weeks; recipient and time retained.",
+    "Estimated blood loss": "Zero milliliters plus less-than-one-milliliter competing source remain unclarified. C08 held then expressly reviewed blank, no automatic amount chosen."
+  },
+  "independent_simple_cell_XML_readback": {
+    "v3_1": {
+      "exact_adopted_text": "Diagnostic colonoscopy.",
+      "manual_answer_correction": false
+    },
+    "v3_2": {
+      "exact_adopted_text": "Monitored anesthesia care.",
+      "manual_answer_correction": false
+    },
+    "v3_3": {
+      "exact_adopted_text": "BBPS eight.",
+      "manual_answer_correction": false
+    },
+    "v3_4": {
+      "exact_adopted_text": "The scope was advanced to the cecum.",
+      "manual_answer_correction": false
+    },
+    "v3_5": {
+      "exact_adopted_text": "Rectal bleeding.",
+      "manual_answer_correction": false
+    },
+    "v3_6": {
+      "exact_adopted_text": "Sigmoid diverticulosis and small internal hemorrhoids.\nNo polyps were seen.",
+      "manual_answer_correction": false
+    },
+    "v3_7": {
+      "exact_adopted_text": "No polyps were seen.",
+      "manual_answer_correction": false
+    },
+    "v3_8": {
+      "exact_adopted_text": "No specimens were collected.",
+      "manual_answer_correction": false
+    },
+    "v3_9": {
+      "original_blank_preserved": true
+    },
+    "v3_10": {
+      "exact_adopted_text": "There were no immediate complications.",
+      "manual_answer_correction": false
+    },
+    "v3_11": {
+      "exact_adopted_text": "Recommendation, follow-up with the referring clinician in two weeks.",
+      "manual_answer_correction": false
+    }
+  },
+  "all_other_ZIP_member_bytes_identical": true,
+  "surrounding_XML_identical_after_removing_only_ten_written_cell_contents": true,
+  "export_sha256": "dea0c9a75dca84696d90458d5235842fa15e9893535a92c7901d7e209b35ce46",
+  "invoice_reconciled": false,
+  "native_Word_inspection": false,
+  "human_microphone_acceptance": false,
+  "network_provider_calls": 0,
+  "database_queries": 0,
+  "credentials_read": 0
+}
