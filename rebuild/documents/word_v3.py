@@ -1665,11 +1665,12 @@ def response_word(txt: str) -> bool:
 
 
 class Detector:
-    def __init__(self, package: Package, *, layout_proposal=False):
+    def __init__(self, package: Package, *, layout_proposal=False, _table_instructions=True):
         self.package = package
         self.index = SlotIndex(package)
         self.areas: list[Area] = []
         self.layout_proposal = layout_proposal
+        self._table_instructions = _table_instructions
         self.layout_candidates = []
         self.withdrawn_areas: list[Area] = []   # EC3: answer areas withdrawn from shared merged cells
         self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
@@ -4801,6 +4802,152 @@ class Detector:
                     context=write_context, complete_source=True, source_questions=[relation]))
                 self.claimed.update(id(p.el) for p in [*source, first, second])
 
+    def table_selection_source(self, table):
+        """One visible caption owns its immediately following original table.
+
+        A plain title may intervene only when it repeats the first printed
+        column header plus 'Table'. Other questions, tables, wrappers and
+        foreign/hidden source terminate this relationship; it never continues
+        a selection command into another table or section.
+        """
+        if not self._table_instructions:
+            return None  # exact former source representation, used only for legacy binding below
+        key = ('table-selection-source', id(table))
+        if key in self._grid:
+            return self._grid[key]
+        self._grid[key] = None
+        unsafe = {SDT, q('w:hyperlink'), TXBX, q('w:drawing'), q('w:pict'), q('w:object'),
+                  q('w:customXml'), q('w:ins'), q('w:del'), q('w:moveFrom'), q('w:moveTo')}
+        def plain(slot, controls=False):
+            paragraphs = ([slot] if slot.kind == 'p' else
+                          [p for cells in self.grid(slot).values() for cell in cells
+                           for p in self.own_paragraphs(cell)] if slot.kind == 'tbl' else [])
+            return (not any(not isinstance(n.tag, str) or n.tag in unsafe
+                            or not n.tag.startswith('{' + W + '}')
+                            or not controls and n.tag in (FLDCHAR, q('w:instrText')) for n in slot.el.iter())
+                    and all(self.tab_source_visible(p) for p in paragraphs))
+        if (table.parent is not None or table.el.getparent().tag != q('w:body')
+                or not plain(table, controls=True)
+                or len(list(table.el.iter(q('w:tbl')))) != 1
+                or any((n.text or '').strip().upper() != 'FORMCHECKBOX'
+                       for n in table.el.iter(q('w:instrText')))
+                or any(n.get(q('w:fldCharType')) == 'begin'
+                       and n.find('./' + q('w:ffData') + '/' + q('w:checkBox')) is None
+                       or n.get(q('w:fldCharType')) not in ('begin', 'separate', 'end')
+                       for n in table.el.iter(FLDCHAR))):
+            return None
+        sources = []
+        node = table.el.getprevious()
+        while node is not None and len(sources) < 6:
+            slot = self.index.by_el.get(id(node))
+            if slot is None or slot.kind != 'p' or slot.parent is not None or not plain(slot):
+                return None
+            sources.append(slot)
+            if self.text(node).strip():
+                break
+            node = node.getprevious()
+        if not sources or not self.text(sources[-1].el).strip():
+            return None
+        last = sources[-1]
+        if re.fullmatch(r'.+\s+Table', self.text(last.el).strip(), re.I):
+            first = self.grid(table).get(0, [])
+            if not first or not first[0].children or not all(plain(p) for p in self.own_paragraphs(first[0])):
+                return None
+            header = self.cell_text(first[0])
+            if self.text(last.el).strip().casefold() != (header + ' Table').casefold():
+                return None
+            node = last.el.getprevious()
+            while node is not None and len(sources) < 6:
+                slot = self.index.by_el.get(id(node))
+                if slot is None or slot.kind != 'p' or slot.parent is not None or not plain(slot):
+                    return None
+                sources.append(slot)
+                if self.text(node).strip():
+                    break
+                node = node.getprevious()
+        caption = sources[-1]
+        printed = self.text(caption.el).strip()
+        match = re.fullmatch(r'(.+)\(([^()]*)\)\s*[:*]*\s*', printed)
+        command = (re.fullmatch(r'(?:please\s+)?(?:select|check|tick|choose|mark|circle)\s+'
+                    r'(?:all(?:\s+(?:that\s+apply|applicable(?:\s+(?:boxes|options|answers))?))?|'
+                    r'(?:only\s+)?one(?:\s+(?:box|option|answer))?(?:\s+only)?)', match[2].strip(), re.I)
+                   if match else None)
+        if (not command or WIDER_REACH.search(printed) or len(printed) > MAX_MAPPING_LABEL
+                or self.blank_spans(*self.ptext(caption.el)) or self.box_units(caption)):
+            return None
+        single = bool(CHECK_ONE.search(match[2]))
+        if not single and not positive_command(match[2]) or single and not self.parallel_table_options(table):
+            # A bare one-only command over several row questions cannot decide
+            # whether one applies to the table or each row. Only the complete
+            # flat option list can own that single selection without guessing.
+            return None
+        result = {'caption': caption, 'table': table, 'printed': printed,
+                  'sources': [*reversed(sources), table]}
+        result['references'] = [{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)}
+                                for s in result['sources']]
+        self._grid[key] = result
+        return result
+
+    def table_selection_owners(self):
+        key = 'table-selection-owners'
+        if key not in self._grid:
+            self._grid[key] = {id(source['caption'].el): table.el
+                for table in self.index.slots if table.kind == 'tbl'
+                for source in [self.table_selection_source(table)] if source}
+        return self._grid[key]
+
+    def parallel_table_options(self, table):
+        rows = self.grid(table)
+        if len(rows) != 1 or not 2 <= len(rows.get(0, [])) <= 8:
+            return False
+        cells = rows[0]
+        if any(c.info['span'] != 1 or c.info['vmerge'] or c.el.getparent().tag != q('w:tr') for c in cells):
+            return False
+        units = []
+        for cell in cells:
+            for paragraph in self.own_paragraphs(cell):
+                printed = self.text(paragraph.el).strip()
+                options = self.box_units(paragraph)
+                if printed and not options or any(clean_label(u[2]) or not option_text(self.adjacent_option_text(u))
+                                                  for u in options):
+                    return False
+                units.extend(options)
+        options = [option_text(self.adjacent_option_text(u)) for u in units]
+        return len(options) >= 2 and len(set(o.casefold() for o in options)) == len(options)
+
+    def merge_table_option_groups(self, groups):
+        """Join a complete one-row option list laid out in parallel cells."""
+        replacements, consumed = {}, set()
+        for table in (s for s in self.index.slots if s.kind == 'tbl'):
+            source = self.table_selection_source(table)
+            rows = self.grid(table)
+            if not source or len(rows) != 1 or not 2 <= len(rows.get(0, [])) <= 8:
+                continue
+            cells = rows[0]
+            if any(c.info['span'] != 1 or c.info['vmerge'] or c.el.getparent().tag != q('w:tr') for c in cells):
+                continue
+            selected = [(i, g) for i, g in enumerate(groups)
+                        if self.host_cell(g['paras'][0]) in cells]
+            if (len(selected) < 2 or any(self.host_cell(p) not in cells for _, g in selected for p in g['paras'])
+                    or any(clean_label(u[2]) or not option_text(self.adjacent_option_text(u))
+                           for _, g in selected for u in g['units'])):
+                continue
+            paragraphs = [p for c in cells for p in self.own_paragraphs(c)]
+            covered = {id(p.el) for _, g in selected for p in g['paras']}
+            if any(self.text(p.el).strip() and (id(p.el) not in covered or not self.box_units(p)) for p in paragraphs):
+                continue
+            all_boxes = [u[0] for p in paragraphs for u in self.box_units(p)]
+            units = [u for _, g in selected for u in g['units']]
+            options = [option_text(self.adjacent_option_text(u)) for u in units]
+            if (all_boxes != [u[0] for u in units] or len(options) < 2
+                    or len(set(o.casefold() for o in options)) != len(options)):
+                continue
+            first = selected[0][0]
+            replacements[first] = {'paras': [p for _, g in selected for p in g['paras']], 'units': units,
+                                   'question_from_cell': False, 'whole_table_options': source}
+            consumed.update(i for i, _ in selected[1:])
+        return [replacements.get(i, g) for i, g in enumerate(groups) if i not in consumed]
+
     def rule_checkboxes(self, leftovers=False):
         # paragraph-level units, then grouping. A cell holding ONLY a box under a column header is left for the
         # option-grid rule; whatever that rule does not take comes back here (leftovers=True) - never dropped.
@@ -4879,7 +5026,7 @@ class Detector:
                 continue
             current = {"paras": [pslot], "units": list(units), "question_from_cell": False}
             groups.append(current)
-        for g in groups:
+        for g in self.merge_table_option_groups(groups):
             self.emit_checkbox_group(g)
 
     def pure_option_cell(self, cell, pslot, unit) -> bool:
@@ -5302,6 +5449,8 @@ class Detector:
                         named = self.named_guidance_owner(p)
                         if named is not None:
                             owner = named.el
+                        if owner is None:
+                            owner = self.table_selection_owners().get(id(p))
                         found.append((id(p), owner, sentence, where, limit_targets(sentence) if limit else "*"))
             self._form_wide = found
         return self._form_wide
@@ -6118,6 +6267,8 @@ class Detector:
 
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
+        cell = self.host_cell(pslot)
+        table_source = self.table_selection_source(cell.parent) if cell is not None else None
         for units in self.split_inline_groups(g):
             options = [option_text(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else option_text(o)
                        for o in (self.adjacent_option_text(unit) for unit in units)]
@@ -6138,6 +6289,9 @@ class Detector:
             host = pslot
             used_para = None
             row_question = False
+            if g.get('whole_table_options'):
+                question = clean_label(table_source['printed'])
+                used_para = table_source['caption']
             nested = self.nested_checkbox_source(g) if not question else None
             if nested and nested.get("problem"):
                 self.notes.append(nested["problem"])
@@ -6212,6 +6366,9 @@ class Detector:
                                           *(nested["source_slots"] if nested else [])]}
                 if cell is not None:
                     own.update(self.own_paragraph_ids(cells))
+                if table_source:
+                    local.append(table_source['printed'])
+                    own.update(id(s.el) for s in table_source['sources'])
                 named = self.named_selection_source(question, own, options)
                 if named and not named.get('problem'):
                     local += named['commands']
@@ -6226,8 +6383,11 @@ class Detector:
                 if named:
                     scoped_sources = (named['source_slots'] if 'source_slots' in named else
                                       [named['owner'], *[slot for slot, _ in named['entries']]])
-                for affected in dict.fromkeys([*g['paras'], *scoped_sources]):
-                    self.coverage_issue(affected, 'named_selection_source' if named else 'unmapped_answer', self.notes[-1])
+                for affected in dict.fromkeys([*g['paras'], *scoped_sources,
+                                              *([table_source['caption']] if table_source else [])]):
+                    code = ('named_selection_source' if named else 'table_selection_source'
+                            if table_source else 'unmapped_answer')
+                    self.coverage_issue(affected, code, self.notes[-1])
                     if named and named.get('human'):
                         self.protected_regions.add(affected.id)
                         self.box_action_reasons[affected.id] = self.notes[-1]
@@ -6301,6 +6461,13 @@ class Detector:
                                 for p in dict.fromkeys([named['owner'], *g['paras'], *[slot for slot, _ in named['entries']]])]})
                 if named.get('selected_objects'):
                     area.source_questions[-1]['selected_objects'] = named['selected_objects']
+            if table_source:
+                area.label_slot = table_source['caption']
+                area.complete_source = True
+                area.context = ' > '.join(x for x in [area.context, table_source['printed']] if x)
+                area.source_questions.append({'relation': 'table_selection_instruction',
+                    'instruction': table_source['printed'], 'cardinality': area.kind,
+                    'sources': table_source['references']})
             branches = [branch for unit in units for branch in [self.option_branch_source(unit)]
                         if branch and branch['qualified']]
             if branches:
@@ -10614,7 +10781,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                            if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
                                                 'unmapped_bracketed_source', 'named_selection_source',
                                                 'scalar_alternative_source', 'unresolved_insertion_source',
-                                                'unresolved_narrative_band')]
+                                                'unresolved_narrative_band', 'table_selection_source')]
     adjacent_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
     temporal_answers = [area for area in source_detector.areas if any(
@@ -10673,8 +10840,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 and field.get('options', []) == area.options
                 and field.get('source_questions', []) == area.source_questions)
 
+    legacy_table_detector = None
     for area in source_detector.areas:
-        if not any(r.get('relation') in ('explicit_insertion', 'narrative_empty_band')
+        if not any(r.get('relation') in ('explicit_insertion', 'narrative_empty_band', 'table_selection_instruction')
                    for r in area.source_questions):
             continue
         regions = [{'place': place[0], 'start': place[1], 'end': place[2]}
@@ -10684,6 +10852,29 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         active = [f for f in fields if answers.get(f['key']) not in (None, '', [])
                   and any(reader.touches(place, region) for place in reader.of(f) for region in regions)]
         if active and (len(active) != 1 or not exact_original_area(active[0], area)):
+            if any(r.get('relation') == 'table_selection_instruction' for r in area.source_questions):
+                # Preserve exact former mappings compiled from this SAME source.
+                # Their one-answer groups can record a valid subset of an
+                # all-that-apply list; they never widen a one-only instruction.
+                if legacy_table_detector is None:
+                    legacy_table_detector = Detector(package, layout_proposal=True, _table_instructions=False)
+                    legacy_table_detector.detect()
+                boxes = area.target['boxes']
+                valid = all(any(exact_original_area(f, old) and old.target.get('type') == 'checkboxes'
+                                and all(b in boxes for b in old.target['boxes'])
+                                for old in legacy_table_detector.areas) for f in active)
+                if valid:
+                    if area.kind == 'choice':
+                        states = [box_state(index, b) for b in boxes]
+                        if any(s is None for s in states):
+                            fail('The original selection state is unreadable; review this exact group.', 'mapping_mismatch')
+                        for f in active:
+                            selected = _options_chosen(f, answers[f['key']])
+                            for i, b in enumerate(f['locator']['target']['boxes']):
+                                states[boxes.index(b)] = i in selected
+                        if sum(states) > 1:
+                            fail('Only one option can be chosen across this original table.', 'invalid_answer')
+                    continue
             fail('This insertion requires its complete original request and exact answer band. '
                  'Review the mapping again; its source and neighbors remain unchanged.', 'mapping_mismatch')
 
@@ -11005,7 +11196,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy", "temporal_format_hint", "guided_response_row") and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "table_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy", "temporal_format_hint", "guided_response_row") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
@@ -11038,7 +11229,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             else:
                 owns = (any(original_branch_mapping(field, area) for area in relation_areas)
                         or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy', 'temporal_format_hint', 'guided_response_row') for r in relations)
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'table_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy', 'temporal_format_hint', 'guided_response_row') for r in relations)
                                 or area.kind == field.get("kind") and area.options == (field.get("options") or [])
                                 and area.label == field.get("label") and area.context == field.get("context"))
                            for area in relation_areas))
