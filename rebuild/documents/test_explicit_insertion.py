@@ -101,6 +101,21 @@ class ExplicitInsertion(unittest.TestCase):
                 self.assertFalse(any(f['locator']['target'].get('shape') == 'insertion' for f in info['fields']))
                 self.assertTrue(any(i['code'] == 'unresolved_insertion_source' for i in info['coverage_issues']))
 
+    def test_competing_placeholders_do_not_own_an_independent_request(self):
+        for printed in ('Choose {insert drug} or {insert other drug}. Contact {insert telephone number}.',
+                        'Contact {insert telephone number}; choose {insert drug} or {insert other drug}.',
+                        '{insert first} or {insert second} or {insert third}. Contact {insert telephone number}.'):
+            with self.subTest(printed=printed):
+                doc = Document(); doc.add_paragraph(printed)
+                source = data(doc); info = word.inspect(source)
+                fields = [f for f in info['fields'] if f['locator']['target'].get('shape') == 'insertion']
+                self.assertEqual(len(fields), 1)
+                self.assertEqual(fields[0]['source_questions'][0]['request'], '{insert telephone number}')
+                self.assertTrue(info['coverage_issues'])
+                final = word.fill(source, fields, {fields[0]['key']: '555-0100'})
+                self.assertEqual(word.text_of(paragraphs(final)[0]),
+                                 printed.replace('{insert telephone number}', '555-0100'))
+
     def test_hidden_linked_native_and_revision_sources_are_not_plain_insertions(self):
         for marker in ('hidden', 'hyperlink', 'sdt', 'ins'):
             with self.subTest(marker=marker):
