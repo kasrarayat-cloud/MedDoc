@@ -7,6 +7,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 
 from . import word_v3 as word
+from .test_signing_areas import signing_form
 
 
 def source(captions='Signature of Recorder\tDate\tTime', *, same_line=False, gap=False):
@@ -29,6 +30,38 @@ def fields(data):
 
 
 class CaptionedSigningBand(unittest.TestCase):
+    def test_existing_protected_blocks_do_not_require_duplicate_ambiguity_review(self):
+        for floating, mismatch in ((False, False), (True, False), (False, True)):
+            with self.subTest(floating=floating, mismatch=mismatch):
+                raw = signing_form(table=floating, mismatch=mismatch)
+                inspected = word.inspect(raw)
+                expected = [('unmapped_answer', 'word/document.xml', 'b/tbl[0]')] if floating else []
+                self.assertEqual([(row['code'], row['part'], row['slot'])
+                                  for row in inspected['coverage_issues']], expected)
+                catalog = inspected['fields']; held = [field for field in catalog if field.get('write_protected')]
+                self.assertTrue(held)
+                for field in held:
+                    with self.assertRaises(word.V3Failure):
+                        word.fill(raw, catalog, {field['key']: 'Dr Synthetic'})
+                original_roles = word.destination_roles(raw)['roles']
+                self.assertTrue(any(role['source'] == 'protected_area' for role in original_roles))
+                self.assertTrue(any(role['source'] == 'human_document_action' for role in original_roles))
+
+    def test_new_mixed_signing_band_still_requires_source_bound_review(self):
+        raw = source(); inspected = word.inspect(raw)
+        own = [row for row in inspected['coverage_issues'] if row['code'] == 'ambiguous_signing_band']
+        self.assertEqual([(row['part'], row['slot']) for row in own], [('word/document.xml', 'b/p[1]')])
+        detector = word.Detector(word.open_package(raw))
+        relation = detector.captioned_signing_band(detector.index.by_id['word/document.xml#b/p[1]'])
+        self.assertEqual((own[0]['start'], own[0]['end']), (relation['start'], relation['end']))
+        self.assertEqual(len(own[0]['id']), 64)
+        catalog = inspected['fields']
+        for field in catalog:
+            if field['locator']['slot'] == 'b/p[1]':
+                self.assertTrue(field['write_protected'])
+                with self.assertRaises(word.V3Failure):
+                    word.fill(raw, catalog, {field['key']: 'Dr Synthetic'})
+
     def test_existing_whole_signing_block_keeps_both_original_and_action_roles(self):
         doc = Document(); doc.add_paragraph('Discharge letter'); doc.add_paragraph('Plan: ______')
         p = doc.add_paragraph()

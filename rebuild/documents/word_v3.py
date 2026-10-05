@@ -2880,8 +2880,9 @@ class Detector:
             area.protection = ('Protected signing block: this writing band has its own printed signature captions, but its divided runs have '
                                'no verified one-to-one column ownership. Keep this band unchanged and review its '
                                'physical name, signature, date and time locations.')
-            self.coverage_issue(area.slot, 'ambiguous_signing_band', area.protection,
-                                start=relation['start'], end=relation['end'])
+            if area.slot.id not in self.protected_area_sources:
+                self.coverage_issue(area.slot, 'ambiguous_signing_band', area.protection,
+                                    start=relation['start'], end=relation['end'])
 
     def previous_continuous_paragraph(self, host):
         """Nearest substantive source across plain spacers or adjacent one-column rows only."""
