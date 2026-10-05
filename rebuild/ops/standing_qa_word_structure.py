@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import zipfile
 
 try:
@@ -21,8 +22,43 @@ PRICING = 'ordinary_notes_field_relations'
 CASE_IDS = ('WQ01', 'WQ02', 'WQ03')
 FORM_IDS = ('synthetic-divided-date-v1', 'synthetic-nominal-insertion-v1', 'synthetic-caption-catalogue-v1')
 MANIFEST = Path(__file__).with_name('fixtures') / 'word-structure-qualification-v1.json'
-MANIFEST_SHA256 = 'c1645a23b9ed3fabe6f5e9411e7b97e977ef3b3ae7295d3adc6a823f9bea2dc5'
+MANIFEST_SHA256 = 'a6886adaaee377acf6365ff6a4bb04cd2b6639c8fdc7cdc7430346a2ad5bb0fb'
 require = pc.require
+
+
+def calendar_identity(value):
+    """Independent finite calendar reader, never the document writer's formatter."""
+    try:
+        if re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', value):
+            return datetime.date.fromisoformat(value).isoformat()
+        slash = re.fullmatch(r'([0-9]{2})/([0-9]{2})/([0-9]{4})', value)
+        if slash:
+            a, b, year = map(int, slash.groups()); dates = set()
+            for day, month in ((a, b), (b, a)):
+                try:dates.add(datetime.date(year, month, day).isoformat())
+                except ValueError:pass
+            return next(iter(dates)) if len(dates) == 1 else None
+        month = re.fullmatch(r'([0-9]{2})/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/([0-9]{4})', value)
+        if month:
+            number = ('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec').index(month[2]) + 1
+            return datetime.date(int(month[3]), number, int(month[1])).isoformat()
+    except (TypeError, ValueError):pass
+    return None
+
+
+def usefulness(case, fields, answers):
+    result = elicited.usefulness(case, fields, answers)
+    for field in fields:
+        label = field['label']; allowed = case.get('accepted_date_values', {}).get(label)
+        if allowed is None:continue
+        require(field['kind'] == 'date' and label in case['desired_supported'], 'Only a declared ordinary date has alternatives.')
+        expected = calendar_identity(case['desired_supported'][label])
+        require(expected and all(calendar_identity(value) == expected for value in allowed),
+                'The prospectively declared date representations disagree on a real calendar date.')
+        row = answers.get(field['key'], {})
+        if row.get('status') == 'supported' and row.get('text') in allowed:
+            result[field['key']] = 'supported_correct'
+    return result
 
 
 def build(form):
@@ -194,7 +230,7 @@ class WordStructureRun(stages.Run):
             version.refresh_from_db()
             require(response.status_code == 302 and version.confirmed, 'Normal mapping confirmation was refused.')
             def judge(send, version, answers, exported, original, **kwargs):
-                outcomes = elicited.usefulness(case, version.fields, answers)
+                outcomes = usefulness(case, version.fields, answers)
                 return outcomes, [], {'word_structure_first_pass': {'fields': outcomes,
                     'manual_answer_corrections': 0, 'corpus_qualification': False}}
             return self.generation_send(send, template, version, case['notes'], extra={

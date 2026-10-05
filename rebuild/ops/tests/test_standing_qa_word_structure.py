@@ -127,6 +127,27 @@ class WordStructureFixedStage(Base):
                     self.assertEqual(result[field['key']], 'over_held')
         self.assertEqual(counts, {'supported_correct': 7, 'held_correct': 8})
 
+    def test_predeclared_date_alternatives_use_independent_calendar_not_writer(self):
+        inputs = wq.frozen_inputs()['word_structure']
+        for case in (inputs['cases'][0], inputs['cases'][2]):
+            fields = inputs['forms'][case['form']]['fields']
+            raw = {f['key']: {'status': 'supported', 'text': case['desired_supported'][f['label']]}
+                   if f['label'] in case['desired_supported'] else {'status': 'conflict', 'text': ''} for f in fields}
+            field = next(f for f in fields if f['label'] == 'Visit date')
+            for value in case['accepted_date_values']['Visit date']:
+                changed = deepcopy(raw); changed[field['key']]['text'] = value
+                outcomes = wq.usefulness(case, fields, wq.stages.steps.field_outcomes(changed))
+                self.assertEqual(outcomes[field['key']], 'supported_correct')
+            for value in ('2026-03-15', '05/10/2026', '02/29/2026', '03/14/2026 extra', '03-14-2026'):
+                changed = deepcopy(raw); changed[field['key']]['text'] = value
+                self.assertEqual(wq.usefulness(case, fields, wq.stages.steps.field_outcomes(changed))[field['key']],
+                                 'unsupported_accepted')
+        self.assertEqual(wq.calendar_identity('02/29/2024'), '2024-02-29')
+        self.assertEqual(wq.calendar_identity('29/Feb/2024'), '2024-02-29')
+        self.assertEqual(wq.calendar_identity('12/12/2026'), '2026-12-12')
+        self.assertIsNone(wq.calendar_identity('05/10/2026'))
+        self.assertIsNone(wq.calendar_identity('2026-02-29'))
+
     def test_three_send_declaration_needs_exact_hash_count_and_stage(self):
         d = self.declaration()
         self.assertEqual([(s.id, s.sends, s.requires) for s in d.stages], [(wq.STAGE, 3, None)])

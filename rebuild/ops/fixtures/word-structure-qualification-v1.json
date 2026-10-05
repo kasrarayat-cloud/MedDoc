@@ -442,6 +442,14 @@
       "physical_expected": {
         "Visit date": "14/Mar/2026",
         "Plan": "Follow-up assessment."
+      },
+      "accepted_date_values": {
+        "Visit date": [
+          "03/14/2026",
+          "2026-03-14",
+          "14/Mar/2026",
+          "14/03/2026"
+        ]
       }
     },
     {
@@ -482,6 +490,14 @@
         "Patient name": "Synthetic Morgan",
         "Visit date": "2026-03-14",
         "Clinical notes": "No deformity."
+      },
+      "accepted_date_values": {
+        "Visit date": [
+          "03/14/2026",
+          "2026-03-14",
+          "14/Mar/2026",
+          "14/03/2026"
+        ]
       }
     }
   ]
