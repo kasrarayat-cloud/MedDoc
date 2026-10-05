@@ -1678,6 +1678,7 @@ class Detector:
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
+        self.protected_area_sources: dict[str, str] = {}  # existing whole-area roles retained by later source guards
         self.response_header_corners: set[str] = set()
         self.fixed_subheading_slots: set[str] = set()
         self.box_action_reasons: dict[str, str] = {}
@@ -2873,6 +2874,8 @@ class Detector:
             relation = self.captioned_signing_band(area.slot)
             if relation is None:
                 continue
+            if area.protection and not area.source_action:
+                self.protected_area_sources[area.slot.id] = area.protection
             area.source_action = True
             area.protection = ('Protected signing block: this writing band has its own printed signature captions, but its divided runs have '
                                'no verified one-to-one column ownership. Keep this band unchanged and review its '
@@ -9637,6 +9640,10 @@ def _role_reading(package, *, retained_areas=None):
                 if start is not None:
                     start, end = segment(pid, start, end, field['key'])
                 roles.append(_role(ROLE_PROTECTED, 'human_document_action', pid, start, end, area.protection))
+            if anchor in detector.protected_area_sources:
+                for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
+                    roles.append(_role(ROLE_PROTECTED, 'protected_area', pid, None, None,
+                                       detector.protected_area_sources[anchor]))
         elif area.protection:
             for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
                 roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))

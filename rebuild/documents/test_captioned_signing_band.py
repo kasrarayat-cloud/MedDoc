@@ -4,6 +4,7 @@ import io
 import unittest
 
 from docx import Document
+from docx.oxml import OxmlElement
 
 from . import word_v3 as word
 
@@ -28,6 +29,49 @@ def fields(data):
 
 
 class CaptionedSigningBand(unittest.TestCase):
+    def test_existing_whole_signing_block_keeps_both_original_and_action_roles(self):
+        doc = Document(); doc.add_paragraph('Discharge letter'); doc.add_paragraph('Plan: ______')
+        p = doc.add_paragraph()
+        for n in range(2):
+            if n:p.add_run().add_tab()
+            run = p.add_run(); run.underline = True; run._r.append(OxmlElement('w:tab'))
+        doc.add_paragraph('Signature\tDate')
+        out = io.BytesIO(); doc.save(out); raw = out.getvalue()
+        roles = word.destination_roles(raw)['roles']
+        band = [role for role in roles if role['place'] == 'word/document.xml#b/p[2]']
+        original = [role for role in band if role['source'] == 'protected_area']
+        actions = [role for role in band if role['source'] == 'human_document_action']
+        self.assertTrue(original and actions)
+        self.assertTrue(all(role['start'] is None and role['end'] is None for role in original))
+        self.assertTrue(all('ordinary notes do not authorize' in role['reason'] for role in original))
+        self.assertTrue(any(role['source'] == 'protected_region'
+                            and role['place'] == 'word/document.xml#b/p[3]' for role in roles))
+        catalog = fields(raw)
+        for field in catalog:
+            if field['locator']['slot'] == 'b/p[2]':
+                with self.assertRaises(word.V3Failure):
+                    word.fill(raw, catalog, {field['key']: 'Dr Synthetic'})
+        with self.assertRaises(word.V3Failure):
+            word.locate(raw, [{'slot': 'word/document.xml#b/p[2]', 'kind': 'text', 'label': 'Signature'}])
+        plan = next(field for field in catalog if field['label'] == 'Plan')
+        filled = word.fill(raw, catalog, {plan['key']: 'Follow up.'})
+        before, after = word.SlotIndex(word.open_package(raw)), word.SlotIndex(word.open_package(filled))
+        for path in ('b/p[2]', 'b/p[3]'):
+            self.assertEqual(word.fingerprint(before.by_id['word/document.xml#' + path].el),
+                             word.fingerprint(after.by_id['word/document.xml#' + path].el))
+
+    def test_new_source_action_does_not_invent_an_existing_whole_area_role(self):
+        raw = source(); roles = word.destination_roles(raw)['roles']
+        band = [role for role in roles if role['place'] == 'word/document.xml#b/p[1]']
+        self.assertTrue(any(role['source'] == 'human_document_action' for role in band))
+        self.assertFalse(any(role['source'] == 'protected_area' for role in band))
+        doc = Document(); doc.add_paragraph('Visit date: ______    Signature: ______')
+        out = io.BytesIO(); doc.save(out); ordinary = out.getvalue(); catalog = fields(ordinary)
+        date = next(field for field in catalog if field['label'] == 'Visit date')
+        self.assertFalse(date.get('write_protected'))
+        self.assertFalse(any(role['source'] == 'protected_area' for role in word.destination_roles(ordinary)['roles']))
+        word.fill(ordinary, catalog, {date['key']: '2026-10-05'})
+
     def test_following_and_same_line_signing_captions_hold_every_owned_fragment(self):
         for same_line in (False, True):
             with self.subTest(same_line=same_line):
