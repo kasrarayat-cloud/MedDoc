@@ -74,6 +74,7 @@ no longer describe the request) and each, and their sum, must fit the stage and 
 keeps the declared version and its frozen maximum.
 """
 import dataclasses
+import datetime
 import hashlib
 import html as htmlmod
 import json
@@ -612,6 +613,39 @@ def export_read_back(original, exported, fields, answers):
     return {'passed': not problems, 'problems': problems, 'fields': readings, 'outside_written_fields': outside}
 
 
+def calendar_from_divided_date(value, pattern):
+    """Independent calendar reading under the source-appointed component order.
+
+    ISO is explicit. A different numeric order is admissible only when one
+    calendar interpretation remains. This does not call the writer formatter.
+    """
+    orders = {'ddmmmyyyy': ('day', 'named', 'year'), 'ddmmyyyy': ('day', 'month', 'year'),
+              'mmddyyyy': ('month', 'day', 'year'), 'yyyymmdd': ('year', 'month', 'day')}
+    months = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+    if not isinstance(value, str) or pattern not in orders:return None
+    text = value.strip()
+    try:
+        if re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', text):
+            return datetime.date.fromisoformat(text).isoformat()
+        widths = {'day': r'[0-9]{2}', 'month': r'[0-9]{2}', 'named': r'[A-Za-z]{3}', 'year': r'[0-9]{4}'}
+        matched = re.fullmatch(r'\s*/\s*'.join('(' + widths[part] + ')' for part in orders[pattern]), text)
+        if matched:
+            parts = dict(zip(orders[pattern], matched.groups()))
+            month = (next(i for i, name in enumerate(months, 1) if name.casefold() == parts['named'].casefold())
+                     if 'named' in parts else int(parts['month']))
+            try:return datetime.date(int(parts['year']), month, int(parts['day'])).isoformat()
+            except ValueError:pass
+        numeric = re.fullmatch(r'([0-9]{2})\s*/\s*([0-9]{2})\s*/\s*([0-9]{4})', text)
+        candidates = set()
+        if numeric:
+            first, second, year = map(int, numeric.groups())
+            for day, month in ((first, second), (second, first)):
+                try:candidates.add(datetime.date(year, month, day).isoformat())
+                except ValueError:pass
+        return next(iter(candidates)) if len(candidates) == 1 else None
+    except (ValueError, StopIteration):return None
+
+
 def saved_export_verification(original, exported, fields, saved, *, reviewed_answers=None):
     """Keep the frozen check and require complete independent readback.
 
@@ -626,6 +660,7 @@ def saved_export_verification(original, exported, fields, saved, *, reviewed_ans
                                  saved if reviewed_answers is None else reviewed_answers)
     written = dict(frozen['supported_answers_in_their_fields'])
     corrections = {}
+    calendar_corrections = {}
     if read_back['passed']:
         for field in fields:
             key = field['key']
@@ -639,9 +674,21 @@ def saved_export_verification(original, exported, fields, saved, *, reviewed_ans
                     and reading.get('expected') == text and reading.get('read') == text):
                 written[key] = True
                 corrections[key] = 'Exact saved visible breaks read in the physical destination.'
+            target = (field.get('locator') or {}).get('target') or {}
+            if (written.get(key) is False and field.get('kind') == 'date'
+                    and target.get('shape') == 'temporal_band' and not field.get('write_protected')
+                    and value.get('status') == 'supported' and reading.get('answered') is True
+                    and reading.get('set_by_export') is True):
+                wanted = calendar_from_divided_date(text, target.get('format'))
+                shown = calendar_from_divided_date(reading.get('read'), target.get('format'))
+                if wanted is not None and wanted == shown:
+                    written[key] = True
+                    calendar_corrections[key] = {'calendar': wanted, 'physical_read': reading['read'],
+                        'source_format': target['format'], 'reason': 'Exact divided date read in its physical destination.'}
     result = {**frozen, 'supported_answers_in_their_fields': written,
               'frozen_export_verification': frozen,
               'visible_break_readback_corrections': corrections,
+              'divided_calendar_readback_corrections': calendar_corrections,
               'workflow_success': (frozen['zip_members_unchanged']
                                    and set(frozen['changed_parts']) <= {'word/document.xml'}
                                    and all(written.values()) and read_back['passed'])}

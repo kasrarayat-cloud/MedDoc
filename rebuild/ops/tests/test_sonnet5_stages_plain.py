@@ -567,6 +567,51 @@ def replaced_once(old, new):
     return edit
 
 
+class DividedCalendarReadBackTests(unittest.TestCase):
+    def fixture(self, pattern='ddmmmyyyy'):
+        from documents.test_temporal_band import band_form, detected
+        separators = (2, 5) if pattern == 'ddmmmyyyy' else (4, 6) if pattern == 'yyyymmdd' else (2, 4)
+        original = band_form('Visit date:', pattern=pattern, separators=separators)
+        fields = detected(original)
+        date = next(f for f in fields if f['locator']['target'].get('shape') == 'temporal_band')
+        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
+        saved[date['key']] = {'status': 'supported', 'text': '03/14/2026', 'reviewed': True}
+        return original, fields, date, saved
+
+    def test_every_appointed_source_order_reads_the_same_calendar_in_exact_destination(self):
+        from documents import word_v3 as w
+        for pattern, expected in (('ddmmmyyyy','14/Mar/2026'), ('ddmmyyyy','14/03/2026'),
+                                  ('mmddyyyy','03/14/2026'), ('yyyymmdd','2026/03/14')):
+            with self.subTest(pattern=pattern):
+                original, fields, date, saved = self.fixture(pattern)
+                exported = w.fill(original, fields, {date['key']: '03/14/2026'})
+                result, reading = st.saved_export_verification(original, exported, fields, saved)
+                self.assertFalse(result['frozen_export_verification']['workflow_success'])
+                self.assertTrue(result['workflow_success'], reading['problems'])
+                self.assertEqual(reading['fields'][date['key']]['read'], expected)
+                self.assertEqual(result['divided_calendar_readback_corrections'][date['key']]['calendar'], '2026-03-14')
+
+    def test_scattered_date_wrong_calendar_or_changed_original_neighbors_refuse(self):
+        from documents import word_v3 as w
+        original, fields, date, saved = self.fixture()
+        plan = next(f for f in fields if f['label'] == 'Plan')
+        honest = w.fill(original, fields, {date['key']: '03/14/2026'})
+        wrong = w.fill(original, fields, {date['key']: '2026-03-15'})
+        scattered = w.fill(original, fields, {plan['key']: '03/14/2026'})
+        changed = rezip(honest, 'word/document.xml', replaced_once(b'>Visit date:', b'>Changed date:'))
+        for exported in (wrong, scattered, changed):
+            result, reading = st.saved_export_verification(original, exported, fields, saved)
+            self.assertFalse(result['workflow_success'])
+            self.assertEqual(result['divided_calendar_readback_corrections'], {})
+
+    def test_independent_calendar_reader_rejects_ambiguity_and_impossible_dates(self):
+        for value in ('05/10/2026', '02/30/2026', '2026-02-29', '29/Feb/2026', '14/Foo/2026', 'date 03/14/2026'):
+            self.assertIsNone(st.calendar_from_divided_date(value, 'ddmmmyyyy'), value)
+        self.assertEqual(st.calendar_from_divided_date('02/29/2024', 'ddmmmyyyy'), '2024-02-29')
+        self.assertEqual(st.calendar_from_divided_date('05/10/2026', 'mmddyyyy'), '2026-05-10')
+        self.assertEqual(st.calendar_from_divided_date('05/10/2026', 'ddmmyyyy'), '2026-10-05')
+
+
 class ExportReadBackTests(unittest.TestCase):
     """Refutation EXPORT-CHECK-DOES-NOT-READ: the frozen app-path check skipped held and blank fields, called a choice or
     checkbox written without reading its mark, and never looked at the rest of word/document.xml. The stage's own
