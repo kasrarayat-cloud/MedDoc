@@ -154,6 +154,42 @@ class ExplicitInsertion(unittest.TestCase):
         self.assertEqual(fields[0]['locator']['slot'], 'b/p[0]')
         self.assertEqual(fields[0]['locator']['target']['shape'], 'after_label')
 
+    def test_consecutive_named_placeholders_have_independent_physical_writers(self):
+        doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+        cell.text = '[Addressee name]'
+        cell.add_paragraph('[Address]')
+        cell.add_paragraph('[Your contact telephone number]')
+        cell.add_paragraph('{{Email address}}')
+        source = data(doc); fields = word.inspect(source)['fields']
+        self.assertEqual(len(fields), 4)
+        self.assertEqual([f['locator']['slot'] for f in fields],
+                         ['b/tbl[0]/tr[0]/tc[0]/p[%d]' % i for i in range(4)])
+        self.assertTrue(all(not f['locator'].get('extra') for f in fields))
+        answers = {f['key']: 'Synthetic value %d' % i for i, f in enumerate(fields)}
+        final = word.fill(source, fields, answers)
+        index = word.SlotIndex(word.open_package(final))
+        for field in fields:
+            self.assertEqual(word.text_of(index.by_id[field['locator']['part'] + '#' + field['locator']['slot']].el),
+                             answers[field['key']])
+
+    def test_anonymous_drawn_lines_still_continue_one_answer(self):
+        doc = Document(); doc.add_paragraph('Clinical observations')
+        doc.add_paragraph('__________'); doc.add_paragraph('__________')
+        source = data(doc); fields = word.inspect(source)['fields']
+        self.assertEqual(len(fields), 1)
+        self.assertEqual(fields[0]['kind'], 'long_text')
+        self.assertEqual([f['slot'] for f in fields[0]['locator']['extra']], ['b/p[2]'])
+        final = word.fill(source, fields, {fields[0]['key']: 'Synthetic first line\nSecond line'})
+        self.assertIn('Synthetic first line', word.text_of(paragraphs(final)[1]))
+
+    def test_named_placeholder_keeps_its_preceding_signing_caption_role(self):
+        doc = Document(); doc.add_paragraph('[Manager signature]'); doc.add_paragraph('[Name]')
+        source = data(doc); fields = word.inspect(source)['fields']
+        self.assertEqual(len(fields), 1)
+        self.assertEqual(fields[0]['kind'], 'signature')
+        with self.assertRaises(word.V3Failure):
+            word.fill(source, fields, {fields[0]['key']: 'Dr Synthetic'})
+
     def test_narrative_caption_cannot_release_signature_or_patient_authorship(self):
         doc = Document(); doc.add_paragraph('Completed by the patient:')
         band(doc, '• Detailed account of the observations:')

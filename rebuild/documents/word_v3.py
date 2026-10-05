@@ -8454,11 +8454,16 @@ class Detector:
             spans = merge_spans(self.explicit_insertion_spans(slot, text, pieces)
                                 + self.blank_spans(text, pieces))
             residue = "".join(ch for i, ch in enumerate(text) if not any(s <= i < e for s, e, _ in spans))
+            named_placeholder = (len(spans) == 1 and (spans[0][2] in ('insertion', 'token', 'bracket', 'angle')
+                                 or spans[0][2] == 'hint' and not PLACEHOLDER_TEXT.fullmatch(text[spans[0][0]:spans[0][1]].strip())))
             if len(spans) == 1 and spans[0][2] != 'insertion' and not clean_label(residue.replace("_", "")):
                 # a line that is ONLY a drawn blank: continues the previous line's area, or takes the label above
                 sibs, idx = self.para_neighbours(slot)
                 prev_sib = sibs[idx - 1] if idx else None
-                if pending is not None and prev_sib is pending_last:
+                prior_human = (pending is not None and (pending.kind in SIGNING_KINDS or pending.protection
+                               or self.question_box_authorship(pending.label)
+                               or self.checkbox_source_action(pending.label, governing=True)))
+                if pending is not None and prev_sib is pending_last and (not named_placeholder or prior_human):
                     pending.extra_slots.append(slot)
                     if pending.kind == "text":
                         pending.kind = "long_text"
