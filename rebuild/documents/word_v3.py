@@ -1676,6 +1676,7 @@ class Detector:
         self.source_guidance_areas: list[Area] = []  # preserved source controls, never clinical answer destinations
         self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
         self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
+        self.signing_caption_holds: list[Area] = []  # below-caption blanks held after the source-action guard
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
@@ -2582,6 +2583,7 @@ class Detector:
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
+        self.guard_signing_caption_holds()
         self.guard_captioned_signing_bands()
         self.guard_action_participants()
         self.rule_scalar_alternatives()
@@ -2867,6 +2869,20 @@ class Detector:
         return {'captions': labels, 'source': {'part': caption.part, 'slot': caption.path,
                                              'fingerprint': fingerprint(caption.el)},
                 'start': spans[0][0], 'end': stop}
+
+    def guard_signing_caption_holds(self):
+        """The blank below a printed signing caption, held after the source-action guard.
+
+        guard_source_actions reads the same caption first: a human or ambiguous
+        action keeps its own protection, coverage issue and generation review.
+        Only a blank that reading left writable is held here.
+        """
+        current = {id(area) for area in self.areas}
+        for area in self.signing_caption_holds:
+            if id(area) in current and not area.protection:
+                area.source_action = True
+                area.protection = ('This printed signing or document action is human-owned. '
+                                   'Complete it through the explicit human signing workflow.')
 
     def guard_captioned_signing_bands(self):
         for area in self.areas:
@@ -8445,15 +8461,19 @@ class Detector:
                 action = self.checkbox_source_action(head, governing=True) if requested else ''
                 kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
                     ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
-                if kind not in SIGNING_KINDS and (requested or narrative or signing) and not role:
-                    # A printed caption that names a signing act owns the
-                    # blank beside it as part of that act, whichever branch
-                    # read it (plain, bulleted band or parenthetical request):
-                    # a 'signature ... date' caption never yields an ordinary
-                    # writable answer, whatever drew its signing line. Hold
-                    # only - the kind is unchanged; a signature-kind area is
-                    # already never filled.
-                    role = 'signature' if self.caption_names_signing_act(txt) else ''
+                hold = ''
+                if not requested and not narrative and signing and kind not in SIGNING_KINDS:
+                    # A printed caption that names a signature owns the blank
+                    # below it as part of that signing act: a combined
+                    # 'signature ... date' caption never yields an ordinary
+                    # writable date, whatever drew its signing line. The
+                    # signature wording must also be the engine's own signing
+                    # event (a receipt of a signed report, or a clinical
+                    # 'signature' result, is not one). Hold only - the kind is
+                    # unchanged - and only after guard_source_actions, whose
+                    # reading of the caption keeps precedence.
+                    hold = signing_place(label) or ('signature' if SIGNATURE.search(label)
+                                                    and self.signature_caption_event(label) else '')
                 relation = ({'relation': 'narrative_empty_band', 'question': self.ptext(ps.el)[0],
                              'source': {'part': ps.part, 'slot': ps.path, 'fingerprint': fingerprint(ps.el)}}
                             if narrative else self.write_request_source(ps) if requested else None)
@@ -8465,6 +8485,8 @@ class Detector:
                     area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
                                        if role or action == 'human_signing_action' else
                                        'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
+                elif hold:
+                    self.signing_caption_holds.append(area)
                 self.add(area)
                 self.claimed.add(id(ps.el))
                 for b in blanks:
@@ -8619,28 +8641,18 @@ class Detector:
                     r'(?:signs|signed|initials|initiall?ed)(?:\s+[^:;.!?\r\n]+)?', text, re.I))
 
     @classmethod
-    def caption_names_signing_act(cls, caption):
-        """Whether a printed caption names a signing act, read only with the engine's own signing readers.
+    def signature_caption_event(cls, caption):
+        """The engine's signing-event reading of a complete caption.
 
-        The complete caption and each of its tab- or colon-separated parts are
-        read. A temporal modifier may precede the act ('Date of signing', read
-        by temporal_source_action) or follow it ('Witness signature date': the
-        part without its trailing date/time is read by the narrow signing
-        readers only). A receipt of a signed document, or a clinical result
-        date, is not a signing act.
+        A trailing date or time ('Clinician signature  Date') is read exactly
+        as the engine reads the same caption in its temporal word order ('Date
+        of clinician signature'); no other wording is added.
         """
-        text = re.sub(r'^\s*[•●▪‣]\s+', '', caption)
-        parts = [part for head in dict.fromkeys((text, text.partition('(')[0]))
-                 for part in (head, *re.split(r'\t+|:\s+', head))]
-        for part in parts:
-            whole = clean_label(part)
-            bare = clean_label(re.sub(r'\s+(?:date|time)(?:\s+and\s+time)?\s*:?\s*$', '', part, flags=re.I))
-            if whole and (signing_place(whole) or cls.signing_event_source(whole)
-                          or cls.temporal_source_action(whole)):
-                return True
-            if bare and bare != whole and (signing_place(bare) or cls.signing_event_source(bare)):
-                return True
-        return False
+        if cls.signing_event_source(caption):
+            return True
+        tail = re.fullmatch(r'(.+?)\s*(?:[/,&]\s*)?(?:date|time)(?:\s*(?:and|&|/)\s*time)?\s*:?',
+                            _plain(caption).strip(), re.I)
+        return bool(tail and cls.signing_event_source('Date of ' + tail[1].strip(' ,/&')))
 
     @classmethod
     def temporal_source_action(cls, argument):
@@ -8817,14 +8829,6 @@ class Detector:
                                        'Keep it unchanged and use the explicit human workflow.')
                     self.coverage_issue(paragraph, 'human_signing_action', area.protection)
                 self.add(area)
-            # The caption is these two destinations' complete source question,
-            # not a further answer after its own colon: claim it, as the
-            # temporal band and the lines-below-label captions are claimed.
-            # A human act's caption is part of that protected act, so a stored
-            # writer after its colon is refused rather than filled.
-            self.claimed.add(id(caption.el))
-            if human:
-                self.protected_regions.add(caption.id)
 
     def insertion_source_plain(self, slot):
         """An insertion's printed source has no control, wrapper or foreign ink."""
@@ -9147,7 +9151,7 @@ class Detector:
         """
         wp = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
         a = "http://schemas.openxmlformats.org/drawingml/2006/main"
-        for slot in (s for s in self.index.slots if s.kind == 'p'):
+        for slot in (s for s in self.index.slots if s.kind == 'p' and s.parent is None):
             if self.ptext(slot.el)[0].strip() or not self.tab_source_visible(slot):
                 continue
             drawings = [n for n in slot.el.iter('{%s}inline' % wp)

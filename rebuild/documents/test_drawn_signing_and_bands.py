@@ -1,4 +1,4 @@
-"""Drawn signing bands, optional response bands, wrapped insertions and paired heading captions.
+"""Drawn signing bands, signing-caption holds, and the withdrawn paragraph relaxations' counterexamples.
 
 Pure XML/parser controls on project-authored synthetic documents; no corpus content, no app resources.
 """
@@ -174,6 +174,34 @@ class DrawnSigningBand(unittest.TestCase):
         fields = word.inspect(raw)['fields']
         self.assertFalse([f for f in fields if f.get('write_protected')])
 
+    def test_a_drawn_band_inside_a_table_cell_leaves_the_table_log_writable(self):
+        # A protected region inside a table makes its table_rows writer refuse, so the drawn band is read at body
+        # level only (refutation 2026-10-05). The in-cell signing date stays held by its own caption.
+        doc = Document()
+        doc.add_paragraph('Synthetic medication record')
+        table = doc.add_table(rows=4, cols=3)
+        for n, text in enumerate(('Medication', 'Dose', 'Route')):
+            table.cell(0, n).text = text
+        cell = table.cell(3, 0).merge(table.cell(3, 2))
+        lines = cell.paragraphs[0]
+        lines._p.append(line_run(1, fallback=False))
+        lines.add_run('\t\t')
+        lines._p.append(line_run(2, fallback=False))
+        cell.add_paragraph('Signature of Patient or Representative\t\t\tDate')
+        cell.add_paragraph('')
+        doc.add_paragraph('Neighbor findings: ______')
+        raw = data(doc)
+        fields = word.inspect(raw)['fields']
+        self.assertFalse([f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                                   for r in f.get('source_questions', []))])
+        log = [f for f in fields if f['kind'] == 'table_rows']
+        self.assertEqual(len(log), 1)
+        final = word.fill(raw, fields, {log[0]['key']: [['Synthetic drug A', '5 mg', 'oral']]})
+        self.assertEqual([c.text for c in Document(io.BytesIO(final)).tables[0].rows[1].cells],
+                         ['Synthetic drug A', '5 mg', 'oral'])
+        held = [f for f in fields if f.get('write_protected')]
+        self.assertEqual([(f['kind'], f['locator']['slot']) for f in held], [('date', 'b/tbl[0]/tr[3]/tc[0]/p[2]')])
+
 
 def caption_over_blank(caption, style=None):
     doc = Document()
@@ -191,23 +219,32 @@ class SigningCaptionHold(unittest.TestCase):
         return [f for f in word.inspect(raw)['fields'] if f['locator']['slot'] == 'b/p[2]']
 
     def test_signing_event_captions_hold_the_blank_below(self):
-        for caption in ('Signature of Patient or Representative\t\t\tDate', 'Patient signature\t\t\tDate',
-                        'Date of signing:', 'Date participant signs:', 'Date witness initials:',
-                        'Date consent granted:', 'Date of signatures:'):
+        # The signature wording and the engine's own signing-event reader agree on each of these captions; a
+        # trailing date reads as the same caption in the engine's temporal word order ('Date of ... signature').
+        for caption in ('Signature of Patient or Representative\t\t\tDate', 'Date of patient signature:',
+                        'Date of witness signature:', 'Date signed by recorder:', 'Signature date:',
+                        'Date of approval signature:', 'Witness signature date:', 'Clinician signature\t\t\tDate',
+                        'Report signed date:'):
             with self.subTest(caption):
                 raw = caption_over_blank(caption)
-                fields = word.inspect(raw)['fields']
+                found = word.inspect(raw)
+                fields = found['fields']
                 below = [f for f in fields if f['locator']['slot'] == 'b/p[2]']
-                for field in below:
-                    self.assertTrue(field.get('write_protected') or field['kind'] in ('signature', 'initials'), field)
-                    if field.get('write_protected'):
-                        with self.assertRaises(word.V3Failure):
-                            word.fill(raw, fields, {field['key']: '14/03/2026'})
+                self.assertEqual([(f['kind'], bool(f.get('write_protected'))) for f in below], [('date', True)])
+                with self.assertRaises(word.V3Failure):
+                    word.fill(raw, fields, {below[0]['key']: '14/03/2026'})
+                # A hold is not a coverage exclusion: it adds no generation review of its own.
+                self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[2]'])
 
     def test_ordinary_date_captions_keep_their_writable_blank(self):
         for caption in ('Date of assessment:', 'Visit date:', 'Date of birth:', 'Date of procedure:',
                         'Date signed report received:', 'Date received signed report:',
-                        'Date nurse received the signed report:', 'Review date:'):
+                        'Date nurse received the signed report:', 'Review date:',
+                        # A clinical 'signature', 'signs' or 'initial' is not a signing act (refutation 2026-10-05).
+                        'Gene expression signature result date:', 'Date of vital signs:',
+                        'Date of onset of signs and symptoms:', 'Troponin (initial) date:',
+                        'Date of initial or repeat test:', 'Date of troponin (initial):',
+                        'Signed copy given date:', 'Signed report received date:'):
             with self.subTest(caption):
                 raw = caption_over_blank(caption)
                 fields = word.inspect(raw)['fields']
@@ -217,6 +254,19 @@ class SigningCaptionHold(unittest.TestCase):
                     final = word.fill(raw, fields, {below[0]['key']: '14/03/2026'})
                     index = word.SlotIndex(word.open_package(final))
                     self.assertIn('14/03/2026', word.paragraph_text(index.by_id[BODY + 'b/p[2]'].el)[0])
+
+
+    def test_the_source_action_guard_keeps_its_own_reading_and_review(self):
+        # The hold runs after guard_source_actions: an action the guard reads keeps its coverage issue, so the
+        # import still needs the clinician's exclusion review before generation (refutation 2026-10-05).
+        for caption, code in (('Date of next review:', 'ambiguous_source_action'),
+                              ('Date of approval:', 'ambiguous_source_action'),
+                              ('Date of consent:', 'human_signing_action')):
+            with self.subTest(caption):
+                found = word.inspect(caption_over_blank(caption))
+                below = [f for f in found['fields'] if f['locator']['slot'] == 'b/p[2]']
+                self.assertEqual([bool(f.get('write_protected')) for f in below], [True])
+                self.assertEqual([i['code'] for i in found['coverage_issues'] if i['slot'] == 'b/p[2]'], [code])
 
 
 class WithdrawnRelaxationsKeepTheirReading(unittest.TestCase):

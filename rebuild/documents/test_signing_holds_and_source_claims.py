@@ -1,8 +1,8 @@
-"""Signing holds on every below-caption branch, and printed sources that are never separate destinations.
+"""Ordinary below-caption bands and requests, and printed sources that are never separate destinations.
 
 Pure parser/writer controls on project-authored synthetic documents; no corpus content, no app resources.
-The merged-hierarchy and temporal-pair cases were written by the D08 and D11 specialists (2026-10-05) and
-are kept verbatim; only the source claims they pin were integrated, not their new reading rules.
+The merged-hierarchy cases were written by the D08 specialist (2026-10-05) and are kept verbatim; only the
+source claim they pin was integrated, not its new reading rules.
 """
 import io
 import unittest
@@ -30,8 +30,9 @@ def body(paragraphs):
     return data(doc)
 
 
-class BranchSigningHolds(unittest.TestCase):
-    """The blank below a signing caption is held whichever reading branch saw the caption."""
+class BelowCaptionBranches(unittest.TestCase):
+    """Bulleted bands and parenthetical requests stay ordinary answers: the signing-caption hold reads the plain
+    below-caption branch only."""
 
     def outcomes(self, raw):
         fields = w.inspect(raw)['fields']
@@ -45,15 +46,6 @@ class BranchSigningHolds(unittest.TestCase):
             except w.V3Failure:
                 result[field['label']] = 'refused'
         return result
-
-    def test_bulleted_and_requested_signing_captions_hold_their_blank(self):
-        for paragraphs in (['Clinical summary: ____', '• Date of patient signature:', '', '', '', 'Plan: ____'],
-                           ['Clinical summary: ____', 'Date of patient signature (please specify):', '', 'Plan: ____'],
-                           ['Clinical summary: ____', 'Witness signature date (optional):', '', '', 'Plan: ____']):
-            with self.subTest(caption=paragraphs[1]):
-                outcome = self.outcomes(body(paragraphs))
-                self.assertTrue(outcome)
-                self.assertEqual(set(outcome.values()), {'refused'}, outcome)
 
     def test_ordinary_bulleted_bands_and_requests_stay_writable(self):
         for paragraphs in (['Clinical summary: ____', '• Detailed explanation of the clinical observations:',
@@ -153,80 +145,6 @@ class MergedHierarchySources(unittest.TestCase):
             w.fill(raw, fields + [forged], {'former_flat': 'Synthetic value'})
         self.assertEqual(error.exception.code, 'mapping_mismatch')
 
-
-
-def temporal_form(time_hint=':(HH:MM)', caption='Date and Time Collected:'):
-    doc = Document()
-    table = doc.add_table(rows=2, cols=2)
-    table.cell(0, 0).text = caption
-    table.cell(0, 1).text = 'Accession Number:'
-    cell = table.cell(1, 0)
-    cell.text = 'MM/DD/YYYY'
-    cell.add_paragraph(time_hint)
-    clock = cell.add_paragraph()
-    for text in ('AM', 'PM', '24-hr clock'):
-        clock.add_run('☐ ' + text + ' ')
-    table.cell(1, 1).text = 'Original accession entry'
-    return data(doc)
-
-
-CAPTION = 'b/tbl[0]/tr[0]/tc[0]/p[0]'
-
-
-class TemporalPairCaption(unittest.TestCase):
-    def test_temporal_pair_caption_is_its_source_not_a_second_destination(self):
-        raw = temporal_form()
-        result = w.inspect(raw)
-        pair = [f for f in result['fields']
-                if any(r.get('relation') == 'temporal_format_hint' for r in f.get('source_questions', []))]
-        self.assertEqual([f['kind'] for f in pair], ['date', 'time'])
-        self.assertTrue(all(r['sources'][0]['slot'] == CAPTION for f in pair for r in f['source_questions']))
-        self.assertEqual([f for f in result['fields'] if f['locator']['slot'] == CAPTION], [])
-        out = w.fill(raw, result['fields'], {pair[0]['key']: '04/10/2026', pair[1]['key']: '14:35'})
-        written = Document(io.BytesIO(out)).tables[0]
-        self.assertEqual(written.cell(0, 0).text, 'Date and Time Collected:')
-        self.assertEqual([p.text for p in written.cell(1, 0).paragraphs[:2]], ['04/10/2026', '14:35'])
-        self.assertEqual(written.cell(1, 1).text, 'Original accession entry')
-
-    def test_stored_caption_writer_from_before_still_fills_unchanged(self):
-        raw = temporal_form()
-        result = w.inspect(raw)
-        slot = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#' + CAPTION]
-        stored = {'key': 'stored_caption', 'kind': 'date', 'label': 'Date and Time Collected', 'context': '',
-                  'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': CAPTION,
-                              'fingerprint': w.fingerprint(slot.el),
-                              'target': {'type': 'span', 'start': 24, 'end': 24, 'shape': 'after_label'}}}
-        out = w.fill(raw, [stored, *result['fields']], {'stored_caption': '03/14/2026'})
-        self.assertEqual(Document(io.BytesIO(out)).tables[0].cell(0, 0).text, 'Date and Time Collected: 03/14/2026')
-
-    def test_stored_writer_after_a_human_act_caption_is_refused(self):
-        for caption in ('Date and time collected and I approve this document:',
-                        'Date and time I approve this document:', 'Witness signature date and time:'):
-            with self.subTest(caption=caption):
-                raw = temporal_form(caption=caption)
-                result = w.inspect(raw)
-                pair = [f for f in result['fields']
-                        if any(r.get('relation') == 'temporal_format_hint' for r in f.get('source_questions', []))]
-                self.assertEqual(len(pair), 2)
-                self.assertTrue(all(f.get('write_protected') for f in pair))
-                self.assertEqual([f for f in result['fields'] if f['locator']['slot'] == CAPTION], [])
-                slot = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#' + CAPTION]
-                stored = {'key': 'stored_caption', 'kind': 'date', 'label': caption.rstrip(':'), 'context': '',
-                          'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': CAPTION,
-                                      'fingerprint': w.fingerprint(slot.el),
-                                      'target': {'type': 'span', 'start': len(caption), 'end': len(caption),
-                                                 'shape': 'after_label'}}}
-                with self.assertRaises(w.V3Failure) as error:
-                    w.fill(raw, [stored, *result['fields']], {'stored_caption': '10/04/2026'})
-                self.assertEqual(error.exception.code, 'protected_signing_area')
-                self.assertEqual(w.fill(raw, [stored, *result['fields']], {}), raw)
-
-    def test_a_caption_without_its_complete_pair_keeps_its_own_answer(self):
-        raw = temporal_form('HH:MM pending')
-        result = w.inspect(raw)
-        self.assertFalse([f for f in result['fields']
-                          if any(r.get('relation') == 'temporal_format_hint' for r in f.get('source_questions', []))])
-        self.assertTrue([f for f in result['fields'] if f['locator']['slot'] == CAPTION])
 
 
 if __name__ == '__main__':
