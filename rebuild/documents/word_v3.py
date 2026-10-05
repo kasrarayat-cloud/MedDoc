@@ -9684,6 +9684,15 @@ def temporal_band_characters(answer, pattern):
     return ''.join(parts[part] for part in order[pattern])
 
 
+def temporal_band_printed_value(answer, pattern):
+    """The one calendar-valid date's literal source-appointed component order."""
+    characters = temporal_band_characters(answer, pattern)
+    values, start = [], 0
+    for part in re.findall(r'd+|m+|y+', pattern):
+        values.append(characters[start:start + len(part)]); start += len(part)
+    return '/'.join(values)
+
+
 def _rpr_from_mark(mark):
     """The paragraph mark's run properties, usable on a run."""
     if mark is None:
@@ -11306,10 +11315,22 @@ def constrained_scalar_value(original, final, field, written, *, _source_detecto
         if target.get('shape') == 'numeric_part':
             return numeric_part_value(source, current, target.get('number'))
         if target.get('shape') == 'temporal_band':
-            detector = _source_detector or Detector(original.package)
+            detector = _source_detector() if callable(_source_detector) else _source_detector
+            if detector is None:
+                detector = Detector(original.package)
+            if detector.package is not original.package:
+                return None
             own = detector.index.by_id.get(identity)
             area = detector.temporal_band(own) if own is not None else None
             if area is None or area.target != target or field.get('kind') != 'date':
+                return None
+            for ref in (target['caption'], target['guide']):
+                neighbour = final.by_id.get('%s#%s' % (ref['part'], ref['slot']))
+                if neighbour is None or fingerprint(neighbour.el) != ref['fingerprint']:
+                    return None
+            visibility = Detector(final.package)
+            if (not visibility.tab_source_visible(after) or visibility.region_hidden(after.el)
+                    or wraps_structure(after.el)):
                 return None
             expression, end = '', 0
             for start, stop in target['parts']:

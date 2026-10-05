@@ -110,6 +110,58 @@ class TemporalBandOwnershipTests(unittest.TestCase):
         slash.text = slash.text.replace('/', '-')
         self.assertIsNone(word.constrained_scalar_value(original, index, field, True))
 
+    def test_normal_effective_values_reads_iso_and_printed_date_inputs(self):
+        data = band_form(); field = bands(data)[0]; key = field['key']
+        for answer in ('2026-10-05', '05/Oct/2026'):
+            with self.subTest(answer=answer):
+                self.assertEqual(word.effective_values(data, [field], {key: answer}),
+                                 {key: '05/Oct/2026'})
+        self.assertEqual(word.effective_values(data, [field], {}), {key: ''})
+
+    def test_normal_effective_values_rejects_mutated_written_band(self):
+        data = band_form(); field = bands(data)[0]; key = field['key']
+        answers = {key: '2026-10-05'}
+        final = word.fill(data, [field], answers)
+        for mutation in ('separator', 'calendar', 'hidden', 'guide', 'caption'):
+            with self.subTest(mutation=mutation):
+                package = word.open_package(final)
+                index = word.SlotIndex(package)
+                paragraph = index.by_id['word/document.xml#b/p[1]'].el
+                if mutation == 'separator':
+                    node = next(n for n in paragraph.iter(word.T) if '/' in (n.text or ''))
+                    node.text = node.text.replace('/', '-')
+                elif mutation == 'calendar':
+                    characters = [n for n in paragraph.iter(word.T)
+                                  if (n.text or '').strip() and '/' not in n.text and n.text != '.']
+                    for node, value in zip(characters, '30Feb2026'):node.text = value
+                elif mutation == 'hidden':
+                    run = next(n for n in paragraph.findall(word.R)
+                               if word.text_of(n).strip() and '/' not in word.text_of(n))
+                    properties = run.find(word.q('w:rPr'))
+                    if properties is None:
+                        properties = OxmlElement('w:rPr'); run.insert(0, properties)
+                    properties.append(OxmlElement('w:vanish'))
+                else:
+                    path = 'b/p[2]' if mutation == 'guide' else 'b/p[0]'
+                    node = next(index.by_id['word/document.xml#' + path].el.iter(word.T))
+                    node.text = 'mm' if mutation == 'guide' else 'Date of witness approval:'
+                written = package.write({'word/document.xml': package.tree('word/document.xml')})
+                self.assertIsNone(word.effective_values(data, [field], answers, _written=written)[key])
+
+    def test_stage_readback_compares_only_this_source_format_to_its_logical_date(self):
+        from ops import sonnet5_stages as stages
+        data = band_form(); field = bands(data)[0]; key = field['key']
+        for answer in ('2026-10-05', '05/Oct/2026'):
+            with self.subTest(answer=answer):
+                final = word.fill(data, [field], {key: answer})
+                saved = {key: {'text': answer, 'status': 'supported', 'reviewed': True}}
+                self.assertTrue(stages.export_read_back(data, final, [field], saved)['passed'])
+        final = word.fill(data, [field], {key: '2026-10-05'})
+        for answer in ('2026-10-06', '2026-02-30', '05/gar/2026'):
+            with self.subTest(answer=answer):
+                saved = {key: {'text': answer, 'status': 'supported', 'reviewed': True}}
+                self.assertFalse(stages.export_read_back(data, final, [field], saved)['passed'])
+
     def test_foreign_missing_inconsistent_hidden_or_populated_source_does_not_grant_band(self):
         for options in ({'foreign_guide': True}, {'pattern': 'ddmmyy'}, {'separators': (1, 5)},
                         {'hidden': True}, {'populated': True}):

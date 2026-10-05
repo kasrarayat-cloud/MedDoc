@@ -573,6 +573,11 @@ def export_read_back(original, exported, fields, answers):
                 shown = w.constrained_scalar_value(before, after, f, sets)
                 expected = (str(saved.get('text') or '') if sets
                             else w.constrained_scalar_value(before, before, f, False))
+                if sets and kind == 'date' and target.get('shape') == 'temporal_band':
+                    # Only this source-appointed divided date changes its text
+                    # representation. The reader still verifies the original
+                    # caption, guide, exact character positions and calendar.
+                    expected = w.temporal_band_printed_value(expected, target['format'])
                 record.update(expected=expected, read=shown)
                 if sets and (shown is None or _flat(shown) != _flat(expected)):
                     problem(key, 'the export shows ' + (repr(shown[:80]) if shown is not None else 'no readable value')
