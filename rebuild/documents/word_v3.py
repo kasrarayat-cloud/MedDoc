@@ -1673,6 +1673,7 @@ class Detector:
         self._table_instructions = _table_instructions
         self.layout_candidates = []
         self.withdrawn_areas: list[Area] = []   # EC3: answer areas withdrawn from shared merged cells
+        self.source_guidance_areas: list[Area] = []  # preserved source controls, never clinical answer destinations
         self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
         self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
         self.notes: list[str] = []
@@ -2562,6 +2563,7 @@ class Detector:
         self.rule_temporal_bands()
         self.rule_ruled_paragraphs()
         self.rule_parenthetical_write_cells()
+        self.rule_optional_response_bands()
         self.rule_lines_below_label(write_requests_only=True)
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
@@ -3312,8 +3314,19 @@ class Detector:
                               options=[o for o in slot.info.get("options", []) if o]))
             else:
                 kind = "date" if slot.info.get("input_type") == "date" else self.kind_for(label)
-                self.add(Area(kind, clean_label(label), slot, {"type": "ff_text"}, context=self.context_for(slot),
-                              protection=ff_text_protection(slot.el)))
+                area = Area(kind, clean_label(label), slot, {"type": "ff_text"}, context=self.context_for(slot),
+                            protection=ff_text_protection(slot.el))
+                if ff_source_guidance(slot.el):
+                    # These exact source controls already refuse every write.
+                    # Keep their physical roles and complete help, separately
+                    # from the answers a doctor is asked to complete. Stored
+                    # mappings still resolve their original protected controls.
+                    area.capacity = self.capacity_for(area)
+                    self.source_guidance_areas.append(area)
+                    self.withdrawn_areas.append(area)
+                    self.claimed.add(id(slot.el))
+                else:
+                    self.add(area)
 
     # 3. checkboxes: content-control, legacy and glyph boxes, grouped into questions -------------------------------
     def box_units(self, pslot):
@@ -8446,6 +8459,46 @@ class Detector:
                 for b in blanks:
                     self.claimed.add(id(b.el))
 
+    def rule_optional_response_bands(self):
+        """An explicit optional response caption owns its adjacent blank band.
+
+        The caption may have its own style. Every answer paragraph must share
+        one plain flowing style and be a direct source sibling; no table,
+        drawing, hidden text or later question is absorbed.
+        """
+        for caption in (s for s in self.index.roots if s.kind == 'p' and s.part == 'word/document.xml'):
+            text, pieces = self.ptext(caption.el)
+            if (id(caption.el) in self.claimed
+                    or not re.fullmatch(r'[^:;?!\r\n]{1,160}\s*\(optional\)\s*:', text.strip(), re.I)
+                    or self.blank_spans(text, pieces) or self.box_units(caption)
+                    or not self.insertion_source_plain(caption)):
+                continue
+            slots = []; node = caption.el.getnext(); style = None
+            while node is not None and node.tag == q('w:p'):
+                slot = self.index.by_el.get(id(node))
+                if slot is None or slot.parent is not caption.parent or self.ptext(node)[0].strip():
+                    break
+                props = node.find(q('w:pPr'))
+                current = fingerprint(props) if props is not None else ''
+                if (id(node) in self.claimed or not self.plain_spacing_paragraph(slot, unused_tab_stops=True)
+                        or not self.tab_source_visible(slot) or style is not None and current != style):
+                    break
+                style = current; slots.append(slot); node = node.getnext()
+            if not 2 <= len(slots) <= 20:
+                continue
+            relation = {'relation': 'optional_response_band', 'question': text,
+                        'source': {'part': caption.part, 'slot': caption.path,
+                                   'fingerprint': fingerprint(caption.el)}}
+            reason = ''
+            if (signing_place(text) or self.checkbox_source_action(text, governing=True)
+                    or self.question_box_authorship(text)):
+                reason = 'This optional response belongs to a human signing or authored act; keep it unchanged.'
+            area = Area('long_text', clean_label(text), slots[0], {'type': 'paragraph'},
+                        context=self.context_for(caption), extra_slots=slots[1:], label_slot=caption,
+                        complete_source=True, source_questions=[relation], protection=reason)
+            area.source_action = bool(reason)
+            self.add(area); self.claimed.update(id(s.el) for s in [caption, *slots])
+
     # 7. blanks and 'Label:' answers inside paragraphs ---------------------------------------------------------------
     def literal_reference_link(self, text, pieces, start, end):
         """A printed address equal to its hyperlink target is fixed reference ink."""
@@ -8774,11 +8827,13 @@ class Detector:
         """An insertion's printed source has no control, wrapper or foreign ink."""
         unsafe = {SDT, FLDCHAR, q('w:instrText'), q('w:hyperlink'), TXBX, q('w:drawing'),
                   q('w:pict'), q('w:object'), q('w:customXml'), q('w:ins'), q('w:del'),
-                  q('w:moveFrom'), q('w:moveTo'), q('w:sectPr'), q('w:br')}
+                  q('w:moveFrom'), q('w:moveTo'), q('w:sectPr')}
         return (slot.parent is None and slot.el.getparent() is not None
                 and slot.el.getparent().tag == q('w:body')
                 and not any(not isinstance(node.tag, str) or node.tag in unsafe
                             or not node.tag.startswith('{' + W + '}') for node in slot.el.iter())
+                and all(node.get(q('w:type')) in (None, 'textWrapping')
+                        for node in slot.el.iter(q('w:br')))
                 and self.tab_source_visible(slot))
 
     def explicit_insertion_spans(self, slot, text, pieces):
@@ -8969,8 +9024,16 @@ class Detector:
         blanks = merge_spans(blanks)
         if not blanks:
             return 0
+        # A heading style cannot erase separate, physically delimited answer
+        # captions. Both complete labels must name fields and the first must
+        # own an actual inline gap before the next printed label.
+        paired_captions = (len(blanks) >= 2 and all(k == 'after_label' for _, _, k in blanks)
+                           and all(FIELDISH.search(clean_label(text[blanks[n - 1][1] if n else 0:start]))
+                                   for n, (start, _, _) in enumerate(blanks))
+                           and all('\t' in text[start:end] or end - start >= 3
+                                   for start, end, _ in blanks[:-1]))
         if self.is_heading(slot.el) and all(k == "after_label" for _, _, k in blanks) \
-                and not format_hint:
+                and not format_hint and not paired_captions:
             return 0
         prose_words = len(re.findall(r"[A-Za-z]{2,}", "".join(ch for i, ch in enumerate(text)
                                                              if not any(s0 <= i < e0 for s0, e0, _ in blanks))))
@@ -9078,8 +9141,81 @@ class Detector:
 
     # Protected signing structures: enumerate them without claiming a visual layout engine.
     def rule_protected_signing_areas(self):
+        self.rule_inline_signing_lines()
         self.rule_signing_captions()
         self.rule_initial_boxes()
+
+    def rule_inline_signing_lines(self):
+        """Inline horizontal lines and their immediate signing captions stay human-owned.
+
+        This is a protected-source inventory, never a new writable drawing
+        contract. Anchored shapes, text boxes and a partial caption do not
+        establish a correspondence. Modern/fallback drawings stay untouched.
+        """
+        wp = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+        a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        for slot in (s for s in self.index.slots if s.kind == 'p'):
+            if self.ptext(slot.el)[0].strip() or not self.tab_source_visible(slot):
+                continue
+            drawings = [n for n in slot.el.iter('{%s}inline' % wp)
+                        if not any(p.tag == FALLBACK for p in n.iterancestors())]
+            if len(drawings) < 1 or len(drawings) > 8 or slot.el.find('.//{%s}anchor' % wp) is not None:
+                continue
+            geometry = []
+            for drawing in drawings:
+                extent = drawing.find('{%s}extent' % wp)
+                transforms = list(drawing.iter('{%s}xfrm' % a))
+                shapes = list(drawing.iter('{%s}prstGeom' % a))
+                if (extent is None or len(transforms) != 1 or len(shapes) != 1
+                        or shapes[0].get('prst') != 'line'
+                        or drawing.find('.//' + TXBX) is not None):
+                    break
+                size = transforms[0].find('{%s}ext' % a)
+                try:
+                    width, height = int(extent.get('cx')), int(extent.get('cy'))
+                    if size is None or int(size.get('cy')) != 0 or int(size.get('cx')) != width:
+                        break
+                except (TypeError, ValueError):
+                    break
+                if width <= 0 or height < 0 or height > 12700:
+                    break
+                geometry.append({'width': width, 'height': height, 'fingerprint': fingerprint(drawing)})
+            if len(geometry) != len(drawings):
+                continue
+            following = slot.el.getnext()
+            caption = self.index.by_el.get(id(following)) if following is not None else None
+            if (caption is None or caption.kind != 'p' or caption.parent is not slot.parent
+                    or not self.tab_source_visible(caption) or wraps_structure(caption.el)):
+                continue
+            text, pieces = self.ptext(caption.el)
+            labels = [clean_label(x) for x in re.split(r'\t+', text) if x.strip()]
+            if (len(labels) != len(drawings) or not any(signing_place(label) for label in labels)
+                    or any(not FIELDISH.search(label) for label in labels)
+                    or self.blank_spans(text, pieces) or self.box_units(caption)):
+                continue
+            reason = ('These printed inline lines belong to a human signing event. '
+                      'Keep the signature, signing date and captions unchanged.')
+            source = {'part': caption.part, 'slot': caption.path, 'fingerprint': fingerprint(caption.el)}
+            relation = {'relation': 'protected_inline_signing_lines', 'question': text,
+                        'source': source, 'drawings': geometry}
+            for number, label in enumerate(labels, 1):
+                area = Area(self.kind_for(label), label, slot, {'type': 'none', 'drawing': number},
+                            context=self.context_for(caption), protection=reason,
+                            structural=True, label_slot=caption, source_questions=[relation])
+                area.source_action = True
+                self.add(area)
+            self.claimed.update((id(slot.el), id(caption.el)))
+            self.protected_regions.update((slot.id, caption.id))
+            # The previous detector borrowed the combined caption to invent a
+            # date on the immediately following empty paragraph. That spacer
+            # is part of this preserved signing band, not an ordinary answer.
+            after = caption.el.getnext()
+            spacer = self.index.by_el.get(id(after)) if after is not None else None
+            if (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
+                    and self.plain_spacing_paragraph(spacer, unused_tab_stops=True)):
+                self.claimed.add(id(spacer.el))
+                self.protected_regions.add(spacer.id)
+            self.notes.append(reason + ' Location: ' + slot.id)
 
     def rule_signing_captions(self):
         for slot in [s for s in self.index.slots if s.kind == "p"]:
@@ -9364,6 +9500,8 @@ def inspect(data: bytes) -> dict:
     package = open_package(data)
     detector = Detector(package)
     areas, notes = detector.detect()
+    if detector.source_guidance_areas:
+        notes.append("The original form's embedded instructions and navigation are preserved separately from clinical answers.")
     fields = mapped_fields(detector, areas)
     # A checkbox group's claim must not hide separate writable blanks on its
     # paragraph (for example two distinct write-ins after the last option).
@@ -9381,6 +9519,7 @@ def inspect(data: bytes) -> dict:
                 if detail not in notes:notes.append(detail)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
             "coverage_issues": detector.coverage_issues,
+            "preserved_source_guidance": preserved_source_guidance(detector),
             "layout_quarantine": detector.layout_quarantine,
             "layout_pending": len(detector.layout_candidates)}
 
@@ -10546,24 +10685,52 @@ def ff_text_protection(begin_run):
     info = ff_info(data)
     if info["max_chars"] == -1:
         return "This legacy input has an unsupported native maximum length. Its original value remains unchanged."
+    if ff_source_guidance(begin_run):
+        return ("This tiny blank legacy control carries source guidance in its help text. "
+                "It remains protected, with its original value, help and navigation intact.")
+    return ""
+
+
+def ff_source_guidance(begin_run):
+    """The existing exact microtype guidance contract, independent of answer kind.
+
+    A normal one-character field, a named control, a printed question, a table
+    cell, existing content or even one ordinary-sized run is not guidance.
+    """
+    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
+    if data.find(q("w:textInput")) is None:
+        return False
+    info = ff_info(data)
     default = data.find(q("w:textInput") + "/" + q("w:default"))
     paragraph = next(begin_run.iterancestors(q("w:p")), None)
     if (info["max_chars"] != 1 or info.get("name") or info.get("input_type") != "regular" or
             default is None or (default.get(q("w:val")) or "").strip() or not ff_literal_help(begin_run).strip() or
             paragraph is None or text_of(paragraph).strip() or next(paragraph.iterancestors(q("w:tc")), None) is not None):
-        return ""
+        return False
     runs, end = _field_result_runs(begin_run)
     if not runs or any(text_of(r).strip() for r in runs):
-        return ""
+        return False
     for run in [begin_run] + _siblings_between(begin_run, end) + [end]:
         if run.tag != R:
-            return ""
+            return False
         for tag in ("w:sz", "w:szCs"):
             size = run.find(q("w:rPr") + "/" + q(tag))
             if size is None or size.get(q("w:val")) not in ("1", "2"):
-                return ""
-    return ("This tiny blank legacy control carries source guidance in its help text. "
-            "It remains protected, with its original value, help and navigation intact.")
+                return False
+    return True
+
+
+def preserved_source_guidance(detector):
+    """Version-bound evidence for controls preserved outside the answer mapping."""
+    records = []
+    for area in detector.source_guidance_areas:
+        text = ff_literal_help(area.slot.el)
+        if len(text) > MAX_SOURCE_INSTRUCTION_CHARS:
+            fail("The complete legacy field help exceeds the supported metadata bound.", "mapping_limit")
+        records.append({"role": "source_guidance", "part": area.slot.part,
+                        "slot": area.slot.path, "fingerprint": fingerprint(area.slot.el),
+                        "text": text, "write_protected": True})
+    return records
 
 
 def write_ff_text(begin_run, answer):

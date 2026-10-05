@@ -53,6 +53,7 @@ def process_v3(workspace, request):
             found = word_v3.inspect(data)
             return {"format": "docx", "fields": found["fields"], "warnings": found["notes"] + V3_WARNINGS,
                     "coverage_issues": found.get('coverage_issues', []),
+                    "preserved_source_guidance": found.get('preserved_source_guidance', []),
                     "layout_quarantine": found.get('layout_quarantine'),
                     "layout_pending": found["layout_pending"],
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
@@ -888,6 +889,8 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
         coverage['block_generation'] = bool(preferred == 'legacy' and (
             coverage.get('legacy_omissions') or coverage.get('legacy_unmapped') or coverage.get('comparison_unresolved')))
     result = advanced if selected == 'v3' else legacy
+    if advanced and advanced.get('preserved_source_guidance'):
+        coverage['preserved_source_guidance'] = advanced['preserved_source_guidance']
     if selected == 'v3' and advanced.get('coverage_issues'):
         coverage['selected_engine_issues'] = advanced['coverage_issues']
         coverage['block_generation'] = True
