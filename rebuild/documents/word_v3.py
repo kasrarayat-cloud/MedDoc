@@ -1485,7 +1485,6 @@ INITIALS_DATE_PAIR = re.compile(
     r"(?:\binitials\b[^.;:?]*?" + _JOIN + r"\s*dated?\b|\binitial\s*" + _JOIN + r"\s*dated?\b"
     r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*initials?\b)" + _PAIR_CLOSES, re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
-OPTIONAL_RESPONSE_CAPTION = re.compile(r"[^:;?!\r\n]{1,160}\s*\(optional\)\s*:", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
 HEADING_STYLE = re.compile(r"^(?:heading|title|subtitle|toc)", re.I)
 LABEL_END = re.compile(r"[:?]\s*$|[–—-]\s*$")
@@ -8388,14 +8387,11 @@ class Detector:
                 # A printed bullet ending in a colon can own a flowing answer
                 # band. Its complete caption, rather than a word-count cutoff,
                 # is the source; two plain empty paragraphs prove the band.
-                # An explicit optional response caption is the same source
-                # relationship; its own emphasis does not style the band.
-                optional = not in_container and txt.rstrip().endswith(":") and OPTIONAL_RESPONSE_CAPTION.fullmatch(txt) is not None
                 narrative = (not in_container and txt.rstrip().endswith(":")
                              and (re.match(r"^[•●▪‣]\s+", txt) is not None
-                                  or self.list_info(ps.el) is not None or optional))
+                                  or self.list_info(ps.el) is not None))
                 props = ps.el.find(q('w:pPr'))
-                band_style = None if optional else (fingerprint(props) if props is not None else '')
+                band_style = fingerprint(props) if props is not None else ''
                 if not requested and self.ptext(ps.el)[0].rstrip("\n").endswith("\t"):
                     continue  # the actual inline tab is already its answer gap
                 cell = self.host_cell(ps)
@@ -8418,10 +8414,7 @@ class Detector:
                     if t2.strip() or id(nxt.el) in self.claimed or nxt.el.find(".//" + TXBX) is not None:
                         break
                     props = nxt.el.find(q('w:pPr'))
-                    current = fingerprint(props) if props is not None else ''
-                    if narrative and band_style is None:
-                        band_style = current  # the first blank sets the band's uniform style
-                    if narrative and current != band_style:
+                    if narrative and (fingerprint(props) if props is not None else '') != band_style:
                         break  # a style/spacing transition is a different layout band
                     blanks.append(nxt)
                     if not in_container and not narrative and len(blanks) >= 1:
@@ -8455,7 +8448,8 @@ class Detector:
                     # 'signature ... date' caption never yields an ordinary
                     # writable date, whatever drew its signing line. A
                     # signature-kind area is already never filled.
-                    role = signing_place(label) or ('signature' if SIGNATURE.search(label) else '')
+                    role = signing_place(label) or ('signature' if SIGNATURE.search(label)
+                                                    or self.temporal_source_action(label) else '')
                 relation = ({'relation': 'narrative_empty_band', 'question': self.ptext(ps.el)[0],
                              'source': {'part': ps.part, 'slot': ps.path, 'fingerprint': fingerprint(ps.el)}}
                             if narrative else self.write_request_source(ps) if requested else None)
@@ -8800,13 +8794,11 @@ class Detector:
         """An insertion's printed source has no control, wrapper or foreign ink."""
         unsafe = {SDT, FLDCHAR, q('w:instrText'), q('w:hyperlink'), TXBX, q('w:drawing'),
                   q('w:pict'), q('w:object'), q('w:customXml'), q('w:ins'), q('w:del'),
-                  q('w:moveFrom'), q('w:moveTo'), q('w:sectPr')}
+                  q('w:moveFrom'), q('w:moveTo'), q('w:sectPr'), q('w:br')}
         return (slot.parent is None and slot.el.getparent() is not None
                 and slot.el.getparent().tag == q('w:body')
                 and not any(not isinstance(node.tag, str) or node.tag in unsafe
                             or not node.tag.startswith('{' + W + '}') for node in slot.el.iter())
-                and all(node.get(q('w:type')) in (None, 'textWrapping')
-                        for node in slot.el.iter(q('w:br')))
                 and self.tab_source_visible(slot))
 
     def explicit_insertion_spans(self, slot, text, pieces):
@@ -8997,16 +8989,8 @@ class Detector:
         blanks = merge_spans(blanks)
         if not blanks:
             return 0
-        # A heading style cannot erase separate, physically delimited answer
-        # captions. Both complete labels must name fields and the first must
-        # own an actual inline gap before the next printed label.
-        paired_captions = (len(blanks) >= 2 and all(k == 'after_label' for _, _, k in blanks)
-                           and all(FIELDISH.search(clean_label(text[blanks[n - 1][1] if n else 0:start]))
-                                   for n, (start, _, _) in enumerate(blanks))
-                           and all('\t' in text[start:end] or end - start >= 3
-                                   for start, end, _ in blanks[:-1]))
         if self.is_heading(slot.el) and all(k == "after_label" for _, _, k in blanks) \
-                and not format_hint and not paired_captions:
+                and not format_hint:
             return 0
         prose_words = len(re.findall(r"[A-Za-z]{2,}", "".join(ch for i, ch in enumerate(text)
                                                              if not any(s0 <= i < e0 for s0, e0, _ in blanks))))
@@ -9185,7 +9169,7 @@ class Detector:
             after = caption.el.getnext()
             spacer = self.index.by_el.get(id(after)) if after is not None else None
             if (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
-                    and self.plain_spacing_paragraph(spacer, unused_tab_stops=True)):
+                    and not self.ptext(spacer.el)[0].strip()):
                 self.claimed.add(id(spacer.el))
                 self.protected_regions.add(spacer.id)
             self.notes.append(reason + ' Location: ' + slot.id)

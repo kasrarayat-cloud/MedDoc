@@ -58,7 +58,8 @@ def line_run(number, *, width=2286000, height=0, prst='line', anchored=False, te
     return etree.fromstring('<w:r %s>%s</w:r>' % (DECLARED, drawing))
 
 
-def drawn_band(caption='Signature of Patient or Representative\t\t\tDate', *, lines=2, spacer=True, **shape):
+def drawn_band(caption='Signature of Patient or Representative\t\t\tDate', *, lines=2, spacer=True, spacer_xml='',
+               **shape):
     """Clinical summary / drawn lines / caption below / spacer / ordinary visit date."""
     doc = Document()
     doc.add_paragraph('Clinical summary: ________')
@@ -69,7 +70,10 @@ def drawn_band(caption='Signature of Patient or Representative\t\t\tDate', *, li
         paragraph._p.append(line_run(number + 1, **shape))
     doc.add_paragraph(caption)
     if spacer:
-        doc.add_paragraph()
+        blank = doc.add_paragraph()
+        if spacer_xml:
+            for node in etree.fromstring('<w:wrap %s>%s</w:wrap>' % (DECLARED, spacer_xml)):
+                blank._p.append(node)
     doc.add_paragraph('Visit date: ________')
     return data(doc)
 
@@ -146,139 +150,111 @@ class DrawnSigningBand(unittest.TestCase):
         self.assertFalse([f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
                                                    for r in f.get('source_questions', []))])
 
+    def test_a_blank_under_the_drawn_caption_stays_held_whatever_its_empty_formatting(self):
+        variants = {'tab only': '<w:r><w:tab/></w:r>',
+                    'empty underlined run': '<w:r><w:rPr><w:u w:val="single"/></w:rPr></w:r>',
+                    'underlined paragraph mark': '<w:pPr><w:rPr><w:u w:val="single"/></w:rPr></w:pPr>'}
+        for name, xml in variants.items():
+            with self.subTest(name):
+                raw = drawn_band(spacer_xml=xml)
+                fields = word.inspect(raw)['fields']
+                self.assertFalse([f for f in fields if f['locator']['slot'] == 'b/p[3]'])
+                blank = word.SlotIndex(word.open_package(raw)).by_id[BODY + 'b/p[3]']
+                stored = {'key': 'v3_9', 'kind': 'date', 'label': 'Signature of Patient or Representative Date',
+                          'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[3]',
+                                                     'fingerprint': word.fingerprint(blank.el),
+                                                     'target': {'type': 'paragraph'}}}
+                with self.assertRaises(word.V3Failure):
+                    word.fill(raw, [stored], {'v3_9': '14/03/2026'})
+                with self.assertRaises(word.V3Failure):
+                    word.locate(raw, [{'kind': 'date', 'label': 'Date', 'slot': BODY + 'b/p[3]'}])
+
     def test_a_bare_date_caption_under_its_line_is_not_promoted_to_a_signing_event(self):
         raw = drawn_band(caption='Date', lines=1)
         fields = word.inspect(raw)['fields']
         self.assertFalse([f for f in fields if f.get('write_protected')])
 
 
-def optional_band(caption='Additional information (optional):', blanks=8, *, bold=True, break_at=None,
-                  then='Sign below to show you received this notice.'):
+def caption_over_blank(caption, style=None):
     doc = Document()
-    doc.add_paragraph('Patient number: ________')
-    paragraph = doc.add_paragraph()
-    paragraph.add_run(caption).bold = bold
-    for number in range(blanks):
-        blank = doc.add_paragraph()
-        if break_at is not None and number >= break_at:
-            blank.paragraph_format.space_after = Pt(18)
-    doc.add_paragraph(then)
+    doc.add_paragraph('Clinical summary: ________')
+    doc.add_paragraph(caption, style=style) if style else doc.add_paragraph(caption)
+    doc.add_paragraph()
+    doc.add_paragraph('Plan: ____________')
     return data(doc)
 
 
-def body_paragraphs(raw):
-    package = word.open_package(raw)
-    return list(package.tree('word/document.xml').find(word.q('w:body')).iterchildren(word.q('w:p')))
+class SigningCaptionHold(unittest.TestCase):
+    """The blank below a printed signing caption belongs to that signing act."""
+
+    def below(self, raw):
+        return [f for f in word.inspect(raw)['fields'] if f['locator']['slot'] == 'b/p[2]']
+
+    def test_signing_event_captions_hold_the_blank_below(self):
+        for caption in ('Signature of Patient or Representative\t\t\tDate', 'Patient signature\t\t\tDate',
+                        'Date of signing:', 'Date participant signs:', 'Date witness initials:',
+                        'Date consent granted:', 'Date of signatures:'):
+            with self.subTest(caption):
+                raw = caption_over_blank(caption)
+                fields = word.inspect(raw)['fields']
+                below = [f for f in fields if f['locator']['slot'] == 'b/p[2]']
+                for field in below:
+                    self.assertTrue(field.get('write_protected') or field['kind'] in ('signature', 'initials'), field)
+                    if field.get('write_protected'):
+                        with self.assertRaises(word.V3Failure):
+                            word.fill(raw, fields, {field['key']: '14/03/2026'})
+
+    def test_ordinary_date_captions_keep_their_writable_blank(self):
+        for caption in ('Date of assessment:', 'Visit date:', 'Date of birth:', 'Date of procedure:'):
+            with self.subTest(caption):
+                raw = caption_over_blank(caption)
+                fields = word.inspect(raw)['fields']
+                below = [f for f in fields if f['locator']['slot'] == 'b/p[2]']
+                self.assertEqual([f.get('write_protected', False) for f in below], [False] * len(below))
+                if below:
+                    final = word.fill(raw, fields, {below[0]['key']: '14/03/2026'})
+                    index = word.SlotIndex(word.open_package(final))
+                    self.assertIn('14/03/2026', word.paragraph_text(index.by_id[BODY + 'b/p[2]'].el)[0])
 
 
-class OptionalResponseBand(unittest.TestCase):
-    def band_field(self, raw):
-        return [f for f in word.inspect(raw)['fields']
-                if any(r.get('relation') == 'narrative_empty_band' for r in f.get('source_questions', []))]
+class WithdrawnRelaxationsKeepTheirReading(unittest.TestCase):
+    """Independent refutation (2026-10-05) showed three paragraph relaxations wrote into section titles, deleted
+    line breaks or blocked generation for ordinary forms; they were withdrawn. These are its counterexamples."""
 
-    def test_explicit_optional_caption_owns_its_uniform_blank_band(self):
-        raw = optional_band()
-        bands = self.band_field(raw)
-        self.assertEqual(len(bands), 1)
-        field = bands[0]
-        self.assertEqual((field['kind'], field['locator']['slot']), ('long_text', 'b/p[2]'))
-        self.assertEqual([x['slot'] for x in field['locator']['extra']], ['b/p[%d]' % n for n in range(3, 10)])
-        self.assertEqual(field['source_questions'][0]['source']['slot'], 'b/p[1]')
-        self.assertFalse([f for f in word.inspect(raw)['fields'] if f['locator']['slot'] == 'b/p[1]'])
-        final = word.fill(raw, [field], {field['key']: 'First synthetic line\nSecond synthetic line'})
-        old, new = body_paragraphs(raw), body_paragraphs(final)
-        self.assertEqual(len(old), len(new))
-        for number in (0, 1, 10):
-            self.assertEqual(word.fingerprint(old[number]), word.fingerprint(new[number]), number)
-        self.assertEqual(word.text_of(new[2]), 'First synthetic line')
-        self.assertEqual(word.text_of(new[3]), 'Second synthetic line')
-
-    def test_style_transition_ends_the_band_and_one_blank_is_no_band(self):
-        field = self.band_field(optional_band(break_at=3))[0]
-        self.assertEqual([x['slot'] for x in field['locator']['extra']], ['b/p[3]', 'b/p[4]'])
-        self.assertFalse(self.band_field(optional_band(blanks=1)))
-
-    def test_signature_optional_caption_never_yields_an_ordinary_answer(self):
-        raw = optional_band(caption='Representative signature (optional):')
-        fields = word.inspect(raw)['fields']
-        for field in fields:
-            if field['locator']['slot'] in ['b/p[%d]' % n for n in range(1, 10)]:
-                self.assertTrue(field['kind'] in ('signature', 'initials') or field.get('write_protected'), field)
-
-    def test_caption_without_the_optional_request_keeps_its_existing_reading(self):
-        self.assertFalse(self.band_field(optional_band(caption='Additional information:')))
-
-    def test_a_second_writer_inside_the_band_is_refused(self):
-        raw = optional_band()
-        field = self.band_field(raw)[0]
-        third = word.SlotIndex(word.open_package(raw)).by_id[BODY + 'b/p[4]']
-        forged = {'key': 'v3_99', 'kind': 'text', 'label': 'Other note', 'context': '',
-                  'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[4]',
-                              'fingerprint': word.fingerprint(third.el), 'target': {'type': 'paragraph'}}}
-        with self.assertRaises(word.V3Failure):
-            word.fill(raw, [field, forged], {field['key']: 'Band answer', 'v3_99': 'Forged'})
-
-
-def broken_insertion(kind=None):
-    doc = Document()
-    paragraph = doc.add_paragraph()
-    paragraph.add_run('Coverage of your current {insert type}')
-    brk = OxmlElement('w:br')
-    if kind:
-        brk.set(qn('w:type'), kind)
-    paragraph.add_run()._r.append(brk)
-    paragraph.add_run('services will end on {insert effective date}')
-    doc.add_paragraph('Fixed following text.')
-    return data(doc)
-
-
-class WrappedInsertion(unittest.TestCase):
-    def insertions(self, raw):
-        return [f for f in word.inspect(raw)['fields']
-                if any(r.get('relation') == 'explicit_insertion' for r in f.get('source_questions', []))]
-
-    def test_ordinary_line_break_keeps_both_insertions_and_the_break(self):
-        for kind in (None, 'textWrapping'):
-            with self.subTest(kind):
-                raw = broken_insertion(kind)
-                fields = self.insertions(raw)
-                self.assertEqual(sorted(f['label'] for f in fields), ['effective date', 'type'])
-                answers = {f['key']: ('14/03/2026' if f['kind'] == 'date' else 'home health') for f in fields}
-                final = word.fill(raw, fields, answers)
-                paragraph = body_paragraphs(final)[0]
-                self.assertEqual(word.paragraph_text(paragraph)[0],
-                                 'Coverage of your current home health\nservices will end on 14/03/2026')
-                self.assertEqual(len(paragraph.findall('.//' + word.q('w:br'))), 1)
-                self.assertEqual(word.fingerprint(body_paragraphs(raw)[1]), word.fingerprint(body_paragraphs(final)[1]))
-
-    def test_page_and_column_breaks_are_never_crossed(self):
-        for kind in ('page', 'column'):
-            with self.subTest(kind):
-                self.assertFalse(self.insertions(broken_insertion(kind)))
-
-
-def heading(text, style='Heading 2'):
-    doc = Document()
-    doc.add_paragraph(text, style=style)
-    doc.add_paragraph('Fixed following text.')
-    return data(doc)
-
-
-class PairedHeadingCaptions(unittest.TestCase):
-    def test_two_complete_captions_with_real_gaps_keep_their_destinations(self):
-        fields = word.inspect(heading('Patient name:\t\t\t\t\tPatient number:'))['fields']
-        self.assertEqual([(f['label'], f['locator']['target'].get('shape')) for f in fields],
-                         [('Patient name', 'after_label'), ('Patient number', 'after_label')])
-        final = word.fill(heading('Patient name:\t\t\t\t\tPatient number:'), fields,
-                          {fields[0]['key']: 'Pat Example', fields[1]['key']: 'SYN-1'})
-        text = word.paragraph_text(body_paragraphs(final)[0])[0]
-        self.assertLess(text.index('Pat Example'), text.index('Patient number:'))
-        self.assertTrue(text.rstrip().endswith('SYN-1'))
-
-    def test_single_heading_caption_and_non_field_headings_stay_fixed(self):
-        for text in ('Patient name:', 'Section A:\t\t\tSection B:', 'Summary:\t\t\tDetails:'):
+    def test_heading_section_titles_with_field_words_stay_fixed(self):
+        for text, style in (('Patient Details:\t\t\t\tNext of Kin Details:', 'Heading 2'),
+                            ('Clinical Notes:\t\t\t\tNursing Notes:', 'Heading 2'),
+                            ('Patient name:\t\t\t\t\tPatient number:', 'Heading 2')):
             with self.subTest(text):
-                self.assertEqual(word.inspect(heading(text))['fields'], [])
+                doc = Document()
+                doc.add_paragraph(text, style=style)
+                doc.add_paragraph('Name: ____________________\t\tName: ____________________')
+                fields = word.inspect(data(doc))['fields']
+                self.assertFalse([f for f in fields if f['locator']['slot'] == 'b/p[0]'])
+
+    def test_a_request_wrapped_by_a_line_break_is_never_written_across_the_break(self):
+        doc = Document()
+        doc.add_paragraph('Notice to the patient.')
+        paragraph = doc.add_paragraph()
+        paragraph._p.append(etree.fromstring('<w:r %s><w:t>Enter</w:t><w:br/><w:t xml:space="preserve">the referring '
+                                             'clinician here</w:t></w:r>' % DECLARED))
+        doc.add_paragraph('Fixed following text.')
+        found = word.inspect(data(doc))
+        self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[1]'])
+
+    def test_optional_caption_over_irregular_blanks_keeps_its_own_answer_and_generation(self):
+        doc = Document()
+        doc.add_paragraph('Patient number: ________')
+        doc.add_paragraph('Allergies (optional):')
+        for _ in range(3):
+            doc.add_paragraph().add_run('\t')
+        doc.add_paragraph('Visit date: ________')
+        raw = data(doc)
+        found = word.inspect(raw)
+        self.assertFalse([i for i in found['coverage_issues'] if i['code'] == 'unresolved_narrative_band'])
+        caption = [f for f in found['fields'] if f['label'].startswith('Allergies')]
+        self.assertEqual(len(caption), 1)
+        word.fill(raw, found['fields'], {caption[0]['key']: 'Synthetic answer text'})
 
 
 if __name__ == '__main__':
