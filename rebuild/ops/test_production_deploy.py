@@ -1008,7 +1008,10 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # (client.messages.create(**wire), max_retries=0, inside run_one's try) and every definition but stop() and run_one's
 # exception handler are AST-identical; a refused part's hold is released instead of kept.
 BATCH_PRICED_MODULES = {
-    'core/generation_batch.py': '3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152',
+    # 2026-10-05 divided-calendar uniqueness addendum: constraints() adds only
+    # a pre-plan refusal. Removing that exact branch restores the previous
+    # complete module AST; request, plan_for, imports and prices are unchanged.
+    'core/generation_batch.py': '57718cc78ecca95a1b2987bd779373febf836a71883270ffd7b0d9d00fba808f',
     'core/batch_jobs.py': 'b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74',
 }
 

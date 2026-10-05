@@ -143,3 +143,31 @@ only `enqueue`, `resolve_view` and `recover_recorded` differ; every other top-le
 cannot be read), the whole-catalogue plan is refused rather than narrowed. `run_one`, the send boundary, is
 unchanged; no request, price, hold amount or send changed. `core/generation_batch.py` is unchanged (`1da9f91b…`).
 
+### Addendum 2026-10-05 — divided-calendar uniqueness admission only
+
+The final Word work adds one two-line refusal inside `generation_batch.constraints()`:
+`unique_values` rules involving a `temporal_band` destination refuse before a plan
+can be priced or sent. Different source-appointed date formats can display the
+same calendar date as different strings, so the existing string uniqueness
+reader cannot establish this constraint safely.
+
+The complete normalized C6 module identity was
+`3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152`.
+Removing exactly this new refusal restores that entire AST. All other top-level
+statements, imports, constants and definitions remain identical. In particular,
+`plan_for` calls `plan_constraints` before constructing or pricing parts; its
+per-part serialized request size plus 12,000, actual wire output cap, rates, US
+multiplier, ceiling, retail multiplier and complete charge sum are unchanged.
+`request`, `require_config`, partitions, ordinary request compilation and
+`batch_jobs.run_one` are unchanged. No model, request, retry, price or hold changes.
+
+Reviewed replacement normalized identity:
+`core/generation_batch.py`:
+`57718cc78ecca95a1b2987bd779373febf836a71883270ffd7b0d9d00fba808f`.
+
+The actual divided-date/ordinary-priority controls remain in
+`documents.test_temporal_band.TemporalBandOwnershipTests`; scanner controls
+reject removing the refusal, bypassing its admission call and the existing
+request/price/global-dependency undercharge mutations. Previous provider
+receipts retain their original source provenance; this addendum supplies no
+new paid witness or provider qualification.
