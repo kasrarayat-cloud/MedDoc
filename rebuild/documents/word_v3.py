@@ -8023,6 +8023,16 @@ class Detector:
                     continue
                 label = clean_label(txt)
                 requested = self.parenthetical_write_request(txt)
+                # A printed bullet ending in a colon can own a flowing answer
+                # band. Its complete caption, rather than a word-count cutoff,
+                # is the source; two plain empty paragraphs prove the band.
+                narrative = (not in_container and txt.rstrip().endswith(":")
+                             and (re.match(r"^[•●▪‣]\s+", txt) is not None
+                                  or self.list_info(ps.el) is not None))
+                props = ps.el.find(q('w:pPr'))
+                band_style = fingerprint(props) if props is not None else ''
+                if not requested and self.ptext(ps.el)[0].rstrip("\n").endswith("\t"):
+                    continue  # the actual inline tab is already its answer gap
                 cell = self.host_cell(ps)
                 if (requested and cell is not None and not signing_place(clean_label(txt.partition('(')[0]))
                         and self.row_label(cell.parent, cell.info['row'], cell.info['col'])):
@@ -8031,7 +8041,7 @@ class Detector:
                 if in_container:
                     if not (requested or txt.endswith(":") or signing or self.is_heading(ps.el) and len(paras) > i + 1):
                         continue
-                elif not ((signing or LONG_LABEL.search(label) and self.text(ps.el).rstrip("\n").endswith(":"))
+                elif not (narrative or (signing or LONG_LABEL.search(label) and self.text(ps.el).rstrip("\n").endswith(":"))
                           and len(label.split()) <= 12):
                     continue                      # (trailing spaces after the colon mean: answer on this line)
                 blanks = []
@@ -8042,10 +8052,23 @@ class Detector:
                     t2, pcs = self.ptext(nxt.el)
                     if t2.strip() or id(nxt.el) in self.claimed or nxt.el.find(".//" + TXBX) is not None:
                         break
+                    props = nxt.el.find(q('w:pPr'))
+                    if narrative and (fingerprint(props) if props is not None else '') != band_style:
+                        break  # a style/spacing transition is a different layout band
                     blanks.append(nxt)
-                    if not in_container and len(blanks) >= 1:
+                    if not in_container and not narrative and len(blanks) >= 1:
                         break
                 if not blanks:
+                    continue
+                if narrative and (len(blanks) < 2 or len(blanks) > 20
+                                  or not self.insertion_source_plain(ps)
+                                  or any(not self.plain_spacing_paragraph(b, unused_tab_stops=True)
+                                         or not self.tab_source_visible(b) for b in blanks)):
+                    if len(blanks) >= 2:
+                        for source in [ps, *blanks]:
+                            self.coverage_issue(source, 'unresolved_narrative_band',
+                                'This printed caption and blank band have unresolved structure or visibility; '
+                                'preserve them and review the exact source relationship.')
                     continue
                 if requested and (not self.tab_source_visible(ps) or self.question_box_paragraph(ps.el)[2]
                                   or any(not self.plain_spacing_paragraph(b, unused_tab_stops=True) or not self.tab_source_visible(b)
@@ -8058,9 +8081,12 @@ class Detector:
                 action = self.checkbox_source_action(head, governing=True) if requested else ''
                 kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
                     ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
+                relation = ({'relation': 'narrative_empty_band', 'question': self.ptext(ps.el)[0],
+                             'source': {'part': ps.part, 'slot': ps.path, 'fingerprint': fingerprint(ps.el)}}
+                            if narrative else self.write_request_source(ps) if requested else None)
                 area = Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),
-                            extra_slots=blanks[1:], label_slot=ps, complete_source=requested,
-                            source_questions=[self.write_request_source(ps)] if requested else [])
+                            extra_slots=blanks[1:], label_slot=ps, complete_source=requested or narrative,
+                            source_questions=[relation] if relation else [])
                 if role or action:
                     area.source_action = True
                     area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
@@ -8358,6 +8384,62 @@ class Detector:
                     self.coverage_issue(paragraph, 'human_signing_action', area.protection)
                 self.add(area)
 
+    def insertion_source_plain(self, slot):
+        """An insertion's printed source has no control, wrapper or foreign ink."""
+        unsafe = {SDT, FLDCHAR, q('w:instrText'), q('w:hyperlink'), TXBX, q('w:drawing'),
+                  q('w:pict'), q('w:object'), q('w:customXml'), q('w:ins'), q('w:del'),
+                  q('w:moveFrom'), q('w:moveTo'), q('w:sectPr'), q('w:br')}
+        return (slot.parent is None and slot.el.getparent() is not None
+                and slot.el.getparent().tag == q('w:body')
+                and not any(not isinstance(node.tag, str) or node.tag in unsafe
+                            or not node.tag.startswith('{' + W + '}') for node in slot.el.iter())
+                and self.tab_source_visible(slot))
+
+    def explicit_insertion_spans(self, slot, text, pieces):
+        """Read explicit authoring slots, retaining their complete printed request.
+
+        Single braces require an insertion verb. They do not turn arbitrary
+        brace prose or printed choice menus into scalar answers. A whole-line
+        insertion also needs the explicit destination word 'here'.
+        """
+        candidates = [(m.start(), m.end(), m.group(1).strip(), False)
+                      for m in re.finditer(r'(?<!\{)\{([^{}\r\n]+)\}(?!\})', text)]
+        whole = re.fullmatch(r'\s*(?:insert|enter|type|add|specify)\s+(.{1,160}?)\s+here\s*[.]?\s*', text, re.I)
+        if whole:
+            candidates.append((len(text) - len(text.lstrip()), len(text.rstrip()),
+                               text.strip().rstrip('.'), True))
+        spans = []
+        for opening in re.finditer(r'(?<!\{)\{(?:insert|enter|type|add|specify)\b', text, re.I):
+            if not any(start == opening.start() for start, _, _, _ in candidates):
+                self.coverage_issue(slot, 'unresolved_insertion_source',
+                    'This explicit insertion has unmatched or nested delimiters; preserve its original source.',
+                    start=opening.start(), end=len(text))
+        for start, end, printed, full in candidates:
+            request = re.fullmatch(r'(?:insert|enter|type|add|specify)\s+([^{}\[\]<>;?!\r\n]{1,160})', printed, re.I)
+            if not request:
+                if re.match(r'^(?:insert|enter|type|add|specify)\b', printed, re.I):
+                    self.coverage_issue(slot, 'unresolved_insertion_source',
+                        'This explicit insertion exceeds the supported request grammar; preserve its exact source.',
+                        start=start, end=end)
+                continue
+            argument = request[1].strip()
+            if full:
+                argument = re.sub(r'\s+here$', '', argument, flags=re.I)
+            # A slash between author descriptors can qualify one scalar
+            # identifier ('provider/plan telephone number'). A slash-only
+            # menu, a selection instruction or competing alternatives cannot.
+            slash_scalar = re.fullmatch(r'[\w-]+/[\w-]+\s+(?:[\w-]+\s+){0,8}(?:number|address|identifier)', argument, re.I)
+            ambiguous = (OPTION_SELECTION.search(argument) or re.search(r'\b(?:or|either|neither)\b', argument, re.I)
+                         or '/' in argument and not slash_scalar)
+            if (ambiguous or not self.insertion_source_plain(slot)
+                    or hyperlink_write(pieces, start, end)):
+                self.coverage_issue(slot, 'unresolved_insertion_source',
+                    'This explicit insertion needs review of its exact source role or alternatives; preserve it unchanged: '
+                    + text[start:end], start=start, end=end)
+                continue
+            spans.append((start, end, 'insertion'))
+        return spans
+
     def rule_paragraph_fields(self):
         pending, pending_last = None, None     # a multi-line answer area and its last line
         for slot in [s for s in self.index.slots if s.kind == "p"]:
@@ -8369,9 +8451,10 @@ class Detector:
             if cell is not None and id(cell.el) in self.claimed:
                 continue
             text, pieces = self.ptext(p)
-            spans = self.blank_spans(text, pieces)
+            spans = merge_spans(self.explicit_insertion_spans(slot, text, pieces)
+                                + self.blank_spans(text, pieces))
             residue = "".join(ch for i, ch in enumerate(text) if not any(s <= i < e for s, e, _ in spans))
-            if len(spans) == 1 and not clean_label(residue.replace("_", "")):
+            if len(spans) == 1 and spans[0][2] != 'insertion' and not clean_label(residue.replace("_", "")):
                 # a line that is ONLY a drawn blank: continues the previous line's area, or takes the label above
                 sibs, idx = self.para_neighbours(slot)
                 prev_sib = sibs[idx - 1] if idx else None
@@ -8392,7 +8475,7 @@ class Detector:
                     # sibling answer, never this blank's question: the header names it (refutation 2026-09-28 B1).
                     header = clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
                     label = self.row_label(cell.parent, cell.info["row"], cell.info["col"], values=not header) or header
-                if not label and spans[0][2] in ("angle", "bracket", "token"):
+                if not label and spans[0][2] in ("angle", "bracket", "token", "insertion"):
                     label = clean_label(text[spans[0][0]:spans[0][1]].strip("{}[]<> "))
                 label = label or "Answer"
                 area = Area(self.kind_for(label), label, slot, {"type": "span", "start": spans[0][0], "end": spans[0][1],
@@ -8516,6 +8599,23 @@ class Detector:
             seg = re.split(r"[\x00" + BOX + CHECKED + "]", seg)[-1]
             seg = re.split(r"(?<=[.;!?])\s+(?=[A-Z(])", seg.strip())[-1]
             label = clean_label(seg)
+            if kind == 'insertion':
+                argument = re.sub(r'^(?:insert|enter|type|add|specify)\s+', '',
+                                  text[s:e].strip('{} ').rstrip('.'), flags=re.I)
+                argument = re.sub(r'\s+here$', '', argument, flags=re.I)
+                label = clean_label(argument)
+                whole = not text[:s].strip() and not text[e:].strip()
+                relation = {'relation': 'explicit_insertion', 'question': text,
+                            'request': text[s:e], 'source': {'part': slot.part, 'slot': slot.path,
+                                                           'fingerprint': fingerprint(slot.el)}}
+                physical_kind = self.kind_for(clean_label(seg)) if SIGNATURE.search(seg) or INITIALS.search(seg) else ''
+                self.add(Area(physical_kind or ('long_text' if whole else self.kind_for(label)), label, slot,
+                              {'type': 'span', 'start': s, 'end': e, 'shape': kind},
+                              context=self.context_for(slot), complete_source=True,
+                              source_questions=[relation]))
+                made += 1
+                prev_end = e
+                continue
             if kind in ("token", "bracket", "angle", "hint") and not label:
                 label = clean_label(re.sub(r"^(?:enter|insert|type|add|specify)\s+", "", text[s:e].strip("{}[]<> "), flags=re.I))
             elif kind in ("token", "bracket", "angle"):
@@ -10310,7 +10410,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                            for issue in source_detector.coverage_issues
                            if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
                                                 'unmapped_bracketed_source', 'named_selection_source',
-                                                'scalar_alternative_source')]
+                                                'scalar_alternative_source', 'unresolved_insertion_source',
+                                                'unresolved_narrative_band')]
     adjacent_answers = [area for area in source_detector.areas if any(
         relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
     temporal_answers = [area for area in source_detector.areas if any(
@@ -10368,6 +10469,20 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 and field.get('label') == area.label and field.get('context') == area.context
                 and field.get('options', []) == area.options
                 and field.get('source_questions', []) == area.source_questions)
+
+    for area in source_detector.areas:
+        if not any(r.get('relation') in ('explicit_insertion', 'narrative_empty_band')
+                   for r in area.source_questions):
+            continue
+        regions = [{'place': place[0], 'start': place[1], 'end': place[2]}
+                   for place in reader.of(area_to_field(1, area))]
+        if area.label_slot is not None:
+            regions.append({'place': area.label_slot.id, 'start': None, 'end': None})
+        active = [f for f in fields if answers.get(f['key']) not in (None, '', [])
+                  and any(reader.touches(place, region) for place in reader.of(f) for region in regions)]
+        if active and (len(active) != 1 or not exact_original_area(active[0], area)):
+            fail('This insertion requires its complete original request and exact answer band. '
+                 'Review the mapping again; its source and neighbors remain unchanged.', 'mapping_mismatch')
 
     for area in source_detector.areas:
         if not any(r.get('relation') == 'guided_response_row' for r in area.source_questions):
@@ -10479,6 +10594,11 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
                  "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        if target.get('shape') == 'insertion' and not any(
+                exact_original_area(field, area) for area in source_detector.areas
+                if any(r.get('relation') == 'explicit_insertion' for r in area.source_questions)):
+            fail('This insertion no longer matches its complete original request and span. '
+                 'Review the mapping again.', 'mapping_mismatch')
         for area in named_choices:
             relation = next(r for r in area.source_questions if r.get('relation') == 'named_selection_instruction')
             regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None} for ref in relation['sources']]
@@ -10686,7 +10806,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
-            elif relation.get('relation') == 'parenthetical_write_request':
+            elif relation.get('relation') in ('parenthetical_write_request', 'explicit_insertion', 'narrative_empty_band'):
                 refs = [relation.get('source')]
             elif relation.get('relation') == 'manual_numeric_part':
                 refs = [relation.get('source')]
