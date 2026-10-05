@@ -186,12 +186,14 @@ MAX_DEADLINE_SECONDS = 600
 #: standing_qa_transcription.TranscriptionRun; the others: sonnet5_stages.Run).
 STAGE_KIND = {'model_check': 'model_check', 'mapping': 'mapping', 'notes_comparison': 'ordinary_notes',
               'notes_qualification': 'ordinary_notes', 'elicited_qualification': 'ordinary_notes',
+              'word_structure_qualification': 'ordinary_notes',
               'd30_d31_structure': 'ordinary_notes', 'transcription': 'transcription', 'ordinary_batch': 'ordinary_batch'}
 #: The pricing keys each stage's sends are priced under (every one must be declared for a declared stage).
 STAGE_PRICING = {'model_check': ('model_check',), 'mapping': ('mapping',),
                  'notes_comparison': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'notes_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'elicited_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
+                 'word_structure_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'd30_d31_structure': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'transcription': ('transcription',), 'ordinary_batch': ('ordinary_notes', 'ordinary_notes_field_relations')}
 _ALL_OFF = {'QUILLMD_WM_NARRATIVE': '0', 'QUILLMD_V3_HISTORY_CONTEXT': '0', 'QUILLMD_V3_GENERATION_BATCHES': '0',
@@ -207,6 +209,7 @@ STAGE_FLAGS = {'model_check': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'legacy'},
                'notes_comparison': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'notes_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'elicited_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'word_structure_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'd30_d31_structure': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'ordinary_batch': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'transcription': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_DEEPGRAM_MIP_OPT_OUT': 'true',
@@ -397,6 +400,7 @@ def build_transcription_forms(target, inputs):
 WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
     'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
     'rebuild/ops/standing_qa_elicited.py', 'rebuild/ops/fixtures/elicited-qualification-v1.json',
+    'rebuild/ops/standing_qa_word_structure.py', 'rebuild/ops/fixtures/word-structure-qualification-v1.json',
     'rebuild/ops/standing_qa_batch.py', 'rebuild/ops/fixtures/ordinary-batch-101-v1.json',
     'rebuild/ops/fixtures/ordinary-batch-101-v1.docx', 'rebuild/core/batch_jobs.py',
     'rebuild/core/ordinary_source_scope.py', 'rebuild/core/reviewed_source.py',
@@ -901,6 +905,12 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
                 'The elicited stage requires its exact separately declared five-case synthetic freeze.')
     elif re.search(r'^elicited_fixture_manifest:', text, re.M):
         raise Refused('An elicited fixture declaration requires its own stage.')
+    if 'word_structure_qualification' in ids:
+        require(one('word_structure_fixture_manifest', r'([0-9a-f]{64})') == word_structure_module().MANIFEST_SHA256
+                and next(stage.sends for stage in stages if stage.id == 'word_structure_qualification') == 3,
+                'The Word structure stage requires its exact separately declared three-case synthetic freeze.')
+    elif re.search(r'^word_structure_fixture_manifest:', text, re.M):
+        raise Refused('A Word structure fixture declaration requires its own stage.')
     if 'notes_qualification' in ids:
         require(notes_review, 'The qualified-only stage requires the exact prospective notes mapping review.')
         require(next(stage.sends for stage in stages if stage.id == 'notes_qualification') == 14,
@@ -1084,6 +1094,14 @@ def elicited_module():
     return standing_qa_elicited
 
 
+def word_structure_module():
+    try:
+        from . import standing_qa_word_structure
+    except ImportError:
+        import standing_qa_word_structure
+    return standing_qa_word_structure
+
+
 def send_inputs(send, inputs):
     """{'form_sha256', 'notes_sha256'? | 'audio_sha256'?} of what `send` would put in a provider request: the fixed
     model-check case, a frozen mapping form, a frozen notes case, or an allowlisted synthetic recording and the frozen
@@ -1091,6 +1109,8 @@ def send_inputs(send, inputs):
     is known only once the transcription send has made them, and its generation attempt records it.)"""
     if send.group == 'elicited_qualification':
         return elicited_module().send_inputs(send, inputs)
+    if send.group == 'word_structure_qualification':
+        return word_structure_module().send_inputs(send, inputs)
     if send.path in batch_module().PATHS:
         return batch_module().send_inputs(send, inputs)
     if send.path == 'model_check':
@@ -1115,6 +1135,8 @@ def standing_plan(stage, inputs=None):
     Send = stages.Send
     if stage == 'elicited_qualification':
         return elicited_module().plan_sends(inputs)
+    if stage == 'word_structure_qualification':
+        return word_structure_module().plan_sends(inputs)
     if stage == 'ordinary_batch':
         return batch_module().plan_sends(inputs)
     if stage == 'model_check':
@@ -1175,6 +1197,7 @@ def plan_definitions(inputs):
     report = {}
     for stage in STAGE_KIND:
         own_inputs = (batch_module().frozen_inputs() if stage == 'ordinary_batch'
+                      else word_structure_module().frozen_inputs() if stage == 'word_structure_qualification'
                       else elicited_module().frozen_inputs() if stage == 'elicited_qualification' else inputs)
         try:
             sends = standing_plan(stage, own_inputs)
@@ -1203,6 +1226,9 @@ def stage_inputs(stage, declaration):
     if stage == 'elicited_qualification':
         require(declaration.stage(stage).sends == 5, 'The declaration does not admit the complete elicited plan.')
         return elicited_module().frozen_inputs()
+    if stage == 'word_structure_qualification':
+        require(declaration.stage(stage).sends == 3, 'The declaration does not admit the complete Word plan.')
+        return word_structure_module().frozen_inputs()
     if stage == 'ordinary_batch':
         return batch_module().frozen_inputs()
     inputs = sq.stages_module().frozen_inputs()
@@ -2013,6 +2039,8 @@ def price_sends(stage, sends, inputs, state_dir, declaration, limits=None):
     expect = declaration.expect(limits)
     if stage == 'elicited_qualification':
         return elicited_module().price_sends(sends, inputs, state_dir, declaration, limits)
+    if stage == 'word_structure_qualification':
+        return word_structure_module().price_sends(sends, inputs, state_dir, declaration, limits)
     if stage == 'ordinary_batch':
         return batch_module().price_sends(sends, inputs, state_dir, declaration, limits)
     forms = stages.build_forms(Path(state_dir) / 'forms', 'mapping' if stage == 'mapping' else 'ordinary_notes', inputs) \
@@ -2080,7 +2108,7 @@ def qualification_result(stage, record, stops):
     The new run's record explicitly distinguishes its stricter stop policy.
     Historical stages return the exact original object and stop decision.
     """
-    if stage not in ('notes_qualification', 'elicited_qualification') or stops:
+    if stage not in ('notes_qualification', 'elicited_qualification', 'word_structure_qualification') or stops:
         return record, stops
     verdict = record.get('verdict')
     require(isinstance(verdict, dict) and isinstance(verdict.get('unsafe'), list)
@@ -2143,12 +2171,13 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     require_none_stranded(stage, remaining)                 # (before anything is written: the historical rule)
     cap = limits.max_sends_per_run if max_sends is None else min(int(max_sends), limits.max_sends_per_run)
     require(cap > 0, 'A run makes at least one send.')
-    if stage in ('notes_qualification', 'elicited_qualification'):
+    if stage in ('notes_qualification', 'elicited_qualification', 'word_structure_qualification'):
         cap = min(cap, 1)  # Inspect each qualified result before any following request.
     selected = select_batch(remaining, cap)
     run = begin_run(campaign, stage, selected, inputs, cap, provenance)
     try:
         forms = (build_transcription_forms(root / 'forms' / stage, inputs) if transcribing
+                 else word_structure_module().build_forms(root / 'forms' / stage, inputs) if stage == 'word_structure_qualification'
                  else elicited_module().build_forms(root / 'forms' / stage, inputs) if stage == 'elicited_qualification'
                  else batch_module().build_forms(root / 'forms' / stage, inputs) if stage == 'ordinary_batch'
                  else stages.build_forms(root / 'forms' / stage, kind, inputs))
@@ -2166,6 +2195,7 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
             worker.planned = tr.planned_maxima(selected, declaration)
         else:
             worker_class = (elicited_module().ElicitedRun if stage == 'elicited_qualification'
+                            else word_structure_module().WordStructureRun if stage == 'word_structure_qualification'
                             else batch_module().BatchRun if stage == 'ordinary_batch' else stages.Run)
             worker = worker_class(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
                                 world=world, checked=checked, deadline=limits.request_deadline_seconds)
@@ -2348,7 +2378,7 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
         for name, entry in definitions.items():
             if not entry.get('established'):
                 continue
-            if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification') and not any(s.id == name for s in declaration.stages):
+            if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification', 'word_structure_qualification') and not any(s.id == name for s in declaration.stages):
                 entry['declared'] = False
                 continue
             if name == 'transcription':
@@ -2377,7 +2407,7 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                         for audio_id in declaration.transcription.inputs]
             else:
                 own_inputs = (stage_inputs(name, declaration)
-                              if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification') else inputs)
+                              if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification', 'word_structure_qualification') else inputs)
                 sends = standing_plan(name, own_inputs)
                 if name == 'notes_qualification':
                     entry['notes_mapping_review_manifest_sha256'] = own_inputs['notes_mapping_review_manifest_sha256']
@@ -2793,7 +2823,7 @@ def priced_plan(stage=None, path=None):
                 continue
             with override_settings(**expected_settings(name)):
                 own_inputs = (stage_inputs(name, declaration)
-                              if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification') else inputs)
+                              if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification', 'word_structure_qualification') else inputs)
                 priced = price_sends(name, standing_plan(name, own_inputs), own_inputs, Path(scratch) / name, declaration)
             report[name] = {send_id: {k: (format(v, 'f') if isinstance(v, Decimal) else v) for k, v in row.items()}
                             for send_id, row in priced.items()}
