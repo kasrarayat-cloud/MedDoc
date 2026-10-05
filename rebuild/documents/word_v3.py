@@ -26,6 +26,7 @@ import re
 import unicodedata
 import zipfile
 from dataclasses import dataclass, field as dfield
+from datetime import date
 
 from lxml import etree
 
@@ -2555,6 +2556,7 @@ class Detector:
         self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
+        self.rule_temporal_bands()
         self.rule_ruled_paragraphs()
         self.rule_parenthetical_write_cells()
         self.rule_lines_below_label(write_requests_only=True)
@@ -8196,6 +8198,78 @@ class Detector:
                    or cls.question_box_authorship(clause) or signing_place(clause)
                    for clause in clauses if clause.strip())
 
+    def temporal_band(self, slot):
+        """One caption, one divided blank and its own printed date-format guide.
+
+        The format's character positions appoint the blank runs, rather than
+        turning every run and separator into a separate question. All three
+        paragraphs must be immediate siblings in the same physical container.
+        """
+        siblings, at = self.para_neighbours(slot)
+        if at is None or at == 0 or at + 1 >= len(siblings):
+            return None
+        caption, guide = siblings[at - 1], siblings[at + 1]
+        if caption.el.getnext() is not slot.el or slot.el.getnext() is not guide.el:
+            return None
+        sources = (caption, slot, guide)
+        if (any(s.part != slot.part or s.parent is not slot.parent for s in sources)
+                or any(not self.tab_source_visible(s) or self.region_hidden(s.el) or wraps_structure(s.el)
+                       for s in sources)
+                or any(n.tag in (q('w:hyperlink'), q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                       for s in sources for n in s.el.iter())):
+            return None
+        label = self.ptext(caption.el)[0].strip()
+        pattern = re.sub(r'\s+', '', self.ptext(guide.el)[0]).lower()
+        if (pattern not in ('ddmmmyyyy', 'ddmmyyyy', 'mmddyyyy', 'yyyymmdd')
+                or not re.fullmatch(r'[^:;.!?\r\n]+:', label)
+                or not DATE_LABEL.search(label) or self.blank_spans(*self.ptext(caption.el))):
+            return None
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        if (len(spans) != len(pattern) or any(kind != 'utab' for _, _, kind in spans)
+                or any(text[start:end].strip() for start, end, _ in spans)):
+            return None
+        outside = ''.join(ch for n, ch in enumerate(text)
+                          if not any(start <= n < end for start, end, _ in spans))
+        # Only the date's two printed separators and optional fixed terminal
+        # punctuation surround these runs. Existing values are never blanks.
+        if re.sub(r'\s+', '', outside).rstrip('.') != '//':
+            return None
+        groups = re.findall(r'd+|m+|y+', pattern)
+        boundaries = {len(groups[0]), len(groups[0]) + len(groups[1])}
+        if any(text[spans[n - 1][1]:spans[n][0]].strip() != ('/' if n in boundaries else '')
+               for n in range(1, len(spans))):
+            return None
+        if self.box_units(slot) or len(label) > MAX_MAPPING_LABEL:
+            return None
+        context = self.context_for(caption, complete=True)
+        if len(context) > MAX_MAPPING_CONTEXT:
+            return None
+        refs = [{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)} for s in sources]
+        target = {'type': 'span', 'shape': 'temporal_band', 'start': spans[0][0], 'end': spans[-1][1],
+                  'parts': [[start, end] for start, end, _ in spans], 'format': pattern,
+                  'caption': refs[0], 'guide': refs[2]}
+        area = Area('date', clean_label(label), slot, target, context=context,
+                    complete_source=True, label_slot=caption)
+        if self.temporal_source_action(label) or self.kind_for(label) in SIGNING_KINDS:
+            area.source_action = True
+            area.protection = 'This date belongs to a printed human signing or authored act; keep it unchanged.'
+        return area
+
+    def rule_temporal_bands(self):
+        for slot in (s for s in self.index.slots if s.kind == 'p'):
+            area = self.temporal_band(slot)
+            if area is None:
+                continue
+            siblings, at = self.para_neighbours(slot)
+            sources = siblings[at - 1:at + 2]
+            if any(id(s.el) in self.claimed for s in sources):
+                continue
+            self.add(area)
+            self.claimed.update(id(s.el) for s in sources)
+            if area.protection:
+                self.coverage_issue(slot, 'human_signing_action', area.protection)
+
     def rule_temporal_format_pairs(self):
         """Two complete format paragraphs under their own aligned temporal caption.
 
@@ -9580,6 +9654,36 @@ def replace_range(p, start, end, answer, *, plain=True):
     return True
 
 
+def temporal_band_characters(answer, pattern):
+    """An explicit date, rendered in the original's printed format positions."""
+    months = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+    value = str(answer).strip()
+    iso = re.fullmatch(r'(\d{4})-(\d{2})-(\d{2})', value)
+    try:
+        if iso:
+            year, month, day = (int(part) for part in iso.groups())
+        else:
+            orders = {'ddmmmyyyy': ('dd', 'mmm', 'yyyy'), 'ddmmyyyy': ('dd', 'mm', 'yyyy'),
+                      'mmddyyyy': ('mm', 'dd', 'yyyy'), 'yyyymmdd': ('yyyy', 'mm', 'dd')}
+            order = orders[pattern]
+            widths = {'dd': r'\d{2}', 'mm': r'\d{2}', 'mmm': r'[A-Za-z]{3}', 'yyyy': r'\d{4}'}
+            match = re.fullmatch(r'\s*/\s*'.join('(' + widths[part] + ')' for part in order), value)
+            if match is None:
+                raise ValueError
+            parts = dict(zip(order, match.groups()))
+            year, day = int(parts['yyyy']), int(parts['dd'])
+            month = (next(n for n, word in enumerate(months, 1) if word.lower() == parts['mmm'].lower())
+                     if 'mmm' in parts else int(parts['mm']))
+        date(year, month, day)
+    except (ValueError, KeyError, StopIteration):
+        fail('This divided date needs a real YYYY-MM-DD value or its exact printed slash-separated format.',
+             'invalid_answer')
+    parts = {'dd': '%02d' % day, 'mm': '%02d' % month, 'mmm': months[month - 1], 'yyyy': '%04d' % year}
+    order = {'ddmmmyyyy': ('dd', 'mmm', 'yyyy'), 'ddmmyyyy': ('dd', 'mm', 'yyyy'),
+             'mmddyyyy': ('mm', 'dd', 'yyyy'), 'yyyymmdd': ('yyyy', 'mm', 'dd')}
+    return ''.join(parts[part] for part in order[pattern])
+
+
 def _rpr_from_mark(mark):
     """The paragraph mark's run properties, usable on a run."""
     if mark is None:
@@ -10633,6 +10737,19 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         for anchor in anchors:
             part = anchor.part
             if kind == "span":
+                if target.get('shape') == 'temporal_band':
+                    current = next((area for area in source_detector.areas
+                                    if area.slot.id == anchor.id and area.target == target), None)
+                    if current is None or current.kind != field.get('kind') or loc.get('extra'):
+                        fail('This divided date no longer owns its original caption, blank runs and format guide.',
+                             'mapping_mismatch')
+                    for ref in (target['caption'], target['guide']):
+                        resolve(ref['part'], ref['slot'], ref['fingerprint'])
+                    characters = temporal_band_characters(answer, target['format'])
+                    for (start, end), character in zip(target['parts'], characters):
+                        ops.append((anchor.el, start, lambda el=anchor.el, s=start, e=end, a=character:
+                                    replace_range(el, s, e, a), part))
+                    continue
                 s0, e0 = target["start"], target["end"]
                 if target.get("shape") == "after_label":
                     e0 = s0
@@ -11188,6 +11305,30 @@ def constrained_scalar_value(original, final, field, written, *, _source_detecto
         source, current = paragraph_text(before.el)[0], paragraph_text(after.el)[0]
         if target.get('shape') == 'numeric_part':
             return numeric_part_value(source, current, target.get('number'))
+        if target.get('shape') == 'temporal_band':
+            detector = _source_detector or Detector(original.package)
+            own = detector.index.by_id.get(identity)
+            area = detector.temporal_band(own) if own is not None else None
+            if area is None or area.target != target or field.get('kind') != 'date':
+                return None
+            expression, end = '', 0
+            for start, stop in target['parts']:
+                expression += re.escape(source[end:start]) + r'([A-Za-z0-9])'
+                end = stop
+            match = re.fullmatch(expression + re.escape(source[end:]), current)
+            if match is None:
+                return '' if not written and current == source else None
+            characters = ''.join(match.groups())
+            lengths = [len(part) for part in re.findall(r'd+|m+|y+', target['format'])]
+            pieces, at = [], 0
+            for length in lengths:
+                pieces.append(characters[at:at + length]); at += length
+            try:
+                if temporal_band_characters('/'.join(pieces), target['format']) != characters:
+                    return None
+            except V3Failure:
+                return None
+            return '/'.join(pieces)
         start, end = target.get("start"), target.get("end")
         if type(start) is not int or type(end) is not int or not 0 <= start <= end <= len(source):
             return None
