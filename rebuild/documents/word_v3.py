@@ -2874,7 +2874,7 @@ class Detector:
             if relation is None:
                 continue
             area.source_action = True
-            area.protection = ('This writing band has its own printed signature captions, but its divided runs have '
+            area.protection = ('Protected signing block: this writing band has its own printed signature captions, but its divided runs have '
                                'no verified one-to-one column ownership. Keep this band unchanged and review its '
                                'physical name, signature, date and time locations.')
             self.coverage_issue(area.slot, 'ambiguous_signing_band', area.protection,
@@ -8570,6 +8570,13 @@ class Detector:
         temporal = re.match(r'^(?:date|time)(?:\s+(?:of|for))?\s+(.+)$', text, re.I)
         if temporal:
             text = temporal[1]
+            # In a complete receipt predicate, "signed" modifies its object;
+            # it is not the actor's signing predicate. Coordination remains
+            # subject to the separate complete-clause action reader.
+            receipt = re.fullmatch(r'(?:[^:;.!?\r\n]+\s+)?(?:received|recorded|filed|stored)\s+'
+                r'(?:(?:the|a|an|this|that|these|those)\s+)?signed\s+[^:;.!?\r\n]+', text, re.I)
+            if receipt and not re.search(r'\b(?:and|or|but)\b', text, re.I):
+                return False
         if re.fullmatch(r'(?:signature|initials?|signing)(?:\s*\([^()]+\)|'
                         r'\s+(?:of|by)\s+[^:;.!?\r\n]+|\s+(?:date|time))?', text, re.I):
             return True

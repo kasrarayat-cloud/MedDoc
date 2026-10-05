@@ -268,7 +268,8 @@ class TemporalBandOwnershipTests(unittest.TestCase):
 
     def test_temporal_modifier_keeps_the_complete_signing_event_role(self):
         for caption in ('Date of witness signature:', 'Date of signing:', 'Date signed by recorder:',
-                        'Date participant signs:', 'Date witness initials:', 'Date consent granted:'):
+                        'Date participant signs:', 'Date witness initials:', 'Date consent granted:',
+                        'Date nurse signed report:'):
             with self.subTest(caption=caption):
                 raw = band_form(caption=caption); field = bands(raw)[0]
                 self.assertTrue(field.get('write_protected'))
@@ -276,7 +277,8 @@ class TemporalBandOwnershipTests(unittest.TestCase):
                 with self.assertRaises(word.V3Failure):
                     word.fill(raw, [forged], {field['key']: '2026-10-05'})
         for caption in ('Visit date:', 'Date of assessment:', 'Date recorder noted findings:',
-                        'Date signed report received:'):
+                        'Date signed report received:', 'Date received signed report:',
+                        'Date nurse received signed report:', 'Date nurse received the signed report:'):
             with self.subTest(caption=caption):
                 raw = band_form(caption=caption); field = bands(raw)[0]
                 self.assertFalse(field.get('write_protected'))
