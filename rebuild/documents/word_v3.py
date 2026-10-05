@@ -2556,6 +2556,7 @@ class Detector:
         self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
+        self.rule_captioned_blank_rows()
         self.rule_temporal_bands()
         self.rule_ruled_paragraphs()
         self.rule_parenthetical_write_cells()
@@ -2578,6 +2579,7 @@ class Detector:
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
+        self.guard_captioned_signing_bands()
         self.guard_action_participants()
         self.rule_scalar_alternatives()
         self.guard_numeric_bands()
@@ -2700,6 +2702,126 @@ class Detector:
             extent = ({'start': area.target['start'], 'end': area.target['end']}
                       if area.target.get('type') == 'span' else {})
             self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
+
+    def rule_captioned_blank_rows(self):
+        """Same-grid captions below blank answers own them before box heuristics.
+
+        Multiple complete field captions appoint the corresponding wide blank
+        cells. Matching narrow empty columns in both rows are physical spacing,
+        not separate checkbox questions borrowed from a neighboring caption.
+        """
+        for table in (s for s in self.index.slots if s.kind == 'tbl'):
+            rows = self.grid(table)
+            caption_rows = set()
+            for row in sorted(rows):
+                answers = sorted(rows[row], key=lambda c: c.info['col'])
+                captions = sorted(rows.get(row + 1, []), key=lambda c: c.info['col'])
+                if (len(answers) < 2 or len(answers) != len(captions)
+                        or any((a.info['col'], a.info['span']) != (c.info['col'], c.info['span'])
+                               for a, c in zip(answers, captions))
+                        or any(c.info['vmerge'] or self.cell_has_claim(c.el) or wraps_structure(c.el)
+                               or self.region_hidden(c.el) for c in answers + captions)
+                        or any(not self.is_empty_cell(c) for c in answers)):
+                    continue
+                pairs, spacers = [], []
+                for answer, caption in zip(answers, captions):
+                    ink = self.cell_text(caption)
+                    paragraphs = self.own_paragraphs(caption)
+                    if (not paragraphs or any(not self.tab_source_visible(p) for p in
+                                              self.own_paragraphs(answer) + paragraphs)
+                            or any(n.tag == q('w:hyperlink') for c in (answer, caption) for n in c.el.iter())):
+                        break
+                    if not ink:
+                        if not self.is_empty_cell(caption) or not self.is_narrow(table, answer) or not self.is_narrow(table, caption):
+                            break
+                        spacers.extend((answer, caption)); continue
+                    if (len(paragraphs) != 1 or len(ink) > 80 or not FIELDISH.search(ink)
+                            or is_option_word(ink) or re.search(r'[.;?!\r\n]', ink)
+                            or self.blank_spans(*self.ptext(paragraphs[0].el))
+                            or self.is_narrow(table, answer)):
+                        break
+                    # A complete conflicting caption above prevents automatic
+                    # orientation; repeated identical captions are consistent.
+                    above = [c for c in rows.get(row - 1, []) if row - 1 not in caption_rows
+                             if c.info['col'] == answer.info['col'] and c.info['span'] == answer.info['span']]
+                    if any(self.cell_text(c) and FIELDISH.search(self.cell_text(c))
+                           and self.is_label_cell(c) and clean_label(self.cell_text(c)) != clean_label(ink)
+                           for c in above):
+                        break
+                    pairs.append((answer, caption, paragraphs[0], ink))
+                else:
+                    if len(pairs) < 2:
+                        continue
+                    for answer, caption, paragraph, ink in pairs:
+                        relation = {'relation': 'caption_below_cell', 'question': ink,
+                                    'source': {'part': paragraph.part, 'slot': paragraph.path,
+                                               'fingerprint': fingerprint(paragraph.el)}}
+                        area = Area(self.kind_for(ink), clean_label(ink), answer, {'type': 'cell'},
+                                    context=self.context_for(answer, complete=True), complete_source=True,
+                                    label_slot=paragraph, source_questions=[relation])
+                        self.add(area)
+                    for source in answers + captions:
+                        self.claimed.update(id(n) for n in source.el.iter())
+                    for source in captions + spacers:
+                        self.protected_regions.add(source.id)
+                    caption_rows.add(row + 1)
+
+    def captioned_signing_band(self, slot):
+        """A divided writing band cannot borrow the preceding question's role.
+
+        Its own signature captions can follow it in the same paragraph or the
+        immediate sibling. Without measured column alignment they establish a
+        human-owned band, not which individual run is a name/date/signature.
+        """
+        if slot.kind != 'p' or not self.tab_source_visible(slot) or wraps_structure(slot.el):
+            return None
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        if len(spans) < 2 or any(kind not in ('utab', 'blank') for _, _, kind in spans):
+            return None
+        stop = spans[-1][1]
+        prefix = ''.join(ch for n, ch in enumerate(text[:stop])
+                         if not any(start <= n < end for start, end, _ in spans))
+        if prefix.strip():
+            return None
+        tail = text[stop:]
+        caption = slot
+        if not tail.strip():
+            node = slot.el.getnext()
+            caption = self.index.by_el.get(id(node)) if node is not None else None
+            if (caption is None or caption.kind != 'p' or caption.parent is not slot.parent
+                    or caption.part != slot.part or not self.tab_source_visible(caption)
+                    or wraps_structure(caption.el)):
+                return None
+            tail = self.ptext(caption.el)[0]
+        if any(n.tag == q('w:hyperlink') for source in (slot, caption) for n in source.el.iter()):
+            return None
+        labels = [label.strip() for label in re.split(r'\t+', tail) if label.strip()]
+        if not 1 <= len(labels) <= 4 or any(len(label) > 160 or re.search(r'[.;?!\r\n]', label) for label in labels):
+            return None
+        # A signature caption's head names the act. Incidental mentions in a
+        # printed name, receipt/status question or a past narrative do not.
+        signing = any(re.fullmatch(r'(?:signature|initials)(?:\s+(?:of|by)\s+[^:;.!?\r\n]+)?\s*:?',
+                                  label, re.I) for label in labels)
+        if not signing:
+            return None
+        return {'captions': labels, 'source': {'part': caption.part, 'slot': caption.path,
+                                             'fingerprint': fingerprint(caption.el)},
+                'start': spans[0][0], 'end': stop}
+
+    def guard_captioned_signing_bands(self):
+        for area in self.areas:
+            if area.slot.kind != 'p' or area.target.get('type') != 'span':
+                continue
+            relation = self.captioned_signing_band(area.slot)
+            if relation is None:
+                continue
+            area.source_action = True
+            area.protection = ('This writing band has its own printed signature captions, but its divided runs have '
+                               'no verified one-to-one column ownership. Keep this band unchanged and review its '
+                               'physical name, signature, date and time locations.')
+            self.coverage_issue(area.slot, 'ambiguous_signing_band', area.protection,
+                                start=relation['start'], end=relation['end'])
 
     def previous_continuous_paragraph(self, host):
         """Nearest substantive source across plain spacers or adjacent one-column rows only."""
@@ -10817,7 +10939,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 refs = relation["sources"]
             elif relation.get('relation') == 'adjacent_checkbox_answer':
                 refs = [relation.get('source'), relation.get('owner')]
-            elif relation.get('relation') in ('parenthetical_write_request', 'explicit_insertion', 'narrative_empty_band'):
+            elif relation.get('relation') in ('parenthetical_write_request', 'explicit_insertion', 'narrative_empty_band', 'caption_below_cell'):
                 refs = [relation.get('source')]
             elif relation.get('relation') == 'manual_numeric_part':
                 refs = [relation.get('source')]
