@@ -8429,8 +8429,12 @@ class Detector:
             # identifier ('provider/plan telephone number'). A slash-only
             # menu, a selection instruction or competing alternatives cannot.
             slash_scalar = re.fullmatch(r'[\w-]+/[\w-]+\s+(?:[\w-]+\s+){0,8}(?:number|address|identifier)', argument, re.I)
+            enclosed = any(m.start() < start and end < m.end()
+                           for m in re.finditer(r'\[[^\[\]\r\n]*\]', text))
+            alternatives = re.search(r'\}\s+or\s+\{|\]\s+or\s+\[', text, re.I)
             ambiguous = (OPTION_SELECTION.search(argument) or re.search(r'\b(?:or|either|neither)\b', argument, re.I)
-                         or '/' in argument and not slash_scalar)
+                         or '/' in argument and not slash_scalar or ':' in argument or ',' in argument
+                         or enclosed or alternatives)
             if (ambiguous or not self.insertion_source_plain(slot)
                     or hyperlink_write(pieces, start, end)):
                 self.coverage_issue(slot, 'unresolved_insertion_source',

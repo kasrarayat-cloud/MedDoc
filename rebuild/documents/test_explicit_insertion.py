@@ -73,7 +73,9 @@ class ExplicitInsertion(unittest.TestCase):
                 source = data(doc); fields = word.inspect(source)['fields']
                 self.assertEqual(len(fields), 1)
                 self.assertIn('555-0100', word.text_of(paragraphs(word.fill(source, fields, {fields[0]['key']: '555-0100'}))[0]))
-        for request in ('left/right', 'aspirin/warfarin', 'one or two', 'select a category'):
+        for request in ('left/right', 'aspirin/warfarin', 'one or two', 'select a category',
+                        'appropriate term: partially approved, denied',
+                        'appropriate term: denied, partially approved, stopped, reduced, suspended'):
             with self.subTest(request=request):
                 doc = Document(); doc.add_paragraph('Value {insert ' + request + '}.')
                 info = word.inspect(data(doc))
@@ -88,6 +90,16 @@ class ExplicitInsertion(unittest.TestCase):
                 self.assertFalse(any(f['locator']['target'].get('shape') == 'insertion' for f in info['fields']))
                 if 'insert' in printed:
                     self.assertTrue(any(i['code'] == 'unresolved_insertion_source' for i in info['coverage_issues']))
+
+    def test_insertions_inside_optional_wording_or_competing_placeholders_remain_held(self):
+        for printed in ('[If applicable, call {insert telephone number}.]',
+                        '{insert opening hours} or {website}',
+                        '{website} or {insert opening hours}'):
+            with self.subTest(printed=printed):
+                doc = Document(); doc.add_paragraph(printed)
+                info = word.inspect(data(doc))
+                self.assertFalse(any(f['locator']['target'].get('shape') == 'insertion' for f in info['fields']))
+                self.assertTrue(any(i['code'] == 'unresolved_insertion_source' for i in info['coverage_issues']))
 
     def test_hidden_linked_native_and_revision_sources_are_not_plain_insertions(self):
         for marker in ('hidden', 'hyperlink', 'sdt', 'ins'):
