@@ -43,6 +43,21 @@ INSTRUMENT_R4_FAMILIES = {'fixed33': {'dev_application_gate_v2.py': '32c30861a6a
  'native': {'dev_application_gate_native_v1.py': '3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5',
             'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
             'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5'}}
+INSTRUMENT_R5_VERSION = 'word48-shared-segmented-r5-v1'
+INSTRUMENT_R5_FAMILIES = {'fixed33': {'dev_application_gate_v2.py': 'c088b9ffdbd226002378def8816116d0c7ae91133c09f1f0e3b9798968b883a3',
+             'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'run_dev_application_gate_v2.py': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7'},
+ 'additiveDEV': {'dev_application_gate_v2.py': 'c088b9ffdbd226002378def8816116d0c7ae91133c09f1f0e3b9798968b883a3',
+                 'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+                 'run_dev_application_gate_v2.py': '94f4270a7618a9452c9a935b1da38c3d80762ea9dccc06bb2d70deea91294714'},
+ 'holdout': {'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'holdout-rights.json': 'dac2183e8263491ceccd402dba5bec9984186c3457c495bf964a95dd6679ff13',
+             'run_holdout_application.py': '0de47ec3c87ed690d6df6902bba8c5d271dba2b5d242e3f8a5dff211a8709bf9',
+             'holdout_application.py': 'eb547fc3a26b0d54a429ee5ba08fb2ed141225a6812a12c48cf0f02b4b081c8d',
+             'prepared-plan.json': '8008d18b5405227c373b6e0d6a0220877ff6a845387c531c291827f2c08a57f0'},
+ 'native': {'dev_application_gate_native_v1.py': '3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5',
+            'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+            'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5'}}
 FIXED_PROFILES = ('empty', 'ordinary', 'long')
 NATIVE_PROFILES = ('native-ordinary', 'native-long')
 
@@ -88,7 +103,7 @@ def integer(value):
 
 
 def validate_qualification_identity(version, families, fixed_helpers, peer_sha):
-    """Admit only the old identity or the separately reviewed r3/r4 instruments.
+    """Admit only the old identity or the separately reviewed r3/r4/r5 instruments.
 
     This is metadata admission, not a resource grant or qualification result.
     Every GT/scorer/profile/choice/render helper and the authenticated peer stays
@@ -100,6 +115,8 @@ def validate_qualification_identity(version, families, fixed_helpers, peer_sha):
         expected = INSTRUMENT_FAMILIES
     elif version == INSTRUMENT_R4_VERSION:
         expected = INSTRUMENT_R4_FAMILIES
+    elif version == INSTRUMENT_R5_VERSION:
+        expected = INSTRUMENT_R5_FAMILIES
     else:
         raise IntegrityError('Unsupported qualification instrument version.')
     require(families == expected, 'Qualification driver/workflow identity differs.')

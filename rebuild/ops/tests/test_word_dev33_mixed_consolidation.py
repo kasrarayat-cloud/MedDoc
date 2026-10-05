@@ -49,6 +49,24 @@ class VersionedInstrumentIdentity(unittest.TestCase):
         with self.assertRaises(adapter.IntegrityError):
             self.call(version=adapter.INSTRUMENT_R4_VERSION, families=changed)
 
+    def test_final_r5_preserves_old_r4_and_refuses_hybrid_hashes(self):
+        self.call(version=adapter.INSTRUMENT_R5_VERSION,
+                  families=copy.deepcopy(adapter.INSTRUMENT_R5_FAMILIES))
+        self.call(version=adapter.INSTRUMENT_R4_VERSION,
+                  families=copy.deepcopy(adapter.INSTRUMENT_R4_FAMILIES))
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(version=adapter.INSTRUMENT_R5_VERSION,
+                      families=copy.deepcopy(adapter.INSTRUMENT_R4_FAMILIES))
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(version=adapter.INSTRUMENT_R4_VERSION,
+                      families=copy.deepcopy(adapter.INSTRUMENT_R5_FAMILIES))
+        for family, files in adapter.INSTRUMENT_R5_FAMILIES.items():
+            for name in files:
+                changed = copy.deepcopy(adapter.INSTRUMENT_R5_FAMILIES)
+                changed[family][name] = '0' * 64
+                with self.assertRaises(adapter.IntegrityError):
+                    self.call(version=adapter.INSTRUMENT_R5_VERSION, families=changed)
+
     def test_unknown_version_and_hybrid_family_are_refused(self):
         with self.assertRaises(adapter.IntegrityError):
             self.call(version='word48-shared-segmented-r4-v1')
