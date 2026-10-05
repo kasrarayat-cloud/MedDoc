@@ -6,8 +6,10 @@ from io import StringIO
 import json
 from pathlib import Path
 import runpy
+import subprocess
 import sys
 import tempfile
+import textwrap
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -67,6 +69,97 @@ class DemoIdentityLiteralTests(unittest.TestCase):
             for changed in ({**actual, 'release': '0' * 40}, {**actual, 'surface': 'foreign'},
                             {**actual, 'status': 'failed'}, {**actual, 'extra': True}):
                 self.assertFalse(eval(predicate, {**scope, 'health': changed}))
+
+    def test_replayed_invitation_post_reaches_view_with_same_client_csrf(self):
+        # Minimal settings and middleware live in a child, leaving the parent
+        # test process's configured settings/application state untouched.
+        script = textwrap.dedent(r"""
+            import ast, json, re, socket, sys
+            from pathlib import Path
+            from types import SimpleNamespace
+            from django.conf import settings
+            settings.configure(SECRET_KEY='offline-synthetic-csrf-control',
+                ALLOWED_HOSTS=['testserver'], ROOT_URLCONF=__name__,
+                MIDDLEWARE=['django.middleware.csrf.CsrfViewMiddleware'],
+                INSTALLED_APPS=[], USE_I18N=False, DEBUG=False)
+            import django
+            django.setup()
+            from django.db.backends.base.base import BaseDatabaseWrapper
+            def forbidden(*args, **kwargs):
+                raise AssertionError('Unexpected DB/network operation')
+            socket.socket.connect = forbidden
+            BaseDatabaseWrapper.ensure_connection = forbidden
+            from django.http import HttpResponse
+            from django.middleware.csrf import get_token
+            from django.test import Client
+            from django.urls import path
+            visits = []
+            def login(request):
+                visits.append('login')
+                return HttpResponse('<input name="csrfmiddlewaretoken" value="' + get_token(request) + '">')
+            def closed(request):
+                visits.append('closed')
+                return HttpResponse(status=404)
+            def positive(request):
+                visits.append('positive')
+                return HttpResponse(status=200)
+            urlpatterns = [path('login/', login),
+                path('invite/closed-synthetic-token/', closed),
+                path('synthetic-positive/', positive)]
+            class Served:
+                def __init__(self): self.records = []
+                def client(self): return Client(enforce_csrf_checks=True)
+                def expect(self, client, port, path, status, method='GET', data=None, label=None):
+                    assert port == 9160
+                    response = client.post(path, data or {}) if method == 'POST' else client.get(path)
+                    self.records.append(response.status_code)
+                    assert response.status_code == status
+                    return response.content
+            def require(value, reason):
+                assert value, reason
+            source = Path(sys.argv[1])
+            tree = ast.parse(source.read_text())
+            main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'main')
+            functions = [node for node in main.body if isinstance(node, ast.FunctionDef) and node.name in ('csrf', 'post')]
+            assert len(functions) == 2
+            trial = next(node for node in ast.walk(main) if isinstance(node, ast.Try)
+                and any(isinstance(item, ast.Expr) and isinstance(item.value, ast.Call)
+                    and any(key.arg == 'label' and isinstance(key.value, ast.Constant)
+                        and key.value.value == 'invitation_replay_denied' for key in item.value.keywords)
+                    for item in node.body))
+            index = next(i for i, item in enumerate(trial.body)
+                if isinstance(item, ast.Expr) and isinstance(item.value, ast.Call)
+                and any(key.arg == 'label' and isinstance(key.value, ast.Constant)
+                    and key.value.value == 'invitation_replay_denied' for key in item.value.keywords))
+            replay = trial.body[index + 1:index + 3]
+            def context():
+                scope = {'re': re, 'auth': SimpleNamespace(require=require), 'confidential': [],
+                    'served': Served(), 'route': '/invite/closed-synthetic-token/'}
+                exec(compile(ast.Module(body=functions, type_ignores=[]), str(source), 'exec'), scope)
+                return scope
+            visits.clear(); scope = context()
+            try:
+                exec(compile('post(served.client(), route, {}, 404)', '<original-empty-post>', 'exec'), scope)
+            except AssertionError:
+                pass
+            else:
+                raise AssertionError('Original invalid POST incorrectly reached expected404')
+            assert scope['served'].records == [403] and visits == []
+            visits.clear(); scope = context()
+            exec(compile(ast.Module(body=replay, type_ignores=[]), str(source), 'exec'), scope)
+            assert scope['served'].records == [200, 404] and visits == ['login', 'closed']
+            visits.clear(); scope = context(); client = scope['served'].client()
+            token = scope['csrf'](client, '/login/')
+            scope['post'](client, '/synthetic-positive/', {'csrfmiddlewaretoken': token}, 200)
+            assert scope['served'].records == [200, 200] and visits == ['login', 'positive']
+            print(json.dumps({'original_invalid_post': 403, 'corrected_replay': [200, 404],
+                'independent_positive': [200, 200]}))
+        """)
+        result = subprocess.run([sys.executable, '-B', '-c', script, str(SOURCE)],
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {'original_invalid_post': 403,
+            'corrected_replay': [200, 404], 'independent_positive': [200, 200]})
 
     def test_raw_token_routes_are_not_written_to_http_records(self):
         safe = self.runner['safe_route']

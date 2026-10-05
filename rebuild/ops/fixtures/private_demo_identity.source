@@ -212,7 +212,8 @@ def main():
             and wallet.balance == credit and wallet.reserved == 0
             and m.LedgerEntry.objects.filter(wallet=wallet, kind='welcome').count() == (1 if credit else 0), 'acceptance_or_credit_readback_failed')
         served.expect(served.client(), 9160, route, 404, label='invitation_replay_denied')
-        post(served.client(), route, {}, 404)
+        replay_client = served.client()
+        post(replay_client, route, {'csrfmiddlewaretoken': csrf(replay_client, '/login/')}, 404)
         auth.require(m.User.objects.filter(email=email).count() == 1
             and m.Membership.objects.filter(user=created, department=department).count() == 1, 'invitation_replay_created_duplicate')
         result.update(user=str(created.pk), invitation=str(invitation.pk), invite_mail=notes,
