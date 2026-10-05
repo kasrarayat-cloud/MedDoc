@@ -401,6 +401,7 @@ WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
     'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
     'rebuild/ops/standing_qa_elicited.py', 'rebuild/ops/fixtures/elicited-qualification-v1.json',
     'rebuild/ops/standing_qa_word_structure.py', 'rebuild/ops/fixtures/word-structure-qualification-v1.json',
+    'rebuild/ops/fixtures/word-structure-qualification-v2.json',
     'rebuild/ops/standing_qa_batch.py', 'rebuild/ops/fixtures/ordinary-batch-101-v1.json',
     'rebuild/ops/fixtures/ordinary-batch-101-v1.docx', 'rebuild/core/batch_jobs.py',
     'rebuild/core/ordinary_source_scope.py', 'rebuild/core/reviewed_source.py',

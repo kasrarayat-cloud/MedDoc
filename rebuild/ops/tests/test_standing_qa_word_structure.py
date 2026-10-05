@@ -1,5 +1,6 @@
 """Fixed synthetic Word stage: pure source/XML/temporary ledger, zero resources."""
 from copy import deepcopy
+import ast
 import dataclasses
 import hashlib
 import io
@@ -47,6 +48,32 @@ class WordStructureFixedStage(Base):
         self.assertEqual({s.path for s in sends}, {'field_relations'})
         self.assertEqual({s.pricing_key for s in sends}, {wq.PRICING})
         self.assertEqual(st.stage_inputs(wq.STAGE, self.declaration()), inputs)
+
+    def test_actual_normal_notes_field_persists_exact_v2_and_proves_old_terminal_LF_failure(self):
+        # Compile this exact declaration expression, without importing models,
+        # setting up Django, creating an account or opening a database.
+        from django import forms
+        source = Path(__file__).parents[2] / 'core/forms.py'
+        tree = ast.parse(source.read_bytes())
+        class_ = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'EncounterForm')
+        declaration = next(n for n in class_.body if isinstance(n, ast.Assign)
+                           and any(isinstance(t, ast.Name) and t.id == 'notes' for t in n.targets))
+        field = eval(compile(ast.Expression(declaration.value), str(source), 'eval'), {'forms': forms})
+        self.assertTrue(field.strip)
+        old = wq.MANIFEST.with_name('word-structure-qualification-v1.json')
+        import json
+        original = json.loads(old.read_bytes()); current = wq.frozen_inputs()['word_structure']
+        self.assertEqual(hashlib.sha256(old.read_bytes()).hexdigest(), current['previous_manifest_sha256'])
+        for before, after in zip(original['cases'], current['cases']):
+            self.assertEqual(after['notes'], before['notes'][:-1])
+            self.assertTrue(before['notes'].endswith('\n'))
+            self.assertNotEqual(field.clean(before['notes']), before['notes'])
+            self.assertEqual(field.clean(before['notes']), after['notes'])
+            self.assertEqual(field.clean(after['notes']), after['notes'])
+            for key in ('id','form','desired_supported','required_holds','physical_expected','accepted_date_values'):
+                self.assertEqual(after.get(key), before.get(key))
+            self.assertNotEqual(field.clean(after['notes'].replace('not documented', 'documented')), after['notes'])
+        self.assertEqual(original['forms'], current['forms'])
 
     def test_changed_missing_reordered_sources_and_arbitrary_sends_refuse(self):
         exact = wq.frozen_inputs()

@@ -21,8 +21,8 @@ STAGE = 'word_structure_qualification'
 PRICING = 'ordinary_notes_field_relations'
 CASE_IDS = ('WQ01', 'WQ02', 'WQ03')
 FORM_IDS = ('synthetic-divided-date-v1', 'synthetic-nominal-insertion-v1', 'synthetic-caption-catalogue-v1')
-MANIFEST = Path(__file__).with_name('fixtures') / 'word-structure-qualification-v1.json'
-MANIFEST_SHA256 = 'a6886adaaee377acf6365ff6a4bb04cd2b6639c8fdc7cdc7430346a2ad5bb0fb'
+MANIFEST = Path(__file__).with_name('fixtures') / 'word-structure-qualification-v2.json'
+MANIFEST_SHA256 = 'aa308d224a766bc32195be25c301fb954b391800b9e15799ee6fea4cffdc5ea5'
 require = pc.require
 
 
