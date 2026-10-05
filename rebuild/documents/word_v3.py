@@ -2604,6 +2604,52 @@ class Detector:
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
 
+    def nominal_insertion_complement(self, area):
+        """A type argument in a reported decision does not perform its report.
+
+        The immutable sentence retains the historical actor and decision. Only
+        a proved nominal type/kind/category slot in its embedded clause owns
+        this answer; a signing, permission or author's-statement frame cannot
+        acquire this relationship from a reviewed label.
+        """
+        if (area.slot.kind != 'p' or area.target.get('shape') != 'insertion'
+                or not self.insertion_source_plain(area.slot)):
+            return None
+        printed = self.ptext(area.slot.el)[0]
+        start, end = area.target['start'], area.target['end']
+        request = printed[start:end]
+        if not re.fullmatch(r'\{(?:insert|enter|type|add|specify)\s+(?:type|kind|category)\}', request, re.I):
+            return None
+        relation = {'relation': 'explicit_insertion', 'question': printed, 'request': request,
+                    'source': {'part': area.slot.part, 'slot': area.slot.path,
+                               'fingerprint': fingerprint(area.slot.el)}}
+        if relation not in area.source_questions:
+            return None
+        frame = re.match(r'^\s*[^.;:?!\r\n]{1,80}?\s+(?:reviewed|considered|assessed)\s+'
+                         r'[^.;:?!\r\n]{1,160}?\s+and\s+(?:decided|determined|found)\s+that\s+',
+                         printed, re.I)
+        if frame is None or start < frame.end():
+            return None
+        if (self.question_box_authorship(printed)
+                or self.checkbox_source_action(printed, governing=True) == 'human_signing_action'
+                or re.search(r'\b(?:sign|signed|signing|signatures?|initials|consent|permission|'
+                             r'authori[sz]\w*|attest\w*|certif\w*|declar\w*|approv\w*|permit\w*|allow\w*)\b',
+                             printed, re.I)):
+            return None
+        complement = printed[frame.end():]
+        # The type slot must qualify a printed noun, rather than stand for an
+        # actor, predicate or a whole assertion. Unknown/multiple clauses stay
+        # with their existing complete-source action classification.
+        tail = printed[end:]
+        if (not re.search(r'\b(?:the|a|an|my|our|your|his|her|their|its)\s+$', printed[frame.end():start], re.I)
+                or not re.match(r'\s+[A-Za-z][A-Za-z-]*\s+(?:is|are|was|were|has|have|had|'
+                                r'should|will|would|can|could|may|might|must)\b', tail, re.I)
+                or re.search(r'[;?!]|\.(?=\s+\S)', complement)
+                or self.checkbox_source_action(complement, governing=True)
+                or self.question_box_authorship(complement)):
+            return None
+        return [area.label, complement]
+
     def guard_source_actions(self):
         """Human acts read from the physical source of each actual destination.
 
@@ -2663,6 +2709,9 @@ class Detector:
             # engine label is derived from that original control, not a review.
             elif area.slot.kind in ('sdt', 'ff'):
                 sources.append(area.label)
+            nominal = self.nominal_insertion_complement(area)
+            if nominal is not None:
+                sources = nominal
             if any(relation.get('relation') == 'nested_cell_options' for relation in area.source_questions):
                 # A proved own caption can carry a printed list marker. Read
                 # its action/clinical grammar after that marker, while keeping
