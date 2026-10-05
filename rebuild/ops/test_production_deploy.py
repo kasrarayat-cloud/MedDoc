@@ -1114,7 +1114,10 @@ ORDINARY_PRICED_DEPENDENCY_PATHS = (
     'core/transcript_context.py', 'core/v3_destination.py', 'core/v3_mapping.py',
 )
 ORDINARY_PRICED_DEPENDENCIES = {
-    'core/generation.py': '840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227',
+    # 2026-10-05 WQ01 omission-floor addendum: only MISSING_RECORD_VALUE and
+    # v3_shape_holds change; entire earlier AST restores when removed. Actual
+    # captured WQ01 SDK body and 0.355992 reservation reconstruct exactly.
+    'core/generation.py': '9cdefe21964894589b2db8b9b23db8fc933d926997446d9880a87da3d8c2e207',
     'core/ordinary_source_scope.py': '42ef86c3e4f69222040edc6a630e694eac424b28a8066a311d90e00afd0a4338',
     'core/reviewed_source.py': '8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157',
     'core/reviewed_procedure_source.py': 'aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0',

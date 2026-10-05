@@ -2546,12 +2546,21 @@ def plain_printed_side_option(field, value):
     return bool(chosen and '\n' not in chosen and plain_value(PRINTED_SIDE_PREFIX.sub('side', value, count=1)))
 
 
+MISSING_RECORD_VALUE = re.compile(
+    r'\s*(?:(?:currently|presently)\s+)?(?:not|never)\s+'
+    r'(?:documented|recorded|provided|available)(?:\s+(?:yet|in\s+the\s+(?:notes|record)))?\s*[.]?\s*', re.I)
+
+
 def v3_shape_holds(quote, value):
     """Rules (d)-(g) of contract v3 for one unit (`quote`, and its labelled `value` or the quote itself); rule (c), more
     than one sentence in the unit, is `inner_sentence_end`. Read once per unit per validation (R3-4)."""
     return bool(
         # (d) A value that asks or trails off answers nothing ('Nausea, vomiting or abdominal pain?').
         ASKS_OR_TRAILS_OFF.search(value)
+        # A complete labelled omission state supplies no clinical value. Read
+        # the entire value, never a substring: an actual negative ('no known
+        # drug allergies', 'not taking warfarin') is a different statement.
+        or MISSING_RECORD_VALUE.fullmatch(value)
         # (e) Nor does one shaped as a pointer to other lines (F7).
         or points_elsewhere(value)
         # (f) A self-correction inside the sentence (read with invisible characters removed too).

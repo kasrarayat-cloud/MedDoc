@@ -171,3 +171,34 @@ reject removing the refusal, bypassing its admission call and the existing
 request/price/global-dependency undercharge mutations. Previous provider
 receipts retain their original source provenance; this addendum supplies no
 new paid witness or provider qualification.
+
+### Addendum 2026-10-05 — WQ01 complete omission-state hold
+
+The completed normal campaign-3 attempt 001 on
+`7116193a56654a26299140219fdd12a6af20214b` selected the complete source unit
+`Allergies: not documented.` and adopted `not documented.` as a supported
+allergy value. Its original unsafe classification, raw response, metering and
+export remain unchanged. A complete labelled omission value now holds through
+the existing `v3_shape_holds` floor, retaining its candidate and exact evidence.
+The anchored whole-value predicate does not match actual clinical negatives
+such as `No known drug allergies.` or `not taking warfarin.`
+
+Only the new `MISSING_RECORD_VALUE` assignment and this one shape-floor operand
+change in `core/generation.py`. Removing them restores its entire earlier
+normalized AST `840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227`.
+Every other statement, including source-unit construction, configuration,
+compiler inputs, request schema, model settings, request construction, quote
+formulas and rates, is unchanged. The complete reviewed replacement identity is
+`9cdefe21964894589b2db8b9b23db8fc933d926997446d9880a87da3d8c2e207`.
+The ordinary compiler module and every other priced dependency/input stay fixed.
+
+A source-only reconstruction of that genuine captured SDK request is exact,
+including its 20,000-token between-tools medium profile. The current maximum
+cost is `0.23732800000`; its `1.5` customer bound is `0.355992000000`, exactly
+the original recorded reservation. This is applicability of the original
+unsafe attempt's financial evidence, with its invoice still unreconciled;
+it is neither a new provider result nor clinical qualification. The original
+global profile remains 8,000 tokens; this specific ordinary wire is 20,000.
+The scanner's omission-floor mutation, imported-compiler mutation and original
+request/undercharge controls remain fail-closed. Clinical application/export
+replay on the new integrated source is required separately.

@@ -191,6 +191,11 @@ def Decimal(value=0):
 class OrdinaryCostContract(unittest.TestCase):
     check_mutation = AdditionalCostContracts.check_mutation
 
+    def test_reviewed_omission_floor_remains_part_of_the_complete_binding(self):
+        def checked(): scan.provider_caps(scan.REBUILD / 'core/batch_jobs.py')
+        self.check_mutation('core/generation.py', 'or MISSING_RECORD_VALUE.fullmatch(value)',
+                            'or False', checked)
+
     def test_imported_compiler_and_single_and_batch_sends_share_the_reviewed_price(self):
         expected = ('profile', frozenset({6000, 8000, 16000, 20000}))
         self.assertEqual(scan.maximum_cost_terms(), (12000, expected))
