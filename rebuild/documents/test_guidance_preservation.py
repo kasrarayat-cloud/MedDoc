@@ -114,6 +114,21 @@ class LegacyTextBounds(unittest.TestCase):
                          w.fingerprint(w.SlotIndex(w.open_package(final)).by_id['word/document.xml#b/p[0]'].el))
         self.assertTrue(any(r['place'].endswith('/ff[0]') for r in w.destination_roles_of(w.open_package(raw))))
 
+    def test_preserved_guidance_is_never_offered_as_a_place_to_add_a_field(self):
+        # Refutation 2026-10-05 (round 3): once guidance stopped being a mapped field, mapping review listed the
+        # control and its empty host paragraph as open places, and a field added there refused every answer.
+        doc = legacy_text(help_text='Press TAB to continue.')
+        doc.add_paragraph('Observed code: ____')
+        raw = data(doc)
+        slots = [row['slot'] for row in w.outline(raw)['slots']]
+        self.assertNotIn('word/document.xml#b/p[0]', slots)
+        self.assertFalse([slot for slot in slots if slot.startswith('word/document.xml#b/p[0]/')])
+        self.assertIn('word/document.xml#b/p[1]', slots)
+        for changes in ({'name': 'BloodGroup'}, {'points': '22'}, {'help_text': None}):
+            with self.subTest(changes=changes):
+                listed = [row['slot'] for row in w.outline(data(legacy_text(**changes)))['slots']]
+                self.assertIn('word/document.xml#b/p[0]/ff[0]', listed)
+
     def test_source_guidance_classification_keeps_legitimate_one_character_controls(self):
         for changes in ({'name':'BloodGroup'}, {'label':'Blood group: '}, {'points':'22'},
                         {'result':'A'}, {'default':'O'}, {'limit':'2'}, {'help_text':None}):

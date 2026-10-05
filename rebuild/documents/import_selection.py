@@ -126,7 +126,7 @@ def choose(legacy, advanced, legacy_regions, reader, *, ordinary_roles=()):
     writing place. If either comparison is uncertain, legacy stays available and
     the missing coverage is reported; a v3 rejection never grants broader support.
     """
-    v3_regions, missing = [], []
+    v3_regions, missing, bands = [], [], []
     for field in advanced["fields"]:
         locations = reader.of(field)
         target = field.get('locator', {}).get('target', {})
@@ -139,13 +139,22 @@ def choose(legacy, advanced, legacy_regions, reader, *, ordinary_roles=()):
                 and (field.get("kind") not in ("signature", "initials") or field['key'] in ordinary_roles)):
             if any(not covered(place, legacy_regions) for place in locations):
                 missing.append({"label": field["label"], "locator": field["locator"]})
+        elif (field.get("write_protected")
+              and any(isinstance(q, dict) and q.get("relation") == "protected_inline_signing_lines"
+                      for q in field.get("source_questions") or [])
+              and any(not covered(place, legacy_regions) for place in locations)):
+            # A drawn signing band is v3-only knowledge of the original: legacy
+            # cannot see the human-owned event it protects. It selects v3 as
+            # the band's old inferred (writable) date did, never a legacy hold.
+            bands.append({"label": field["label"], "locator": field["locator"]})
     lost = [place for place in legacy_regions if not covered(place, v3_regions)]
     unmapped = [note for note in legacy["warnings"] if "not mapped" in note.casefold()
                 or "not be placed" in note.casefold()]
     # A whole empty cell from legacy may become a more precise cell/paragraph
     # writer. Preserve the legacy route when containment cannot prove parity.
-    selected = "v3" if (missing or unmapped) and not lost else "legacy"
+    selected = "v3" if (missing or unmapped or bands) and not lost else "legacy"
     return selected, {"legacy_omissions": missing, "legacy_unmapped": unmapped,
+                      "v3_only_signing_bands": bands,
                       "v3_uncovered_legacy_places": [list(place) for place in lost],
                       "block_generation": bool(selected == 'legacy' and (missing or unmapped)),
                       "automatic_complete": False,

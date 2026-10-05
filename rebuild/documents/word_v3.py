@@ -374,6 +374,8 @@ SYMBOL_BOXES = {
 PUA_BOXES = ({0xF06F, 0xF071, 0xF072, 0xF0A8, 0xF0A3, 0xF02A, 0xF081}, {0xF0FE, 0xF0FD, 0xF078, 0xF052, 0xF053, 0xF054})
 T, TAB, PTAB, BR, CR, SYM, NBH = (q("w:t"), q("w:tab"), q("w:ptab"), q("w:br"), q("w:cr"), q("w:sym"), q("w:noBreakHyphen"))
 R, SDT, FLDCHAR, FALLBACK, TXBX = q("w:r"), q("w:sdt"), q("w:fldChar"), q("mc:Fallback"), q("w:txbxContent")
+#: Content that makes a paragraph more than an empty spacer: a drawn signing band never claims it.
+BAND_SPACER_CONTENT = frozenset({TXBX, SDT, FLDCHAR, q("w:fldSimple"), q("w:drawing"), q("w:pict"), q("w:object")})
 PASS_THROUGH = {q("w:hyperlink"), q("w:smartTag"), q("w:fldSimple"), q("w:customXml"), q("w:dir"), q("w:bdo"),
                 q("mc:AlternateContent"), q("mc:Choice"), q("w:sdtContent")}
 
@@ -1676,7 +1678,6 @@ class Detector:
         self.source_guidance_areas: list[Area] = []  # preserved source controls, never clinical answer destinations
         self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
         self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
-        self.signing_caption_holds: list[Area] = []  # below-caption blanks held after the source-action guard
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
@@ -2583,7 +2584,6 @@ class Detector:
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
         self.guard_source_actions()
-        self.guard_signing_caption_holds()
         self.guard_captioned_signing_bands()
         self.guard_action_participants()
         self.rule_scalar_alternatives()
@@ -2869,20 +2869,6 @@ class Detector:
         return {'captions': labels, 'source': {'part': caption.part, 'slot': caption.path,
                                              'fingerprint': fingerprint(caption.el)},
                 'start': spans[0][0], 'end': stop}
-
-    def guard_signing_caption_holds(self):
-        """The blank below a printed signing caption, held after the source-action guard.
-
-        guard_source_actions reads the same caption first: a human or ambiguous
-        action keeps its own protection, coverage issue and generation review.
-        Only a blank that reading left writable is held here.
-        """
-        current = {id(area) for area in self.areas}
-        for area in self.signing_caption_holds:
-            if id(area) in current and not area.protection:
-                area.source_action = True
-                area.protection = ('This printed signing or document action is human-owned. '
-                                   'Complete it through the explicit human signing workflow.')
 
     def guard_captioned_signing_bands(self):
         for area in self.areas:
@@ -8461,19 +8447,6 @@ class Detector:
                 action = self.checkbox_source_action(head, governing=True) if requested else ''
                 kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
                     ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
-                hold = ''
-                if not requested and not narrative and signing and kind not in SIGNING_KINDS:
-                    # A printed caption that names a signature owns the blank
-                    # below it as part of that signing act: a combined
-                    # 'signature ... date' caption never yields an ordinary
-                    # writable date, whatever drew its signing line. The
-                    # signature wording must also be the engine's own signing
-                    # event (a receipt of a signed report, or a clinical
-                    # 'signature' result, is not one). Hold only - the kind is
-                    # unchanged - and only after guard_source_actions, whose
-                    # reading of the caption keeps precedence.
-                    hold = signing_place(label) or ('signature' if SIGNATURE.search(label)
-                                                    and self.signature_caption_event(label) else '')
                 relation = ({'relation': 'narrative_empty_band', 'question': self.ptext(ps.el)[0],
                              'source': {'part': ps.part, 'slot': ps.path, 'fingerprint': fingerprint(ps.el)}}
                             if narrative else self.write_request_source(ps) if requested else None)
@@ -8485,8 +8458,6 @@ class Detector:
                     area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
                                        if role or action == 'human_signing_action' else
                                        'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
-                elif hold:
-                    self.signing_caption_holds.append(area)
                 self.add(area)
                 self.claimed.add(id(ps.el))
                 for b in blanks:
@@ -8639,20 +8610,6 @@ class Detector:
             return True
         return bool(temporal and re.fullmatch(r'[^:;.!?\r\n]+?\s+'
                     r'(?:signs|signed|initials|initiall?ed)(?:\s+[^:;.!?\r\n]+)?', text, re.I))
-
-    @classmethod
-    def signature_caption_event(cls, caption):
-        """The engine's signing-event reading of a complete caption.
-
-        A trailing date or time ('Clinician signature  Date') is read exactly
-        as the engine reads the same caption in its temporal word order ('Date
-        of clinician signature'); no other wording is added.
-        """
-        if cls.signing_event_source(caption):
-            return True
-        tail = re.fullmatch(r'(.+?)\s*(?:[/,&]\s*)?(?:date|time)(?:\s*(?:and|&|/)\s*time)?\s*:?',
-                            _plain(caption).strip(), re.I)
-        return bool(tail and cls.signing_event_source('Date of ' + tail[1].strip(' ,/&')))
 
     @classmethod
     def temporal_source_action(cls, argument):
@@ -9209,7 +9166,8 @@ class Detector:
             after = caption.el.getnext()
             spacer = self.index.by_el.get(id(after)) if after is not None else None
             if (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
-                    and not self.ptext(spacer.el)[0].strip()):
+                    and not self.ptext(spacer.el)[0].strip()
+                    and not any(node.tag in BAND_SPACER_CONTENT for node in spacer.el.iter())):
                 self.claimed.add(id(spacer.el))
                 self.protected_regions.add(spacer.id)
             self.notes.append(reason + ' Location: ' + slot.id)
@@ -10715,6 +10673,18 @@ def ff_source_guidance(begin_run):
             if size is None or size.get(q("w:val")) not in ("1", "2"):
                 return False
     return True
+
+
+def source_guidance_place(detector, slot):
+    """An exact preserved guidance control, or the otherwise empty paragraph that only hosts such controls."""
+    if slot.kind == "ff":
+        return slot.info.get("field") == "FORMTEXT" and ff_source_guidance(slot.el)
+    if slot.kind != "p":
+        return False
+    controls = [c for c in slot.children if c.kind == "ff"]
+    return (bool(controls) and len(controls) == len(slot.children)
+            and all(c.info.get("field") == "FORMTEXT" and ff_source_guidance(c.el) for c in controls)
+            and not detector.ptext(slot.el)[0].replace("\x00", "").strip())
 
 
 def preserved_source_guidance(detector):
@@ -12349,6 +12319,8 @@ def outline(data: bytes) -> dict:
     for s in detector.index.slots:
         if s.kind not in ("p", "tc", "sdt", "ff", "glyphs"):
             continue
+        if source_guidance_place(detector, s):
+            continue  # preserved source guidance, never a clinician answer place (inspect lists it separately)
         if s.kind == "p":
             preview = detector.ptext(s.el)[0]
         elif s.kind == "tc":

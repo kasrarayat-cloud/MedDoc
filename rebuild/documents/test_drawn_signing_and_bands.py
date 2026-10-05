@@ -3,6 +3,7 @@
 Pure XML/parser controls on project-authored synthetic documents; no corpus content, no app resources.
 """
 import io
+import json
 import unittest
 
 from docx import Document
@@ -126,22 +127,16 @@ class DrawnSigningBand(unittest.TestCase):
         with self.assertRaises(word.V3Failure):
             word.fill(raw, [forged], {'v3_99': '14/03/2026'})
 
-    def test_every_other_drawn_or_undrawn_signing_caption_holds_the_blank_below(self):
+    def test_other_drawings_or_no_drawing_are_not_a_drawn_band(self):
+        # Only the exact inline line pair is a drawn band; every other shape keeps the engine's existing reading.
         shapes = {'anchored': {'anchored': True}, 'rectangle': {'prst': 'rect'}, 'text box': {'textbox': True},
                   'tall': {'height': 50800}, 'diagonal': {'drawn_height': 100}, 'one line': {'lines': 1},
-                  'three lines': {'lines': 3}, 'no drawing': {'lines': 0},
-                  'clinician': {'caption': 'Clinician signature\t\t\tDate', 'anchored': True}}
+                  'three lines': {'lines': 3}, 'no drawing': {'lines': 0}}
         for name, options in shapes.items():
             with self.subTest(name):
-                raw = drawn_band(**options)
-                fields = word.inspect(raw)['fields']
-                writable = [f for f in fields if not f.get('write_protected')
-                            and f['kind'] not in ('signature', 'initials')]
-                self.assertEqual(sorted(f['label'] for f in writable), ['Clinical summary', 'Visit date'])
-                for field in fields:
-                    if field.get('write_protected') and field['locator']['target']['type'] != 'none':
-                        with self.assertRaises(word.V3Failure):
-                            word.fill(raw, fields, {field['key']: '14/03/2026'})
+                fields = word.inspect(drawn_band(**options))['fields']
+                self.assertFalse([f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                                           for r in f.get('source_questions', []))])
 
     def test_ordinary_captions_under_lines_are_not_signing_events(self):
         raw = drawn_band(caption='Printed name\t\t\tTitle')
@@ -168,6 +163,33 @@ class DrawnSigningBand(unittest.TestCase):
                     word.fill(raw, [stored], {'v3_9': '14/03/2026'})
                 with self.assertRaises(word.V3Failure):
                     word.locate(raw, [{'kind': 'date', 'label': 'Date', 'slot': BODY + 'b/p[3]'}])
+
+    def test_a_spacer_that_anchors_a_text_box_is_not_part_of_the_band(self):
+        # Refutation 2026-10-05 (round 3): an empty-looking spacer that anchors a floating text box was claimed,
+        # so the text box's own field was offered and then every export refused.
+        box = ('<w:r><w:drawing><wp:anchor behindDoc="0" distT="0" distB="0" distL="0" distR="0" simplePos="0" '
+               'locked="0" layoutInCell="1" allowOverlap="1" relativeHeight="9"><wp:simplePos x="0" y="0"/>'
+               '<wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>'
+               '<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>'
+               '<wp:extent cx="2286000" cy="457200"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapSquare wrapText="bothSides"/>'
+               '<wp:docPr id="9" name="Box 9"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData '
+               'uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr/>'
+               '<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2286000" cy="457200"/></a:xfrm>'
+               '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r>'
+               '<w:t xml:space="preserve">Office use - reference number: ________</w:t></w:r></w:p></w:txbxContent>'
+               '</wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>')
+        raw = drawn_band(spacer_xml=box)
+        fields = word.inspect(raw)['fields']
+        band = [f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                         for r in f.get('source_questions', []))]
+        self.assertEqual(len(band), 2)
+        writable = [f for f in fields if not f.get('write_protected') and f['kind'] not in ('signature', 'initials')]
+        self.assertIn('word/document.xml#b/p[3]/txbx[0]/p[0]',
+                      [f['locator']['part'] + '#' + f['locator']['slot'] for f in writable])
+        answers = {f['key']: '14/03/2026' if f['kind'] == 'date' else 'REF-123' for f in writable}
+        final = word.fill(raw, fields, answers)
+        self.assertIn('REF-123', ''.join(word.text_of(n) for n in
+                      word.SlotIndex(word.open_package(final)).by_id[BODY + 'b/p[3]'].el.iter(word.TXBX)))
 
     def test_a_bare_date_caption_under_its_line_is_not_promoted_to_a_signing_event(self):
         raw = drawn_band(caption='Date', lines=1)
@@ -199,8 +221,6 @@ class DrawnSigningBand(unittest.TestCase):
         final = word.fill(raw, fields, {log[0]['key']: [['Synthetic drug A', '5 mg', 'oral']]})
         self.assertEqual([c.text for c in Document(io.BytesIO(final)).tables[0].rows[1].cells],
                          ['Synthetic drug A', '5 mg', 'oral'])
-        held = [f for f in fields if f.get('write_protected')]
-        self.assertEqual([(f['kind'], f['locator']['slot']) for f in held], [('date', 'b/tbl[0]/tr[3]/tc[0]/p[2]')])
 
 
 def caption_over_blank(caption, style=None):
@@ -212,29 +232,13 @@ def caption_over_blank(caption, style=None):
     return data(doc)
 
 
-class SigningCaptionHold(unittest.TestCase):
-    """The blank below a printed signing caption belongs to that signing act."""
+class BelowCaptionReading(unittest.TestCase):
+    """The blank below a printed caption keeps the engine's existing reading: ordinary answers stay writable and a
+    source action keeps the guard's own review. A wording-based signing-caption hold was withdrawn after three
+    refutation rounds (2026-10-05): every reader over- or under-held, and a hold could change the import route."""
 
     def below(self, raw):
         return [f for f in word.inspect(raw)['fields'] if f['locator']['slot'] == 'b/p[2]']
-
-    def test_signing_event_captions_hold_the_blank_below(self):
-        # The signature wording and the engine's own signing-event reader agree on each of these captions; a
-        # trailing date reads as the same caption in the engine's temporal word order ('Date of ... signature').
-        for caption in ('Signature of Patient or Representative\t\t\tDate', 'Date of patient signature:',
-                        'Date of witness signature:', 'Date signed by recorder:', 'Signature date:',
-                        'Date of approval signature:', 'Witness signature date:', 'Clinician signature\t\t\tDate',
-                        'Report signed date:'):
-            with self.subTest(caption):
-                raw = caption_over_blank(caption)
-                found = word.inspect(raw)
-                fields = found['fields']
-                below = [f for f in fields if f['locator']['slot'] == 'b/p[2]']
-                self.assertEqual([(f['kind'], bool(f.get('write_protected'))) for f in below], [('date', True)])
-                with self.assertRaises(word.V3Failure):
-                    word.fill(raw, fields, {below[0]['key']: '14/03/2026'})
-                # A hold is not a coverage exclusion: it adds no generation review of its own.
-                self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[2]'])
 
     def test_ordinary_date_captions_keep_their_writable_blank(self):
         for caption in ('Date of assessment:', 'Visit date:', 'Date of birth:', 'Date of procedure:',
@@ -267,6 +271,48 @@ class SigningCaptionHold(unittest.TestCase):
                 below = [f for f in found['fields'] if f['locator']['slot'] == 'b/p[2]']
                 self.assertEqual([bool(f.get('write_protected')) for f in below], [True])
                 self.assertEqual([i['code'] for i in found['coverage_issues'] if i['slot'] == 'b/p[2]'], [code])
+
+
+class DrawnBandRoute(unittest.TestCase):
+    """A drawn band is v3-only knowledge: it keeps the import on v3 where e0 did (via its old inferred date)."""
+
+    def form(self, *, band=True):
+        doc = Document()
+        doc.add_paragraph('Synthetic intake')
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = 'Patient name'
+        table.cell(1, 0).text = 'Diagnosis'
+        doc.add_paragraph('Please circle [yes/no] where the form asks.')
+        if band:
+            lines = doc.add_paragraph()
+            lines._p.append(line_run(1, fallback=False))
+            lines.add_run('\t\t')
+            lines._p.append(line_run(2, fallback=False))
+            doc.add_paragraph('Signature of Patient or Representative\t\t\tDate')
+            doc.add_paragraph()
+        doc.add_paragraph('End of form.')
+        return data(doc)
+
+    def test_band_keeps_the_reviewable_v3_route(self):
+        import tempfile
+        from pathlib import Path
+        from django.test import override_settings
+        from .service import inspect_template
+        with tempfile.TemporaryDirectory() as tmp, override_settings(QUILLMD_WORD_AUTO_PREFER_V3=True):
+            path = Path(tmp) / 'original.docx'
+            path.write_bytes(self.form())
+            result = inspect_template(path, engine='auto')
+        coverage = result['import_manifest']['coverage']
+        self.assertEqual(result['import_manifest']['engine'], 'v3')
+        self.assertEqual(len(coverage['v3_only_signing_bands']), 2)
+        self.assertTrue(coverage['selected_engine_issues'])
+        self.assertFalse(coverage.get('advanced_unresolved_areas'))
+
+    def test_without_a_band_the_route_rule_is_unchanged(self):
+        from . import import_selection
+        self.assertNotIn('protected_inline_signing_lines', json.dumps(word.inspect(self.form(band=False))['fields']))
+        legacy = {'fields': [], 'warnings': []}
+        self.assertEqual(import_selection.choose(legacy, {'fields': []}, [], None)[0], 'legacy')
 
 
 class WithdrawnRelaxationsKeepTheirReading(unittest.TestCase):
