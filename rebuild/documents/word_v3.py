@@ -2801,6 +2801,7 @@ class Detector:
                 else:
                     if len(pairs) < 2:
                         continue
+                    signing_event = any(signing_place(ink) for _, _, _, ink in pairs)
                     for answer, caption, paragraph, ink in pairs:
                         relation = {'relation': 'caption_below_cell', 'question': ink,
                                     'source': {'part': paragraph.part, 'slot': paragraph.path,
@@ -2808,6 +2809,12 @@ class Detector:
                         area = Area(self.kind_for(ink), clean_label(ink), answer, {'type': 'cell'},
                                     context=self.context_for(answer, complete=True), complete_source=True,
                                     label_slot=paragraph, source_questions=[relation])
+                        if signing_event:
+                            area.source_action = True
+                            area.protection = ('This name, signature or date belongs to the same printed signing '
+                                               'event. Ordinary notes cannot establish its signer identity or '
+                                               'that event; complete the block through the human signing workflow.')
+                            self.coverage_issue(answer, 'human_signing_event', area.protection)
                         self.add(area)
                     for source in answers + captions:
                         self.claimed.update(id(n) for n in source.el.iter())

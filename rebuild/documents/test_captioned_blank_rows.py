@@ -9,7 +9,7 @@ from docx.shared import Inches
 from . import word_v3 as word
 
 
-def form(*, conflict=False, merged=False):
+def form(*, conflict=False, merged=False, signing=True):
     document = Document()
     table = document.add_table(rows=3 if conflict else 2, cols=5)
     widths = (2.0, .15, 2.0, .15, 1.2)
@@ -17,7 +17,9 @@ def form(*, conflict=False, merged=False):
         table.columns[n].width = Inches(width)
         for row in table.rows:row.cells[n].width = Inches(width)
     at = 1 if conflict else 0
-    for n, text in ((0, 'Participant name'), (2, 'Signature'), (4, 'Date')):
+    labels = ((0, 'Participant name'), (2, 'Signature'), (4, 'Date')) if signing else (
+        (0, 'Patient name'), (2, 'Clinical notes'), (4, 'Visit date'))
+    for n, text in labels:
         table.cell(at + 1, n).text = text
         if conflict:table.cell(0, n).text = 'Hospital number'
     if merged:table.cell(at, 0).merge(table.cell(at, 1))
@@ -44,17 +46,44 @@ class CaptionedBlankRows(unittest.TestCase):
         with self.assertRaises(word.V3Failure):
             word.fill(data, catalog, {signing['key']: 'Dr Synthetic'})
 
+    def test_actual_role_report_and_generation_selection_hold_the_whole_signing_event(self):
+        from copy import deepcopy
+        from core import generation
+        data, _ = form(); fields = owned_fields(data)
+        self.assertTrue(all(f.get('write_protected') for f in fields))
+        untrusted = deepcopy(fields)
+        for field in untrusted:
+            field.pop('write_protected', None); field['kind'] = 'text'
+        report = word.destination_roles(data, untrusted)
+        self.assertEqual(set(report['violations']), {f['key'] for f in untrusted})
+        actual = []
+        for field in untrusted:
+            row = deepcopy(field)
+            row.update(write_protected=True, review_reason=report['violations'][field['key']]['reason'])
+            actual.append(row)
+        asked, context, _ = generation.v3_generation_fields(actual)
+        self.assertEqual(asked, [])
+        self.assertEqual(set(context), {'Participant name', 'Signature', 'Date'})
+        for field in fields:
+            forged = deepcopy(field); forged.pop('write_protected', None)
+            with self.subTest(label=field['label']), self.assertRaises(word.V3Failure):
+                word.fill(data, [forged], {field['key']: 'Invented signer event'})
+        ordinary, _ = form(signing=False); fields = owned_fields(ordinary)
+        self.assertFalse(word.destination_roles(ordinary, fields)['violations'])
+        self.assertEqual(generation.v3_generation_fields(fields)[0], fields)
+
     def test_ordinary_name_date_and_clinical_writes_preserve_every_caption_and_package_part(self):
-        data, _ = form(); catalog = word.inspect(data)['fields']
-        answers = {f['key']: {'Participant name': 'Synthetic Person', 'Date': '2026-10-05',
+        data, _ = form(signing=False); catalog = word.inspect(data)['fields']
+        answers = {f['key']: {'Patient name': 'Synthetic Person', 'Visit date': '2026-10-05',
+                              'Clinical notes': 'No focal swelling.',
                               'Clinical findings': 'No focal swelling.'}[f['label']]
-                   for f in catalog if f['label'] != 'Signature'}
+                   for f in catalog}
         output = word.fill(data, catalog, answers)
         original = word.SlotIndex(word.open_package(data)); final = word.SlotIndex(word.open_package(output))
         for n in range(5):
             identity = 'word/document.xml#b/tbl[0]/tr[1]/tc[%d]' % n
             self.assertEqual(word.fingerprint(original.by_id[identity].el), word.fingerprint(final.by_id[identity].el))
-        for n in (1, 2, 3):
+        for n in (1, 3):
             identity = 'word/document.xml#b/tbl[0]/tr[0]/tc[%d]' % n
             self.assertEqual(word.fingerprint(original.by_id[identity].el), word.fingerprint(final.by_id[identity].el))
         with ZipFile(io.BytesIO(data)) as a, ZipFile(io.BytesIO(output)) as b:
