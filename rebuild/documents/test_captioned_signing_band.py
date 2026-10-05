@@ -71,3 +71,14 @@ class CaptionedSigningBand(unittest.TestCase):
         data = source(gap=True); detector = word.Detector(word.open_package(data))
         slot = detector.index.by_id['word/document.xml#b/p[1]']
         self.assertIsNone(detector.captioned_signing_band(slot))
+
+    def test_actor_order_and_parenthetical_captions_do_not_release_the_band(self):
+        for captions in ('Recorder signature\tDate\tTime', 'Signature (Recorder)\tDate\tTime',
+                         'Participant signature\tDate', 'Witness initials\tDate', 'Name\tSign below\tDate'):
+            with self.subTest(captions=captions):
+                raw = source(captions); own = [f for f in fields(raw) if f['locator']['slot'] == 'b/p[1]']
+                self.assertTrue(own and all(f.get('write_protected') for f in own))
+                for field in own:
+                    forged = deepcopy(field); forged.pop('write_protected', None); forged['kind'] = 'text'
+                    with self.assertRaises(word.V3Failure):
+                        word.fill(raw, [forged], {field['key']: 'Dr Synthetic'})

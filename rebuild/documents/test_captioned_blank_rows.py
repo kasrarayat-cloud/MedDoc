@@ -129,3 +129,16 @@ class CaptionedBlankRows(unittest.TestCase):
         self.assertEqual([(f['label'], f['kind']) for f in fields],
                          [('Participant name', 'text'), ('Signature', 'signature'), ('Date', 'date'),
                           ('Researcher name', 'text'), ('Signature', 'signature'), ('Date', 'date')])
+
+    def test_date_of_signature_and_named_signatory_keep_whole_block_human_owned(self):
+        from core import generation
+        document = Document(); table = document.add_table(rows=2, cols=2)
+        table.cell(1, 0).text = 'Name of signatory'; table.cell(1, 1).text = 'Date of signature'
+        stream = io.BytesIO(); document.save(stream); raw = stream.getvalue()
+        fields = owned_fields(raw)
+        self.assertEqual(len(fields), 2)
+        self.assertTrue(all(f.get('write_protected') for f in fields))
+        self.assertEqual(generation.v3_generation_fields(fields)[0], [])
+        for field in fields:
+            with self.assertRaises(word.V3Failure):
+                word.fill(raw, [field], {field['key']: 'Dr Synthetic'})

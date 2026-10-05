@@ -2802,7 +2802,8 @@ class Detector:
                 else:
                     if len(pairs) < 2:
                         continue
-                    signing_event = any(signing_place(ink) for _, _, _, ink in pairs)
+                    signing_event = any(self.signing_event_source(ink) or self.temporal_source_action(ink)
+                                        for _, _, _, ink in pairs)
                     for answer, caption, paragraph, ink in pairs:
                         relation = {'relation': 'caption_below_cell', 'question': ink,
                                     'source': {'part': paragraph.part, 'slot': paragraph.path,
@@ -2858,8 +2859,7 @@ class Detector:
             return None
         # A signature caption's head names the act. Incidental mentions in a
         # printed name, receipt/status question or a past narrative do not.
-        signing = any(re.fullmatch(r'(?:signature|initials)(?:\s+(?:of|by)\s+[^:;.!?\r\n]+)?\s*:?',
-                                  label, re.I) for label in labels)
+        signing = any(self.signing_event_source(label) for label in labels)
         if not signing:
             return None
         return {'captions': labels, 'source': {'part': caption.part, 'slot': caption.path,
@@ -8558,15 +8558,45 @@ class Detector:
                 kept.append((start, end, kind))
         return kept
 
+    @staticmethod
+    def signing_event_source(printed):
+        """Complete event/owner captions, without choosing a signer's identity.
+
+        A temporal modifier can qualify the event; an actor can precede or
+        follow its signature noun. An incidental signature inside a different
+        field's complete argument is not that caption's head.
+        """
+        text = _plain(printed).strip(' :.')
+        temporal = re.match(r'^(?:date|time)(?:\s+(?:of|for))?\s+(.+)$', text, re.I)
+        if temporal:
+            text = temporal[1]
+        if re.fullmatch(r'(?:signature|initials?|signing)(?:\s*\([^()]+\)|'
+                        r'\s+(?:of|by)\s+[^:;.!?\r\n]+|\s+(?:date|time))?', text, re.I):
+            return True
+        owned = re.fullmatch(r'([^:;.!?()\r\n]+)\s+(?:signature|initials?)', text, re.I)
+        if owned and not re.search(r'\b(?:of|to|for|by|from|with|and|or)\b', owned[1], re.I):
+            return True
+        if re.fullmatch(r'(?:signed|initiall?ed)\s+by\s+[^:;.!?\r\n]+|'
+                        r'(?:sign|initial)\s+(?:here|below)|(?:signatory|signer)\s+name|'
+                        r'name\s+of\s+(?:the\s+)?(?:signatory|signer)', text, re.I):
+            return True
+        return bool(temporal and re.fullmatch(r'[^:;.!?\r\n]+?\s+'
+                    r'(?:signs|signed|initials|initiall?ed)(?:\s+[^:;.!?\r\n]+)?', text, re.I))
+
     @classmethod
     def temporal_source_action(cls, argument):
         # A temporal modifier can qualify coordinated events. Each complete
         # clause keeps its own actor/predicate/argument reading: recording an
         # observation does not release a subsequent approval or appointed
         # response. Ordinary coordinated recorded states are still ordinary.
-        clauses = [argument, *re.split(r'(?:\s+|,\s*)(?:and|or|but)\s+', argument, flags=re.I)]
+        temporal = re.match(r'^\s*(?:date|time)(?:\s+(?:of|for))?\s+(.+?)\s*[:.]?\s*$', argument, re.I)
+        clauses = [argument, *([temporal[1]] if temporal else []),
+                   *re.split(r'(?:\s+|,\s*)(?:and|or|but)\s+', argument, flags=re.I)]
         return any(cls.checkbox_source_action(clause, governing=True)
-                   or cls.question_box_authorship(clause) or signing_place(clause)
+                   or cls.question_box_authorship(clause) or cls.signing_event_source(clause)
+                   or signing_place(clause)
+                   or temporal and re.fullmatch(r'(?:consent|permission|authori[sz]ation)\s+'
+                       r'(?:(?:was|is|has\s+been)\s+)?(?:granted|given|approved|provided)\s*[:.]?', clause, re.I)
                    for clause in clauses if clause.strip())
 
     def temporal_band(self, slot):
