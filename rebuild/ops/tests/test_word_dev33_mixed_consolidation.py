@@ -15,6 +15,67 @@ adapter = types.ModuleType('word_dev33_mixed_consolidation_test_literal')
 exec(compile(LITERAL.read_bytes(), str(LITERAL), 'exec'), adapter.__dict__)
 
 
+class VersionedInstrumentIdentity(unittest.TestCase):
+    def call(self, version=None, families=None, helpers=None, peer=None):
+        adapter.validate_qualification_identity(
+            adapter.INSTRUMENT_VERSION if version is None else version,
+            copy.deepcopy(adapter.INSTRUMENT_FAMILIES) if families is None else families,
+            copy.deepcopy(adapter.INSTRUMENT_FIXED_HELPERS) if helpers is None else helpers,
+            adapter.PEER_SHA if peer is None else peer)
+
+    def test_reviewed_r3_and_unchanged_historical_identity_are_admitted(self):
+        self.call()
+        self.call(version=adapter.VERSION, families=copy.deepcopy(adapter.DRIVERS))
+
+    def test_unknown_version_and_hybrid_family_are_refused(self):
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(version='word48-shared-segmented-r4-v1')
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(families=copy.deepcopy(adapter.DRIVERS))
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(version=adapter.VERSION)
+
+    def test_each_changed_missing_extra_family_or_file_is_refused(self):
+        for family, files in adapter.INSTRUMENT_FAMILIES.items():
+            for name in files:
+                with self.subTest(family=family, file=name):
+                    changed = copy.deepcopy(adapter.INSTRUMENT_FAMILIES)
+                    changed[family][name] = '0' * 64
+                    with self.assertRaises(adapter.IntegrityError):
+                        self.call(families=changed)
+                    del changed[family][name]
+                    with self.assertRaises(adapter.IntegrityError):
+                        self.call(families=changed)
+            changed = copy.deepcopy(adapter.INSTRUMENT_FAMILIES)
+            del changed[family]
+            with self.assertRaises(adapter.IntegrityError):
+                self.call(families=changed)
+        changed = copy.deepcopy(adapter.INSTRUMENT_FAMILIES)
+        changed['foreign'] = {}
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(families=changed)
+        changed = copy.deepcopy(adapter.INSTRUMENT_FAMILIES)
+        changed['fixed33']['foreign.py'] = 'a' * 64
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(families=changed)
+
+    def test_every_fixed_helper_and_peer_remains_required(self):
+        for name in adapter.INSTRUMENT_FIXED_HELPERS:
+            changed = copy.deepcopy(adapter.INSTRUMENT_FIXED_HELPERS)
+            changed[name] = '0' * 64
+            with self.assertRaises(adapter.IntegrityError):
+                self.call(helpers=changed)
+            del changed[name]
+            with self.assertRaises(adapter.IntegrityError):
+                self.call(helpers=changed)
+        changed = copy.deepcopy(adapter.INSTRUMENT_FIXED_HELPERS)
+        changed['foreign.py'] = '0' * 64
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(helpers=changed)
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(peer='05c157aacd0c717ca9835bc8b8482f8c100101e7be3f6a3aa46d49cd145e8a23')
+
+
 class MixedNativeV3(unittest.TestCase):
     def setUp(self):
         self.prepared = json.loads((ROOT / 'docs/rebuild/v1/word-dev33-supported-layout-plan-prepared-20261004.json').read_text())

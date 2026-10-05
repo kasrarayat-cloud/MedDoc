@@ -31,6 +31,29 @@ DRIVERS = {
 FIXED_PROFILES = ('empty', 'ordinary', 'long')
 NATIVE_PROFILES = ('native-ordinary', 'native-long')
 
+# Additive instrument identity; historical DRIVERS/validate_seal remain unchanged.
+INSTRUMENT_VERSION = 'word48-shared-segmented-r3-v1'
+INSTRUMENT_FAMILIES = {'fixed33': {'dev_application_gate_v2.py': '5b2b28cf02f19bdf68c2c5f87c036f61ad56e3c416ad0e27e62803046e48d39f',
+             'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'run_dev_application_gate_v2.py': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7'},
+ 'additiveDEV': {'dev_application_gate_v2.py': '5b2b28cf02f19bdf68c2c5f87c036f61ad56e3c416ad0e27e62803046e48d39f',
+                 'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+                 'run_dev_application_gate_v2.py': '94f4270a7618a9452c9a935b1da38c3d80762ea9dccc06bb2d70deea91294714'},
+ 'holdout': {'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'holdout-rights.json': 'dac2183e8263491ceccd402dba5bec9984186c3457c495bf964a95dd6679ff13',
+             'run_holdout_application.py': '0de47ec3c87ed690d6df6902bba8c5d271dba2b5d242e3f8a5dff211a8709bf9',
+             'holdout_application.py': '2fe225cf11e5c23439d90e96789ee3ce3efe0713162c247b2dbee163ba7226c5',
+             'prepared-plan.json': '8008d18b5405227c373b6e0d6a0220877ff6a845387c531c291827f2c08a57f0'},
+ 'native': {'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5',
+            'dev_application_gate_native_v1.py': '3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5',
+            'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e'}}
+INSTRUMENT_FIXED_HELPERS = {'fill_eval.py': '7c74e1d3a46a0252d0b79169ac7cf0905222e7d741ee8061130bc37a2bf2a848',
+ 'final_eval.py': '97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a',
+ 'render_eval.py': '265ff7ad137889717a2f93554c8926f93f4cccd76b8c120eeda50bd5bf8f8a76',
+ 'score.py': 'd9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c',
+ 'v2/answering.py': '75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4',
+ 'v2/ticked.py': 'e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79'}
+
 
 class IntegrityError(ValueError):
     pass
@@ -47,6 +70,24 @@ def sha(raw):
 
 def integer(value):
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def validate_qualification_identity(version, families, fixed_helpers, peer_sha):
+    """Admit only the old identity or the separately reviewed r3 instrument.
+
+    This is metadata admission, not a resource grant or qualification result.
+    Every GT/scorer/profile/choice/render helper and the authenticated peer stays
+    fixed. Unknown versions, hybrid families and extra helpers fail closed.
+    """
+    if version == VERSION:
+        expected = DRIVERS
+    elif version == INSTRUMENT_VERSION:
+        expected = INSTRUMENT_FAMILIES
+    else:
+        raise IntegrityError('Unsupported qualification instrument version.')
+    require(families == expected, 'Qualification driver/workflow identity differs.')
+    require(fixed_helpers == INSTRUMENT_FIXED_HELPERS, 'Fixed qualification helper differs.')
+    require(peer_sha == PEER_SHA, 'Authenticated qualification peer differs.')
 
 
 def validate_derivative(prepared, original):
