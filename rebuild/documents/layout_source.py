@@ -27,8 +27,44 @@ def digest(value):
     return hashlib.sha256(value).hexdigest()
 
 
-def source_elements(root):
+FORM_METADATA_NS = "http://schemas.microsoft.com/sharepoint/v3/contenttype/forms"
+
+
+def default_form_metadata_pi(root, part, data):
+    """Only the empty marker on complete default SharePoint form metadata.
+
+    mso-contentType also accompanies document-information-panel resource URLs;
+    its target alone is not evidence of inert content. This exact schema holds
+    only SharePoint's default Display/Edit/New form names, outside Word content.
+    Nothing is removed or rewritten before the renderer receives the package.
+    """
+    if (not re.fullmatch(r"customXml/item[1-9][0-9]*\.xml", part)
+            or not data.startswith(b"<?mso-contentType?>")
+            or root.getroottree().docinfo.doctype
+            or root.tag != "{" + FORM_METADATA_NS + "}FormTemplates"
+            or root.nsmap != {None: FORM_METADATA_NS}
+            or root.attrib or root.text or root.tail or root.getnext() is not None):
+        return None
+    marker = root.getprevious()
+    if (not isinstance(marker, w.etree._ProcessingInstruction)
+            or marker.target != "mso-contentType" or marker.text
+            or marker.tail or marker.getprevious() is not None
+            or marker.getparent() is not None or marker.getnext() is not root):
+        return None
+    children = list(root)
+    if len(children) != 3:
+        return None
+    for child, name in zip(children, ("Display", "Edit", "New")):
+        if (child.tag != "{" + FORM_METADATA_NS + "}" + name or child.attrib
+                or len(child) or child.text != "DocumentLibraryForm" or child.tail
+                or child.nsmap != {None: FORM_METADATA_NS}):
+            return None
+    return marker
+
+
+def source_elements(root, *, part="", data=b""):
     """Element nodes after checking the complete parsed XML document."""
+    inert_marker = default_form_metadata_pi(root, part, data)
     first = root
     while first.getprevious() is not None:
         first = first.getprevious()
@@ -37,7 +73,7 @@ def source_elements(root):
         for node in first.iter():
             if isinstance(node.tag, str):
                 yield node
-            elif not isinstance(node, w.etree._Comment):
+            elif node is not inert_marker and not isinstance(node, w.etree._Comment):
                 w.fail("XML processing instructions and unknown node types cannot use layout verification.",
                        "layout_unsafe_source")
         first = first.getnext()
@@ -64,7 +100,7 @@ def safety(package):
                     w.fail("Linked resources cannot be used for layout verification.", "layout_unsafe_source")
         if name.endswith(".xml"):
             instructions = []
-            for node in source_elements(package.tree(name)):
+            for node in source_elements(package.tree(name), part=name, data=package.zip.read(name)):
                 if node.tag == w.q("w:fldSimple"):
                     check_field_instruction(node.get(w.q("w:instr")) or "")
                 if node.tag == w.q("w:fldChar"):
