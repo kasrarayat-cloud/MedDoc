@@ -1485,6 +1485,7 @@ INITIALS_DATE_PAIR = re.compile(
     r"(?:\binitials\b[^.;:?]*?" + _JOIN + r"\s*dated?\b|\binitial\s*" + _JOIN + r"\s*dated?\b"
     r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*initials?\b)" + _PAIR_CLOSES, re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
+OPTIONAL_RESPONSE_CAPTION = re.compile(r"[^:;?!\r\n]{1,160}\s*\(optional\)\s*:", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
 HEADING_STYLE = re.compile(r"^(?:heading|title|subtitle|toc)", re.I)
 LABEL_END = re.compile(r"[:?]\s*$|[–—-]\s*$")
@@ -2563,7 +2564,6 @@ class Detector:
         self.rule_temporal_bands()
         self.rule_ruled_paragraphs()
         self.rule_parenthetical_write_cells()
-        self.rule_optional_response_bands()
         self.rule_lines_below_label(write_requests_only=True)
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
@@ -8388,11 +8388,14 @@ class Detector:
                 # A printed bullet ending in a colon can own a flowing answer
                 # band. Its complete caption, rather than a word-count cutoff,
                 # is the source; two plain empty paragraphs prove the band.
+                # An explicit optional response caption is the same source
+                # relationship; its own emphasis does not style the band.
+                optional = not in_container and txt.rstrip().endswith(":") and OPTIONAL_RESPONSE_CAPTION.fullmatch(txt) is not None
                 narrative = (not in_container and txt.rstrip().endswith(":")
                              and (re.match(r"^[•●▪‣]\s+", txt) is not None
-                                  or self.list_info(ps.el) is not None))
+                                  or self.list_info(ps.el) is not None or optional))
                 props = ps.el.find(q('w:pPr'))
-                band_style = fingerprint(props) if props is not None else ''
+                band_style = None if optional else (fingerprint(props) if props is not None else '')
                 if not requested and self.ptext(ps.el)[0].rstrip("\n").endswith("\t"):
                     continue  # the actual inline tab is already its answer gap
                 cell = self.host_cell(ps)
@@ -8415,7 +8418,10 @@ class Detector:
                     if t2.strip() or id(nxt.el) in self.claimed or nxt.el.find(".//" + TXBX) is not None:
                         break
                     props = nxt.el.find(q('w:pPr'))
-                    if narrative and (fingerprint(props) if props is not None else '') != band_style:
+                    current = fingerprint(props) if props is not None else ''
+                    if narrative and band_style is None:
+                        band_style = current  # the first blank sets the band's uniform style
+                    if narrative and current != band_style:
                         break  # a style/spacing transition is a different layout band
                     blanks.append(nxt)
                     if not in_container and not narrative and len(blanks) >= 1:
@@ -8440,6 +8446,12 @@ class Detector:
                     continue
                 head = clean_label(txt.partition('(')[0]) if requested else ''
                 role = signing_place(head) if requested else ''
+                if not requested and not narrative and signing:
+                    # A printed caption that names a signing act owns the
+                    # blank beside it as part of that act: a combined
+                    # 'signature ... date' caption never yields an ordinary
+                    # writable date, whatever drew its signing line.
+                    role = signing_place(label) or ('signature' if SIGNATURE.search(label) else '')
                 action = self.checkbox_source_action(head, governing=True) if requested else ''
                 kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
                     ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
@@ -8458,46 +8470,6 @@ class Detector:
                 self.claimed.add(id(ps.el))
                 for b in blanks:
                     self.claimed.add(id(b.el))
-
-    def rule_optional_response_bands(self):
-        """An explicit optional response caption owns its adjacent blank band.
-
-        The caption may have its own style. Every answer paragraph must share
-        one plain flowing style and be a direct source sibling; no table,
-        drawing, hidden text or later question is absorbed.
-        """
-        for caption in (s for s in self.index.roots if s.kind == 'p' and s.part == 'word/document.xml'):
-            text, pieces = self.ptext(caption.el)
-            if (id(caption.el) in self.claimed
-                    or not re.fullmatch(r'[^:;?!\r\n]{1,160}\s*\(optional\)\s*:', text.strip(), re.I)
-                    or self.blank_spans(text, pieces) or self.box_units(caption)
-                    or not self.insertion_source_plain(caption)):
-                continue
-            slots = []; node = caption.el.getnext(); style = None
-            while node is not None and node.tag == q('w:p'):
-                slot = self.index.by_el.get(id(node))
-                if slot is None or slot.parent is not caption.parent or self.ptext(node)[0].strip():
-                    break
-                props = node.find(q('w:pPr'))
-                current = fingerprint(props) if props is not None else ''
-                if (id(node) in self.claimed or not self.plain_spacing_paragraph(slot, unused_tab_stops=True)
-                        or not self.tab_source_visible(slot) or style is not None and current != style):
-                    break
-                style = current; slots.append(slot); node = node.getnext()
-            if not 2 <= len(slots) <= 20:
-                continue
-            relation = {'relation': 'optional_response_band', 'question': text,
-                        'source': {'part': caption.part, 'slot': caption.path,
-                                   'fingerprint': fingerprint(caption.el)}}
-            reason = ''
-            if (signing_place(text) or self.checkbox_source_action(text, governing=True)
-                    or self.question_box_authorship(text)):
-                reason = 'This optional response belongs to a human signing or authored act; keep it unchanged.'
-            area = Area('long_text', clean_label(text), slots[0], {'type': 'paragraph'},
-                        context=self.context_for(caption), extra_slots=slots[1:], label_slot=caption,
-                        complete_source=True, source_questions=[relation], protection=reason)
-            area.source_action = bool(reason)
-            self.add(area); self.claimed.update(id(s.el) for s in [caption, *slots])
 
     # 7. blanks and 'Label:' answers inside paragraphs ---------------------------------------------------------------
     def literal_reference_link(self, text, pieces, start, end):
