@@ -27,6 +27,28 @@ class VersionedInstrumentIdentity(unittest.TestCase):
         self.call()
         self.call(version=adapter.VERSION, families=copy.deepcopy(adapter.DRIVERS))
 
+    def test_r4_calendar_instrument_is_additive_and_cannot_be_hybridized(self):
+        self.call(version=adapter.INSTRUMENT_R4_VERSION,
+                  families=copy.deepcopy(adapter.INSTRUMENT_R4_FAMILIES))
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(version=adapter.INSTRUMENT_R4_VERSION)
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(families=copy.deepcopy(adapter.INSTRUMENT_R4_FAMILIES))
+        for family, files in adapter.INSTRUMENT_R4_FAMILIES.items():
+            for name in files:
+                with self.subTest(family=family, file=name):
+                    changed = copy.deepcopy(adapter.INSTRUMENT_R4_FAMILIES)
+                    changed[family][name] = '0' * 64
+                    with self.assertRaises(adapter.IntegrityError):
+                        self.call(version=adapter.INSTRUMENT_R4_VERSION, families=changed)
+                    del changed[family][name]
+                    with self.assertRaises(adapter.IntegrityError):
+                        self.call(version=adapter.INSTRUMENT_R4_VERSION, families=changed)
+        changed = copy.deepcopy(adapter.INSTRUMENT_R4_FAMILIES)
+        changed['foreign'] = {}
+        with self.assertRaises(adapter.IntegrityError):
+            self.call(version=adapter.INSTRUMENT_R4_VERSION, families=changed)
+
     def test_unknown_version_and_hybrid_family_are_refused(self):
         with self.assertRaises(adapter.IntegrityError):
             self.call(version='word48-shared-segmented-r4-v1')
