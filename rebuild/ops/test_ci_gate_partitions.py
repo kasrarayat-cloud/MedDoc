@@ -56,7 +56,8 @@ class CIGatePartitions(unittest.TestCase):
             'documents.test_underlined_subheadings', 'documents.test_source_style_cache',
             'documents.test_captioned_blank_rows', 'documents.test_captioned_signing_band',
             'documents.test_explicit_insertion', 'documents.test_nominal_insertion_role',
-            'documents.test_table_selection_source', 'documents.test_temporal_band'])
+            'documents.test_table_selection_source', 'documents.test_temporal_band',
+            'documents.test_drawn_signing_and_bands', 'documents.test_signing_holds_and_source_claims'])
         self.assertEqual(support[0][-1], '-v')
         self.assertEqual(support[1], ['-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_*.py', '-v'])
 
