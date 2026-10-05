@@ -205,7 +205,9 @@ class SigningCaptionHold(unittest.TestCase):
                             word.fill(raw, fields, {field['key']: '14/03/2026'})
 
     def test_ordinary_date_captions_keep_their_writable_blank(self):
-        for caption in ('Date of assessment:', 'Visit date:', 'Date of birth:', 'Date of procedure:'):
+        for caption in ('Date of assessment:', 'Visit date:', 'Date of birth:', 'Date of procedure:',
+                        'Date signed report received:', 'Date received signed report:',
+                        'Date nurse received the signed report:', 'Review date:'):
             with self.subTest(caption):
                 raw = caption_over_blank(caption)
                 fields = word.inspect(raw)['fields']

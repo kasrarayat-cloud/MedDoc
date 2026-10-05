@@ -4679,7 +4679,10 @@ class Detector:
                         self.add(Area('choice', question, anchors[0], {'type': 'checkboxes', 'boxes': boxes}, context=context,
                             options=choices, complete_source=True, source_questions=[relation],
                             extra_slots=list(dict.fromkeys(s for s in anchors[1:] if s is not anchors[0]))))
-                    self.claimed.update(id(p.el) for p in [*paragraphs, *peer_paragraphs])
+                    # The column question, item label and merge tail are this
+                    # hierarchy's own printed source (its 'sources', which fill
+                    # binds): never a separate answer place for a later rule.
+                    self.claimed.update(id(p.el) for p in [*source_paragraphs, *paragraphs, *peer_paragraphs])
 
     def checkbox_label_size(self, paragraph, position):
         """Explicit printed label size, never the checkbox glyph's font.
@@ -8442,14 +8445,15 @@ class Detector:
                 action = self.checkbox_source_action(head, governing=True) if requested else ''
                 kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
                     ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
-                if not requested and not narrative and signing and kind not in SIGNING_KINDS:
+                if kind not in SIGNING_KINDS and (requested or narrative or signing) and not role:
                     # A printed caption that names a signing act owns the
-                    # blank beside it as part of that act: a combined
-                    # 'signature ... date' caption never yields an ordinary
-                    # writable date, whatever drew its signing line. A
-                    # signature-kind area is already never filled.
-                    role = signing_place(label) or ('signature' if SIGNATURE.search(label)
-                                                    or self.temporal_source_action(label) else '')
+                    # blank beside it as part of that act, whichever branch
+                    # read it (plain, bulleted band or parenthetical request):
+                    # a 'signature ... date' caption never yields an ordinary
+                    # writable answer, whatever drew its signing line. Hold
+                    # only - the kind is unchanged; a signature-kind area is
+                    # already never filled.
+                    role = 'signature' if self.caption_names_signing_act(txt) else ''
                 relation = ({'relation': 'narrative_empty_band', 'question': self.ptext(ps.el)[0],
                              'source': {'part': ps.part, 'slot': ps.path, 'fingerprint': fingerprint(ps.el)}}
                             if narrative else self.write_request_source(ps) if requested else None)
@@ -8613,6 +8617,30 @@ class Detector:
             return True
         return bool(temporal and re.fullmatch(r'[^:;.!?\r\n]+?\s+'
                     r'(?:signs|signed|initials|initiall?ed)(?:\s+[^:;.!?\r\n]+)?', text, re.I))
+
+    @classmethod
+    def caption_names_signing_act(cls, caption):
+        """Whether a printed caption names a signing act, read only with the engine's own signing readers.
+
+        The complete caption and each of its tab- or colon-separated parts are
+        read. A temporal modifier may precede the act ('Date of signing', read
+        by temporal_source_action) or follow it ('Witness signature date': the
+        part without its trailing date/time is read by the narrow signing
+        readers only). A receipt of a signed document, or a clinical result
+        date, is not a signing act.
+        """
+        text = re.sub(r'^\s*[•●▪‣]\s+', '', caption)
+        parts = [part for head in dict.fromkeys((text, text.partition('(')[0]))
+                 for part in (head, *re.split(r'\t+|:\s+', head))]
+        for part in parts:
+            whole = clean_label(part)
+            bare = clean_label(re.sub(r'\s+(?:date|time)(?:\s+and\s+time)?\s*:?\s*$', '', part, flags=re.I))
+            if whole and (signing_place(whole) or cls.signing_event_source(whole)
+                          or cls.temporal_source_action(whole)):
+                return True
+            if bare and bare != whole and (signing_place(bare) or cls.signing_event_source(bare)):
+                return True
+        return False
 
     @classmethod
     def temporal_source_action(cls, argument):
@@ -8789,6 +8817,14 @@ class Detector:
                                        'Keep it unchanged and use the explicit human workflow.')
                     self.coverage_issue(paragraph, 'human_signing_action', area.protection)
                 self.add(area)
+            # The caption is these two destinations' complete source question,
+            # not a further answer after its own colon: claim it, as the
+            # temporal band and the lines-below-label captions are claimed.
+            # A human act's caption is part of that protected act, so a stored
+            # writer after its colon is refused rather than filled.
+            self.claimed.add(id(caption.el))
+            if human:
+                self.protected_regions.add(caption.id)
 
     def insertion_source_plain(self, slot):
         """An insertion's printed source has no control, wrapper or foreign ink."""
