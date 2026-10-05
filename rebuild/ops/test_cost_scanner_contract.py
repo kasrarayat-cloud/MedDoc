@@ -193,7 +193,8 @@ class OrdinaryCostContract(unittest.TestCase):
 
     def test_reviewed_omission_floor_remains_part_of_the_complete_binding(self):
         def checked(): scan.provider_caps(scan.REBUILD / 'core/batch_jobs.py')
-        self.check_mutation('core/generation.py', 'or MISSING_RECORD_VALUE.fullmatch(value)',
+        self.check_mutation('core/generation.py',
+                            'or any(MISSING_RECORD_VALUE.fullmatch(reading) for reading in safety_readings(value))',
                             'or False', checked)
 
     def test_imported_compiler_and_single_and_batch_sends_share_the_reviewed_price(self):

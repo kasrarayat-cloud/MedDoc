@@ -47,6 +47,19 @@ class MissingRecordValues(SimpleTestCase):
                 answer = selected(notes, [field('a', label)], {label: [notes]})['a']
                 self.assertEqual((answer['status'], answer['text']), ('supported', value))
 
+    def test_refuted_omission_variants_hold_without_normalizing_retained_evidence(self):
+        fields = [field('a', 'Allergies')]
+        for value in ('not yet documented.', 'not documented in the chart.', 'not documented!',
+                      'not documented\u200b.', 'not docu\u200bmented.', 'not documented\uff0e'):
+            with self.subTest(value=value):
+                notes = 'Allergies: ' + value
+                answer = selected(notes, fields, {'Allergies': [notes]})['a']
+                self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+                self.assertEqual(answer['held_candidate']['text'], value)
+                self.assertEqual(answer['evidence'], [{'quote': notes, 'start': 0, 'end': len(notes)}])
+                stale = {**answer, 'status': 'supported', 'text': value}
+                self.assertEqual(g.governed_decisions(notes, fields, {'a': stale}), ['Allergies'])
+
     def test_new_floor_is_complete_value_only_and_keeps_other_floors(self):
         for value in ('not undocumented.', 'not documented as severe.', 'no known drug allergies.',
                       'The patient is not taking warfarin.', 'not documented and penicillin.',

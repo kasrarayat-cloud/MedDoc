@@ -202,3 +202,25 @@ global profile remains 8,000 tokens; this specific ordinary wire is 20,000.
 The scanner's omission-floor mutation, imported-compiler mutation and original
 request/undercharge controls remain fail-closed. Clinical application/export
 replay on the new integrated source is required separately.
+
+#### Corrective addendum — complete omission grammar and safety readings
+
+Independent finished-diff refutation demonstrated six complete-value bypasses:
+`not yet documented.`, `not documented in the chart.`, `not documented!`,
+an invisible character before the stop or inside `documented`, and a fullwidth
+stop. The original failed probes and the first repair stay preserved. The
+complete-value grammar now admits the missing-record qualifier/order and
+closing punctuation, and withholding reads every existing `safety_readings`
+interpretation. That established hold-only reader applies NFKC and invisible
+character removal without changing evidence, candidate text or offsets. The
+guard remains a full match, never an unrestricted substring check.
+
+The reviewed replacement complete generation AST is now
+`80624fb45d82a6795e4450f12dff4135be0c9f7961fe55942e82aaf4bc8f9456`;
+the previous `9cdefe…` pin is superseded only for this correction. Removing the
+same new assignment and shape-floor operand still restores the entire original
+`840bf7…` AST. Every compiler/quote/request definition stays unchanged. Repeating
+the actual captured WQ01 SDK reconstruction remains exact, with wire SHA256
+`e7ac48563b5e9ebab93f41b007a892e2c00e344852d774e11102f618e9114ea2`,
+maximum cost `0.23732800000` and original customer bound `0.355992000000`.
+The original unsafe outcome, metering and unreconciled invoice are untouched.

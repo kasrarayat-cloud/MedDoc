@@ -1117,7 +1117,7 @@ ORDINARY_PRICED_DEPENDENCIES = {
     # 2026-10-05 WQ01 omission-floor addendum: only MISSING_RECORD_VALUE and
     # v3_shape_holds change; entire earlier AST restores when removed. Actual
     # captured WQ01 SDK body and 0.355992 reservation reconstruct exactly.
-    'core/generation.py': '9cdefe21964894589b2db8b9b23db8fc933d926997446d9880a87da3d8c2e207',
+    'core/generation.py': '80624fb45d82a6795e4450f12dff4135be0c9f7961fe55942e82aaf4bc8f9456',
     'core/ordinary_source_scope.py': '42ef86c3e4f69222040edc6a630e694eac424b28a8066a311d90e00afd0a4338',
     'core/reviewed_source.py': '8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157',
     'core/reviewed_procedure_source.py': 'aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0',

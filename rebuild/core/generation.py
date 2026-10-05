@@ -2547,8 +2547,8 @@ def plain_printed_side_option(field, value):
 
 
 MISSING_RECORD_VALUE = re.compile(
-    r'\s*(?:(?:currently|presently)\s+)?(?:not|never)\s+'
-    r'(?:documented|recorded|provided|available)(?:\s+(?:yet|in\s+the\s+(?:notes|record)))?\s*[.]?\s*', re.I)
+    r'\s*(?:(?:currently|presently)\s+)?(?:not|never)\s+(?:yet\s+)?'
+    r'(?:documented|recorded|provided|available)(?:\s+(?:yet|in\s+(?:the\s+)?(?:notes|record|chart)))?\s*[.!?]?\s*', re.I)
 
 
 def v3_shape_holds(quote, value):
@@ -2560,7 +2560,9 @@ def v3_shape_holds(quote, value):
         # A complete labelled omission state supplies no clinical value. Read
         # the entire value, never a substring: an actual negative ('no known
         # drug allergies', 'not taking warfarin') is a different statement.
-        or MISSING_RECORD_VALUE.fullmatch(value)
+        # Compatibility and invisible-character readings are hold-only; the
+        # candidate, quotation and offsets remain exactly as supplied.
+        or any(MISSING_RECORD_VALUE.fullmatch(reading) for reading in safety_readings(value))
         # (e) Nor does one shaped as a pointer to other lines (F7).
         or points_elsewhere(value)
         # (f) A self-correction inside the sentence (read with invisible characters removed too).
