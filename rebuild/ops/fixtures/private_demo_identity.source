@@ -170,7 +170,7 @@ def main():
         served.expect(served.client(), 9160, '/register/', 404, label='invite_only_registration_closed')
         for surface, port in (('doctor', 9160), ('admin', 9161)):
             health = json.loads(served.expect(served.client(), port, '/health/', 200, label='surface_identity'))
-            auth.require(health == {'status': 'ok', 'data_mode': 'synthetic', 'surface': surface,
+            auth.require(health == {'status': 'ok', 'data_mode': 'synthetic-only', 'surface': surface,
                 'release': args.expected_commit}, 'surface_health_differs')
         check('Invite-only exact doctor/admin fixture identity')
         unique = sha((args.run_id + secrets.token_hex(16)).encode())[:16]

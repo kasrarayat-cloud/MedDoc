@@ -1,11 +1,14 @@
 """Literal new-demo identity runner controls; no account/DB/mail/service action."""
+import ast
 import contextlib
+import copy
 from io import StringIO
 import json
 from pathlib import Path
 import runpy
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -35,6 +38,35 @@ class DemoIdentityLiteralTests(unittest.TestCase):
     def test_execution_without_exact_prospective_identity_refuses_before_importing_application(self):
         with patch.object(sys, 'argv', ['identity', '--execute']), self.assertRaisesRegex(RuntimeError, 'Complete prospective'):
             self.runner['main']()
+
+    def test_literal_health_gate_accepts_actual_synthetic_surfaces_and_refuses_wrong_identity(self):
+        # Compile only the real health response and literal predicate: no app,
+        # database, HTTP or credentials are needed to reproduce this refusal.
+        tree = ast.parse(SOURCE.read_text())
+        gates = [node.args[0] for node in ast.walk(tree) if isinstance(node, ast.Call)
+                 and len(node.args) == 2 and isinstance(node.args[1], ast.Constant)
+                 and node.args[1].value == 'surface_health_differs']
+        self.assertEqual(len(gates), 1)
+        predicate = compile(ast.Expression(gates[0]), str(SOURCE), 'eval')
+        views = SOURCE.parents[2] / 'core/views.py'
+        functions = [copy.deepcopy(node) for node in ast.parse(views.read_text()).body
+                     if isinstance(node, ast.FunctionDef) and node.name in ('health', 'health_data_mode')]
+        self.assertEqual({node.name for node in functions}, {'health', 'health_data_mode'})
+        for node in functions:
+            node.decorator_list = []
+        release = '7a6d733e9fdd5c4feb353bcc520034e50e5af8e2'
+        for surface in ('doctor', 'admin'):
+            context = {'settings': SimpleNamespace(SYNTHETIC_ONLY=True, ADMIN_SITE=surface == 'admin',
+                                                    RELEASE_SHA=release), 'JsonResponse': lambda value: value}
+            exec(compile(ast.Module(body=functions, type_ignores=[]), str(views), 'exec'), context)
+            actual = context['health'](None)
+            scope = {'health': actual, 'surface': surface, 'args': SimpleNamespace(expected_commit=release)}
+            self.assertTrue(eval(predicate, scope))
+            for changed in ({**actual, 'data_mode': mode} for mode in ('synthetic', 'real', 'live')):
+                self.assertFalse(eval(predicate, {**scope, 'health': changed}))
+            for changed in ({**actual, 'release': '0' * 40}, {**actual, 'surface': 'foreign'},
+                            {**actual, 'status': 'failed'}, {**actual, 'extra': True}):
+                self.assertFalse(eval(predicate, {**scope, 'health': changed}))
 
     def test_raw_token_routes_are_not_written_to_http_records(self):
         safe = self.runner['safe_route']
