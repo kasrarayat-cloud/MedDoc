@@ -8446,15 +8446,16 @@ class Detector:
                     continue
                 head = clean_label(txt.partition('(')[0]) if requested else ''
                 role = signing_place(head) if requested else ''
-                if not requested and not narrative and signing:
-                    # A printed caption that names a signing act owns the
-                    # blank beside it as part of that act: a combined
-                    # 'signature ... date' caption never yields an ordinary
-                    # writable date, whatever drew its signing line.
-                    role = signing_place(label) or ('signature' if SIGNATURE.search(label) else '')
                 action = self.checkbox_source_action(head, governing=True) if requested else ''
                 kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
                     ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
+                if not requested and not narrative and signing and kind not in SIGNING_KINDS:
+                    # A printed caption that names a signing act owns the
+                    # blank beside it as part of that act: a combined
+                    # 'signature ... date' caption never yields an ordinary
+                    # writable date, whatever drew its signing line. A
+                    # signature-kind area is already never filled.
+                    role = signing_place(label) or ('signature' if SIGNATURE.search(label) else '')
                 relation = ({'relation': 'narrative_empty_band', 'question': self.ptext(ps.el)[0],
                              'source': {'part': ps.part, 'slot': ps.path, 'fingerprint': fingerprint(ps.el)}}
                             if narrative else self.write_request_source(ps) if requested else None)
