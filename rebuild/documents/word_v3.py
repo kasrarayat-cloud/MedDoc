@@ -9890,31 +9890,45 @@ def replace_range(p, start, end, answer, *, plain=True):
 def temporal_band_characters(answer, pattern):
     """An explicit date, rendered in the original's printed format positions."""
     months = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+    orders = {'ddmmmyyyy': ('dd', 'mmm', 'yyyy'), 'ddmmyyyy': ('dd', 'mm', 'yyyy'),
+              'mmddyyyy': ('mm', 'dd', 'yyyy'), 'yyyymmdd': ('yyyy', 'mm', 'dd')}
     value = str(answer).strip()
     iso = re.fullmatch(r'(\d{4})-(\d{2})-(\d{2})', value)
     try:
-        if iso:
-            year, month, day = (int(part) for part in iso.groups())
-        else:
-            orders = {'ddmmmyyyy': ('dd', 'mmm', 'yyyy'), 'ddmmyyyy': ('dd', 'mm', 'yyyy'),
-                      'mmddyyyy': ('mm', 'dd', 'yyyy'), 'yyyymmdd': ('yyyy', 'mm', 'dd')}
-            order = orders[pattern]
-            widths = {'dd': r'\d{2}', 'mm': r'\d{2}', 'mmm': r'[A-Za-z]{3}', 'yyyy': r'\d{4}'}
-            match = re.fullmatch(r'\s*/\s*'.join('(' + widths[part] + ')' for part in order), value)
-            if match is None:
-                raise ValueError
+        order = orders[pattern]
+        widths = {'dd': r'\d{2}', 'mm': r'\d{2}', 'mmm': r'[A-Za-z]{3}', 'yyyy': r'\d{4}'}
+        match = re.fullmatch(r'\s*/\s*'.join('(' + widths[part] + ')' for part in order), value)
+        calendar = None
+        if match:
             parts = dict(zip(order, match.groups()))
-            year, day = int(parts['yyyy']), int(parts['dd'])
             month = (next(n for n, word in enumerate(months, 1) if word.lower() == parts['mmm'].lower())
                      if 'mmm' in parts else int(parts['mm']))
-        date(year, month, day)
+            try:
+                calendar = date(int(parts['yyyy']), month, int(parts['dd']))
+            except ValueError:
+                pass
+        if calendar is None and iso:
+            calendar = date(*(int(part) for part in iso.groups()))
+        if calendar is None:
+            numeric = re.fullmatch(r'(\d{2})\s*/\s*(\d{2})\s*/\s*(\d{4})', value)
+            candidates = set()
+            if numeric:
+                first, second, year = (int(part) for part in numeric.groups())
+                for month, day in ((first, second), (second, first)):
+                    try:
+                        candidates.add(date(year, month, day))
+                    except ValueError:
+                        pass
+            if len(candidates) != 1:
+                raise ValueError
+            calendar = candidates.pop()
+        year, month, day = calendar.year, calendar.month, calendar.day
     except (ValueError, KeyError, StopIteration):
-        fail('This divided date needs a real YYYY-MM-DD value or its exact printed slash-separated format.',
+        fail('This divided date needs a real YYYY-MM-DD value, its exact printed slash-separated format, '
+             'or a numeric slash date with only one possible calendar interpretation.',
              'invalid_answer')
     parts = {'dd': '%02d' % day, 'mm': '%02d' % month, 'mmm': months[month - 1], 'yyyy': '%04d' % year}
-    order = {'ddmmmyyyy': ('dd', 'mmm', 'yyyy'), 'ddmmyyyy': ('dd', 'mm', 'yyyy'),
-             'mmddyyyy': ('mm', 'dd', 'yyyy'), 'yyyymmdd': ('yyyy', 'mm', 'dd')}
-    return ''.join(parts[part] for part in order[pattern])
+    return ''.join(parts[part] for part in order)
 
 
 def temporal_band_printed_value(answer, pattern):

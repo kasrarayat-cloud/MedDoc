@@ -136,6 +136,33 @@ class TemporalBandOwnershipTests(unittest.TestCase):
         slash.text = slash.text.replace('/', '-')
         self.assertIsNone(word.constrained_scalar_value(original, index, field, True))
 
+    def test_unique_numeric_calendar_intake_keeps_each_source_appointed_output(self):
+        for pattern, separators, expected in [
+                ('ddmmmyyyy', (2, 5), '14/Mar/2026'), ('ddmmyyyy', (2, 4), '14/03/2026'),
+                ('mmddyyyy', (2, 4), '03/14/2026'), ('yyyymmdd', (4, 6), '2026/03/14')]:
+            with self.subTest(pattern=pattern):
+                data = band_form(pattern=pattern, separators=separators); field = bands(data)[0]
+                for answer in ('03/14/2026', '14/03/2026', '2026-03-14', expected):
+                    with self.subTest(answer=answer):
+                        self.assertEqual(word.effective_values(data, [field], {field['key']: answer}),
+                                         {field['key']: expected})
+
+    def test_calendar_ambiguity_is_resolved_only_by_actual_source_grammar(self):
+        for pattern, expected, iso in [('ddmmyyyy', '05/10/2026', '2026-10-05'),
+                                      ('mmddyyyy', '05/10/2026', '2026-05-10')]:
+            self.assertEqual(word.temporal_band_printed_value('05/10/2026', pattern), expected)
+            self.assertEqual(word.temporal_band_characters('05/10/2026', pattern),
+                             word.temporal_band_characters(iso, pattern))
+        for pattern in ('ddmmmyyyy', 'yyyymmdd'):
+            for answer in ('05/10/2026', '2026-02-29', '29/02/2026', '04/31/2026',
+                           '00/12/2026', '03/14/0000', '3/14/2026', '03-14-2026'):
+                with self.subTest(pattern=pattern, answer=answer), self.assertRaises(word.V3Failure):
+                    word.temporal_band_characters(answer, pattern)
+        self.assertEqual(word.temporal_band_printed_value('12/12/2026', 'ddmmmyyyy'), '12/Dec/2026')
+        self.assertEqual(word.temporal_band_printed_value('02/29/2024', 'ddmmmyyyy'), '29/Feb/2024')
+        self.assertEqual(word.temporal_band_printed_value('29/02/2024', 'yyyymmdd'), '2024/02/29')
+        self.assertEqual(word.temporal_band_printed_value('2024/02/29', 'yyyymmdd'), '2024/02/29')
+
     def test_normal_effective_values_reads_iso_and_printed_date_inputs(self):
         data = band_form(); field = bands(data)[0]; key = field['key']
         for answer in ('2026-10-05', '05/Oct/2026'):
