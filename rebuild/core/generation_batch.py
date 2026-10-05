@@ -163,6 +163,8 @@ def constraints(version, *, live=False):
             for key in rule['keys']:
                 if by_key[key].get('kind') in ('multi_choice', 'checkbox', 'table_rows'):
                     refuse('A unique-priority field must hold one scalar value.')
+                if ((by_key[key].get('locator') or {}).get('target') or {}).get('shape') == 'temporal_band':
+                    refuse('Uniqueness of divided calendar dates is unsupported; review the form-wide rule.')
                 constraint_values(by_key[key], rule['allowed_values'])
         else:
             refuse('A form-wide rule is unsupported; it needs review before generation.')

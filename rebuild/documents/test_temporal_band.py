@@ -1,6 +1,8 @@
 """Pure physical ownership controls; no application, DB, network or renderer."""
 from copy import deepcopy
+import hashlib
 import io
+from types import SimpleNamespace
 import unittest
 from zipfile import ZipFile
 
@@ -49,6 +51,30 @@ def detected(data):
 
 def bands(data):
     return [f for f in detected(data) if f['locator']['target'].get('shape') == 'temporal_band']
+
+
+def calendar_constraint_fixture():
+    document = Document()
+    document.add_paragraph('The two assessment dates must be different calendar dates.')
+    for pattern, separators in [('ddmmmyyyy', (2, 5)), ('mmddyyyy', (2, 4))]:
+        sample = Document(io.BytesIO(band_form(pattern=pattern, separators=separators)))
+        for paragraph in sample.paragraphs[:3]:
+            document._element.body.insert(-1, deepcopy(paragraph._p))
+    output = io.BytesIO(); document.save(output)
+    return output.getvalue()
+
+
+def constraint_version(data, fields, values):
+    from core import generation_batch as batch
+    manifest = {'contract': batch.CONSTRAINTS, 'source_sha256': hashlib.sha256(data).hexdigest(),
+                'fields_sha256': batch.digest(fields), 'coverage': 'complete',
+                'provenance': 'synthetic_fixture', 'evidence_sha256': '1' * 64,
+                'instruction_references': [{'id': 'rule', 'part': 'word/document.xml', 'slot': 'b/p[0]',
+                                           'sha256': hashlib.sha256(Document(io.BytesIO(data)).paragraphs[0].text.encode()).hexdigest()}],
+                'rules': [{'kind': 'unique_values', 'source_id': 'rule',
+                           'keys': [f['key'] for f in fields], 'allowed_values': values}]}
+    return SimpleNamespace(fields=fields, template=SimpleNamespace(sha256=manifest['source_sha256']),
+                           generation_constraints=manifest)
 
 
 class TemporalBandOwnershipTests(unittest.TestCase):
@@ -161,6 +187,44 @@ class TemporalBandOwnershipTests(unittest.TestCase):
             with self.subTest(answer=answer):
                 saved = {key: {'text': answer, 'status': 'supported', 'reviewed': True}}
                 self.assertFalse(stages.export_read_back(data, final, [field], saved)['passed'])
+
+    def test_divided_calendar_uniqueness_refuses_before_generation_admission(self):
+        from core import generation_batch as batch
+        from django.core.exceptions import ValidationError
+        data = calendar_constraint_fixture(); fields = bands(data)
+        self.assertEqual(len(fields), 2)
+        answers = {f['key']: '2026-10-05' for f in fields}
+        self.assertEqual(list(word.effective_values(data, fields, answers).values()),
+                         ['05/Oct/2026', '10/05/2026'])
+        version = constraint_version(data, fields, ['05/Oct/2026', '10/05/2026'])
+        with self.assertRaisesRegex(ValidationError, 'divided calendar dates.*Nothing was sent or charged'):
+            batch.constraints(version)
+
+    def test_divided_dates_without_a_unique_rule_keep_ordinary_admission(self):
+        from core import generation_batch as batch
+        data = calendar_constraint_fixture(); fields = bands(data)
+        version = constraint_version(data, fields, ['05/Oct/2026', '10/05/2026'])
+        version.generation_constraints['rules'] = []
+        self.assertEqual(batch.constraints(version), version.generation_constraints)
+
+    def test_ordinary_priority_uniqueness_still_reads_actual_written_values(self):
+        from core import generation_batch as batch
+        from django.core.exceptions import ValidationError
+        document = Document(); document.add_paragraph('The two priorities must be different.')
+        document.add_paragraph('Priority A: ______'); document.add_paragraph('Priority B: ______')
+        output = io.BytesIO(); document.save(output); data = output.getvalue()
+        fields = detected(data); self.assertEqual(len(fields), 2)
+        version = constraint_version(data, fields, ['1', '2'])
+        manifest = batch.constraints(version)
+        def read(selected, values):return word.effective_values(data, selected, values)
+        for values in (('1', '2'), ('1', '1')):
+            answers = {f['key']: {'text': value, 'status': 'supported', 'reviewed': True}
+                       for f, value in zip(fields, values)}
+            if values == ('1', '1'):
+                with self.assertRaisesRegex(ValidationError, 'invalid or repeated priority'):
+                    batch.validate_constraints(manifest, answers, fields, read_options=read)
+            else:
+                batch.validate_constraints(manifest, answers, fields, read_options=read)
 
     def test_foreign_missing_inconsistent_hidden_or_populated_source_does_not_grant_band(self):
         for options in ({'foreign_guide': True}, {'pattern': 'ddmmyy'}, {'separators': (1, 5)},
