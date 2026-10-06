@@ -9204,17 +9204,34 @@ class Detector:
                     # a clinician review it, as the previous reading did.
                     self.coverage_issue(spacer, 'ambiguous_signing_band',
                                         DRAWN_BAND_SPACER_REVIEW + 'Location: ' + spacer.id)
+            # A typed signing area may run over several lines (e0 read them as one signature field): each further
+            # typed writing line directly below the spacer is one of the band's places too, unwritten and reviewed,
+            # rather than a neutral answer that lost the caption's label.
+            further = band_next(spacer.el) if spacer is not None else None
+            while further is not None:
+                line = self.index.by_el.get(id(further))
+                if not (line is not None and line.kind == 'p' and line.parent is slot.parent
+                        and not any(node.tag in BAND_SPACER_CONTENT for node in line.el.iter())
+                        and self.band_typed_line(line)):
+                    break
+                self.signing_band_places.append(line.id)
+                self.claimed.add(id(line.el))
+                self.protected_regions.add(line.id)
+                self.coverage_issue(line, 'ambiguous_signing_band', DRAWN_BAND_SPACER_REVIEW + 'Location: ' + line.id)
+                further = band_next(line.el)
             self.notes.append(reason + ' Location: ' + slot.id)
 
     def band_typed_line(self, spacer):
-        """A paragraph that prints only a typed writing line: every printed character lies in a blank the engine's own
-        blank reader reads (underscores, dots), with no label of its own."""
+        """A paragraph that prints only a typed writing line: every printed character lies in a label-less blank the
+        engine's own blank reader reads (underscores, dots, underlined tabs). A placeholder, bracket, angle, hint or
+        segmented blank names or shapes its own answer, so a line holding one is never this."""
         text, pieces = self.ptext(spacer.el)
         spans = self.blank_spans(text, pieces)
         rest = list(text)
         for start, end, _ in spans:
             rest[start:end] = ' ' * (end - start)
-        return bool(spans) and not ''.join(rest).strip()
+        return (bool(spans) and all(kind in ('blank', 'utab') for _, _, kind in spans)
+                and not ''.join(rest).strip())
 
     def band_spacer_draws_line(self, spacer):
         """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,

@@ -273,6 +273,51 @@ class DrawnSigningBand(unittest.TestCase):
                           if f['locator']['slot'] == 'b/p[3]'], [('Print name', False)])
         self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
         self.assertNotIn(BODY + 'b/p[3]', word.signing_band_places(raw))
+        # Refutation round 8: placeholders and bracketed prompts name their own answers; a line of them under the
+        # caption stays the form's own fields, never the band's spacer.
+        for line, labels in (('{{Next review date}}\t\t{{Review clinic}}', ['Next review date', 'Review clinic']),
+                             ('[Insert clinician name]\t[Insert job title]', ['clinician name', 'job title'])):
+            with self.subTest(line=line):
+                xml = ''.join('<w:r><w:t xml:space="preserve">%s</w:t></w:r>' % part if part else '<w:r><w:tab/></w:r>'
+                              for part in line.replace('\t', '\n\t\n').split('\n')
+                              for part in ([''] if part == '\t' else [part]) if part or part == '')
+                raw = drawn_band(caption, spacer_xml=xml)
+                found = word.inspect(raw)
+                self.assertEqual([f['label'] for f in found['fields'] if f['locator']['slot'] == 'b/p[3]'], labels)
+                self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
+                self.assertNotIn(BODY + 'b/p[3]', word.signing_band_places(raw))
+
+    def test_a_multi_line_typed_signing_area_is_wholly_the_bands(self):
+        # Refutation round 8: only the first typed line became the band's spacer; lines 2+ of a typed signing area
+        # (one signature field on e0) lost the caption's label and became neutral writable answers. The whole run of
+        # typed lines below the spacer belongs to the band; the form's next own field does not.
+        for first in ('typed', 'empty'):
+            with self.subTest(first=first):
+                doc = Document()
+                doc.add_paragraph('Clinical summary: ________')
+                lines = doc.add_paragraph()
+                lines._p.append(line_run(1))
+                lines.add_run('\t\t')
+                lines._p.append(line_run(2))
+                doc.add_paragraph('Patient signature\t\t\tPrint name')
+                doc.add_paragraph('_' * 30 if first == 'typed' else '')
+                doc.add_paragraph('_' * 30)
+                doc.add_paragraph('.' * 30)
+                doc.add_paragraph('Visit date: ________')
+                raw = data(doc)
+                found = word.inspect(raw)
+                band = word.signing_band_places(raw)
+                for place in ('b/p[3]', 'b/p[4]', 'b/p[5]'):
+                    self.assertIn(BODY + place, band)
+                    self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == place])
+                reviewed = sorted(i['slot'] for i in found['coverage_issues'] if i['code'] == 'ambiguous_signing_band')
+                self.assertEqual(reviewed, ['b/p[3]', 'b/p[4]', 'b/p[5]'] if first == 'typed' else ['b/p[4]', 'b/p[5]'])
+                visit = [f for f in found['fields'] if f['locator']['slot'] == 'b/p[6]']
+                self.assertEqual([(f['label'], bool(f.get('write_protected'))) for f in visit], [('Visit date', False)])
+                writable = [f for f in found['fields'] if not f.get('write_protected')]
+                final = word.fill(raw, found['fields'], {f['key']: 'Alex Example' for f in writable})
+                for place in ('b/p[3]', 'b/p[4]', 'b/p[5]'):
+                    self.assertEqual(slot_bytes(final, place), slot_bytes(raw, place))
 
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician
@@ -549,7 +594,8 @@ class DrawnBandRoute(unittest.TestCase):
             'typed line': '<w:p %s><w:r><w:t>%s</w:t></w:r></w:p>' % (DECLARED, '_' * 30),
         }
 
-        def report(spacer, *, numbered=True, typed=False, caption='Patient signature\t\t\tPrint name', outlined=False):
+        def report(spacer, *, numbered=True, typed=False, caption='Patient signature\t\t\tPrint name', outlined=False,
+                   extra=0):
             doc = Document()
             doc.add_paragraph('Synthetic endoscopy report')
             name = doc.add_paragraph('PATIENT NAME: ')
@@ -573,6 +619,8 @@ class DrawnBandRoute(unittest.TestCase):
             placeholder = doc.add_paragraph()._p
             placeholder.addnext(etree.fromstring(spacers[spacer]))
             placeholder.getparent().remove(placeholder)
+            for _ in range(extra):
+                doc.add_paragraph('_' * 30)
             if typed:
                 doc.add_paragraph('Printed Name of Recorder:')
                 band = doc.add_paragraph()
@@ -609,6 +657,15 @@ class DrawnBandRoute(unittest.TestCase):
                     self.assertNotIn('advanced_unresolved_areas', coverage)
                     self.assertEqual(output.paragraphs[1].text, 'PATIENT NAME: Alex Example')
                     self.assertEqual(output.paragraphs[8].text, Document(io.BytesIO(raw)).paragraphs[8].text)
+        # A multi-line typed signing area on a legacy-kept form exports as on e0, every line unchanged.
+        raw = report('typed line', extra=2)
+        for preferred in ('auto', 'legacy'):
+            with self.subTest(spacer='typed lines', preferred=preferred):
+                route, coverage, output = imported(raw, preferred)
+                self.assertEqual(route, 'legacy')
+                self.assertFalse(coverage.get('block_generation'))
+                self.assertEqual([p.text for p in output.paragraphs[8:11]],
+                                 [p.text for p in Document(io.BytesIO(raw)).paragraphs[8:11]])
         # The settings default engine keeps a band form without lost places on legacy as well.
         _, coverage, _ = imported(report('bottom border', numbered=False), 'legacy')
         self.assertFalse(coverage.get('block_generation'))
@@ -655,6 +712,89 @@ class DrawnBandRoute(unittest.TestCase):
                           coverage['block_generation']), ('legacy', True, True))
         self.assertTrue(all(issue['detail'].startswith(word.DRAWN_BAND_SPACER_REVIEW)
                             for issue in coverage['advanced_unresolved_areas']))
+
+    def test_a_header_band_holds_a_legacy_import_whatever_the_earlier_fields_span(self):
+        # Refutation round 8: legacy places are one per ANCHOR, so a multi-paragraph tab-form field earlier in the
+        # form shifted the field/place pairing and a role-less legacy date field in a header band went unseen; the
+        # import was admitted and the date written into both header copies. Places are now read per field.
+        import tempfile
+        from pathlib import Path
+        from . import engine
+        underlined = '<w:r %s><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>' % DECLARED
+        caption = 'Signature of Patient or Representative\t\t\tDate'
+
+        def report(anchors):
+            doc = Document()
+            doc.add_paragraph('Synthetic endoscopy report')
+            doc.add_paragraph('PATIENT NAME: ')._p.append(etree.fromstring(underlined))
+            heading = doc.add_paragraph('COMMENTS')
+            outline = OxmlElement('w:outlineLvl')
+            outline.set(qn('w:val'), '1')
+            heading._p.get_or_add_pPr().append(outline)
+            for _ in range(anchors):
+                doc.add_paragraph()._p.append(etree.fromstring(underlined))
+            doc.add_paragraph('End of report.')
+            section = doc.sections[0]
+            section.different_first_page_header_footer = True
+            for header in (section.header, section.first_page_header):
+                header.is_linked_to_previous = False
+                lines = header.paragraphs[0]
+                lines._p.append(line_run(1, fallback=False))
+                lines.add_run('\t\t')
+                lines._p.append(line_run(2, fallback=False))
+                band = header.add_paragraph(caption)
+                level = OxmlElement('w:outlineLvl')
+                level.set(qn('w:val'), '2')
+                band._p.get_or_add_pPr().append(level)
+                header.add_paragraph()._p.append(etree.fromstring(underlined))
+            return data(doc)
+
+        for anchors in (1, 2, 3):
+            raw = report(anchors)
+            for preferred in ('auto', 'legacy'):
+                with self.subTest(anchors=anchors, preferred=preferred), tempfile.TemporaryDirectory() as tmp:
+                    workspace = Path(tmp)
+                    (workspace / 'input.docx').write_bytes(raw)
+                    result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': preferred,
+                                                        'prefer_v3_parity': preferred == 'auto'})
+                    coverage = result['import_manifest']['coverage']
+                    route = result['import_manifest']['engine']
+                    self.assertTrue(coverage['block_generation'])
+                    if route == 'v3':
+                        # Every legacy place is kept, so the band selects v3: both spacers are protected there and
+                        # their reviews are the clearable selected-engine issues.
+                        self.assertEqual((anchors, preferred), (1, 'auto'))
+                        issues = coverage['selected_engine_issues']
+                        self.assertFalse([f for f in result['fields'] if f['locator']['part'] != BODY[:-1]
+                                          and not f.get('write_protected')])
+                    else:
+                        self.assertIn(caption, [field['label'] for field in result['fields']])
+                        issues = coverage['advanced_unresolved_areas']
+                    held = [issue['part'] for issue in issues if issue['detail'].startswith(word.DRAWN_BAND_SPACER_REVIEW)]
+                    self.assertEqual(sorted(held), ['word/header1.xml', 'word/header2.xml'])
+        # Without per-field places nothing says where legacy writes: the reviews keep holding.
+        from unittest import mock
+        from . import import_selection
+        raw = report(2)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                import_selection, 'legacy_field_places', side_effect=ValueError('Legacy places do not match the fields.')):
+            workspace = Path(tmp)
+            (workspace / 'input.docx').write_bytes(raw)
+            result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': 'legacy'})
+        coverage = result['import_manifest']['coverage']
+        self.assertTrue(coverage['block_generation'])
+        self.assertEqual(len([issue for issue in coverage['advanced_unresolved_areas']
+                              if issue['detail'].startswith(word.DRAWN_BAND_SPACER_REVIEW)]), 2)
+
+    def test_legacy_places_are_read_per_field(self):
+        from . import import_selection
+        fields = [{'locator': {'paragraph': 1}}, {'locator': {'tab_form': {'anchors': [{}, {}, {}]}}},
+                  {'locator': {'cell': 0}}]
+        places = [('a', 0, 1), ('b', 0, 1), ('c', 0, 1), ('d', 0, 1), ('e', None, None)]
+        self.assertEqual(import_selection.legacy_field_places(fields, places),
+                         [[('a', 0, 1)], [('b', 0, 1), ('c', 0, 1), ('d', 0, 1)], [('e', None, None)]])
+        with self.assertRaises(ValueError):
+            import_selection.legacy_field_places(fields, places[:-1])
 
     def test_band_parts_never_compete_with_the_forms_own_questions(self):
         # Refutation round 4: a bare 'Date' band part shared its question key with the form's own 'Date' and held

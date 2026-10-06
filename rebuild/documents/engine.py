@@ -911,9 +911,14 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
     band = (set(word_v3.signing_band_places(path.read_bytes()))
             if selected == 'legacy' and places is not None
             and any(issue.get('code') == 'ambiguous_signing_band' for issue in issues) else set())
-    if band and not any(import_selection.covered(place, [(item, None, None) for item in band])
-                        and not word_v3.legacy_role_kind(field['label'])
-                        for field, place in zip(legacy['fields'], places)):
+    try:
+        owned = import_selection.legacy_field_places(legacy['fields'], places) if band else None
+    except ValueError:
+        owned = None  # the legacy places are not known per field: the review keeps holding
+    if owned is not None and not any(not word_v3.legacy_role_kind(field['label'])
+                                     and any(import_selection.covered(place, [(item, None, None) for item in band])
+                                             for place in own)
+                                     for field, own in zip(legacy['fields'], owned)):
         # A drawn signing band's spacer review belongs to the v3 route that
         # protects the band; a legacy import cannot review or clear it. It
         # stops holding a legacy import only when legacy cannot write into the

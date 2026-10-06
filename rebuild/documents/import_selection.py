@@ -73,6 +73,20 @@ def legacy_places(document, paragraphs, cells, fields, detector):
     return places
 
 
+def legacy_field_places(fields, places):
+    """legacy_places' flat list split per field: a tab-form field contributes one place per anchor, so the flat list
+    is not aligned with the fields once any field has several anchors. Any count mismatch refuses."""
+    out, n = [], 0
+    for field in fields:
+        loc = field["locator"]
+        count = len(loc["tab_form"]["anchors"]) if "tab_form" in loc else 1
+        out.append(places[n:n + count])
+        n += count
+    if n != len(places):
+        raise ValueError("Legacy places do not match the fields.")
+    return out
+
+
 def covered(place, regions):
     slot, start, end = place
     for parent, low, high in regions:
