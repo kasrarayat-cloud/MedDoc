@@ -25,7 +25,8 @@ automatic_retries: none
 request_deadline_seconds: 120
 generation_timeout_seconds: 60
 transcription_timeout_seconds: 90
-worker_guard_sha256: 42358895e8a68131b6ce7819ccfe915d958ce2affd9983829a802a41317f921d
+worker_guard_sha256: 47550cf7e5f7e38251e052372a9871e866422bae6d781f8b00da11cb00486604
+continuation_diagnosis_sha256: 8680cc5c25e576e85d00a5d5723bd226043e8076ff7afa665dd98d36f171b0ec
 qa_launcher_sha256: d1f5c5d97a41f9f7e3937593a5862a162f67af014d3cea683f0025a3c2ed219f
 credential_helper_sha256: 71e2140499cf0ae4dd675fb5d7d84f635f517d0ae403dd6eb8141d393272f953
 source_inventory_sha256: 2e045a4efa7f6fc60e56231823cd2c5e86d8d0cd456422d0303fcf4fde93188d
@@ -60,3 +61,7 @@ Every request and outcome records declaration commit/hash, exact worker source/c
 The exact allowed synthesized recording is `forms/soap-positive-synthesized.wav`, SHA256 `8bb6b53f2832ae830fc422e6fac366a383226fcb911e59a814466cb90809b8d7`,1130602bytes,25.6362358276644seconds,mono22050Hz16-bitPCM, synthesized locally with espeak-ng from the exact committed SOAP-positive text. It has no human speech or patient data. The input and audio manifests, launcher, guard and credential reader are bound above to their reviewed hashes. Root independently verified all343 archived source files against committed `git cat-file` blobs from dedac. Eleven offline guard proofs passed with socket creation blocked and invented credentials: valid Deepgram capture precedes fake transport; raw response is retained; duplicate sends, wrong endpoint/model/extra parameter/timeout and failed/unknown/invalid-cost prior outcomes refuse. These are transport proofs, not live workflow results.
 
 The guard independently requires the exact configured pricing fingerprint and pins every attempt's maximum exposure, form/notes/audio/source hashes and declared terms. Every preceding outcome must pass and have known nonnegative finite cost. Failure remains a batch stop even if a local STOP file is later absent. A valid preexisting application quote intentionally retains its original model and rates; configuration changes do not invalidate it. Qualification and owner acceptance require freshly loaded pages and fresh quotes naming5.5, preserving that existing snapshot behavior.
+
+## Specific verification diagnosis before continuation
+
+Attempt005 remains failed in its immutable ledger and STOP. The separately committed `20261006-quillmd-owner-voice-duration-adjudication.md` binds that exact known operator precision defect to a read-only adjudication and permits only the remaining, already-declared `soap-voice-generation` after normal explicit transcript correction/save. Its hash is pinned above. No other failed or unknown outcome is admitted; no additional transcription, replay, new budget or source mutation is permitted.
