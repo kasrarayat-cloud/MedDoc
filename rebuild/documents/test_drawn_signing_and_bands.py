@@ -2,9 +2,11 @@
 
 Pure XML/parser controls on project-authored synthetic documents; no corpus content, no app resources.
 """
+import copy
 import io
 import json
 import unittest
+from unittest import mock
 
 from docx import Document
 from docx.oxml import OxmlElement
@@ -379,6 +381,67 @@ class DrawnSigningBand(unittest.TestCase):
                             self.assertIn(place, [i['slot'] for i in found['coverage_issues']
                                                   if i['code'] == 'ambiguous_signing_band'])
 
+    def test_the_band_reads_its_caption_through_side_headings_and_header_copies(self):
+        # Refutation round 10: a side heading ('Consent for right knee arthroscopy') qualifies every later label
+        # ('<heading> - Signature of patient'), so plain label equality released the caption's typed line as a
+        # writable answer; and identical header copies merge into one area whose second copy is a target copy, so the
+        # second header's line was released too. Provenance, qualified labels and copies now all count.
+        line = '_' * 30
+        grey = etree.fromstring('<w:r %s><w:rPr><w:color w:val="808080"/></w:rPr><w:t>Click here to enter text.</w:t>'
+                                '</w:r>' % DECLARED)
+        for after in ([line], [line, line], ['grey'], ['line and date prompt']):
+            with self.subTest(after=after):
+                doc = Document()
+                doc.add_paragraph('Synthetic consent record')
+                doc.add_paragraph().add_run('Consent for right knee arthroscopy').bold = True
+                doc.add_paragraph('PATIENT NAME: ')._p.append(
+                    etree.fromstring('<w:r %s><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>' % DECLARED))
+                doc.add_paragraph()._p.append(line_run(1, fallback=False))
+                if after == ['line and date prompt']:
+                    # The caption's columns read onto the line ('<heading> - Signature of patient Date', no source).
+                    doc.paragraphs[-1]._p.append(line_run(2, fallback=False))
+                    doc.add_paragraph('Signature of patient\t\t\tDate')
+                else:
+                    doc.add_paragraph('Signature of patient')
+                for text in after:
+                    if text == 'grey':
+                        doc.add_paragraph()._p.append(copy.deepcopy(grey))
+                    elif text == 'line and date prompt':
+                        prompt = doc.add_paragraph('_' * 22 + '\t\t\t')
+                        prompt._p.append(etree.fromstring('<w:r %s><w:rPr><w:color w:val="808080"/></w:rPr>'
+                                                          '<w:t>dd/mm/yyyy</w:t></w:r>' % DECLARED))
+                    else:
+                        doc.add_paragraph(text)
+                doc.add_paragraph('End of record.')
+                raw = data(doc)
+                band = word.signing_band_places(raw)
+                found = word.inspect(raw)
+                writable = [f for f in found['fields'] if not f.get('write_protected')]
+                final = word.fill(raw, found['fields'], {f['key']: 'Alex Example' for f in writable})
+                for number in range(len(after)):
+                    place = 'b/p[%d]' % (5 + number)
+                    self.assertIn(BODY + place, band)
+                    self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == place])
+                    self.assertIn(place, [i['slot'] for i in found['coverage_issues']])
+                    self.assertEqual(slot_bytes(final, place), slot_bytes(raw, place))
+        doc = Document()
+        doc.add_paragraph('PATIENT NAME: ')._p.append(
+            etree.fromstring('<w:r %s><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>' % DECLARED))
+        section = doc.sections[0]
+        section.different_first_page_header_footer = True
+        for header in (section.header, section.first_page_header):
+            header.is_linked_to_previous = False
+            header.paragraphs[0]._p.append(line_run(1, fallback=False))
+            header.add_paragraph('Signature of patient')
+            header.add_paragraph(line)
+        raw = data(doc)
+        band = word.signing_band_places(raw)
+        self.assertIn('word/header1.xml#hf/p[2]', band)
+        self.assertIn('word/header2.xml#hf/p[2]', band)
+        found = word.inspect(raw)
+        self.assertFalse([f for f in found['fields'] if f['locator']['part'] != 'word/document.xml'
+                          and not f.get('write_protected')])
+
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician
         # to review them held generation for nothing.
@@ -431,6 +494,61 @@ def caption_over_blank(caption, style=None):
     doc.add_paragraph()
     doc.add_paragraph('Plan: ____________')
     return data(doc)
+
+
+class DetectionCost(unittest.TestCase):
+    """Refutation round 10 (cost): the band-free reading - a whole second detection, run by every detector and every
+    band-place reading, four times in one automatic import - took a large band form past the parser's CPU limit where
+    e0 imported it. It is now read once per original, and only when a band has a line to judge; the detector's text
+    reading has exact fast paths. These pin both structurally, never by timing."""
+
+    def test_the_band_free_reading_runs_once_per_original_and_only_when_a_line_follows(self):
+        runs = []
+        detect = word.Detector.detect
+
+        def counted(detector):
+            if not detector._inline_bands:
+                runs.append(detector)
+            return detect(detector)
+
+        def band_form(after):
+            doc = Document()
+            doc.add_paragraph('Synthetic consent record')
+            doc.add_paragraph()._p.append(line_run(1, fallback=False))
+            doc.add_paragraph('Signature of patient')
+            for text in after:
+                doc.add_paragraph(text)
+            return data(doc)
+
+        word._BAND_FREE_READINGS.clear()
+        with mock.patch.object(word.Detector, 'detect', counted):
+            nothing_after = band_form([])
+            word.inspect(nothing_after)
+            word.signing_band_places(nothing_after)
+            self.assertEqual(runs, [])                 # nothing follows the caption: the band never asks
+            line_after = band_form(['_' * 30, 'End of record.'])
+            found = word.inspect(line_after)
+            band = word.signing_band_places(line_after)
+            word.destination_roles(line_after)
+            word.fill(line_after, found['fields'], {})
+            self.assertEqual(len(runs), 1)             # one reading, shared by every detection of these bytes
+            self.assertIn(BODY + 'b/p[3]', band)       # and it still decides the caption's own line
+            self.assertNotIn(BODY + 'b/p[4]', band)
+            word.signing_band_places(band_form(['_' * 31, 'End of record.']))
+            self.assertEqual(len(runs), 2)             # other bytes have their own reading
+
+    def test_the_ascii_text_fast_path_reads_exactly_what_the_glyph_map_reads(self):
+        # Every box glyph and private-use box code lies outside ASCII, so outside the symbol fonts ASCII text maps to
+        # itself; in a symbol font an ASCII letter can draw a box ('o' in Wingdings), and the fast path never applies.
+        self.assertTrue(all(ord(ch) > 0x7F for ch in word.GLYPH_BOX + word.GLYPH_CHECKED))
+        self.assertTrue(all(code > 0x7F for codes in word.PUA_BOXES for code in codes))
+        samples = [''.join(map(chr, range(0x80))), 'Signature of patient: ____', '\u2610 Yes \u2612 No',
+                   'o q r * R S T Q x \xa8 \xa1', ''.join(chr(code) for code in (0xF06F, 0xF0FE, 0x2A, 0x6F)), '']
+        for font in ('', 'arial', 'wingdings', 'wingdings 2', 'symbol', 'segoe ui symbol'):
+            for text in samples:
+                with self.subTest(font=font, text=text[:16]):
+                    self.assertEqual(word.map_text(text, font), ''.join(word.map_char(ch, font) for ch in text))
+        self.assertEqual(word.map_text('o', 'wingdings'), word.BOX)
 
 
 class BelowCaptionReading(unittest.TestCase):

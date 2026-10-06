@@ -192,9 +192,15 @@ FLOATING_INITIALS_REFUSAL = ("Filled export is unavailable for this form's float
                            "This layout needs qualification before any nonempty export.")
 
 
+_QNAMES = {}
+
+
 def q(tag: str) -> str:
-    prefix, local = tag.split(":")
-    return "{%s}%s" % (NS[prefix], local)
+    name = _QNAMES.get(tag)
+    if name is None:
+        prefix, local = tag.split(":")
+        name = _QNAMES[tag] = "{%s}%s" % (NS[prefix], local)
+    return name
 
 
 class V3Failure(ValueError):
@@ -395,6 +401,14 @@ def run_font(r) -> str:
     return (fonts.get(q("w:ascii")) or fonts.get(q("w:hAnsi")) or fonts.get(q("w:cs")) or "").strip().lower()
 
 
+def map_text(text: str, font: str) -> str:
+    """map_char over a whole text. Outside the symbol fonts an ASCII character never draws a box (every box glyph and
+    private-use box code lies outside ASCII), so ASCII text maps to itself."""
+    if font not in SYMBOL_BOXES and text.isascii():
+        return text
+    return "".join(map_char(c, font) for c in text)
+
+
 def map_char(ch: str, font: str) -> str:
     """One visible character -> itself, or BOX / CHECKED when it draws a checkbox. Always one character."""
     if ch in GLYPH_BOX:
@@ -446,7 +460,7 @@ def text_of(el, *, own=False) -> str:
                 continue
             if tag == T:
                 font = run_font(ch.getparent()) if ch.getparent() is not None and ch.getparent().tag == R else ""
-                out.append("".join(map_char(c, font) for c in (ch.text or "")))
+                out.append(map_text(ch.text or "", font))
             elif tag in (TAB, PTAB):
                 out.append("\t")
             elif tag in (BR, CR):
@@ -577,7 +591,7 @@ def piece_text(pc: Piece) -> str:
         if pc.node.tag == NBH:
             return "-"
         font = run_font(pc.run)
-        return "".join(map_char(c, font) for c in (pc.node.text or ""))
+        return map_text(pc.node.text or "", font)
     if pc.kind == "tab":
         return "\t"
     if pc.kind == "br":
@@ -1677,7 +1691,7 @@ class Detector:
     def __init__(self, package: Package, *, layout_proposal=False, _table_instructions=True, _inline_bands=True):
         self.package = package
         self._inline_bands = _inline_bands
-        self._band_free_areas = None   # the band-free reading's areas, read once for the band rule
+        self._band_free_areas = None   # the band-free reading's (label, places), read once for the band rule
         self.index = SlotIndex(package)
         self.areas: list[Area] = []
         self.layout_proposal = layout_proposal
@@ -8925,7 +8939,7 @@ class Detector:
         """'Label:' followed by a printed gap (a tab or three or more spaces) and then more of an answer line:
         another 'Label:' or a unit. The answer is written inside the printed line (segment_paragraph's reading)."""
         text = self.ptext(slot.el)[0]
-        for m in self.LABEL_COLON.finditer(text):
+        for m in (self.LABEL_COLON.finditer(text) if ":" in text else ()):   # (a match needs a colon)
             label_text = m.group(1)
             if len(label_text.split()) > MAX_LABEL_WORDS or not re.search(r"[A-Za-z]", label_text):
                 continue
@@ -8959,7 +8973,7 @@ class Detector:
         format_hint = False
         blanks = list(spans)
         # 'Label:' followed by a gap (>=1 tab or >=3 spaces) or the end of the paragraph, with nothing else drawn
-        for m in self.LABEL_COLON.finditer(text):
+        for m in (self.LABEL_COLON.finditer(text) if ":" in text else ()):   # (a match needs a colon)
             if self.fixed_link_introduction(slot):
                 continue
             end = m.end()
@@ -9211,11 +9225,15 @@ class Detector:
             # reviewed, never a neutral answer that lost the caption's label. A line with its own label (a field, a
             # placeholder, a row captioned below it) is not the caption's and stays the form's; the first paragraph
             # that is not the caption's ends them.
-            own = self.band_caption_places(caption)
+            own = None   # read only when a line follows: a band with none never needs the band-free reading
             further = band_next((spacer or caption).el)
             while further is not None:
                 line = self.index.by_el.get(id(further))
-                if line is None or line.kind != 'p' or line.parent is not slot.parent or line.id not in own:
+                if line is None or line.kind != 'p' or line.parent is not slot.parent:
+                    break
+                if own is None:
+                    own = self.band_caption_places(caption)
+                if line.id not in own:
                     break
                 self.signing_band_places.append(line.id)
                 self.claimed.add(id(line.el))
@@ -9225,17 +9243,18 @@ class Detector:
             self.notes.append(reason + ' Location: ' + slot.id)
 
     def band_caption_places(self, caption):
-        """The places the band-free reading of this package labels with the band's caption (read as the label above
-        or below a line, or its columns read onto one) - e0's reading of the caption's own writing lines."""
+        """The places the band-free reading of this package labels with the band's caption - e0's reading of the
+        caption's own writing lines: the caption read as the label above or below a line, or its columns read onto
+        one, side-qualified ('<side heading> — <label>') or not, with every merged header/footer copy. The reading
+        is of the package's original bytes, as every detection here reads an unmodified original, and is shared by
+        every detection of those bytes in this process."""
         if self._band_free_areas is None:
-            reader = Detector(self.package, _inline_bands=False)
-            reader.detect()
-            self._band_free_areas = list(reader.areas)
+            self._band_free_areas = band_free_reading(self.package.data)
         label = clean_label(self.text(caption.el))
         own = set()
-        for area in self._band_free_areas:
-            if area.label == label:
-                own.update(place.id for place in [area.slot, *area.extra_slots] if place is not None)
+        for area_label, places in self._band_free_areas:
+            if area_label == label or area_label.endswith(' \u2014 ' + label):
+                own.update(places)
         return own
 
     def band_spacer_draws_line(self, spacer):
@@ -10775,6 +10794,29 @@ def band_signing_label(label):
     sign if positive' nor an identifier or adjective 'initial(s)' ('Patient initials', 'Troponin (initial)') is
     read as a signing event."""
     return bool(signing_place(label) and SIGNATURE.search(label))
+
+
+#: The band-free readings of the most recent originals in this process, by the sha256 of the original's bytes: one
+#: invocation reads the same original in several detections (inspection, roles, routing), and the reading is a whole
+#: second detection. Bounded, so a long-lived process keeps only a few.
+_BAND_FREE_READINGS = {}
+
+
+def band_free_reading(data):
+    """Every area of the band-free reading of these exact original bytes (the detector with the drawn band rule off),
+    as (label, places): each place an area writes or copies to. Read once per original in this process."""
+    key = hashlib.sha256(data).digest()
+    reading = _BAND_FREE_READINGS.get(key)
+    if reading is None:
+        reader = Detector(open_package(data), _inline_bands=False)
+        reader.detect()
+        reading = tuple((area.label, frozenset([place.id for place in [area.slot, *area.extra_slots] if place is not None]
+                                               + [copy['part'] + '#' + copy['slot'] for copy in area.target.get('copies', [])]))
+                        for area in reader.areas)
+        if len(_BAND_FREE_READINGS) >= 4:
+            _BAND_FREE_READINGS.clear()
+        _BAND_FREE_READINGS[key] = reading
+    return reading
 
 
 def signing_band_places(data):
