@@ -503,6 +503,92 @@ class DrawnBandRoute(unittest.TestCase):
                                            'answers': {key: 'Alex Example'}, 'engine': 'legacy'})
                 self.assertIn('Alex Example', Document(workspace / 'output.docx').paragraphs[1].text)
 
+    def test_a_legacy_import_is_never_held_by_a_band_review_it_cannot_clear(self):
+        # Refutation round 6: on the legacy route every v3 coverage issue became an advanced unresolved area that
+        # held generation, and a legacy import has no review that clears one. A drawn band whose spacer draws a line
+        # therefore made a form e0 exported unusable. That review belongs to the v3 route; any other v3 issue (here
+        # a typed captioned signing band's) still holds the legacy import exactly as on e0.
+        import tempfile
+        from pathlib import Path
+        from . import engine
+        underlined = '<w:r %s><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>' % DECLARED
+        spacers = {
+            'bottom border': '<w:p %s><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/>'
+                             '</w:pBdr></w:pPr></w:p>' % DECLARED,
+            'positional tab leader': '<w:p %s><w:r><w:ptab w:relativeTo="margin" w:alignment="right" '
+                                     'w:leader="underscore"/></w:r></w:p>' % DECLARED,
+            'leader tab stop': '<w:p %s><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9000"/></w:tabs>'
+                               '</w:pPr><w:r><w:tab/></w:r></w:p>' % DECLARED,
+        }
+
+        def report(spacer, *, numbered=True, typed=False):
+            doc = Document()
+            doc.add_paragraph('Synthetic endoscopy report')
+            name = doc.add_paragraph('PATIENT NAME: ')
+            name._p.append(etree.fromstring(underlined))
+            heading = doc.add_paragraph('FINDINGS')
+            level = OxmlElement('w:outlineLvl')
+            level.set(qn('w:val'), '1')
+            heading._p.get_or_add_pPr().append(level)
+            for number in (1, 2, 3) if numbered else ():
+                item = doc.add_paragraph('%d. ' % number)
+                item._p.append(etree.fromstring(underlined))
+            lines = doc.add_paragraph()
+            lines._p.append(line_run(1, fallback=False))
+            lines.add_run('\t\t')
+            lines._p.append(line_run(2, fallback=False))
+            doc.add_paragraph('Patient signature\t\t\tPrint name')
+            placeholder = doc.add_paragraph()._p
+            placeholder.addnext(etree.fromstring(spacers[spacer]))
+            placeholder.getparent().remove(placeholder)
+            if typed:
+                doc.add_paragraph('Printed Name of Recorder:')
+                band = doc.add_paragraph()
+                band.add_run('\t\t').underline = True
+                band.add_run('   ')
+                band.add_run('________')
+                band.add_run('   ')
+                band.add_run('\t\t').underline = True
+                doc.add_paragraph('Signature of Recorder\tDate\tTime')
+            doc.add_paragraph('End of report.')
+            return data(doc)
+
+        def imported(raw, preferred):
+            with tempfile.TemporaryDirectory() as tmp:
+                workspace = Path(tmp)
+                (workspace / 'input.docx').write_bytes(raw)
+                result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': preferred,
+                                                    'prefer_v3_parity': preferred == 'auto'})
+                coverage = result['import_manifest']['coverage']
+                key = next(f['key'] for f in result['fields'] if f['label'].upper().startswith('PATIENT NAME'))
+                engine.process(workspace, {'format': 'docx', 'operation': 'fill', 'mapping': result['fields'],
+                                           'answers': {key: 'Alex Example'}, 'engine': 'legacy'})
+                return result['import_manifest']['engine'], coverage, Document(workspace / 'output.docx')
+
+        for spacer in spacers:
+            raw = report(spacer)
+            self.assertTrue([issue for issue in word.inspect(raw)['coverage_issues']
+                             if issue['code'] == 'ambiguous_signing_band'])
+            for preferred in ('auto', 'legacy'):
+                with self.subTest(spacer=spacer, preferred=preferred):
+                    route, coverage, output = imported(raw, preferred)
+                    self.assertEqual(route, 'legacy')
+                    self.assertFalse(coverage.get('block_generation'))
+                    self.assertNotIn('advanced_unresolved_areas', coverage)
+                    self.assertEqual(output.paragraphs[1].text, 'PATIENT NAME: Alex Example')
+        # The settings default engine keeps a band form without lost places on legacy as well.
+        _, coverage, _ = imported(report('bottom border', numbered=False), 'legacy')
+        self.assertFalse(coverage.get('block_generation'))
+        # Any other advanced issue still holds the legacy import: the typed band's own review stays, alone.
+        for preferred in ('auto', 'legacy'):
+            with self.subTest(control='typed band', preferred=preferred):
+                route, coverage, _ = imported(report('bottom border', typed=True), preferred)
+                self.assertEqual(route, 'legacy')
+                self.assertTrue(coverage['block_generation'])
+                held = coverage['advanced_unresolved_areas']
+                self.assertEqual([(issue['code'], issue['detail'].startswith('Protected signing block')) for issue in held],
+                                 [('ambiguous_signing_band', True)])
+
     def test_band_parts_never_compete_with_the_forms_own_questions(self):
         # Refutation round 4: a bare 'Date' band part shared its question key with the form's own 'Date' and held
         # that ordinary answer in field-relations generation.

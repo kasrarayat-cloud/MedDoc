@@ -907,10 +907,20 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
         # the original's unproven whole-document growth contract.
         coverage['layout_quarantine'] = quarantine
         coverage['block_generation'] = True
-    if selected == 'legacy' and advanced and (advanced.get('coverage_issues') or advanced.get('layout_pending')):
+    issues = advanced.get('coverage_issues', []) if advanced else []
+    if selected == 'legacy' and any(issue.get('code') == 'ambiguous_signing_band' for issue in issues):
+        # A drawn signing band's spacer review belongs to the v3 route that
+        # protects the band. A legacy import keeps legacy's previous reading of
+        # the band's places (legacy_roles), cannot review or clear that issue,
+        # and is not held by it; every other advanced issue still holds it.
+        band = set(word_v3.signing_band_places(path.read_bytes()))
+        issues = [issue for issue in issues if not (
+            issue.get('code') == 'ambiguous_signing_band' and issue['part'] + '#' + issue['slot'] in band
+            and issue.get('detail') == word_v3.DRAWN_BAND_SPACER_REVIEW + 'Location: ' + issue['part'] + '#' + issue['slot'])]
+    if selected == 'legacy' and advanced and (issues or advanced.get('layout_pending')):
         # A legacy destination in another cell cannot establish coverage of a
         # withheld advanced answer area or a still-unverified layout proposal.
-        coverage['advanced_unresolved_areas'] = advanced.get('coverage_issues', [])
+        coverage['advanced_unresolved_areas'] = issues
         coverage['advanced_layout_pending'] = advanced.get('layout_pending', 0)
         coverage['block_generation'] = True
         result['warnings'].append('Other answer areas need precise advanced mapping or layout review. '

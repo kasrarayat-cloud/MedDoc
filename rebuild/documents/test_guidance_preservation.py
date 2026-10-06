@@ -142,6 +142,26 @@ class LegacyTextBounds(unittest.TestCase):
         self.assertIn('word/document.xml#b/p[0]', slots)
         self.assertNotIn('word/document.xml#b/p[0]/ff[0]', slots)
 
+    def test_a_guidance_host_with_only_spaces_beside_its_controls_is_not_a_place(self):
+        # Refutation round 6: once any run outside the controls kept a host, D31's guidance host with one trailing
+        # space was offered on the mapping page as a place that refuses every field. Spaces, empty runs and a plain
+        # tab print nothing; printed text still keeps the host a place.
+        def host(*runs):
+            doc = legacy_text(help_text='Press TAB to continue.')
+            for xml in runs:
+                doc.paragraphs[0]._p.append(etree.fromstring(
+                    '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">%s</w:r>' % xml))
+            doc.add_paragraph('Plan: ____')
+            return [row['slot'] for row in w.outline(data(doc))['slots']]
+
+        for runs in (('<w:rPr><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve"> </w:t>',),
+                     ('<w:rPr><w:sz w:val="22"/></w:rPr>',), ('<w:tab/>',)):
+            with self.subTest(runs=runs):
+                slots = host(*runs)
+                self.assertNotIn('word/document.xml#b/p[0]', slots)
+                self.assertIn('word/document.xml#b/p[1]', slots)
+        self.assertIn('word/document.xml#b/p[0]', host('<w:t>Comments</w:t>'))
+
     def test_source_guidance_classification_keeps_legitimate_one_character_controls(self):
         for changes in ({'name':'BloodGroup'}, {'label':'Blood group: '}, {'points':'22'},
                         {'result':'A'}, {'default':'O'}, {'limit':'2'}, {'help_text':None}):

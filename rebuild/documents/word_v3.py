@@ -376,6 +376,10 @@ T, TAB, PTAB, BR, CR, SYM, NBH = (q("w:t"), q("w:tab"), q("w:ptab"), q("w:br"), 
 R, SDT, FLDCHAR, FALLBACK, TXBX = q("w:r"), q("w:sdt"), q("w:fldChar"), q("mc:Fallback"), q("w:txbxContent")
 #: Content that makes a paragraph more than an empty spacer: a drawn signing band never claims it.
 BAND_SPACER_CONTENT = frozenset({TXBX, SDT, FLDCHAR, q("w:fldSimple"), q("w:drawing"), q("w:pict"), q("w:object")})
+# The review a drawn band's line-drawing spacer raises (its detail, before 'Location: <place>'); engine.inspect_auto
+# reads it to keep this v3-only review off a legacy import, which cannot review or clear it.
+DRAWN_BAND_SPACER_REVIEW = ('A visible writing line follows this drawn signing band. It is kept unchanged; '
+                            'review whether it belongs to the signing event or to another field. ')
 #: Body-level range markers render nothing: they never separate a drawn band from its caption or spacer.
 BAND_INVISIBLE_MARKERS = frozenset(q(tag) for tag in (
     "w:bookmarkStart", "w:bookmarkEnd", "w:permStart", "w:permEnd", "w:commentRangeStart", "w:commentRangeEnd"))
@@ -9197,9 +9201,7 @@ class Detector:
                     # may be another field's line: keep it unwritten AND have
                     # a clinician review it, as the previous reading did.
                     self.coverage_issue(spacer, 'ambiguous_signing_band',
-                                        'A visible writing line follows this drawn signing band. It is kept unchanged; '
-                                        'review whether it belongs to the signing event or to another field. '
-                                        'Location: ' + spacer.id)
+                                        DRAWN_BAND_SPACER_REVIEW + 'Location: ' + spacer.id)
             self.notes.append(reason + ' Location: ' + slot.id)
 
     def band_spacer_draws_line(self, spacer):
@@ -10750,8 +10752,10 @@ def signing_band_places(data):
 
 
 def source_guidance_place(detector, slot):
-    """An exact preserved guidance control, or a paragraph whose every run belongs to such controls (one that also
-    prints a line of its own, such as an underlined tab, stays a place)."""
+    """An exact preserved guidance control, or a paragraph holding only such controls and nothing else that prints.
+    A writing line the engine's own blank reader sees (an underlined tab, where the engine's automatic field sits)
+    keeps the paragraph a place; spaces and empty runs beside the controls do not. (Printed text keeps it a place
+    already: ff_source_guidance requires an otherwise empty paragraph and a complete field.)"""
     if slot.kind == "ff":
         return slot.info.get("field") == "FORMTEXT" and ff_source_guidance(slot.el)
     if slot.kind != "p":
@@ -10760,13 +10764,7 @@ def source_guidance_place(detector, slot):
     if (not controls or len(controls) != len(slot.children)
             or not all(c.info.get("field") == "FORMTEXT" and ff_source_guidance(c.el) for c in controls)):
         return False
-    owned = set()
-    for control in controls:
-        _, end = _field_result_runs(control.el)
-        if end is None:
-            return False
-        owned.update(id(run) for run in [control.el, *_siblings_between(control.el, end), end])
-    return all(id(run) in owned for run in slot.el.iter(R))
+    return not detector.blank_spans(*detector.ptext(slot.el))
 
 
 def preserved_source_guidance(detector):
