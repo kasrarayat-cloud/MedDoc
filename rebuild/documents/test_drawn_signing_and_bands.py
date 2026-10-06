@@ -2,6 +2,7 @@
 
 Pure XML/parser controls on project-authored synthetic documents; no corpus content, no app resources.
 """
+import collections
 import copy
 import io
 import json
@@ -657,6 +658,49 @@ class DetectionCost(unittest.TestCase):
                 with self.subTest(font=font, text=text[:16]):
                     self.assertEqual(word.map_text(text, font), ''.join(word.map_char(ch, font) for ch in text))
         self.assertEqual(word.map_text('o', 'wingdings'), word.BOX)
+
+    def test_one_detection_pass_reads_each_slot_visibility_once_and_a_later_read_is_fresh(self):
+        # Refutation round 11 (cost): on printed-table forms a quarter of every detection re-read the same slots'
+        # visibility. A detect() pass changes no XML, so within it each slot is read once; outside a pass every read
+        # is fresh again (test_source_style_cache pins that half for a slot whose XML changes).
+        doc = Document()
+        doc.add_paragraph('Synthetic intake record')
+        table = doc.add_table(rows=3, cols=2)
+        for row, caption in enumerate(('Name', 'Date of birth', 'Allergies')):
+            table.cell(row, 0).text = caption
+        doc.add_paragraph('Heart rate:\t\tBlood pressure:\t\t')
+        doc.add_paragraph('Weight:\t____\tHeight:\t____')
+        doc.add_paragraph('Signature of patient: ______________')
+        raw = data(doc)
+        reads = []
+        visible = word.Detector._tab_source_visible
+
+        def counted(detector, slot):
+            reads.append(slot)                  # held, so no two counted slots share an id
+            return visible(detector, slot)
+
+        def most_reads(run):
+            reads.clear()
+            detector = word.Detector(word.open_package(raw))
+            with mock.patch.object(word.Detector, '_tab_source_visible', counted):
+                run(detector)
+            return detector, max(collections.Counter(map(id, reads)).values())
+
+        self.assertGreater(most_reads(lambda d: d._detect())[1], 1)   # the control: without a pass, slots are re-read
+        detector, most = most_reads(lambda d: d.detect())
+        self.assertEqual(most, 1)
+        self.assertIsNone(detector._visible)                           # the memo ends with its pass
+        slot = reads[0]
+        reads.clear()
+        with mock.patch.object(word.Detector, '_tab_source_visible', counted):
+            detector.tab_source_visible(slot)
+            detector.tab_source_visible(slot)
+        self.assertEqual(len(reads), 2)                                # so a later read is fresh
+        failing = word.Detector(word.open_package(raw))
+        with mock.patch.object(word.Detector, '_detect', side_effect=RuntimeError('synthetic')):
+            with self.assertRaises(RuntimeError):
+                failing.detect()
+        self.assertIsNone(failing._visible)                            # and so does a pass that fails
 
 
 class BelowCaptionReading(unittest.TestCase):

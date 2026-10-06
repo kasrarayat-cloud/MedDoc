@@ -1727,6 +1727,7 @@ class Detector:
         self._numbering = None
         self._col_lists = {}
         self._pure = {}
+        self._visible = None   # tab_source_visible per slot during one detect() pass (kept with its slot)
         # Only this detector's immutable source package owns these style readings.
         # Physical paragraph/run visibility still reads its actual XML each time.
         self._style_index = None
@@ -2588,6 +2589,13 @@ class Detector:
 
     # -- the rules -------------------------------------------------------------------------------------------------
     def detect(self):
+        self._visible = {}
+        try:
+            return self._detect()
+        finally:
+            self._visible = None
+
+    def _detect(self):
         self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
@@ -3955,7 +3963,17 @@ class Detector:
         Style toggle/conditional overrides are deliberately not guessed: an
         enabled hide marker anywhere in the applicable ancestry remains unresolved.
         This is separate from region_hidden, which checks checkbox containment.
+        Physical reads stay fresh between calls; within one detect() pass, which
+        changes no XML, each slot is read once.
         """
+        if self._visible is None:
+            return self._tab_source_visible(slot)
+        known = self._visible.get(id(slot))
+        if known is None:
+            known = self._visible[id(slot)] = (slot, self._tab_source_visible(slot))
+        return known[1]
+
+    def _tab_source_visible(self, slot):
         hide = {q("w:vanish"), q("w:webHidden"), q("w:specVanish")}
         def unhidden(node):
             return node is None or not any(n.tag in hide and n.get(q("w:val"), "1")
