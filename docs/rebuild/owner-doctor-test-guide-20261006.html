@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>QuillMD · Doctor test guide</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172d31; background: #fff; line-height: 1.5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { width: min(100% - 40px, 850px); margin: 32px auto 60px; }
+    h1, h2, h3 { text-wrap: balance; line-height: 1.25; }
+    h1 { font-size: 2rem; letter-spacing: -.04em; }
+    h2 { margin-top: 32px; font-size: 1.25rem; }
+    h3 { font-size: 1rem; }
+    a { color: #12695f; text-underline-offset: 3px; }
+    a:focus-visible, summary:focus-visible { outline: 3px solid #12695f; outline-offset: 3px; }
+    .notice { padding: 16px; border: 1px solid #eadcaf; border-radius: 6px; background: #fff6df; color: #785516; }
+    .notice p:last-child { margin-bottom: 0; }
+    li + li { margin-top: 8px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: #f5f7f7; border: 1px solid #dce5e3; border-radius: 6px; font-size: .9rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .small { font-size: .85rem; color: #53676b; }
+    table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+    th, td { text-align: left; vertical-align: top; padding: 12px; border-bottom: 1px solid #dce5e3; }
+    th { background: #f5f7f7; }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="small">Private synthetic testing · 6 October 2026</p>
+  <h1>Doctor test guide</h1>
+  <p>Open <a href="https://app.quillmd.com:9443/">https://app.quillmd.com:9443/</a>. Enter your existing preview access details, then sign in with your own account.</p>
+  <div class="notice">
+    <p><strong>Fictional patients, notes and recordings only.</strong> This application is not approved for real patient information.</p>
+    <p><strong>Current verified model: claude-sonnet-4-6.</strong> Qualification of Sonnet 5.5 through this doctor's application is pending. The separate newer preview uses simulated answers; its 5.5 setting is not a live model result. That newer build remains held by its release checks.</p>
+  </div>
+
+  <h2>Six steps</h2>
+  <ol>
+    <li><strong>Choose a fictional patient.</strong> Use Patients to create one if needed. Its department must match the form.</li>
+    <li><strong>Choose a test form below.</strong> Inspect its questions and answer locations. Choose <strong>Use this form</strong>.</li>
+    <li><strong>Add the example notes.</strong> Select the patient and date of service, confirm synthetic notes, then <strong>Create document</strong>. The service date cannot be changed later.</li>
+    <li><strong>Save and generate once.</strong> Save any source edits first. Check the displayed maximum charge, choose <strong>Generate supported answers</strong>, then refresh until the request finishes.</li>
+    <li><strong>Review every answer and source.</strong> Correct it, accept a suggestion explicitly, or choose <strong>Leave blank — reviewed</strong> where offered. Save answers and review decisions.</li>
+    <li><strong>Finalize and download.</strong> Confirm your review, choose <strong>Finalize document</strong>, then <strong>Export original format ↓</strong>. Check the resulting Word document.</li>
+  </ol>
+  <p>Use each question's exact label and a complete answer on its own line. Missing details stay missing. Assessment and plan come from your documented clinical decisions.</p>
+
+  <h2>SOAP test — fictional ankle sprain</h2>
+  <p><strong>Navigation:</strong> Workspace → Form library → <a href="https://app.quillmd.com:9443/templates/9765d912-93f2-4a7b-8f0b-42aab78f89d3/">Synthetic SOAP test form — engineering fixture 20260920</a> → <strong>Use this form</strong> → mapping version <strong>2</strong>. This is an eight-field custom Word form arranged as SOAP; the current application has no built-in <strong>Use SOAP note</strong> button.</p>
+  <p>Choose <strong>Synthetic Example X-ray</strong> as the fictional patient. Paste these notes:</p>
+  <pre>Symptoms: Left ankle soreness began after twisting the left ankle yesterday.
+Pertinent negatives: Denies fever, numbness, and right ankle pain.
+Pain score: Six out of ten.
+Pain score: Correction: three out of ten; the earlier six out of ten was entered in error.
+Examination: Mild swelling over the left lateral ankle. No open wound.
+Assessment: The clinician explicitly documents a left ankle sprain.
+Plan: The clinician explicitly directs rest, ice wrapped in cloth for fifteen minutes at a time, and follow-up in three days. No medication is prescribed.</pre>
+  <p><strong>What to check:</strong> The two pain scores need your decision. Review the evidence, enter the corrected score explicitly, and retain the original notes. Allergies and vital signs are not supplied: review and leave those answers blank. Do not add normal findings.</p>
+  <p class="small">The retained typed and synthesized-voice SOAP verification used this form and example. It does not establish a new Sonnet 5.5 result, human microphone acceptance or native Word acceptance for this SOAP export.</p>
+
+  <h2>Custom Word test — fictional wrist visit</h2>
+  <p><strong>Navigation:</strong> Workspace → Form library → <a href="https://app.quillmd.com:9443/templates/5a2219a6-f6e5-4d7c-b4cf-606867aeba49/">Clinical assessment</a> → <strong>Use this form</strong> → mapping version <strong>1</strong>. Check that its questions are <strong>History</strong>, <strong>Findings</strong> and <strong>Plan</strong>, then choose <strong>Synthetic Example X-ray</strong>.</p>
+  <pre>History: Synthetic patient reports left wrist discomfort after a fall.
+Findings: No deformity documented.
+Plan: Follow-up assessment documented.</pre>
+  <p><strong>What to check:</strong> Each answer belongs beside its matching question. Review and save all three. Download the original-format Word document and compare its questions and completed answers.</p>
+  <p>To try your own supported blank form instead: Workspace → <strong>Upload form ＋</strong> → enter a name and department → choose the file → confirm it has no patient data → <strong>Upload and inspect form</strong>. Check every detected question and answer location before using it.</p>
+
+  <h2>Voice test</h2>
+  <p>On a new document, leave notes empty and choose <strong>Use voice</strong>. Record the fictional example or upload a recording. Listen, confirm consent, check the charge, then choose <strong>Transcribe recording</strong>.</p>
+  <ol>
+    <li>Record up to five minutes, or upload one audio track in .wav, .webm, .mp3 or .m4a, up to 15 MB.</li>
+    <li>Send it within 30 minutes of opening the page and before preview access ends.</li>
+    <li>Review the returned transcript. Correct punctuation, names, numbers and units; rewrite it as the selected form's labelled answers.</li>
+    <li>Choose Append or Replace, confirm your review, then <strong>Save reviewed transcript to notes</strong>. Generate and review as above.</li>
+  </ol>
+  <p><strong>Limits:</strong> Speech recognition can be wrong. A raw transcript never replaces your notes without your review. The retained synthesized-speech checks do not prove an actual doctor's microphone works. On the separate newer preview, transcription is currently refused because usage rates are not configured.</p>
+
+  <h2>Supported forms and visible limits</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Form</th><th scope="col">What to use</th><th scope="col">Restriction</th></tr></thead>
+      <tbody>
+        <tr><td>Word .docx</td><td>Two-column question/answer tables, <code>{{Question}}</code> placeholders, or a label followed by an underlined Tab in an ordinary paragraph.</td><td>Typed underscores are not answer fields. Use labelled notes for tables and placeholders. Inspect every exported page.</td></tr>
+        <tr><td>Fillable PDF</td><td>Visible plain text fields with a fixed font size and standard Helvetica.</td><td>Plain ASCII answers only; they must fit the boxes. Auto font size, scripts, rotation and special field options are unsupported.</td></tr>
+        <tr><td>Qualified WM IOV</td><td>The exact supplied blank file, unchanged.</td><td>Exact labelled notes and approved prewritten statement lines are required. Re-saving the blank in Word changes its fingerprint and it is refused.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><strong>Refused:</strong> old .doc files; encrypted, password-protected or scanned forms; other Word content controls, text boxes, tracked changes, fields or macros; web/email links or linked images; PDFs with choices, signing fields, buttons, links, attachments or actions. The upload page names the reason.</p>
+  <p><strong>Signing:</strong> A signature is never generated from notes. Where offered, type your exact account name or leave it empty. Every prewritten WM IOV statement needs separate review. CPT remains unavailable without its required licence.</p>
+  <details open>
+    <summary>Headings, corrections and underlined-Tab sentences can hold answers for review</summary>
+    <ul>
+      <li>A heading or forward pointer can make later answers need your decision. A final heading or backward pointer can affect earlier answers. Corrections can also hold earlier answers.</li>
+      <li>On question/answer tables, placeholders, fillable PDFs and WM IOV, an unlabelled line or an empty label sends every generated answer back for your decision.</li>
+      <li>Underlined-Tab forms can use complete sentences with a recognised verb and final punctuation. Headings, quotations, incomplete lines and words such as <em>if</em>, <em>these</em> or <em>above</em> can hold answers.</li>
+      <li>Read the full notes and the reason beside each held answer. Make an explicit decision; do not assume an empty answer means a negative finding.</li>
+    </ul>
+  </details>
+  <p class="small">Save regularly. Account and preview sessions end after 30 minutes without activity; preview access also ends two hours after sign-in. This guide does not change the application's model, release, MFA or records. The shorter application instructions are prepared for review and are not yet installed.</p>
+</main>
+</body>
+</html>
