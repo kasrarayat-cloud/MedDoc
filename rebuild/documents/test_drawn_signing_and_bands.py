@@ -289,8 +289,10 @@ class DrawnSigningBand(unittest.TestCase):
 
     def test_a_multi_line_typed_signing_area_is_wholly_the_bands(self):
         # Refutation round 8: only the first typed line became the band's spacer; lines 2+ of a typed signing area
-        # (one signature field on e0) lost the caption's label and became neutral writable answers. The whole run of
-        # typed lines below the spacer belongs to the band; the form's next own field does not.
+        # (one signature field on e0) lost the caption's label and became neutral writable answers. Round 9: the band
+        # takes exactly the caption's own lines - what a band-free reading labels from the caption - so lines under
+        # a typed spacer are the band's, while typed lines after an EMPTY spacer (e0 never read them as the
+        # caption's) and the form's next own field are not.
         for first in ('typed', 'empty'):
             with self.subTest(first=first):
                 doc = Document()
@@ -307,17 +309,75 @@ class DrawnSigningBand(unittest.TestCase):
                 raw = data(doc)
                 found = word.inspect(raw)
                 band = word.signing_band_places(raw)
-                for place in ('b/p[3]', 'b/p[4]', 'b/p[5]'):
-                    self.assertIn(BODY + place, band)
-                    self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == place])
                 reviewed = sorted(i['slot'] for i in found['coverage_issues'] if i['code'] == 'ambiguous_signing_band')
-                self.assertEqual(reviewed, ['b/p[3]', 'b/p[4]', 'b/p[5]'] if first == 'typed' else ['b/p[4]', 'b/p[5]'])
+                if first == 'typed':
+                    for place in ('b/p[3]', 'b/p[4]', 'b/p[5]'):
+                        self.assertIn(BODY + place, band)
+                        self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == place])
+                    self.assertEqual(reviewed, ['b/p[3]', 'b/p[4]', 'b/p[5]'])
+                else:
+                    self.assertIn(BODY + 'b/p[3]', band)
+                    self.assertNotIn(BODY + 'b/p[4]', band)
+                    self.assertNotIn(BODY + 'b/p[5]', band)
+                    self.assertEqual(reviewed, [])
                 visit = [f for f in found['fields'] if f['locator']['slot'] == 'b/p[6]']
                 self.assertEqual([(f['label'], bool(f.get('write_protected'))) for f in visit], [('Visit date', False)])
                 writable = [f for f in found['fields'] if not f.get('write_protected')]
                 final = word.fill(raw, found['fields'], {f['key']: 'Alex Example' for f in writable})
-                for place in ('b/p[3]', 'b/p[4]', 'b/p[5]'):
+                for place in ('b/p[3]', 'b/p[4]', 'b/p[5]') if first == 'typed' else ('b/p[3]',):
                     self.assertEqual(slot_bytes(final, place), slot_bytes(raw, place))
+
+    def test_the_band_takes_exactly_the_captions_own_lines(self):
+        # Refutation round 9: a typed-line heuristic both missed lines e0 read as the caption's signing area (grey
+        # prompts, segmented or boxed dates, a line plus a date prompt) - leaving them neutral writable answers - and
+        # swallowed lines with their own reading (a row captioned below it). The band now takes exactly what a
+        # band-free reading labels from its caption.
+        grey = '<w:r><w:rPr><w:color w:val="808080"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>'
+        tabs = '<w:r><w:tab/><w:tab/><w:tab/><w:tab/></w:r>'
+
+        def text(value):
+            return '<w:r><w:t xml:space="preserve">%s</w:t></w:r>' % value
+
+        cases = (
+            ('Patient signature\t\t\tPrint name', [tabs + grey % 'Enter printed name'], [True]),
+            ('Signature of Patient\t\t\tDate', [tabs + text('|__|__|/|__|__|/|__|__|__|__|')], [True]),
+            ('Signature of Patient\t\t\tDate', [text('_' * 22) + '<w:r><w:tab/><w:tab/><w:tab/></w:r>' + grey % 'dd/mm/yyyy'],
+             [True]),
+            ('Signature of patient', [text('_' * 30), text('_' * 30), text('Printed name of patient')], [True, True, False]),
+            ('Signature\t\t\tDate\t\t\tTime', [text('_' * 30)], [True]),
+            ('Signature of Patient\t\t\tDate', ['', text('_' * 22) + '<w:r><w:tab/><w:tab/></w:r>' + text('_' * 22),
+                                                text('Name of interpreter') + '<w:r><w:tab/><w:tab/><w:tab/></w:r>'
+                                                + text('Interpreter ID')], [True, False, False]),
+        )
+        for caption, after, held in cases:
+            with self.subTest(caption=caption, after=after[0][:40]):
+                doc = Document()
+                doc.add_paragraph('Clinical summary: ________')
+                lines = doc.add_paragraph()
+                for number in range(len([x for x in caption.split('\t') if x.strip()])):
+                    if number:
+                        lines.add_run('\t\t')
+                    lines._p.append(line_run(number + 1, fallback=False))
+                doc.add_paragraph(caption)
+                for xml in after:
+                    paragraph = doc.add_paragraph()
+                    for node in list(etree.fromstring('<w:wrap %s>%s</w:wrap>' % (DECLARED, xml))):
+                        paragraph._p.append(node)
+                doc.add_paragraph('End of record.')
+                raw = data(doc)
+                band = word.signing_band_places(raw)
+                found = word.inspect(raw)
+                writable = [f for f in found['fields'] if not f.get('write_protected')]
+                final = word.fill(raw, found['fields'], {f['key']: 'Alex Example' for f in writable})
+                for number, expected in enumerate(held):
+                    place = 'b/p[%d]' % (3 + number)
+                    self.assertEqual(BODY + place in band, expected, place)
+                    if expected:
+                        self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == place])
+                        self.assertEqual(slot_bytes(final, place), slot_bytes(raw, place))
+                        if after[number]:
+                            self.assertIn(place, [i['slot'] for i in found['coverage_issues']
+                                                  if i['code'] == 'ambiguous_signing_band'])
 
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician

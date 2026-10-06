@@ -1674,8 +1674,10 @@ def response_word(txt: str) -> bool:
 
 
 class Detector:
-    def __init__(self, package: Package, *, layout_proposal=False, _table_instructions=True):
+    def __init__(self, package: Package, *, layout_proposal=False, _table_instructions=True, _inline_bands=True):
         self.package = package
+        self._inline_bands = _inline_bands
+        self._band_free_areas = None   # the band-free reading's areas, read once for the band rule
         self.index = SlotIndex(package)
         self.areas: list[Area] = []
         self.layout_proposal = layout_proposal
@@ -9114,6 +9116,8 @@ class Detector:
         contract. Anchored shapes, text boxes and a partial caption do not
         establish a correspondence. Modern/fallback drawings stay untouched.
         """
+        if not self._inline_bands:
+            return
         wp = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
         a = "http://schemas.openxmlformats.org/drawingml/2006/main"
         for slot in (s for s in self.index.slots if s.kind == 'p' and s.parent is None):
@@ -9170,13 +9174,11 @@ class Detector:
             # The previous detector borrowed the combined caption to invent a
             # date on the immediately following empty paragraph. That spacer
             # is part of this preserved signing band, not an ordinary answer,
-            # when it shows nothing at all or only a typed writing line (the
-            # caption's own line, which would otherwise lose its label and
-            # become a neutral answer); it is then one of the band's places.
+            # when it shows nothing at all; it is then one of the band's places.
             after = band_next(caption.el)
             spacer = self.index.by_el.get(id(after)) if after is not None else None
             if not (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
-                    and (not self.ptext(spacer.el)[0].strip() or self.band_typed_line(spacer))
+                    and not self.ptext(spacer.el)[0].strip()
                     and not any(node.tag in BAND_SPACER_CONTENT for node in spacer.el.iter())):
                 spacer = None
             if spacer is not None:
@@ -9198,21 +9200,22 @@ class Detector:
             if spacer is not None:
                 self.claimed.add(id(spacer.el))
                 self.protected_regions.add(spacer.id)
-                if self.band_spacer_draws_line(spacer) or self.band_typed_line(spacer):
+                if self.band_spacer_draws_line(spacer):
                     # A visible writing line here (underline, leader, border)
                     # may be another field's line: keep it unwritten AND have
                     # a clinician review it, as the previous reading did.
                     self.coverage_issue(spacer, 'ambiguous_signing_band',
                                         DRAWN_BAND_SPACER_REVIEW + 'Location: ' + spacer.id)
-            # A typed signing area may run over several lines (e0 read them as one signature field): each further
-            # typed writing line directly below the spacer is one of the band's places too, unwritten and reviewed,
-            # rather than a neutral answer that lost the caption's label.
-            further = band_next(spacer.el) if spacer is not None else None
+            # The caption's own writing lines - the places the band-free reading labels from this caption (e0's
+            # signing area: a typed, prompted or multi-line signature line) - belong to the band too, unwritten and
+            # reviewed, never a neutral answer that lost the caption's label. A line with its own label (a field, a
+            # placeholder, a row captioned below it) is not the caption's and stays the form's; the first paragraph
+            # that is not the caption's ends them.
+            own = self.band_caption_places(caption)
+            further = band_next((spacer or caption).el)
             while further is not None:
                 line = self.index.by_el.get(id(further))
-                if not (line is not None and line.kind == 'p' and line.parent is slot.parent
-                        and not any(node.tag in BAND_SPACER_CONTENT for node in line.el.iter())
-                        and self.band_typed_line(line)):
+                if line is None or line.kind != 'p' or line.parent is not slot.parent or line.id not in own:
                     break
                 self.signing_band_places.append(line.id)
                 self.claimed.add(id(line.el))
@@ -9221,17 +9224,19 @@ class Detector:
                 further = band_next(line.el)
             self.notes.append(reason + ' Location: ' + slot.id)
 
-    def band_typed_line(self, spacer):
-        """A paragraph that prints only a typed writing line: every printed character lies in a label-less blank the
-        engine's own blank reader reads (underscores, dots, underlined tabs). A placeholder, bracket, angle, hint or
-        segmented blank names or shapes its own answer, so a line holding one is never this."""
-        text, pieces = self.ptext(spacer.el)
-        spans = self.blank_spans(text, pieces)
-        rest = list(text)
-        for start, end, _ in spans:
-            rest[start:end] = ' ' * (end - start)
-        return (bool(spans) and all(kind in ('blank', 'utab') for _, _, kind in spans)
-                and not ''.join(rest).strip())
+    def band_caption_places(self, caption):
+        """The places the band-free reading of this package labels with the band's caption (read as the label above
+        or below a line, or its columns read onto one) - e0's reading of the caption's own writing lines."""
+        if self._band_free_areas is None:
+            reader = Detector(self.package, _inline_bands=False)
+            reader.detect()
+            self._band_free_areas = list(reader.areas)
+        label = clean_label(self.text(caption.el))
+        own = set()
+        for area in self._band_free_areas:
+            if area.label == label:
+                own.update(place.id for place in [area.slot, *area.extra_slots] if place is not None)
+        return own
 
     def band_spacer_draws_line(self, spacer):
         """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,
