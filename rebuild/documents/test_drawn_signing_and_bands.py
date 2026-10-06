@@ -424,23 +424,28 @@ class DrawnSigningBand(unittest.TestCase):
                     self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == place])
                     self.assertIn(place, [i['slot'] for i in found['coverage_issues']])
                     self.assertEqual(slot_bytes(final, place), slot_bytes(raw, place))
-        doc = Document()
-        doc.add_paragraph('PATIENT NAME: ')._p.append(
-            etree.fromstring('<w:r %s><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>' % DECLARED))
-        section = doc.sections[0]
-        section.different_first_page_header_footer = True
-        for header in (section.header, section.first_page_header):
-            header.is_linked_to_previous = False
-            header.paragraphs[0]._p.append(line_run(1, fallback=False))
-            header.add_paragraph('Signature of patient')
-            header.add_paragraph(line)
-        raw = data(doc)
-        band = word.signing_band_places(raw)
-        self.assertIn('word/header1.xml#hf/p[2]', band)
-        self.assertIn('word/header2.xml#hf/p[2]', band)
-        found = word.inspect(raw)
-        self.assertFalse([f for f in found['fields'] if f['locator']['part'] != 'word/document.xml'
-                          and not f.get('write_protected')])
+        for lines in (1, 2):
+            # (A copy's further lines are its own places: the merged area names only the copy's first line.)
+            with self.subTest(header_lines=lines):
+                doc = Document()
+                doc.add_paragraph('PATIENT NAME: ')._p.append(
+                    etree.fromstring('<w:r %s><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>' % DECLARED))
+                section = doc.sections[0]
+                section.different_first_page_header_footer = True
+                for header in (section.header, section.first_page_header):
+                    header.is_linked_to_previous = False
+                    header.paragraphs[0]._p.append(line_run(1, fallback=False))
+                    header.add_paragraph('Signature of patient')
+                    for _ in range(lines):
+                        header.add_paragraph(line)
+                raw = data(doc)
+                band = word.signing_band_places(raw)
+                for part in ('word/header1.xml', 'word/header2.xml'):
+                    for number in range(lines):
+                        self.assertIn('%s#hf/p[%d]' % (part, 2 + number), band)
+                found = word.inspect(raw)
+                self.assertFalse([f for f in found['fields'] if f['locator']['part'] != 'word/document.xml'
+                                  and not f.get('write_protected')])
 
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician

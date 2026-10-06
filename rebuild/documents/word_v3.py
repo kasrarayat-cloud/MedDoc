@@ -1700,6 +1700,7 @@ class Detector:
         self.withdrawn_areas: list[Area] = []   # EC3: answer areas withdrawn from shared merged cells
         self.source_guidance_areas: list[Area] = []  # preserved source controls, never clinical answer destinations
         self.signing_band_places: list[str] = []  # every drawn band's line, caption and spacer place, in every part
+        self.merged_copies: list = []            # (kept area, merged header/footer copy): the copy's own places
         self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
         self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
         self.notes: list[str] = []
@@ -9441,6 +9442,7 @@ class Detector:
                 keep.protection = keep.protection or other.protection
                 keep.target.setdefault("copies", []).append({"part": other.slot.part, "slot": other.slot.path,
                                                              "fingerprint": fingerprint(other.slot.el)})
+                self.merged_copies.append((keep, other))
                 self.areas.remove(other)
 
 
@@ -10804,13 +10806,18 @@ _BAND_FREE_READINGS = {}
 
 def band_free_reading(data):
     """Every area of the band-free reading of these exact original bytes (the detector with the drawn band rule off),
-    as (label, places): each place an area writes or copies to. Read once per original in this process."""
+    as (label, places): each place the area reads, its merged header/footer copies' own places included (a copy's
+    further lines are its own; the merged area names only the copy's first). Read once per original in this process."""
     key = hashlib.sha256(data).digest()
     reading = _BAND_FREE_READINGS.get(key)
     if reading is None:
         reader = Detector(open_package(data), _inline_bands=False)
         reader.detect()
-        reading = tuple((area.label, frozenset([place.id for place in [area.slot, *area.extra_slots] if place is not None]
+        copies = {}
+        for kept, copy in reader.merged_copies:
+            copies.setdefault(id(kept), []).append(copy)
+        reading = tuple((area.label, frozenset([place.id for source in [area, *copies.get(id(area), [])]
+                                                for place in [source.slot, *source.extra_slots] if place is not None]
                                                + [copy['part'] + '#' + copy['slot'] for copy in area.target.get('copies', [])]))
                         for area in reader.areas)
         if len(_BAND_FREE_READINGS) >= 4:
