@@ -34,6 +34,7 @@ ALLOWED = frozenset({SELF, DECL, 'rebuild/ops/test_legacy_model_activation.py',
                      'rebuild/ops/test_link_worktree_venv.py', 'scripts/link-worktree-venv.sh',
                      'scripts/setup-worktree.sh',
                      'docs/foundation/mutations/20261006-quillmd-owner-legacy-sonnet55-qa.md',
+                     'docs/foundation/mutations/20261006-quillmd-owner-voice-duration-adjudication.md',
                      'docs/rebuild/owner-doctor-test-guide-20261006.html'})
 DEPENDENCIES = ('rebuild/ops/managed_helper.py', 'rebuild/ops/private_storage.py',
                 'rebuild/ops/backup_restore.py', 'rebuild/ops/email_activation.py',
@@ -285,11 +286,14 @@ try:
  roots=(pathlib.Path('/host/etc/systemd/system'),pathlib.Path('/host/etc/nginx'),pathlib.Path('/host/etc/ssh'))
  paths=[pathlib.Path('/host/opt/meddoc-pro/Caddyfile')]
  for root in roots:
+  info=root.lstat()
+  assert stat.S_ISDIR(info.st_mode) and not root.is_symlink()
+  paths.append(root)
   paths.extend(sorted(root.rglob('*')))
  result={}
  for path in paths:
   info=path.lstat();name=str(path)[5:]
-  row={'uid':info.st_uid,'gid':info.st_gid,'mode':stat.S_IMODE(info.st_mode)}
+  row={'uid':info.st_uid,'gid':info.st_gid,'mode':stat.S_IMODE(info.st_mode),'device':info.st_dev,'inode':info.st_ino}
   if stat.S_ISLNK(info.st_mode): row['link']=os.readlink(path)
   elif stat.S_ISDIR(info.st_mode): row['directory']=True
   elif stat.S_ISREG(info.st_mode): row['sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
@@ -387,12 +391,15 @@ def database(backup, files):
 
 
 def inventory(root):
+    root = Path(root)
+    require(root.resolve(strict=True) == root and root.is_dir() and not root.is_symlink(), 'static_root_identity')
     result = {}
-    for path in sorted(Path(root).rglob('*')):
+    for path in [root, *sorted(root.rglob('*'))]:
         info = path.lstat()
         require(not path.is_symlink() and (path.is_file() or path.is_dir()), 'static_object')
         result[str(path.relative_to(root))] = {'directory': path.is_dir(), 'mode': stat.S_IMODE(info.st_mode),
                                              'uid': info.st_uid, 'gid': info.st_gid,
+                                             'device': info.st_dev, 'inode': info.st_ino,
                                              'sha256': None if path.is_dir() else sha(path.read_bytes())}
     return result
 
@@ -503,6 +510,44 @@ def await_service_boundary(host, storage, release, timeout=30):
             time.sleep(0.2)
 
 
+def best_effort_private_stop(host):
+    """Every unit gets an independent stop attempt even when reads/actions/evidence fail."""
+    result = {}
+    for unit in UNITS:
+        row = {'stop_attempted': False}
+        result[unit] = row
+        should_stop = True
+        try:
+            row['before'] = host.state(unit)
+            should_stop = not (row['before'].get('ActiveState') == 'inactive'
+                               and row['before'].get('MainPID') == '0')
+        except BaseException as error:
+            row['state_read_failure'] = type(error).__name__
+        if should_stop:
+            row['stop_attempted'] = True
+            try:
+                host.service('stop', unit)
+                row['stop_command_completed'] = True
+            except BaseException as error:
+                row['stop_failure'] = type(error).__name__
+        try:
+            row['after'] = host.state(unit)
+            row['stopped_verified'] = (row['after'].get('ActiveState') == 'inactive'
+                                       and row['after'].get('MainPID') == '0')
+        except BaseException as error:
+            row['state_verification_failure'] = type(error).__name__
+            row['stopped_verified'] = False
+    return result
+
+
+def best_effort_capture(outcome, label, operation):
+    """Diagnostic availability never controls fail-stop or another independent diagnostic."""
+    try:
+        outcome[label] = operation()
+    except BaseException as error:
+        outcome[label + '_capture_failure'] = type(error).__name__
+
+
 def execute(args, contract, evidence, source_info, *, host, backup, storage, exclusion, env_writer):
     original = protected(APP / '.env', 65536)
     require(sha(original) == contract.get('environment_before_sha256'), 'declared_environment_baseline')
@@ -572,28 +617,17 @@ def execute(args, contract, evidence, source_info, *, host, backup, storage, exc
             outcome['complete'] = True
             checkpoint('complete')
     except BaseException as error:
-        # No auto-retry/rollback/database reset. Capture the partial state before a separately declared recovery.
+        # Fail-stop is independent of disk availability and every diagnostic operation.
         outcome['complete'] = False
-        try:
-            outcome['actual_unit_state_on_failure'] = {unit: host.state(unit) for unit in UNITS}
-            outcome['actual_environment_sha256_on_failure'] = sha(protected(APP / '.env', 65536))
-            outcome['actual_shared_head_on_failure'] = git(ROOT, 'rev-parse', 'HEAD').strip().decode()
-            outcome['failure_kind'] = type(error).__name__
-            if getattr(error, 'reason', None):
-                outcome['managed_helper_reason'] = error.reason
-                outcome['managed_helper_cleanup_complete'] = error.cleanup_complete
-            checkpoint('failed')
-            if outcome['actual_environment_sha256_on_failure'] != sha(original):
-                outcome['fail_stop_attempted'] = True
-                for unit in UNITS:
-                    state = host.state(unit)
-                    if state.get('ActiveState') == 'active' or state.get('MainPID', '0') != '0':
-                        host.service('stop', unit)
-                outcome['unit_state_after_fail_stop'] = {unit: host.state(unit) for unit in UNITS}
-                checkpoint('failed_stopped')
-        except BaseException:
-            pass
-        raise Refusal('activation_failed_partial_evidence_retained') from None
+        outcome['failure_kind'] = type(error).__name__
+        outcome['fail_stop'] = best_effort_private_stop(host)
+        if getattr(error, 'reason', None):
+            outcome['managed_helper_reason'] = error.reason
+            outcome['managed_helper_cleanup_complete'] = error.cleanup_complete
+        best_effort_capture(outcome, 'actual_environment_sha256_on_failure', lambda: sha(protected(APP / '.env', 65536)))
+        best_effort_capture(outcome, 'actual_shared_head_on_failure', lambda: git(ROOT, 'rev-parse', 'HEAD').strip().decode())
+        best_effort_capture(outcome, 'failure_checkpoint', lambda: checkpoint('failed'))
+        raise Refusal('activation_failed_recovery_required') from None
     return outcome
 
 
@@ -667,20 +701,12 @@ def rollback(args, source_info, *, host, backup, storage, exclusion, env_writer)
             write_new(destination / 'complete.json', encode(receipt))
     except BaseException as error:
         receipt['stage'] = 'rollback_failed'
-        try:
-            receipt['actual_unit_state'] = {unit: host.state(unit) for unit in UNITS}
-            receipt['actual_environment_sha256'] = sha(protected(APP / '.env', 65536))
-            receipt['failure_kind'] = type(error).__name__
-            write_new(destination / 'failed.json', encode(receipt))
-            for unit in UNITS:
-                state = host.state(unit)
-                if state.get('ActiveState') == 'active' or state.get('MainPID', '0') != '0':
-                    host.service('stop', unit)
-            receipt['unit_state_after_fail_stop'] = {unit: host.state(unit) for unit in UNITS}
-            write_new(destination / 'failed_stopped.json', encode(receipt))
-        except BaseException:
-            pass
-        raise Refusal('rollback_failed_partial_evidence_retained') from None
+        receipt['complete'] = False
+        receipt['failure_kind'] = type(error).__name__
+        receipt['fail_stop'] = best_effort_private_stop(host)
+        best_effort_capture(receipt, 'actual_environment_sha256', lambda: sha(protected(APP / '.env', 65536)))
+        best_effort_capture(receipt, 'failure_checkpoint', lambda: write_new(destination / 'failed.json', encode(receipt)))
+        raise Refusal('rollback_failed_recovery_required') from None
     print(json.dumps({'rollback_complete': True, 'provider_calls': 0, 'evidence_directory': str(destination)}, sort_keys=True))
     return receipt
 

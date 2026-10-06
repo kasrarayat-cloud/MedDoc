@@ -1,8 +1,9 @@
 """Refusal/preservation proofs using invented bytes; no installed state access."""
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
 from copy import deepcopy
 from io import StringIO
 import json
+import errno
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -126,6 +127,68 @@ class OperatorBoundary(unittest.TestCase):
                 host.service(action, unit)
         host.helper.assert_not_called()
 
+    def test_failed_state_read_and_stop_do_not_skip_other_units(self):
+        host = Mock()
+        stopped = []
+        def state(unit):
+            if unit == act.UNITS[0]:
+                raise OSError('fictional state failure')
+            return {'ActiveState': 'inactive' if unit in stopped else 'active',
+                    'MainPID': '0' if unit in stopped else '12'}
+        def service(action, unit):
+            if unit == act.UNITS[0]:
+                raise OSError('fictional stop failure')
+            stopped.append(unit)
+        host.state.side_effect, host.service.side_effect = state, service
+        result = act.best_effort_private_stop(host)
+        self.assertEqual(host.service.call_args_list, [unittest.mock.call('stop', unit) for unit in act.UNITS])
+        self.assertEqual(stopped, list(act.UNITS[1:]))
+        self.assertFalse(result[act.UNITS[0]]['stopped_verified'])
+        self.assertTrue(all(result[unit]['stopped_verified'] for unit in act.UNITS[1:]))
+
+    def test_static_root_mode_change_is_detected_and_root_symlink_refuses(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'static'
+            root.mkdir(mode=0o755)
+            root.joinpath('app.css').write_bytes(b'fictional css')
+            before = act.inventory(root)
+            root.chmod(0o777)
+            after = act.inventory(root)
+            self.assertEqual(before['app.css'], after['app.css'])
+            self.assertNotEqual(before['.'], after['.'])
+            alias = Path(temporary) / 'alias'
+            alias.symlink_to(root, target_is_directory=True)
+            with self.assertRaises(act.Refusal):
+                act.inventory(alias)
+
+    def test_actual_configuration_helper_includes_security_roots(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = str(Path(temporary) / 'host')
+            roots = [Path(prefix) / relative for relative in ('etc/systemd/system', 'etc/nginx', 'etc/ssh')]
+            for root in roots:
+                root.mkdir(parents=True, mode=0o755)
+            caddy = Path(prefix) / 'opt/meddoc-pro/Caddyfile'
+            caddy.parent.mkdir(parents=True)
+            caddy.write_bytes(b'fictional caddy')
+            host = act.Host(Mock())
+            def fake_helper(code, timeout):
+                output = StringIO()
+                with redirect_stdout(output):
+                    exec(compile(code.replace('/host', prefix), '<fictional-read-only-helper>', 'exec'), {})
+                return output.getvalue().encode()
+            host.helper = fake_helper
+            before = host.configuration()
+            roots[1].chmod(0o777)
+            after = host.configuration()
+            key = next(key for key in before if key.endswith('/etc/nginx'))
+            self.assertEqual(before[key]['mode'], 0o755)
+            self.assertEqual(after[key]['mode'], 0o777)
+            self.assertNotEqual(before, after)
+            roots[2].rename(roots[2].with_name('ssh-original'))
+            roots[2].symlink_to(roots[2].with_name('ssh-original'), target_is_directory=True)
+            with self.assertRaises(SystemExit):
+                host.configuration()
+
     def test_simple_unit_start_waits_for_new_pid_proof_but_never_retries_bad_policy(self):
         expected = {'fictional_unit': {'MainPID': '12'}}
         with patch.object(act, 'service_boundary', side_effect=[act.Refusal('same_pid_boundary_proof'), expected]) as boundary, \
@@ -197,6 +260,82 @@ class OperatorBoundary(unittest.TestCase):
             failure = list(runtime.glob('legacy-model-demo-*/failed.json'))
             self.assertEqual(len(failure), 1)
             self.assertFalse(json.loads(failure[0].read_bytes())['complete'])
+
+    def test_activation_enospc_failure_evidence_cannot_leave_new_services_active(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary)
+            target = '4' * 40
+            original = environment()
+            updated, report = act.render(original, target)
+            current = [original]
+            states = {unit: {'ActiveState': 'active', 'MainPID': str(index + 1),
+                             'ExecMainStartTimestampMonotonic': '1'} for index, unit in enumerate(act.UNITS)}
+            old_units = deepcopy(states)
+            host = Mock()
+            def state(unit):
+                return dict(states[unit]) if unit in states else {'ActiveState': 'inactive', 'MainPID': '0'}
+            def service(action, unit):
+                states[unit] = {'ActiveState': 'inactive' if action == 'stop' else 'active',
+                                'MainPID': '0' if action == 'stop' else str(11 + act.UNITS.index(unit)),
+                                'ExecMainStartTimestampMonotonic': '2'}
+            host.state.side_effect, host.service.side_effect = state, service
+            host.effective_worker.return_value = {'values': report['values']}
+            backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock()
+            backup.key_at.return_value.encrypt.side_effect = lambda value: b'FICTIONAL_CIPHER:' + value
+            storage.inventory.return_value = {}
+            exclusion.hold.return_value = nullcontext()
+            writer.replace_environment.side_effect = lambda path, before, after: current.__setitem__(0, after)
+            original_write = act.write_new
+            def write(path, raw):
+                if path.name.startswith('failed'):
+                    raise OSError(errno.ENOSPC, 'fictional full evidence volume')
+                original_write(path, raw)
+            args = SimpleNamespace(operator_commit=target, backup_directory=runtime / 'fictional-backup')
+            contract = {'environment_before_sha256': act.sha(original), 'backup_manifest_sha256': '0' * 64}
+            with patch.object(act, 'RUNTIME', runtime), patch.object(act, 'protected', side_effect=lambda *args: current[0]), \
+                    patch.object(act, 'write_new', side_effect=write), patch.object(act, 'health'), patch.object(act, 'await_health'), \
+                    patch.object(act, 'service_boundary', return_value=old_units), \
+                    patch.object(act, 'await_service_boundary', side_effect=lambda *args: deepcopy(states)), \
+                    patch.object(act, 'verify_backup', return_value={}), patch.object(act, 'database', return_value={}), \
+                    patch.object(act, 'snapshot', side_effect=[{'population': 1}, {'population': 1}, {'population': 1}, {'population': 2}]), \
+                    patch.object(act, 'operation_locks', return_value=nullcontext()), \
+                    patch.object(act, 'git', return_value=target.encode()), patch('sys.stdout', new=StringIO()), \
+                    self.assertRaises(act.Refusal):
+                act.execute(args, contract, {}, {'shared_head': act.BASELINE}, host=host, backup=backup,
+                            storage=storage, exclusion=exclusion, env_writer=writer)
+            self.assertEqual(current[0], updated)
+            self.assertTrue(all(value['ActiveState'] == 'inactive' and value['MainPID'] == '0' for value in states.values()))
+            self.assertEqual(sum(call.args[0] == 'stop' for call in host.service.call_args_list), 6)
+
+    def test_rollback_enospc_failure_evidence_still_invokes_independent_fail_stop(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary)
+            directory = runtime / 'legacy-model-demo-fictional'
+            directory.mkdir(mode=0o700)
+            target = '4' * 40
+            original = environment()
+            updated, _ = act.render(original, target)
+            host, backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock(), Mock()
+            backup.key_at.return_value.decrypt.side_effect = lambda value: value
+            exclusion.hold.return_value = nullcontext()
+            host.state.return_value = {'ActiveState': 'inactive', 'MainPID': '0'}
+            writer.replace_environment.side_effect = OSError('fictional restore failure')
+            original_write = act.write_new
+            def write(path, raw):
+                if path.name == 'failed.json':
+                    raise OSError(errno.ENOSPC, 'fictional full evidence volume')
+                original_write(path, raw)
+            def read(path, *args):
+                return original if path.name == 'environment-before.fernet' else updated
+            args = SimpleNamespace(operator_commit=target, activation_directory=directory)
+            with patch.object(act, 'RUNTIME', runtime), patch.object(act, 'protected', side_effect=read), \
+                    patch.object(act, 'write_new', side_effect=write), patch.object(act, 'snapshot', return_value={}), \
+                    patch.object(act, 'operation_locks', return_value=nullcontext()), \
+                    patch.object(act, 'git', return_value=target.encode()), \
+                    patch.object(act, 'best_effort_private_stop', return_value={}) as stop, \
+                    self.assertRaises(act.Refusal):
+                act.rollback(args, {}, host=host, backup=backup, storage=storage, exclusion=exclusion, env_writer=writer)
+            stop.assert_called_once_with(host)
 
 
 if __name__ == '__main__':

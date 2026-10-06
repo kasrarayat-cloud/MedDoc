@@ -35,7 +35,9 @@ and, if actually qualified, rebuild/templates/encounter_form.html, plus the exac
 already-merged worktree-support paths from PR1286 (test_link_worktree_venv.py,
 link-worktree-venv.sh,setup-worktree.sh), the exact pre-attempt QA declaration
 docs/foundation/mutations/20261006-quillmd-owner-legacy-sonnet55-qa.md and the matching
-docs/rebuild/owner-doctor-test-guide-20261006.html. All other serving source
+docs/rebuild/owner-doctor-test-guide-20261006.html, plus the exact voice diagnosis/continuation
+declaration docs/foundation/mutations/20261006-quillmd-owner-voice-duration-adjudication.md.
+All other serving source
 engine/settings/Word/prompt/runtime bytes remain exactly those of dedac. No static collection.
 
 Before act: exact operator commit and dedac citation are produced by check-citation.sh;
@@ -92,7 +94,8 @@ Launcher proof files alone change for the exact three new process identities.
 Retain original/new environment encrypted under the existing backup recovery key in a new
 0700 operator runtime directory, never plaintext disk/logs. Each immutable0600 checkpoint
 records stage/configuration hashes and preservation evidence. On failure preserve partial
-state and attempt to stop affected active private surfaces if configuration changed; no
+state and independently attempt to stop affected private surfaces even when state reads,
+one stop or checkpoint writes fail. Missing diagnostics do not skip remaining units; no
 automatic retry, provider replay, population cleanup or rollback occurs. Configuration
 rollback is a separately invoked act already scoped by this declaration: while private services are
 stopped/excluded, verify current exact env bytes against the encrypted expected target,
@@ -116,6 +119,6 @@ fixture state through its existing mechanism. A displayed label or an earlier QA
 insufficient as actual installed-worker proof.
 
 Existing signed quotes preserve their original model/rates by design and remain valid for
-their normal30-minute lifetime. This act does not invalidate old browser pages/quotes or
+their normal10-minute generation or30-minute voice lifetime. This act does not invalidate old browser pages/quotes or
 change the engine's frozen-job contract. Owner acceptance must start with fresh navigation
 and confirm the new quote/job model5.5; an old quote may legitimately create a4.6 job.
