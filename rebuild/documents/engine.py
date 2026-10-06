@@ -819,7 +819,7 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
     """Select once at import, under the sandbox, against one immutable byte snapshot."""
     path = workspace / 'input.docx'
     quarantine=word_v3.known_layout_failure(path.read_bytes())
-    legacy, advanced = None, None
+    legacy, advanced, places = None, None, None
     old_error, new_error = '', ''
     try:
         document, paragraphs, cells, fields, notes = docx_inspect(path)
@@ -908,12 +908,19 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
         coverage['layout_quarantine'] = quarantine
         coverage['block_generation'] = True
     issues = advanced.get('coverage_issues', []) if advanced else []
-    if selected == 'legacy' and any(issue.get('code') == 'ambiguous_signing_band' for issue in issues):
+    band = (set(word_v3.signing_band_places(path.read_bytes()))
+            if selected == 'legacy' and places is not None
+            and any(issue.get('code') == 'ambiguous_signing_band' for issue in issues) else set())
+    if band and not any(import_selection.covered(place, [(item, None, None) for item in band])
+                        and not word_v3.legacy_role_kind(field['label'])
+                        for field, place in zip(legacy['fields'], places)):
         # A drawn signing band's spacer review belongs to the v3 route that
-        # protects the band. A legacy import keeps legacy's previous reading of
-        # the band's places (legacy_roles), cannot review or clear that issue,
-        # and is not held by it; every other advanced issue still holds it.
-        band = set(word_v3.signing_band_places(path.read_bytes()))
+        # protects the band; a legacy import cannot review or clear it. It
+        # stops holding a legacy import only when legacy cannot write into the
+        # band: no legacy field there, or only signing-role fields that core
+        # holds per field (never generated). A role-less legacy field in the
+        # band - which would take, say, a signing date - keeps the hold, as
+        # on e0; so does every other advanced issue.
         issues = [issue for issue in issues if not (
             issue.get('code') == 'ambiguous_signing_band' and issue['part'] + '#' + issue['slot'] in band
             and issue.get('detail') == word_v3.DRAWN_BAND_SPACER_REVIEW + 'Location: ' + issue['part'] + '#' + issue['slot'])]

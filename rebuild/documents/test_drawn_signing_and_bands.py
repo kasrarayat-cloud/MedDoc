@@ -503,11 +503,13 @@ class DrawnBandRoute(unittest.TestCase):
                                            'answers': {key: 'Alex Example'}, 'engine': 'legacy'})
                 self.assertIn('Alex Example', Document(workspace / 'output.docx').paragraphs[1].text)
 
-    def test_a_legacy_import_is_never_held_by_a_band_review_it_cannot_clear(self):
+    def test_a_band_review_holds_a_legacy_import_only_where_legacy_would_write_into_the_band(self):
         # Refutation round 6: on the legacy route every v3 coverage issue became an advanced unresolved area that
         # held generation, and a legacy import has no review that clears one. A drawn band whose spacer draws a line
-        # therefore made a form e0 exported unusable. That review belongs to the v3 route; any other v3 issue (here
-        # a typed captioned signing band's) still holds the legacy import exactly as on e0.
+        # therefore made a form e0 exported unusable. Round 7: dropping the review outright let legacy write a
+        # generated date into the band's spacer under a heading-styled 'Clinician signature / Date' caption, which
+        # e0 held. The review now holds a legacy import exactly when a legacy field without a signing role sits in
+        # the band; any other v3 issue (here a typed captioned signing band's) still holds it as on e0.
         import tempfile
         from pathlib import Path
         from . import engine
@@ -519,9 +521,10 @@ class DrawnBandRoute(unittest.TestCase):
                                      'w:leader="underscore"/></w:r></w:p>' % DECLARED,
             'leader tab stop': '<w:p %s><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9000"/></w:tabs>'
                                '</w:pPr><w:r><w:tab/></w:r></w:p>' % DECLARED,
+            'underlined tab': '<w:p %s>%s</w:p>' % (DECLARED, underlined.replace(' ' + DECLARED, '')),
         }
 
-        def report(spacer, *, numbered=True, typed=False):
+        def report(spacer, *, numbered=True, typed=False, caption='Patient signature\t\t\tPrint name', outlined=False):
             doc = Document()
             doc.add_paragraph('Synthetic endoscopy report')
             name = doc.add_paragraph('PATIENT NAME: ')
@@ -537,7 +540,11 @@ class DrawnBandRoute(unittest.TestCase):
             lines._p.append(line_run(1, fallback=False))
             lines.add_run('\t\t')
             lines._p.append(line_run(2, fallback=False))
-            doc.add_paragraph('Patient signature\t\t\tPrint name')
+            heading = doc.add_paragraph(caption)
+            if outlined:
+                outline = OxmlElement('w:outlineLvl')
+                outline.set(qn('w:val'), '2')
+                heading._p.get_or_add_pPr().append(outline)
             placeholder = doc.add_paragraph()._p
             placeholder.addnext(etree.fromstring(spacers[spacer]))
             placeholder.getparent().remove(placeholder)
@@ -565,7 +572,7 @@ class DrawnBandRoute(unittest.TestCase):
                                            'answers': {key: 'Alex Example'}, 'engine': 'legacy'})
                 return result['import_manifest']['engine'], coverage, Document(workspace / 'output.docx')
 
-        for spacer in spacers:
+        for spacer in ('bottom border', 'positional tab leader', 'leader tab stop'):
             raw = report(spacer)
             self.assertTrue([issue for issue in word.inspect(raw)['coverage_issues']
                              if issue['code'] == 'ambiguous_signing_band'])
@@ -588,6 +595,40 @@ class DrawnBandRoute(unittest.TestCase):
                 held = coverage['advanced_unresolved_areas']
                 self.assertEqual([(issue['code'], issue['detail'].startswith('Protected signing block')) for issue in held],
                                  [('ambiguous_signing_band', True)])
+        # Under a heading-styled caption legacy reads the underlined spacer as its own field. A role-less one (the
+        # band's date) would take a generated date, so the band's review holds the import as e0 held it; a signing-role
+        # one is held per field by core (never generated), so the import stays usable.
+        for caption, holds in (('Clinician signature\t\t\tDate', True), ('Patient signature\t\t\tPrinted name', False)):
+            raw = report('underlined tab', caption=caption, outlined=True)
+            for preferred in ('auto', 'legacy'):
+                with self.subTest(caption=caption, preferred=preferred):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        workspace = Path(tmp)
+                        (workspace / 'input.docx').write_bytes(raw)
+                        result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': preferred,
+                                                            'prefer_v3_parity': preferred == 'auto'})
+                    coverage = result['import_manifest']['coverage']
+                    self.assertEqual(result['import_manifest']['engine'], 'legacy')
+                    in_band = [field['label'] for field in result['fields'] if field['label'] == caption]
+                    self.assertEqual(in_band, [caption])
+                    self.assertEqual(bool(word.legacy_role_kind(caption)), not holds)
+                    self.assertEqual(bool(coverage.get('block_generation')), holds)
+                    self.assertEqual([issue['detail'].startswith(word.DRAWN_BAND_SPACER_REVIEW)
+                                      for issue in coverage.get('advanced_unresolved_areas', [])], [True] if holds else [])
+        # When the place readers disagree, nothing says where legacy writes: the band's review keeps holding.
+        from unittest import mock
+        from . import import_selection
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                import_selection, 'legacy_places', side_effect=ValueError('Original place readers disagree.')):
+            workspace = Path(tmp)
+            (workspace / 'input.docx').write_bytes(report('bottom border'))
+            result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': 'auto',
+                                                'prefer_v3_parity': True})
+        coverage = result['import_manifest']['coverage']
+        self.assertEqual((result['import_manifest']['engine'], coverage.get('comparison_unresolved'),
+                          coverage['block_generation']), ('legacy', True, True))
+        self.assertTrue(all(issue['detail'].startswith(word.DRAWN_BAND_SPACER_REVIEW)
+                            for issue in coverage['advanced_unresolved_areas']))
 
     def test_band_parts_never_compete_with_the_forms_own_questions(self):
         # Refutation round 4: a bare 'Date' band part shared its question key with the form's own 'Date' and held
