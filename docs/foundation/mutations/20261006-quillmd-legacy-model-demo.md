@@ -1,20 +1,33 @@
-# Prospective private legacy Sonnet 5.5 configuration act
+# Qualified private legacy Sonnet 5.5 configuration act
 
-This declaration is **NOT QUALIFIED FOR EXECUTION**. The machine-readable contract below
-deliberately refuses execution until actual exact-source QA, source/refutation/CI, current
-authenticated backup and protected environment identity are independently adjudicated and
-their hashes are committed in a normal PR. No candidate V1 installation is authorized.
+Exact unchanged-engine synthetic QA and independent refutation qualify the narrow
+configuration scope below. Execution still refuses until this source arrives on permanent
+main through the normal PR and has an exact merged-commit CI/secrets citation, and until
+the current encrypted backup, preserved population and environment identity match these
+committed hashes. No candidate V1 installation is authorized.
 
 <!-- legacy-model-contract -->
 ```json
 {
-  "execution_qualified": false,
-  "rollback_qualified": false,
+  "execution_qualified": true,
+  "rollback_qualified": true,
   "baseline": "dedac1625032e32c7a149e6771be22e26c307eb1",
-  "approved_source_paths": [],
-  "qualification_sha256": null,
-  "environment_before_sha256": null,
-  "backup_manifest_sha256": null
+  "approved_source_paths": [
+    "docs/foundation/mutations/20261006-quillmd-legacy-model-demo.md",
+    "docs/foundation/mutations/20261006-quillmd-owner-legacy-sonnet55-qa.md",
+    "docs/foundation/mutations/20261006-quillmd-owner-voice-duration-adjudication.md",
+    "docs/rebuild/owner-doctor-test-guide-20261006.html",
+    "rebuild/ops/legacy_model_activation.py",
+    "rebuild/ops/test_legacy_model_activation.py",
+    "rebuild/ops/test_link_worktree_venv.py",
+    "rebuild/templates/encounter_form.html",
+    "scripts/activate-legacy-model-config.py",
+    "scripts/link-worktree-venv.sh",
+    "scripts/setup-worktree.sh"
+  ],
+  "qualification_sha256": "41e2a8747b9b69ddaaf3debb411ebafcd26a5d346f92e09b0479440479a421e4",
+  "environment_before_sha256": "8634ff217326a3d390d32486268344130773496602d6bb49c73440117a24e938",
+  "backup_manifest_sha256": "0fdcf8758e33fcdadc428ebf78fa85ddaca494f7626c4e556bcacf9b1e52d494"
 }
 ```
 
@@ -122,3 +135,21 @@ Existing signed quotes preserve their original model/rates by design and remain 
 their normal10-minute generation or30-minute voice lifetime. This act does not invalidate old browser pages/quotes or
 change the engine's frozen-job contract. Owner acceptance must start with fresh navigation
 and confirm the new quote/job model5.5; an old quote may legitimately create a4.6 job.
+
+## Finished qualification and narrowly scoped installed acceptance
+
+The protected qualification above retains five actual Anthropic requests/responses with `claude-sonnet-5-5`, the unchanged6000-token/60-second/no-retry profile, one actual Deepgram transcription, ordinary typed/voice/custom-form review/finalization/export, missing/conflict decisions and correct metered settlement. The original voice operator precision failure and STOP remain immutable; the separately committed exact diagnosis permits only the already-declared final generation and does not erase the failure. No clinical source or provider request construction changed.
+
+Independent repaired-actuator refutation found no remaining demonstrated failure in its assigned preservation/false-green lens after ENOSPC cleanup and security/static root metadata repairs. Its protected report is `owner-demo-20261006/activation-repaired-independent-refutation.json`; source and finished-diff checks must be re-read after integration.
+
+acceptance_browser_sha256: 3c6f81ae3a4f8f384c37b44654d5b30b06218a4f5b95c1c9ab928f9220f99ae4
+acceptance_options_sha256: 748ae77377f867255a75d6717a2119f176378bd8fe02714cfbff043464ff84bc
+acceptance_max_generation_requests: 3
+acceptance_max_transcription_requests: 1
+acceptance_technical_limit_provider_usd: 0.50
+acceptance_concurrency: 1
+acceptance_automatic_retries: none
+
+After a complete activation checkpoint only, the same normal ruled door may run the hash-pinned `owner-demo-20261006/installed-browser-acceptance.mjs` with the exact cited release and completed activation directory. It creates only three NEW synthetic documents: typed SOAP and voice SOAP with the prepared Alex Morgan patient/form/mapping1, and typed custom assessment with the prepared Jamie Vale patient/form/mapping1. Prepared IDs and frozen input files are covered by the pinned manifest and QA declaration. It never changes older records, templates, patients, memberships, credentials or MFA. Expected new deltas are three encounters, three generation jobs, one transcription job, their provider-result/audio/export files, explicit transcript/review/finalization/download/session audit rows and immutable metered receipt/usage/reservation/ledger entries for these jobs. Existing row and financial history must survive; new metered charges are provider usage times1.5 using existing promotional credit. No wallet top-up or payment.
+
+Each attempt is recorded before the one UI submit, fresh quote names5.5 and2/10/0.20rates, concurrency1, no automatic retry. Known normal charged deliverability and response model are verified before advancing; a failed/reconciliation/unknown outcome creates STOP and blocks later submissions. Technical exposure is bounded by three frozen small generation inputs at0.10USD each and one recording at the existing0.20USD quote, at most0.50USD. Provider client deadlines remain60seconds/90seconds; each browser outcome wait is bounded120seconds. Synthesized browser microphone capture/stop/preview/discard is tested without submitting it, then the one frozen WAV is uploaded. This proves recorder controls with a synthetic Chromium device, not human hardware. Raw transcript stays separate until explicit correction/save; raw/corrected hashes and audit remain. Three first-answer sets must exactly match the frozen fictional values before normal review/finalization/export; independently check immutable actual job configuration, real raw response, usage/settlement, exported original XML and final MFA/public gates. No installed outbound wire capture is claimed.
