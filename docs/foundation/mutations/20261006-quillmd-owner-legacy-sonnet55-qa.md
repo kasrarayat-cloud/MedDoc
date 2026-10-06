@@ -25,6 +25,12 @@ automatic_retries: none
 request_deadline_seconds: 120
 generation_timeout_seconds: 60
 transcription_timeout_seconds: 90
+worker_guard_sha256: 42358895e8a68131b6ce7819ccfe915d958ce2affd9983829a802a41317f921d
+qa_launcher_sha256: d1f5c5d97a41f9f7e3937593a5862a162f67af014d3cea683f0025a3c2ed219f
+credential_helper_sha256: 71e2140499cf0ae4dd675fb5d7d84f635f517d0ae403dd6eb8141d393272f953
+source_inventory_sha256: 2e045a4efa7f6fc60e56231823cd2c5e86d8d0cd456422d0303fcf4fde93188d
+input_manifest_sha256: 292095cf972cc17a376cfad934d29e5402c7216d4687baeeb816127bf6e43982
+audio_manifest_sha256: d765615c1bcf4798eeea145a0ad1e84c1a16c87233d561a5ba1dce28af14358a
 
 This technical batch cap is imposed by the runner, not a new owner monetary ceiling. Standing authority retains its unlimited monetary scope and all technical, input-rights, credential, authentication and safety controls. No additional monetary permission is required. This declaration permits isolated qualification only; it does not admit installation or prove any workflow passed.
 
@@ -48,3 +54,9 @@ Private QA root: `/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/legacy-qa
 Voice is limited to one locally synthesized recording of the committed SOAP-positive fictional text, using the existing Deepgram provider and model `nova-3-medical`, its protected credential `/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/deepgram-api-key`, timeout90 seconds, no retries and one durable send/outcome. A committed audio-hash addendum and reviewed Deepgram-specific transport guard are required before that send. Maximum audio15MB and five minutes, quoted rate0.0043USD/minute; engineering provider exposure cap0.01USD with unknown exposure counted at that maximum. Raw transcription is reviewed and explicitly saved as labelled notes through the ordinary interface. The fifth generation may use only the committed SOAP-positive notes after review; differences from raw transcription must be retained explicitly. Synthesized speech does not qualify a human microphone or native Microsoft Word rendering.
 
 Every request and outcome records declaration commit/hash, exact worker source/configuration, actor/job/document/template/mapping identities, exact input hashes, request model/profile, returned model/message identity/usage and cost. Provider model availability metadata is optional read-only corroboration and is not worker proof. Credentials are never emitted in logs, request headers, artifacts or git. Exact captured evidence, immutable ledgers and failed attempts remain private. No emails, new services/subscriptions, payment acts or real patient information are within this act.
+
+## Prospective audio and guard addendum, before any provider send
+
+The exact allowed synthesized recording is `forms/soap-positive-synthesized.wav`, SHA256 `8bb6b53f2832ae830fc422e6fac366a383226fcb911e59a814466cb90809b8d7`,1130602bytes,25.6362358276644seconds,mono22050Hz16-bitPCM, synthesized locally with espeak-ng from the exact committed SOAP-positive text. It has no human speech or patient data. The input and audio manifests, launcher, guard and credential reader are bound above to their reviewed hashes. Root independently verified all343 archived source files against committed `git cat-file` blobs from dedac. Eleven offline guard proofs passed with socket creation blocked and invented credentials: valid Deepgram capture precedes fake transport; raw response is retained; duplicate sends, wrong endpoint/model/extra parameter/timeout and failed/unknown/invalid-cost prior outcomes refuse. These are transport proofs, not live workflow results.
+
+The guard independently requires the exact configured pricing fingerprint and pins every attempt's maximum exposure, form/notes/audio/source hashes and declared terms. Every preceding outcome must pass and have known nonnegative finite cost. Failure remains a batch stop even if a local STOP file is later absent. A valid preexisting application quote intentionally retains its original model and rates; configuration changes do not invalidate it. Qualification and owner acceptance require freshly loaded pages and fresh quotes naming5.5, preserving that existing snapshot behavior.
