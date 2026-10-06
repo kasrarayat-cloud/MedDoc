@@ -126,6 +126,28 @@ class OperatorBoundary(unittest.TestCase):
                 host.service(action, unit)
         host.helper.assert_not_called()
 
+    def test_simple_unit_start_waits_for_new_pid_proof_but_never_retries_bad_policy(self):
+        expected = {'fictional_unit': {'MainPID': '12'}}
+        with patch.object(act, 'service_boundary', side_effect=[act.Refusal('same_pid_boundary_proof'), expected]) as boundary, \
+                patch.object(act.time, 'sleep'):
+            self.assertEqual(act.await_service_boundary(Mock(), Mock(), act.BASELINE), expected)
+            self.assertEqual(boundary.call_count, 2)
+        with patch.object(act, 'service_boundary', side_effect=act.Refusal('private_unit_source_identity')) as boundary, \
+                self.assertRaises(act.Refusal):
+            act.await_service_boundary(Mock(), Mock(), act.BASELINE)
+        self.assertEqual(boundary.call_count, 1)
+
+    def test_http_startup_wait_is_read_only_and_contract_failure_stops_immediately(self):
+        import httpx
+        with patch.object(act, 'health', side_effect=[httpx.ConnectError('fictional startup'), []]) as health, \
+                patch.object(act.time, 'sleep'):
+            self.assertEqual(act.await_health(act.BASELINE), [])
+            self.assertEqual(health.call_count, 2)
+        with patch.object(act, 'health', side_effect=act.Refusal('public_maintenance')) as health, \
+                self.assertRaises(act.Refusal):
+            act.await_health(act.BASELINE)
+        self.assertEqual(health.call_count, 1)
+
     def test_unrelated_main_passenger_refuses_before_any_act(self):
         source = act.ROOT / '.worktrees/fictional-operator'
         commit = '3' * 40

@@ -455,14 +455,30 @@ def health(release):
     return result
 
 
+def await_health(release, timeout=30):
+    """Read-only startup readiness; policy/HTTP-contract failures are never retried."""
+    import httpx
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return health(release)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout):
+            require(time.monotonic() < deadline, 'startup_http_deadline')
+            time.sleep(0.2)
+
+
 def service_boundary(host, storage, release):
     result = {}
     for unit, surface in zip(UNITS, ('doctor', 'admin', 'worker')):
         state = host.state(unit)
         require(state.get('ActiveState') == 'active' and int(state.get('MainPID', '0')) > 0
                 and state.get('FragmentPath') == '/etc/systemd/system/' + unit
-                and state.get('DropInPaths') == '', 'private_service_identity')
-        require((Path('/etc/systemd/system') / unit).read_bytes() == (APP / 'deploy' / unit).read_bytes(),
+                and state.get('DropInPaths') == '' and state.get('UnitFileState') == 'enabled', 'private_service_identity')
+        installed = Path('/etc/systemd/system') / unit
+        info = installed.lstat()
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1
+                and stat.S_IMODE(info.st_mode) == 0o644 and installed.resolve() == installed
+                and installed.read_bytes() == (APP / 'deploy' / unit).read_bytes(),
                 'private_unit_source_identity')
         raw = storage.read_file(Path('/var/lib/quillmd/proofs'), surface + '.json')
         proof = json.loads(raw)
@@ -470,8 +486,21 @@ def service_boundary(host, storage, release):
                 and proof.get('release') == release and proof.get('pid') == int(state['MainPID'])
                 and proof.get('identity', {}).get('all_capability_sets_empty') is True
                 and proof.get('identity', {}).get('no_new_privileges') is True, 'same_pid_boundary_proof')
+        require(host.state(unit) == state, 'private_service_identity_race')
         result[unit] = state
     return result
+
+
+def await_service_boundary(host, storage, release, timeout=30):
+    """Type=simple start returns before its existing launcher writes the new-PID proof."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return service_boundary(host, storage, release)
+        except Refusal as error:
+            require(str(error) == 'same_pid_boundary_proof' and time.monotonic() < deadline,
+                    'startup_boundary_deadline_or_refusal')
+            time.sleep(0.2)
 
 
 def execute(args, contract, evidence, source_info, *, host, backup, storage, exclusion, env_writer):
@@ -529,7 +558,7 @@ def execute(args, contract, evidence, source_info, *, host, backup, storage, exc
             require(snapshot(host, backup, storage) == stopped, 'stopped_preservation_failure')
             for unit in (UNITS[2], UNITS[0], UNITS[1]):
                 host.service('start', unit)
-            outcome['units_after'] = service_boundary(host, storage, args.operator_commit)
+            outcome['units_after'] = await_service_boundary(host, storage, args.operator_commit)
             require(all(outcome['units_after'][unit]['MainPID'] != units_before[unit]['MainPID']
                         and outcome['units_after'][unit]['ExecMainStartTimestampMonotonic']
                         != units_before[unit]['ExecMainStartTimestampMonotonic'] for unit in UNITS),
@@ -537,7 +566,7 @@ def execute(args, contract, evidence, source_info, *, host, backup, storage, exc
             outcome['effective_worker'] = host.effective_worker()
             require(all(outcome['effective_worker']['values'].get(key) == value
                         for key, value in configuration['values'].items()), 'actual_worker_configuration')
-            outcome['health'] = health(args.operator_commit)
+            outcome['health'] = await_health(args.operator_commit)
             require(snapshot(host, backup, storage) == stopped, 'post_start_preservation_failure')
             require(time.monotonic() < deadline, 'activation_bound')
             outcome['complete'] = True
@@ -627,12 +656,12 @@ def rollback(args, source_info, *, host, backup, storage, exclusion, env_writer)
             require(snapshot(host, backup, storage) == before, 'rollback_stopped_preservation')
             for unit in (UNITS[2], UNITS[0], UNITS[1]):
                 host.service('start', unit)
-            receipt['units_after'] = service_boundary(host, storage, actual_source)
+            receipt['units_after'] = await_service_boundary(host, storage, actual_source)
             receipt['worker_after'] = host.effective_worker()
             parsed = dotenv_values(stream=StringIO(restored.decode()), interpolate=False)
             require(all(receipt['worker_after']['values'].get(key) == parsed.get(key)
                         for key in (*MODEL_VALUES, 'QUILLMD_RELEASE_SHA')), 'rollback_effective_worker')
-            health(actual_source)
+            await_health(actual_source)
             require(snapshot(host, backup, storage) == before, 'rollback_post_start_preservation')
             receipt.update(complete=True, stage='rollback_complete', preserved=before)
             write_new(destination / 'complete.json', encode(receipt))
