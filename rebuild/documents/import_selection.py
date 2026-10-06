@@ -126,7 +126,7 @@ def choose(legacy, advanced, legacy_regions, reader, *, ordinary_roles=()):
     writing place. If either comparison is uncertain, legacy stays available and
     the missing coverage is reported; a v3 rejection never grants broader support.
     """
-    v3_regions, missing, bands = [], [], []
+    v3_regions, missing, bands, band_places = [], [], [], []
     for field in advanced["fields"]:
         locations = reader.of(field)
         target = field.get('locator', {}).get('target', {})
@@ -147,7 +147,16 @@ def choose(legacy, advanced, legacy_regions, reader, *, ordinary_roles=()):
             # cannot see the human-owned event it protects. It selects v3 as
             # the band's old inferred (writable) date did, never a legacy hold.
             bands.append({"label": field["label"], "locator": field["locator"]})
-    lost = [place for place in legacy_regions if not covered(place, v3_regions)]
+        for relation in field.get("source_questions") or []:
+            # Every place of a protected band (line, caption, spacer) is held
+            # by v3: a legacy writer there is accounted for, never "lost".
+            if (field.get("write_protected") and isinstance(relation, dict)
+                    and relation.get("relation") == "protected_inline_signing_lines"):
+                band_places.extend(locations)
+                band_places.extend((place["part"] + "#" + place["slot"], None, None)
+                                   for place in (relation.get("source"), relation.get("spacer"))
+                                   if isinstance(place, dict) and place.get("part") and place.get("slot"))
+    lost = [place for place in legacy_regions if not covered(place, v3_regions + band_places)]
     unmapped = [note for note in legacy["warnings"] if "not mapped" in note.casefold()
                 or "not be placed" in note.casefold()]
     # A whole empty cell from legacy may become a more precise cell/paragraph

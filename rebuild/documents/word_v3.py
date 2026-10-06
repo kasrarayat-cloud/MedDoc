@@ -376,6 +376,9 @@ T, TAB, PTAB, BR, CR, SYM, NBH = (q("w:t"), q("w:tab"), q("w:ptab"), q("w:br"), 
 R, SDT, FLDCHAR, FALLBACK, TXBX = q("w:r"), q("w:sdt"), q("w:fldChar"), q("mc:Fallback"), q("w:txbxContent")
 #: Content that makes a paragraph more than an empty spacer: a drawn signing band never claims it.
 BAND_SPACER_CONTENT = frozenset({TXBX, SDT, FLDCHAR, q("w:fldSimple"), q("w:drawing"), q("w:pict"), q("w:object")})
+#: Body-level range markers render nothing: they never separate a drawn band from its caption or spacer.
+BAND_INVISIBLE_MARKERS = frozenset(q(tag) for tag in (
+    "w:bookmarkStart", "w:bookmarkEnd", "w:permStart", "w:permEnd", "w:commentRangeStart", "w:commentRangeEnd"))
 PASS_THROUGH = {q("w:hyperlink"), q("w:smartTag"), q("w:fldSimple"), q("w:customXml"), q("w:dir"), q("w:bdo"),
                 q("mc:AlternateContent"), q("mc:Choice"), q("w:sdtContent")}
 
@@ -9136,14 +9139,21 @@ class Detector:
                 geometry.append({'width': width, 'height': height, 'fingerprint': fingerprint(drawing)})
             if len(geometry) != len(drawings):
                 continue
-            following = slot.el.getnext()
+            # The lines alone: a text box, picture, object, control or field in
+            # the same paragraph is its own destination, never part of the band.
+            if any(node.tag in (TXBX, SDT, FLDCHAR, q('w:fldSimple'), q('w:object'))
+                   or node.tag == q('w:pict') and not any(a.tag == FALLBACK for a in node.iterancestors())
+                   for node in slot.el.iter()):
+                continue
+            following = band_next(slot.el)
             caption = self.index.by_el.get(id(following)) if following is not None else None
             if (caption is None or caption.kind != 'p' or caption.parent is not slot.parent
                     or not self.tab_source_visible(caption) or wraps_structure(caption.el)):
                 continue
             text, pieces = self.ptext(caption.el)
             labels = [clean_label(x) for x in re.split(r'\t+', text) if x.strip()]
-            if (len(labels) != len(drawings) or not any(signing_place(label) for label in labels)
+            signs = [label for label in labels if band_signing_label(label)]
+            if (len(labels) != len(drawings) or not signs
                     or any(not FIELDISH.search(label) for label in labels)
                     or self.blank_spans(text, pieces) or self.box_units(caption)):
                 continue
@@ -9152,24 +9162,42 @@ class Detector:
             source = {'part': caption.part, 'slot': caption.path, 'fingerprint': fingerprint(caption.el)}
             relation = {'relation': 'protected_inline_signing_lines', 'question': text,
                         'source': source, 'drawings': geometry}
+            # The previous detector borrowed the combined caption to invent a
+            # date on the immediately following empty paragraph. That spacer
+            # is part of this preserved signing band, not an ordinary answer,
+            # when it shows nothing at all; it is then one of the band's places.
+            after = band_next(caption.el)
+            spacer = self.index.by_el.get(id(after)) if after is not None else None
+            if not (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
+                    and not self.ptext(spacer.el)[0].strip()
+                    and not any(node.tag in BAND_SPACER_CONTENT for node in spacer.el.iter())):
+                spacer = None
+            if spacer is not None:
+                relation['spacer'] = {'part': spacer.part, 'slot': spacer.path, 'fingerprint': fingerprint(spacer.el)}
+            # A part that is not itself the signing place is named within its
+            # signing event ('Signature of Patient Date'), as the old inferred
+            # date was: a bare 'Date' would compete with the form's own 'Date'.
+            signers = ' '.join(signs)
             for number, label in enumerate(labels, 1):
-                area = Area(self.kind_for(label), label, slot, {'type': 'none', 'drawing': number},
+                named = label if label in signs else clean_label(signers + ' ' + label)
+                area = Area(self.kind_for(label), named, slot, {'type': 'none', 'drawing': number},
                             context=self.context_for(caption), protection=reason,
                             structural=True, label_slot=caption, source_questions=[relation])
                 area.source_action = True
                 self.add(area)
             self.claimed.update((id(slot.el), id(caption.el)))
             self.protected_regions.update((slot.id, caption.id))
-            # The previous detector borrowed the combined caption to invent a
-            # date on the immediately following empty paragraph. That spacer
-            # is part of this preserved signing band, not an ordinary answer.
-            after = caption.el.getnext()
-            spacer = self.index.by_el.get(id(after)) if after is not None else None
-            if (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
-                    and not self.ptext(spacer.el)[0].strip()
-                    and not any(node.tag in BAND_SPACER_CONTENT for node in spacer.el.iter())):
+            if spacer is not None:
                 self.claimed.add(id(spacer.el))
                 self.protected_regions.add(spacer.id)
+                if not self.plain_spacing_paragraph(spacer, unused_tab_stops=True):
+                    # A visible writing line here (underline, leader, border)
+                    # may be another field's line: keep it unwritten AND have
+                    # a clinician review it, as the previous reading did.
+                    self.coverage_issue(spacer, 'ambiguous_signing_band',
+                                        'A visible writing line follows this drawn signing band. It is kept unchanged; '
+                                        'review whether it belongs to the signing event or to another field. '
+                                        'Location: ' + spacer.id)
             self.notes.append(reason + ' Location: ' + slot.id)
 
     def rule_signing_captions(self):
@@ -10673,6 +10701,20 @@ def ff_source_guidance(begin_run):
             if size is None or size.get(q("w:val")) not in ("1", "2"):
                 return False
     return True
+
+
+def band_next(element):
+    """The next sibling of a drawn band's paragraph, past body-level range markers that render nothing."""
+    node = element.getnext()
+    while node is not None and node.tag in BAND_INVISIBLE_MARKERS:
+        node = node.getnext()
+    return node
+
+
+def band_signing_label(label):
+    """A drawn band's signing part: the engine's signing place AND signature or initials wording, so a clinical
+    'Name of sign if positive' is never read as a signing event."""
+    return bool(signing_place(label) and (SIGNATURE.search(label) or INITIALS.search(label)))
 
 
 def source_guidance_place(detector, slot):

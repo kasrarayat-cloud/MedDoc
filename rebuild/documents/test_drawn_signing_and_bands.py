@@ -90,7 +90,7 @@ class DrawnSigningBand(unittest.TestCase):
         held = [f for f in fields if f.get('write_protected')]
         self.assertEqual([(f['kind'], f['label'], f['locator']['slot'], f['locator']['target']['type']) for f in held],
                          [('signature', 'Signature of Patient or Representative', 'b/p[1]', 'none'),
-                          ('date', 'Date', 'b/p[1]', 'none')])
+                          ('date', 'Signature of Patient or Representative Date', 'b/p[1]', 'none')])
         for field in held:
             relation = field['source_questions'][0]
             self.assertEqual(relation['relation'], 'protected_inline_signing_lines')
@@ -191,6 +191,57 @@ class DrawnSigningBand(unittest.TestCase):
         self.assertIn('REF-123', ''.join(word.text_of(n) for n in
                       word.SlotIndex(word.open_package(final)).by_id[BODY + 'b/p[3]'].el.iter(word.TXBX)))
 
+    def test_invisible_range_markers_never_separate_the_band(self):
+        # Refutation round 4: a body-level bookmark or permission marker between the lines and their caption hid
+        # the band, and the signing date was invented again (also on H17 with one inserted bookmark).
+        for marker in ('<w:bookmarkEnd %s w:id="7"/>', '<w:bookmarkStart %s w:id="8" w:name="sig"/>',
+                       '<w:permStart %s w:id="9" w:edGrp="everyone"/>', '<w:commentRangeStart %s w:id="3"/>'):
+            with self.subTest(marker=marker.split()[0]):
+                doc = Document(io.BytesIO(drawn_band()))
+                doc.paragraphs[1]._p.addnext(etree.fromstring(marker % DECLARED))
+                raw = data(doc)
+                fields = word.inspect(raw)['fields']
+                band = [f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                                 for r in f.get('source_questions', []))]
+                self.assertEqual(len(band), 2)
+                self.assertFalse([f for f in fields if f['kind'] == 'date' and not f.get('write_protected')
+                                  and f['locator']['slot'] != 'b/p[4]'])
+
+    def test_a_text_box_or_control_in_the_lines_paragraph_is_never_swallowed(self):
+        # Refutation round 4: a VML text box beside the drawn lines was offered as a field and then every export
+        # refused; the lines paragraph now holds the lines alone or it is not a band.
+        vml = ('<w:r %s><w:pict><v:shape type="#_x0000_t202" style="width:100pt;height:20pt"><v:textbox>'
+               '<w:txbxContent><w:p><w:r><w:t xml:space="preserve">Hospital number: ________</w:t></w:r></w:p>'
+               '</w:txbxContent></v:textbox></v:shape></w:pict></w:r>' % DECLARED)
+        doc = Document(io.BytesIO(drawn_band()))
+        doc.paragraphs[1]._p.append(etree.fromstring(vml))
+        raw = data(doc)
+        fields = word.inspect(raw)['fields']
+        self.assertFalse([f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                                   for r in f.get('source_questions', []))])
+        writable = [f for f in fields if not f.get('write_protected') and f['kind'] not in ('signature', 'initials')]
+        word.fill(raw, fields, {f['key']: '14/03/2026' if f['kind'] == 'date' else 'Synthetic answer' for f in writable})
+
+    def test_a_clinical_sign_caption_is_not_a_signing_band(self):
+        raw = drawn_band(caption='Name of sign if positive\t\tSite')
+        fields = word.inspect(raw)['fields']
+        self.assertFalse([f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                                   for r in f.get('source_questions', []))])
+
+    def test_a_visible_writing_line_below_the_band_is_kept_and_reviewed(self):
+        # Refutation round 4: a ruled line under the caption may be another field's line. It stays unwritten and,
+        # as in the previous reading, a clinician reviews it before generation.
+        for name, xml in (('underlined tab', '<w:r><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>'),
+                          ('bottom border', '<w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" '
+                                            'w:color="000000"/></w:pBdr></w:pPr>')):
+            with self.subTest(name):
+                found = word.inspect(drawn_band(spacer_xml=xml))
+                self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[3]'])
+                self.assertEqual([i['code'] for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'],
+                                 ['ambiguous_signing_band'])
+        found = word.inspect(drawn_band())
+        self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
+
     def test_a_bare_date_caption_under_its_line_is_not_promoted_to_a_signing_event(self):
         raw = drawn_band(caption='Date', lines=1)
         fields = word.inspect(raw)['fields']
@@ -198,7 +249,7 @@ class DrawnSigningBand(unittest.TestCase):
 
     def test_a_drawn_band_inside_a_table_cell_leaves_the_table_log_writable(self):
         # A protected region inside a table makes its table_rows writer refuse, so the drawn band is read at body
-        # level only (refutation 2026-10-05). The in-cell signing date stays held by its own caption.
+        # level only (refutation 2026-10-05). The in-cell paragraphs keep the engine's existing reading.
         doc = Document()
         doc.add_paragraph('Synthetic medication record')
         table = doc.add_table(rows=4, cols=3)
@@ -307,6 +358,67 @@ class DrawnBandRoute(unittest.TestCase):
         self.assertEqual(len(coverage['v3_only_signing_bands']), 2)
         self.assertTrue(coverage['selected_engine_issues'])
         self.assertFalse(coverage.get('advanced_unresolved_areas'))
+
+    def test_a_legacy_writer_on_the_band_spacer_is_held_by_the_band_not_lost(self):
+        # Refutation round 4: an underlined-tab spacer is a legacy writing place; the band protects it, so it must be
+        # accounted for rather than "lost", or the import fell to a legacy route whose every export refuses.
+        import tempfile
+        from pathlib import Path
+        from django.test import override_settings
+        from .service import inspect_template, fill_template
+        doc = Document()
+        doc.add_paragraph('Synthetic clinic review form')
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = 'Patient name'
+        table.cell(1, 0).text = 'Diagnosis'
+        lines = doc.add_paragraph()
+        lines._p.append(line_run(1, fallback=False))
+        lines.add_run('\t\t')
+        lines._p.append(line_run(2, fallback=False))
+        caption = doc.add_paragraph('Signature of Patient or Representative\t\t\tDate')
+        level = OxmlElement('w:outlineLvl')
+        level.set(qn('w:val'), '2')  # the outline level makes legacy read the underlined tab below as an answer place
+        caption._p.get_or_add_pPr().append(level)
+        spacer = doc.add_paragraph()
+        for node in etree.fromstring('<w:wrap %s><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r></w:wrap>'
+                                     % DECLARED):
+            spacer._p.append(node)
+        doc.add_paragraph('End of form.')
+        with tempfile.TemporaryDirectory() as tmp, override_settings(QUILLMD_WORD_AUTO_PREFER_V3=True):
+            path = Path(tmp) / 'original.docx'
+            path.write_bytes(data(doc))
+            result = inspect_template(path, engine='auto')
+            self.assertEqual(result['import_manifest']['engine'], 'v3')
+            self.assertFalse(result['import_manifest']['coverage']['v3_uncovered_legacy_places'])
+            answers = {f['key']: 'Synthetic answer' for f in result['fields']
+                       if not f.get('write_protected') and f['kind'] not in ('signature', 'initials')}
+            self.assertEqual(len(answers), 2)
+            fill_template(path, result['fields'], answers, Path(tmp) / 'out.docx')
+            self.assertEqual([c.text for c in Document(Path(tmp) / 'out.docx').tables[0].columns[1].cells],
+                             ['Synthetic answer', 'Synthetic answer'])
+
+    def test_band_parts_never_compete_with_the_forms_own_questions(self):
+        # Refutation round 4: a bare 'Date' band part shared its question key with the form's own 'Date' and held
+        # that ordinary answer in field-relations generation.
+        from core.generation import question_key
+        doc = Document()
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'Date'
+        lines = doc.add_paragraph()
+        lines._p.append(line_run(1, fallback=False))
+        lines.add_run('\t\t')
+        lines._p.append(line_run(2, fallback=False))
+        doc.add_paragraph('Signature of Patient\t\tDate')
+        doc.add_paragraph()
+        fields = word.inspect(data(doc))['fields']
+        band = [f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                         for r in f.get('source_questions', []))]
+        self.assertEqual([(f['kind'], f['label']) for f in band],
+                         [('signature', 'Signature of Patient'), ('date', 'Signature of Patient Date')])
+        ordinary = [f for f in fields if f not in band]
+        keys = {question_key(f['label']) for f in band}
+        self.assertTrue(ordinary)
+        self.assertFalse([f for f in ordinary if question_key(f['label']) in keys])
 
     def test_without_a_band_the_route_rule_is_unchanged(self):
         from . import import_selection
