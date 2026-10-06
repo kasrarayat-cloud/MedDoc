@@ -9239,7 +9239,7 @@ class Detector:
                     break
                 if own is None:
                     own = self.band_caption_places(caption)
-                if line.id not in own:
+                if line.id not in own or self.band_named_field(line, labels):
                     break
                 self.signing_band_places.append(line.id)
                 self.claimed.add(id(line.el))
@@ -9262,6 +9262,23 @@ class Detector:
             if area_label == label or area_label.endswith(' \u2014 ' + label):
                 own.update(places)
         return own
+
+    def band_named_field(self, line, parts):
+        """A lone {{token}} line that names its own field: e0 filled it by that name (the legacy route reads the same
+        token), so it is the form's, not the caption's. A token named with a signing name (the engine's signing
+        readers, or signature/initials wording) or with one of the caption's own parts ('Date' under 'Signature of
+        Patient   Date') is the signing event's and stays the band's, as do brackets, angles and prompts."""
+        text, pieces = self.ptext(line.el)
+        spans = merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
+        if len(spans) != 1 or spans[0][2] != 'token':
+            return False
+        start, end, _ = spans[0]
+        if clean_label(''.join(ch for i, ch in enumerate(text) if not start <= i < end).replace('_', '')):
+            return False
+        name = clean_label(text[start:end].strip('{}[]<> '))
+        signing = (self.temporal_source_action(name) or SIGNATURE.search(name) or INITIALS.search(name)
+                   or self.kind_for(name) in SIGNING_KINDS)
+        return bool(name) and not signing and name.casefold() not in {part.casefold() for part in parts}
 
     def band_spacer_draws_line(self, spacer):
         """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,

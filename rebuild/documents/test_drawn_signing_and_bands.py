@@ -447,6 +447,43 @@ class DrawnSigningBand(unittest.TestCase):
                 self.assertFalse([f for f in found['fields'] if f['locator']['part'] != 'word/document.xml'
                                   and not f.get('write_protected')])
 
+    def test_a_token_naming_its_own_field_under_the_caption_stays_the_forms(self):
+        # Refutation round 10 (corpus:3): a lone {{token}} under the caption names its own field - e0 filled
+        # '{{Clinician name}}' by that name - yet the band held it, the default engine refused the form and auto exported
+        # the raw token. Such a token is the form's again. A token with a signing name ('{{Date signed}}', round 9) or
+        # naming one of the caption's own parts ('{{Date}}' under '... Date') is the signing event's and stays the
+        # band's, as do brackets.
+        cases = [('Signature of clinician', '{{Clinician name}}', False), ('Patient signature', '{{Patient name}}', False),
+                 ('Signature of clinician', '{{Next review date}}', False),
+                 ('Patient signature\t\t\tDate', '{{Date}}', True), ('Patient signature\t\t\tPrint name', '{{print name}}', True),
+                 ('Patient signature', '{{Date signed}}', True), ('Patient signature', '{{Signature date}}', True),
+                 ('Patient signature', '{{Patient signature}}', True), ('Patient signature', '{{Initials}}', True),
+                 ('Patient signature', '[Patient name]', True)]
+        for caption, token, held in cases:
+            with self.subTest(caption=caption, token=token):
+                doc = Document()
+                doc.add_paragraph('Synthetic clinic letter')
+                lines = doc.add_paragraph()
+                for number in range(caption.count('\t\t\t') + 1):
+                    if number:
+                        lines.add_run('\t\t')
+                    lines._p.append(line_run(number + 1, fallback=False))
+                doc.add_paragraph(caption)
+                doc.add_paragraph(token)
+                doc.add_paragraph('End of letter.')
+                raw = data(doc)
+                band = word.signing_band_places(raw)
+                found = word.inspect(raw)
+                at = [f for f in found['fields'] if f['locator']['slot'] == 'b/p[3]']
+                self.assertEqual(BODY + 'b/p[3]' in band, held)
+                if held:
+                    self.assertFalse([f for f in at if not f.get('write_protected')])
+                else:
+                    self.assertEqual([f['label'] for f in at], [token.strip('{}')])
+                    self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
+                    final = word.fill(raw, found['fields'], {at[0]['key']: '14/03/2026' if 'date' in token else 'Alex Example'})
+                    self.assertNotEqual(slot_bytes(final, 'b/p[3]'), slot_bytes(raw, 'b/p[3]'))
+
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician
         # to review them held generation for nothing.
