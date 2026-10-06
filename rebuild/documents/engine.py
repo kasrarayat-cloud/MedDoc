@@ -915,7 +915,7 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
         owned = import_selection.legacy_field_places(legacy['fields'], places) if band else None
     except ValueError:
         owned = None  # the legacy places are not known per field: the review keeps holding
-    if owned is not None and not any(not word_v3.legacy_role_kind(field['label'])
+    if owned is not None and not any(not word_v3.legacy_role_kind(field['label']) and 'token' not in field['locator']
                                      and any(import_selection.covered(place, [(item, None, None) for item in band])
                                              for place in own)
                                      for field, own in zip(legacy['fields'], owned)):
@@ -925,7 +925,9 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
         # band: no legacy field there, or only signing-role fields that core
         # holds per field (never generated). A role-less legacy field in the
         # band - which would take, say, a signing date - keeps the hold, as
-        # on e0; so does every other advanced issue.
+        # on e0; so does every other advanced issue. A legacy {{token}} there is
+        # the field its own name gives it, which e0's legacy route filled by
+        # that name: it does not hold the import either.
         issues = [issue for issue in issues if not (
             issue.get('code') == 'ambiguous_signing_band' and issue['part'] + '#' + issue['slot'] in band
             and issue.get('detail') == word_v3.DRAWN_BAND_SPACER_REVIEW + 'Location: ' + issue['part'] + '#' + issue['slot'])]

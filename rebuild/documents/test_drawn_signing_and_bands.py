@@ -447,42 +447,59 @@ class DrawnSigningBand(unittest.TestCase):
                 self.assertFalse([f for f in found['fields'] if f['locator']['part'] != 'word/document.xml'
                                   and not f.get('write_protected')])
 
-    def test_a_token_naming_its_own_field_under_the_caption_stays_the_forms(self):
-        # Refutation round 10 (corpus:3): a lone {{token}} under the caption names its own field - e0 filled
-        # '{{Clinician name}}' by that name - yet the band held it, the default engine refused the form and auto exported
-        # the raw token. Such a token is the form's again. A token with a signing name ('{{Date signed}}', round 9) or
-        # naming one of the caption's own parts ('{{Date}}' under '... Date') is the signing event's and stays the
-        # band's, as do brackets.
-        cases = [('Signature of clinician', '{{Clinician name}}', False), ('Patient signature', '{{Patient name}}', False),
-                 ('Signature of clinician', '{{Next review date}}', False),
-                 ('Patient signature\t\t\tDate', '{{Date}}', True), ('Patient signature\t\t\tPrint name', '{{print name}}', True),
-                 ('Patient signature', '{{Date signed}}', True), ('Patient signature', '{{Signature date}}', True),
-                 ('Patient signature', '{{Patient signature}}', True), ('Patient signature', '{{Initials}}', True),
-                 ('Patient signature', '[Patient name]', True)]
-        for caption, token, held in cases:
+    def test_a_token_under_the_caption_is_held_and_reviewed_yet_mappable_and_legacy_fills_it(self):
+        # Refutation rounds 10-11: whose field a lone {{token}} under the caption names cannot be read from its wording -
+        # '{{patient_signature}}', '{{Signature1}}' and '{{date_signed}}' passed every signing reader. On v3 it stays the
+        # band's, held and reviewed as e0's v3 reading held it (the caption's signature field), but it is not protected:
+        # a clinician who finds it is another field ('{{Next review date}}') maps it by hand. A bracket stays protected.
+        # On the legacy route a legacy {{token}} in the band no longer holds the whole import (round 11 routing:1): legacy
+        # fills it by name, as e0's legacy route did.
+        import tempfile
+        from pathlib import Path
+        from . import engine
+
+        def letter(caption, token):
+            doc = Document()
+            doc.add_paragraph('Synthetic clinic letter')
+            doc.add_paragraph('PATIENT NAME: {{Patient full name}}')
+            lines = doc.add_paragraph()
+            for number in range(caption.count('\t\t\t') + 1):
+                if number:
+                    lines.add_run('\t\t')
+                lines._p.append(line_run(number + 1, fallback=False))
+            doc.add_paragraph(caption)
+            doc.add_paragraph(token)
+            doc.add_paragraph('End of letter.')
+            return data(doc)
+
+        for caption, token in [('Signature of clinician', '{{Clinician name}}'), ('Signature of clinician', '{{Next review date}}'),
+                               ('Patient signature', '{{Date signed}}'), ('Patient signature', '{{patient_signature}}'),
+                               ('Patient signature', '{{Signature1}}'), ('Patient signature\t\t\tDate', '{{Date}}'),
+                               ('Patient signature', '[Patient name]')]:
             with self.subTest(caption=caption, token=token):
-                doc = Document()
-                doc.add_paragraph('Synthetic clinic letter')
-                lines = doc.add_paragraph()
-                for number in range(caption.count('\t\t\t') + 1):
-                    if number:
-                        lines.add_run('\t\t')
-                    lines._p.append(line_run(number + 1, fallback=False))
-                doc.add_paragraph(caption)
-                doc.add_paragraph(token)
-                doc.add_paragraph('End of letter.')
-                raw = data(doc)
-                band = word.signing_band_places(raw)
+                raw = letter(caption, token)
                 found = word.inspect(raw)
-                at = [f for f in found['fields'] if f['locator']['slot'] == 'b/p[3]']
-                self.assertEqual(BODY + 'b/p[3]' in band, held)
-                if held:
-                    self.assertFalse([f for f in at if not f.get('write_protected')])
-                else:
-                    self.assertEqual([f['label'] for f in at], [token.strip('{}')])
-                    self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
-                    final = word.fill(raw, found['fields'], {at[0]['key']: '14/03/2026' if 'date' in token else 'Alex Example'})
-                    self.assertNotEqual(slot_bytes(final, 'b/p[3]'), slot_bytes(raw, 'b/p[3]'))
+                self.assertIn(BODY + 'b/p[4]', word.signing_band_places(raw))
+                self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[4]'])
+                self.assertIn('b/p[4]', [i['slot'] for i in found['coverage_issues'] if i['code'] == 'ambiguous_signing_band'])
+                target = [{'kind': 'text', 'label': 'Mapped by hand', 'slot': 'word/document.xml#b/p[4]'}]
+                if token.startswith('['):
+                    with self.assertRaises(word.V3Failure):      # a bracket line stays protected
+                        word.locate(raw, target)
+                    continue
+                self.assertFalse(word.destination_roles(raw, word.locate(raw, target))['violations'])
+                with tempfile.TemporaryDirectory() as tmp:
+                    workspace = Path(tmp)
+                    (workspace / 'input.docx').write_bytes(raw)
+                    result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': 'legacy'})
+                    self.assertEqual(result['import_manifest']['engine'], 'legacy')
+                    coverage = result['import_manifest']['coverage']
+                    self.assertFalse(coverage.get('block_generation'))
+                    self.assertFalse(coverage.get('advanced_unresolved_areas'))
+                    key = next(f['key'] for f in result['fields'] if f['label'] == token.strip('{}'))
+                    engine.process(workspace, {'format': 'docx', 'operation': 'fill', 'mapping': result['fields'],
+                                               'answers': {key: 'Synthetic answer'}, 'engine': 'legacy'})
+                    self.assertIn('Synthetic answer', Document(workspace / 'output.docx').paragraphs[4].text)
 
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician
