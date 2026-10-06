@@ -93,7 +93,15 @@ try {
   await check('Mobile workspace accessibility and navigation', async () => {
     await accessibility('Mobile workspace accessibility');
     await noPageOverflow();
+    const menu = page.getByRole('button', { name: 'Open navigation', exact: true });
+    assert.equal(await menu.getAttribute('aria-expanded'), 'false');
+    await menu.click();
+    assert.equal(await menu.getAttribute('aria-expanded'), 'true');
     assert.equal(await page.getByRole('button', { name: 'Sign out', exact: true }).isVisible(), true);
+    await accessibility('Mobile navigation drawer accessibility');
+    await page.keyboard.press('Escape');
+    assert.equal(await menu.getAttribute('aria-expanded'), 'false');
+    assert.equal(await menu.evaluate(node => node === document.activeElement), true);
     await page.screenshot({ path: path.join(artifacts, 'workspace-mobile.png'), fullPage: true });
   });
   await check('Desktop workspace accessibility and fixture disclosure', async () => {

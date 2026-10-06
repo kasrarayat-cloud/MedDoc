@@ -2,35 +2,20 @@
 {% block title %}New document{% endblock %}
 {% block breadcrumb %}Documents <span>/</span> New{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">Clinical document</div><h1>Add the documented information.</h1><p>Select your form and patient. Type notes here, or leave the notes empty, create the document, and then record or upload voice on the next page.</p></div><div class="actions"><a class="button secondary" href="{% url 'template_upload' %}">Upload another form</a></div></div>
-<ol class="step-list" aria-label="Document workflow"><li>Upload original</li><li>Review mapping</li><li class="current" aria-current="step">Add notes</li><li>Review & export</li></ol>
-<div class="split">
-  <section class="form-section">{% if not has_patients %}<div class="notice" role="status" data-no-patient>A document needs a fictional patient first. <a href="{% url 'patients' %}">Add a synthetic patient on Patients</a>, then return here.</div>{% endif %}<form method="post" enctype="multipart/form-data" data-submit-once data-unsaved-form>{% csrf_token %}{{ form.as_p }}<div class="form-footer"><button type="submit" data-pending-label="Saving notes…">Create document</button><a href="{% url 'dashboard' %}">Cancel</a></div></form></section>
+<div class="page-heading"><div><div class="eyebrow">New document</div><h1>Start with the documented facts.</h1><p>Choose a patient and a checked form. Add typed notes now, or create the document and use voice next.</p></div><div class="actions"><a class="button secondary" href="{% url 'template_upload' %}">Upload another form</a></div></div>
+<ol class="step-list" aria-label="Document workflow"><li class="current" aria-current="step">1. Add notes</li><li>2. Review answers</li><li>3. Export</li></ol>
+<div class="split composer-layout">
+  <section class="form-section workflow-card"><div class="workflow-heading"><div><h2>Document details and notes</h2><p class="small muted">Patient and form must belong to the same authorized department.</p></div></div>{% if not has_patients %}<div class="notice" role="status" data-no-patient>Add a fictional patient first. <a href="{% url 'patients' %}">Open Patients</a>, then return here.</div>{% endif %}<form method="post" enctype="multipart/form-data" data-submit-once data-unsaved-form>{% csrf_token %}{{ form.as_p }}<div class="form-footer"><button type="submit" data-pending-label="Saving notes…">Create document <span aria-hidden="true">→</span></button><a href="{% url 'dashboard' %}">Cancel</a></div></form></section>
   <aside class="aside" aria-labelledby="notes-steps-title">
-    <h2 id="notes-steps-title">Notes to reviewed document</h2>
+    <h2 id="notes-steps-title">A clear path to your document</h2>
     <ol>
-      <li>Use each question's exact label: <span class="mono">Question label: answer</span>, one answer per line.</li>
-      <li>Include only documented facts. Write denials explicitly, for example <span class="mono">Symptoms: no chest pain</span>.</li>
-      <li>Create the document, then save any note changes or reviewed voice transcript.</li>
-      <li>Generate once. Check every answer against its source; correct it or choose a reviewed blank where offered.</li>
-      <li>Save your review decisions, finalize, then download the original format.</li>
+      <li><strong>Add notes.</strong> Use the exact question label and a complete answer: <span class="mono">Question label: answer</span>, one per line.</li>
+      <li><strong>Review.</strong> Generate once. Check each answer and quotation; correct it or choose a reviewed blank where offered.</li>
+      <li><strong>Export.</strong> Save your decisions, finalize, then download the original format.</li>
     </ol>
-    <h2>Labelled notes are required here</h2>
-    <p>Use exact labelled answers for question/answer tables, placeholders, fillable PDFs and the WM IOV form. In a note with several nonempty lines, an unlabelled line or a label without an answer can hold filled answers for your decision. WM IOV also needs labelled prewritten statements; its form page lists them.</p>
-    <p>Missing information stays missing. Conflicting statements need your decision; they never become normal findings.</p>
-    <details open>
-      <summary>More limits: headings, corrections and underlined-Tab sentences can hold answers for review</summary>
-      <div class="details-body">
-        <ul>
-          <li>A line ending in a colon is a heading. A sentence ending on <em>following</em>, <em>below</em>, <em>as follows</em> or <em>the following</em> plus one word can hold later answers for your decision.</li>
-          <li>A final heading (except a bare label such as <span class="mono">Signed by:</span>), or a heading with <em>above</em>, <em>these</em>, <em>those</em> or <em>listed</em>, can hold earlier answers too. Corrections can also hold earlier answers.</li>
-          <li>On WM IOV, a labelled answer ending in a colon, including a stray colon, holds that answer and later answers. Other labelled answers do not govern neighboring answers.</li>
-          <li>Underlined-Tab forms allow complete sentences with a recognised verb, such as <em>is</em>, <em>was</em>, <em>has</em>, <em>had</em>, <em>reports</em> or <em>showed</em>, and a final . ! or ?. A heading, quotation, unpunctuated extra line, or words such as <em>if</em>, <em>these</em> or <em>above</em> send answers back as conflicts.</li>
-        </ul>
-      </div>
-    </details>
-    <h2>Department access</h2><p>Choose a patient and a form from the same authorized department.</p>
-    {% include 'integrations.html' %}
+    <div class="notice warning" data-labelled-notes-limit><strong>Use labelled answers for this demo.</strong><p>For documented SOAP facts, use <span class="mono">Subjective:</span>, <span class="mono">Objective:</span>, <span class="mono">Assessment:</span> and <span class="mono">Plan:</span> as the exact labels. Omit undocumented sections; missing fields stay blank for review. Free-prose SOAP rewriting is not qualified. Custom Word uses the checked fields in a supported original.</p></div>
+    <section id="voice-next" class="workflow-note"><h3>Using voice?</h3><p>Leave notes empty if you wish, then create the document. On the next page, record or upload audio. Correct the transcript into labelled lines and explicitly save it before generating.</p></section>
+    <section class="workflow-note" aria-labelledby="held-notes-title"><h3 id="held-notes-title">When an answer is held for review</h3><p>Missing facts stay missing. Conflicts never become normal findings. Write denials explicitly, such as <span class="mono">Symptoms: no chest pain</span>.</p><p>Question/answer tables, placeholders, PDFs and WM IOV need exact labels. Extra unlabelled lines, empty labels, headings or corrections can hold answers. WM IOV also requires labelled prewritten statements; check its form page.</p><p>Underlined-Tab forms accept complete sentences with a recognised verb and final punctuation. Headings, quotations, incomplete sentences or conditional wording can return conflicts. Use labelled answers when possible and review every held field.</p></section>
   </aside>
 </div>
 {% endblock %}

@@ -3,8 +3,9 @@
 {% block title %}Services and backups{% endblock %}
 {% block breadcrumb %}Services{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">Operations</div><h1>What is configured, and what is actually happening.</h1><p>These are two different questions and the console keeps them apart. A key being present in the environment is not evidence that the service works.</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_dashboard' %}">Back to administration</a></div></div>
+<div class="page-heading"><div><div class="eyebrow">Operations</div><h1>Workspace health.</h1><p>Check processing, recovery and service evidence. Configuration alone does not establish health.</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_dashboard' %}">Back to administration</a></div></div>
 
+<div class="service-dashboard">
 <section class="section" id="processing"><div class="section-heading"><h2>Processing</h2><span class="badge {{ processing.severity }}">{{ processing.verdict }}</span></div>
 <p>{{ processing.detail }}</p>
 <div class="balance-strip">
@@ -44,4 +45,5 @@
 <div class="table-wrap"><table><caption class="small muted">Release gates and the surface this page is served from.</caption><thead><tr><th scope="col">Gate</th><th scope="col">Value</th></tr></thead><tbody>{% for row in configuration.gates %}<tr><td class="mono">{{ row.name }}</td><td class="mono">{{ row.value }}</td></tr>{% endfor %}</tbody></table></div>
 <p class="small muted">This is the same data <code>python manage.py configuration_status</code> prints, from the same function, so the browser and the terminal cannot disagree.</p>
 </section>
+</div>
 {% endblock %}
