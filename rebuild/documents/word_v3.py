@@ -9253,8 +9253,10 @@ class Detector:
             further = band_next((spacer or caption).el)
             while further is not None:
                 line = self.index.by_el.get(id(further))
-                if (line is None or line.kind != 'p' or line.parent is not slot.parent
-                        or not self.band_writing_line(line, caption)):
+                if line is None or line.kind != 'p' or line.parent is not slot.parent:
+                    break
+                text, spans = self.band_line_spans(line)
+                if not self.band_writing_line(line, caption, text, spans):
                     break
                 if own is None:
                     own = self.band_caption_places(caption)
@@ -9262,7 +9264,7 @@ class Detector:
                     break
                 self.signing_band_places.append(line.id)
                 self.claimed.add(id(line.el))
-                if not self.band_token_line(line):
+                if not self.band_token_line(text, spans):
                     # A {{token}} names a field: held and reviewed like the caption's other lines, never generated,
                     # but a clinician who finds it is not the signing event's may still map it by hand.
                     self.protected_regions.add(line.id)
@@ -9285,15 +9287,13 @@ class Detector:
                 own.update(places)
         return own
 
-    def band_writing_line(self, line, caption):
+    def band_writing_line(self, line, caption, text, spans):
         """Whether a paragraph below a band can be one of its caption's own writing lines: it holds an answer place the
         engine's readers see (a blank, insertion or placeholder span, a drawn line, a box, control, field, text box or
         object), or it is an empty line under a narrative caption (rule_lines_below_label's band of blank lines).
         Printed prose, an empty spacing line or a picture alone is no signing area's writing line: the band ends
-        there, without the band-free reading."""
-        text, pieces = self.ptext(line.el)
-        if (merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
-                or self.band_spacer_draws_line(line) or BOX in text or CHECKED in text or "\x00" in text
+        there, without the band-free reading. `text` and `spans` are the line's band_line_spans."""
+        if (spans or self.band_spacer_draws_line(line) or BOX in text or CHECKED in text or "\x00" in text
                 or any(node.tag in (TXBX, SDT, FLDCHAR, q("w:fldSimple"), q("w:object")) for node in line.el.iter())):
             return True
         if text.strip():
@@ -9302,15 +9302,27 @@ class Detector:
         return label.endswith(":") and (re.match(r"^[•●▪‣]\s+", label) is not None
                                         or self.list_info(caption.el) is not None)
 
-    def band_token_line(self, line):
+    @staticmethod
+    def band_token_line(text, spans):
         """A line that is one {{token}} and nothing else that names it (the legacy route's own placeholder syntax):
-        whose field it names is not decided from its wording."""
-        text, pieces = self.ptext(line.el)
-        spans = merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
+        whose field it names is not decided from its wording. `text` and `spans` are the line's band_line_spans."""
         if len(spans) != 1 or spans[0][2] != 'token':
             return False
         start, end, _ = spans[0]
         return not clean_label(''.join(ch for i, ch in enumerate(text) if not start <= i < end).replace('_', ''))
+
+    def band_line_spans(self, line):
+        """A line's answer spans as the paragraph readers see them, read for the band without those readers' side
+        effects (the coverage issues and notes they record as they read): a line the band claims is never read by
+        them, so its one review is the band's, and a line that ends the band records its own issues and notes when
+        they read it, in e0's order (refutation round 11, corpus:2)."""
+        text, pieces = self.ptext(line.el)
+        issues, notes = self.coverage_issues, self.notes
+        self.coverage_issues, self.notes = [], []
+        try:
+            return text, merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
+        finally:
+            self.coverage_issues, self.notes = issues, notes
 
     def band_spacer_draws_line(self, spacer):
         """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,

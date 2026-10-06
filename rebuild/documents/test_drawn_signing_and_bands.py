@@ -546,6 +546,55 @@ class DrawnSigningBand(unittest.TestCase):
         self.assertEqual([c.text for c in Document(io.BytesIO(final)).tables[0].rows[1].cells],
                          ['Synthetic drug A', '5 mg', 'oral'])
 
+    def test_the_band_reads_its_lines_without_recording_the_paragraph_readers_issues_or_notes(self):
+        # Refutation round 11 (corpus:2): the band asks the paragraph readers whether a line below it holds an answer
+        # place, and those readers record coverage issues and notes as they read. A line the band claims is never read
+        # by them, so its one review is the band's; a line that ends the band keeps e0's issues and notes, in e0's
+        # order (the band-free reading's), with only the band's own note added.
+        def band_form(before, below, header=False):
+            doc = Document()
+            if before:
+                doc.add_paragraph(before)
+            doc.add_paragraph('Synthetic clinic letter')
+            if header:
+                section = doc.sections[0].header
+                section.is_linked_to_previous = False
+                section.paragraphs[0]._p.append(line_run(1, fallback=False))
+                section.add_paragraph('Signature of patient')
+                section.add_paragraph()._p.append(copy.deepcopy(below))
+            else:
+                doc.add_paragraph()._p.append(line_run(1, fallback=False))
+                doc.add_paragraph('Signature of patient')
+                doc.add_paragraph()._p.append(copy.deepcopy(below))
+            doc.add_paragraph('End of letter.')
+            return data(doc)
+
+        def run(text, grey=False):
+            colour = '<w:rPr><w:color w:val="808080"/></w:rPr>' if grey else ''
+            return etree.fromstring('<w:r %s>%s<w:t xml:space="preserve">%s</w:t></w:r>' % (DECLARED, colour, text))
+
+        for header, place in ((False, BODY + 'b/p[3]'), (True, 'word/header1.xml#hf/p[2]')):
+            with self.subTest(claimed='ambiguous grey insertion', header=header):
+                raw = band_form(None, run('Enter name or initials here', grey=True), header)
+                part, slot = place.split('#')
+                found = word.inspect(raw)
+                self.assertIn(place, word.signing_band_places(raw))
+                self.assertEqual([i['code'] for i in found['coverage_issues'] if (i['part'], i['slot']) == (part, slot)],
+                                 ['ambiguous_signing_band'])
+        for before, below in (('Enter clinic or ward here', 'Enter name or initials here'),
+                              ('[Ward/Clinic]', '[Patient/Representative]'),
+                              (None, '______________ [Patient/Representative]')):
+            with self.subTest(ends_the_band=below):
+                raw = band_form(before, run(below))
+                found = word.inspect(raw)
+                self.assertNotIn(BODY + ('b/p[4]' if before else 'b/p[3]'), word.signing_band_places(raw))
+                free = word.Detector(word.open_package(raw), _inline_bands=False)
+                free_notes = free.detect()[1]
+                shown = lambda issues: [(i['code'], i['part'], i['slot'], i['detail']) for i in issues]
+                self.assertEqual(shown(found['coverage_issues']), shown(free.coverage_issues))
+                self.assertEqual([n for n in found['notes'] if not n.startswith('These printed inline lines')], free_notes)
+                self.assertTrue(free.coverage_issues)
+
 
 def caption_over_blank(caption, style=None):
     doc = Document()
