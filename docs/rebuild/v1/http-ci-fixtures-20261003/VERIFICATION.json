@@ -1,0 +1,29 @@
+{
+  "base_commit": "3d612a4f51f5b8ee5803928b7bd7b8fca2236da2",
+  "test_count": 24,
+  "passed": 24,
+  "skipped": 0,
+  "duration_seconds": 58.235,
+  "exit_code": 0,
+  "database_destroyed": true,
+  "provider_requests": 0,
+  "historical_served_124_denominator_changed": false,
+  "historical_object_route_count": 22,
+  "current_active_object_route_count": 21,
+  "active_intrusion_method_checks": 126,
+  "active_owner_route_controls": 21,
+  "retired_route_absence_method_checks": 12,
+  "manual_persisted_ordinary_edit_positive": 1,
+  "manual_cross_department_denied_overwrites": 3,
+  "new_soap_create_intrusion_checks": 3,
+  "files": {
+    "original-failure-blocks.json": {
+      "bytes": 8892,
+      "sha256": "90bd89c494477a0d96dd7741758e2ae28055e3c34d6b6ec2b86d5122bc614345"
+    },
+    "source-manifest.json": {
+      "bytes": 1220,
+      "sha256": "98edbb0b0c748fc03a733104806f46c592f298d60e989055fef7d26535c9401c"
+    }
+  }
+}

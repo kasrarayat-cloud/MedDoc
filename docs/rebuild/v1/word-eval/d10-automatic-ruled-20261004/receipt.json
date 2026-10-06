@@ -1,0 +1,109 @@
+{
+  "source_commit": "e626325acb54beb88117c817a0db0427bffe24f9",
+  "base_commit": "04fb7603282dc47eda98058c6d790f407951acba",
+  "source_word_sha256": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27",
+  "source_tests_sha256": "e5e057b89614e838087c02c801c61ac05ca71300433694bcf4edb6da9b1d4c21",
+  "affected": {
+    "tests": 18,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 40.35564469199744,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27",
+      "rebuild/documents/test_source_coverage.py": "1d2ad792e88130ac5058930083c533d0ad9f8e7ff558c9b561fe07648e67125e"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 105,
+    "refused": 53,
+    "exports": 52,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "original_source_admission": {
+    "source_word_sha256": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27",
+    "source_unchanged": true,
+    "source_only_score": {
+      "n": 198,
+      "ok": 78,
+      "missed": 120,
+      "wrong": 0,
+      "extras": 4,
+      "strict": false
+    },
+    "automatic_A198": "OK",
+    "complete_lines": 14,
+    "complete_spacers": 13,
+    "historical_manual_file": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/numeric-archived-original-word-1b844504a42e-1791085573809471200/development-renderer-1b844504a42e-20261004T034619861680Z/D10/manual-mapping.json",
+    "historical_manual_file_sha256": "d8ffbd00583fa039c542274df49bdb7abf12838cafd20b45f17bbb107549ea57",
+    "automatic_and_historical_manual_export_byte_identical": false,
+    "export_sha256": null,
+    "complete_answer": "Synthetic original impression sentence 00; complete reviewed content.\nSynthetic original impression sentence 01; complete reviewed content.\nSynthetic original impression sentence 02; complete reviewed content.\nSynthetic original impression sentence 03; complete reviewed content.\nSynthetic original impression sentence 04; complete reviewed content.\nSynthetic original impression sentence 05; complete reviewed content.\nSynthetic original impression sentence 06; complete reviewed content.\nSynthetic original impression sentence 07; complete reviewed content.\nSynthetic original impression sentence 08; complete reviewed content.\nSynthetic original impression sentence 09; complete reviewed content.\nSynthetic original impression sentence 10; complete reviewed content.\nSynthetic original impression sentence 11; complete reviewed content.\nSynthetic original impression sentence 12; complete reviewed content.\nSynthetic original impression sentence 13; complete reviewed content.\nSynthetic original impression sentence 14; complete reviewed content.\nSynthetic original impression sentence 15; complete reviewed content.\nSynthetic original impression sentence 16; complete reviewed content.\nSynthetic original impression sentence 17; complete reviewed content.\nSynthetic original impression sentence 18; complete reviewed content.\nSynthetic original impression sentence 19; complete reviewed content.\nSynthetic original impression sentence 20; complete reviewed content.\nSynthetic original impression sentence 21; complete reviewed content.\nSynthetic original impression sentence 22; complete reviewed content.",
+    "untargeted_paragraphs_and_raw_parts_preserved": false,
+    "original_layout_admission": [
+      {
+        "mode": "automatic",
+        "code": "layout_verification_required",
+        "message": "This form's tab-column answers require layout verification before export.",
+        "export_produced": false
+      },
+      {
+        "mode": "historical-manual",
+        "code": "layout_verification_required",
+        "message": "This form's tab-column answers require layout verification before export.",
+        "export_produced": false
+      }
+    ],
+    "original_export_produced": false,
+    "no_answer_original_byte_identical": true,
+    "provider_calls": 0,
+    "DB": 0,
+    "render": 0,
+    "scope": "Original-source mechanical writer proof only; retained actual automatic183/198 remains unchanged until new application replay. No rendered/native Word or whole-document automatic acceptance.",
+    "elapsed_seconds": 19.01114218300063
+  },
+  "first_unsafe_export": {
+    "mode": "old",
+    "original_sha256": "b04dcfcfb97e1437091384915fbfa16e62dcde0eeb637d908267cef2525d35df",
+    "source_word_sha256": "cac4e8d06660acfbd20671e14b82c0d1bd959513f5a5485024d27d0f8d0c6578",
+    "provider_calls": 0,
+    "DB": 0,
+    "render": 0,
+    "refused": false,
+    "export_produced": true,
+    "export_sha256": "28a6cca3c24f5534a52a6dea972597ec413fd8eba52db09e89f79626a116f3b2",
+    "readback": {
+      "v3_1": "Dr Synthetic Finalizer"
+    },
+    "elapsed_seconds": 0.509510613999737
+  },
+  "same_input_corrective": {
+    "mode": "fixed",
+    "original_sha256": "b04dcfcfb97e1437091384915fbfa16e62dcde0eeb637d908267cef2525d35df",
+    "source_word_sha256": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27",
+    "provider_calls": 0,
+    "DB": 0,
+    "render": 0,
+    "refused": true,
+    "code": "mapping_mismatch",
+    "message": "The related question no longer owns this answer destination. Review the mapping again.",
+    "export_produced": false,
+    "elapsed_seconds": 0.4397440059983637
+  },
+  "first_actual_d10_automatic_score": {
+    "n": 198,
+    "ok": 183,
+    "missed": 15,
+    "wrong": 0,
+    "extras": 4,
+    "strict": false
+  },
+  "provider_calls": 0,
+  "database_calls": 0,
+  "render_calls": 0,
+  "active_children": [],
+  "cleanup_bytes": 0,
+  "full_application_replay_required": true,
+  "artifact_seal_sha256": "98601870a4c2ec73536549e2e629a62fb11c1191eb59025f5852c238c2e58f72"
+}

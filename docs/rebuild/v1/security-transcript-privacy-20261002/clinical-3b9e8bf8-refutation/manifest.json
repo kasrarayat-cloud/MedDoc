@@ -1,0 +1,30 @@
+[
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-3b9e8bf8.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-3b9e8bf8-refutation/result.json",
+    "sha256": "c010ac823303dbf866ef3612a9e67f9eb51df060af0f5617e9cd12039ac5e412",
+    "bytes": 17416,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-3b9e8bf8.log",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-3b9e8bf8-refutation/instrument.log",
+    "sha256": "a870e122541dd35be267508e18169b9c78624ffb8e030d5ce7a32e21b8e473f5",
+    "bytes": 1053,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_3b9e8bf8.py",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-3b9e8bf8-refutation/instrument.py",
+    "sha256": "fae620f17f514077b3ee4881a078eeed252b223f4c935d9ad961fef372c43032",
+    "bytes": 7319,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-3b9e8bf8-source/manifest.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-3b9e8bf8-refutation/source-manifest.json",
+    "sha256": "aa19a7189feead7d0ef4823921c1cec545fcebecc152722d8f6b476fc9f3bffa",
+    "bytes": 3317,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  }
+]

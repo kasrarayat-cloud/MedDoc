@@ -1,0 +1,8 @@
+{
+  "candidate": "1b844504a42e02232df9151b6015990a27ace77a",
+  "exit_code": 0,
+  "timed_out": false,
+  "elapsed_seconds": 328.912,
+  "provider_calls": 0,
+  "scope": "Original eligible offline D10; actual fixture HTTP/worker/review/finalization/export; explicit manual corrections, no broad, live-model or native Word acceptance."
+}

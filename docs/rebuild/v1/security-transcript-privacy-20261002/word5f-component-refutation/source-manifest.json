@@ -1,0 +1,51 @@
+{
+  "commit": "5f39682fcaee98847d338e55d3cf556fe12876eb",
+  "contract": "exact committed product components; unused fixture correction excluded by lead authority",
+  "files": [
+    {
+      "path": "rebuild/documents/word_v3.py",
+      "sha256": "9a5dcf34ac0fed72d9e3d8e1a835e633b3f66deedfed4167bf6893a8909db489"
+    },
+    {
+      "path": "rebuild/documents/engine.py",
+      "sha256": "aab66d5054d83df066337d7ea049b33e597e62d947708158460f8d2c870d3305"
+    },
+    {
+      "path": "rebuild/documents/service.py",
+      "sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5"
+    },
+    {
+      "path": "rebuild/documents/import_selection.py",
+      "sha256": "06df2620f8d52891511f9f6e20785c52ee215012cece0d3180a582449fed4128"
+    },
+    {
+      "path": "rebuild/documents/source_policy.py",
+      "sha256": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+    },
+    {
+      "path": "rebuild/core/import_binding.py",
+      "sha256": "89bc91176bfa32e5a93987923908c076f9133ccd0a1541fa62eccafa12ba5397"
+    },
+    {
+      "path": "rebuild/core/v3_mapping.py",
+      "sha256": "950834131edbb89c4c3c83a600502b592e816e9ce4d8067823696704c0d11ae9"
+    },
+    {
+      "path": "rebuild/core/views.py",
+      "sha256": "2719d18e670dca931b5bf0976ba76cd4c20e458fe42e764859b9240078b12cda"
+    },
+    {
+      "path": "rebuild/core/jobs.py",
+      "sha256": "a8309d1998206fe0b16ff833c2092deebccf1678bc0043229550f01ec18d00d1"
+    },
+    {
+      "path": "rebuild/core/migrations/0035_import_manifest.py",
+      "sha256": "627bb0430cfa942a92e38f97609b3dd2d80212683f1e0a6ff48428f97cb697bf"
+    }
+  ],
+  "excluded_fixture": {
+    "path": "rebuild/core/tests/test_source_coverage_workflow.py",
+    "sha256": "b59f8147b44e14166705d6b20df715a30f0fa6a1cb5ce62cdea7053f95062c09",
+    "diff_sha256": "879e582d8fffe87e820b83b40aae491da07cd86cd76a9943112e283aa93ac015"
+  }
+}

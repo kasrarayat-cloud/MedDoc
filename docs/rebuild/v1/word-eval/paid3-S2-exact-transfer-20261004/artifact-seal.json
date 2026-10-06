@@ -1,0 +1,15 @@
+{
+  "raw_base": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/final-word-source-lenses-20261004",
+  "hashes": {
+    "paid3_transfer_child.py": "9e6e0a97d340721e75e83ff55d82b31e9c57326d0a383b24d9cc4a9712c7d391",
+    "paid3-source-dependencies.json": "0a0df49f9e5d24e390e93e25d2c3a16d4051958aca121eeefd1e638525b71c32",
+    "paid3-old04fb-exit.json": "0967f1ede4fd397cd25305fd5ca00eabf9bf0ab936425ab6887506a4ac49e3cb",
+    "paid3-old04fb.log": "7f34d52a29798488c687c855767d3113618343f14fa8fc640294f36fe7b34905",
+    "paid3-old04fb/result.json": "7c215aa794faa3b74f52f2fb90683ca7942100258300134a77a560fd3803f8f6",
+    "paid3-sourceS2-exit.json": "51f8f564085b0e5d70421173b1975c9eb37dc2362bb5ca9c0e62116cba7bc719",
+    "paid3-sourceS2.log": "084bb6b9b2229dcdd9d5b11930b75f3dbcb04e863123ccbffeb67751c02efd50",
+    "paid3-sourceS2/result.json": "c111ca696352bc976f938816c80b72f4d9721853b2f27e718e18a5b343f92a45"
+  },
+  "DB_render_provider_calls": 0,
+  "cleanup_bytes": 0
+}

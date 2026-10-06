@@ -1,0 +1,46 @@
+[
+  {
+    "label": "Medications",
+    "notes": "Takes warfarin 5 mg daily. Only her father does.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  },
+  {
+    "label": "Medications",
+    "notes": "Takes warfarin 5 mg daily. Only her father does.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": false,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Medications taken today",
+    "notes": "Takes warfarin 5 mg daily. Not today.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  },
+  {
+    "label": "Medications taken today",
+    "notes": "Takes warfarin 5 mg daily. Not today.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": false,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  }
+]

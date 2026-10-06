@@ -38,7 +38,7 @@ CANCEL_BUTTON='Cancel queued request'
 def adopted_live_result(notes,fields,request_id,cost=Decimal('0.1')):
     """A valid live provider result the worker adopts (tokens = cost × 1000 so the audit recomputes the estimate)."""
     response=SimpleNamespace(id=f'msg_{request_id}',stop_reason='end_turn',
-        content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':'symptoms','quotes':['no chest pain'],'conflict':False}]}))],
+        content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':fields[0]['key'],'quotes':['no chest pain'],'conflict':False}]}))],
         model_dump=lambda **kwargs:{'id':f'msg_{request_id}'})
     units={'input_tokens':int(Decimal(cost)*1000),'output_tokens':0,'cached_input_tokens':0,'cache_creation_tokens':0}
     return ({'anthropic_response':response,'notes':notes,'fields':fields},cost,units,AUDITABLE_RATES,'anthropic:synthetic-model',request_id,False)
@@ -103,13 +103,14 @@ class SuccessfulGenerationStaysBillable(BoundaryFixture,TestCase):
     def test_editing_then_discarding_the_output_leaves_usage_and_ledger_untouched(self):
         job=self.live_job('req_boundary_success')
         self.assertEqual(job.state,'succeeded');self.assertEqual(job.error,'')
-        self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers['symptoms']['text'],'no chest pain')
+        key=self.encounter.template_version.fields[0]['key']
+        self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers[key]['text'],'no chest pain')
         usage_before=list(Usage.objects.values_list('pk','charged_cost'));ledger_before=list(LedgerEntry.objects.order_by('created_at').values_list('key','amount'))
         self.client.force_login(self.user)
         url=f'/encounters/{self.encounter.pk}/'
-        edited=self.client.post(url+'save/',{'revision':self.encounter.revision,'answer_symptoms':'clinician-edited value'})
+        edited=self.client.post(url+'save/',{'revision':self.encounter.revision,'answer_'+key:'clinician-edited value'})
         self.assertEqual(edited.status_code,302)
-        self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers['symptoms']['text'],'clinician-edited value')
+        self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers[key]['text'],'clinician-edited value')
         discarded=self.client.post(url+'notes/',{'revision':self.encounter.revision,'notes':'Symptoms: replaced after review'})
         self.assertEqual(discarded.status_code,302)
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers,{})

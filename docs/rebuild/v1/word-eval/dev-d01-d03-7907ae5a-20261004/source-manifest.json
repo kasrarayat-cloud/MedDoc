@@ -1,0 +1,10 @@
+{
+  "README.md": "f1bc19b11d214a1f95e198577a8bdfda076f4b4fb05372539af12bdefed51f88",
+  "actual-receipt.json": "a97a45fb993393b1e5c3801417a38f35e26bdc049974d1f8a7005e9f8d0c45c6",
+  "artifact-seal.json": "3d13e4811adf39ecccd4151d6be828dd20ca7d1a4b385959d0ffdea74dfae612",
+  "continuation-checkpoint.json": "1f6850d1d6a9f00f8a95f219d82ba5cb1e7f1de2eb2d670f79e972fdbc358bb2",
+  "dev_application_gate_v2.py.source": "a996c18cd4ee0b7373a1a2eac8d86070dd96e46e5d51710a86aac5f86fe654e0",
+  "discovery-corrective-seal.json": "cdd3a2783d5859671be5ab520d93a47564ed5400ea5369489f56cb6661b09a32",
+  "discovery-corrective.diff": "2c40903d17be6f00257f6f3a9c0118e0099b937f2295dc8bb64b6c01a4c1bc14",
+  "run_dev_application_gate_v2.py.source": "38b02636093e8c8997da15a02973f8f9d67501ced3c9347b5d9a66a26ac6b1ac"
+}

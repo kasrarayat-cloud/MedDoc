@@ -1,0 +1,34 @@
+{
+  "artifacts": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05-geometry-extra-source-diagnosis-20261004/mapping.json",
+      "bytes": 10168,
+      "sha256": "cce0168de077648d0aa9b808558c87b375201cac23111c01644d1e32a074df28"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05-geometry-extra-source-diagnosis-20261004/original.docx",
+      "bytes": 49413,
+      "sha256": "ab006eeb434eb3b479e57313c13f3fb2c1fcb95b6ce3f8580794ab2a170d048a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05-geometry-extra-source-diagnosis-20261004/positioned-table.xml",
+      "bytes": 49004,
+      "sha256": "d32c01d3c3ac838da2628bb20ed8c217337bf420c7d01d12ffffba22373f154a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05-geometry-extra-source-diagnosis-20261004/result.json",
+      "bytes": 13878,
+      "sha256": "30c25a4bf78ef74a749189e50f05f8ff0f14d733869fb73156431cc113e7003c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05-geometry-extra-source-diagnosis-20261004/revision-table.xml",
+      "bytes": 19204,
+      "sha256": "ab9978a012d84f06feacdceca8fd4d8fc49252eeb3a5ab997b99d32716d67b38"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05_original_source_diagnosis.py",
+      "bytes": 3276,
+      "sha256": "ecde3dd13911dee59b40da5ad7ba9b550102f692ba9dcf340fb3ce80a5011153"
+    }
+  ]
+}

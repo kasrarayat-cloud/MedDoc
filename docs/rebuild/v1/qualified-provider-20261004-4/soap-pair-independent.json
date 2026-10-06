@@ -1,0 +1,82 @@
+{
+  "scope": "completed canonical4 SOAP pair016/017 only",
+  "source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "artifact_hashes": [
+    {
+      "attempt": 16,
+      "manifest_sha256": "8ef6414f61e37fad7161f102b25d65868246d9daba8a132cad3ace82f73d3ac2",
+      "all_artifact_hashes_match": true,
+      "artifacts": 16
+    },
+    {
+      "attempt": 17,
+      "manifest_sha256": "9e490e0d2002383c0409e4bb7882e161a5c1caa9e6f55371b2a5beac6ca5f869",
+      "all_artifact_hashes_match": true,
+      "artifacts": 14
+    }
+  ],
+  "accounting": [
+    {
+      "attempt": 16,
+      "cost": "0.0031179524",
+      "QA_charge": "0.004676928600",
+      "receipt_request_id": "01a1071a-0e20-75d0-a501-637120f597db",
+      "all_audit_checks": true,
+      "no_held_reservation": true,
+      "invoice_reconciled": false
+    },
+    {
+      "attempt": 17,
+      "cost": "0.011106",
+      "QA_charge": "0.016659000000",
+      "receipt_request_id": "req_011CfhGyLjVWoQ6A6zHSCssz",
+      "all_audit_checks": true,
+      "no_held_reservation": true,
+      "invoice_reconciled": false
+    }
+  ],
+  "pair_provider_cost": "0.0142239524",
+  "pair_QA_charge": "0.021335928600",
+  "first_pass_supported": 3,
+  "held": 1,
+  "missing": 0,
+  "demonstrated_unsafe": [],
+  "clinician_answer_corrections_credited": 0,
+  "raw_ASR_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+  "reviewed_text_sha256": "ab251f1b25ff18a0857269e7fc112e7e5dd67021c10b1350d2cab99421b9844d",
+  "audio_sha256": "3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7",
+  "explicit_transcript_edits": 3,
+  "semantic_adjudication": {
+    "Objective": "Exact current-patient reviewed source: left lateral ankle swelling and no open wound.",
+    "Assessment": "Explicit clinician-documented left ankle sprain. ASR strain prospectively corrected before generation.",
+    "Plan": "Complete explicit clinical directive: rest, ice, fifteen minutes, three-day follow-up and no medication, all preserved.",
+    "Subjective": "Selected whole candidate includes both six and three pain scores plus explicit earlier-six entered-in-error. Candidate held and expressly left blank. No automatic source correction inferred."
+  },
+  "independent_simple_cell_XML_readback": {
+    "v3_1": {
+      "original_blank_preserved": true
+    },
+    "v3_2": {
+      "exact_adopted_text": "Examination mild swelling over the left lateral ankle.\nNo open wound.",
+      "manual_answer_correction": false
+    },
+    "v3_3": {
+      "exact_adopted_text": "The clinician explicitly documents a left ankle sprain.",
+      "manual_answer_correction": false
+    },
+    "v3_4": {
+      "exact_adopted_text": "The clinician explicitly directs rest, ice wrapped in cloth for fifteen minutes at a time, and follow-up in three days.\nNo medication is prescribed.",
+      "manual_answer_correction": false
+    }
+  },
+  "all_other_ZIP_member_bytes_identical": true,
+  "surrounding_XML_identical_after_removing_only_three_written_cell_contents": true,
+  "export_sha256": "5ef3a23c32a69023ea5c0eaccf7a7701fd037bf518fc19b6e837b3354c7ccd86",
+  "invoice_reconciled": false,
+  "native_Word_inspection": false,
+  "human_microphone_acceptance": false,
+  "procedure_voice_complete": false,
+  "network_provider_calls": 0,
+  "database_queries": 0,
+  "credentials_read": 0
+}

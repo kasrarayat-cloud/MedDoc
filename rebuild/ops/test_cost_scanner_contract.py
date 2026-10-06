@@ -131,6 +131,16 @@ class AdditionalCostContracts(unittest.TestCase):
 
 class BatchCostContract(unittest.TestCase):
     check_mutation = AdditionalCostContracts.check_mutation
+
+    def test_reviewed_calendar_refusal_cannot_disappear_or_move_after_pricing(self):
+        refusal = ("                if ((by_key[key].get('locator') or {}).get('target') or {}).get('shape') == 'temporal_band':\n"
+                   "                    refuse('Uniqueness of divided calendar dates is unsupported; review the form-wide rule.')\n")
+        def checked(): scan.provider_caps(scan.REBUILD / 'core/batch_jobs.py')
+        self.check_mutation('core/generation_batch.py', refusal, '', checked)
+        self.check_mutation('core/generation_batch.py',
+            "    manifest = plan_constraints(version, config, live=config['mode'] == 'live')",
+            "    manifest = version.generation_constraints", checked)
+
     def test_batch_compiler_send_and_complete_price_have_reviewed_identities(self):
         self.assertEqual([cap for _,cap in scan.provider_caps(scan.REBUILD/'core/batch_jobs.py')],
                          [('profile',frozenset({6000,8000,16000,20000}))])
@@ -180,6 +190,12 @@ def Decimal(value=0):
 
 class OrdinaryCostContract(unittest.TestCase):
     check_mutation = AdditionalCostContracts.check_mutation
+
+    def test_reviewed_omission_floor_remains_part_of_the_complete_binding(self):
+        def checked(): scan.provider_caps(scan.REBUILD / 'core/batch_jobs.py')
+        self.check_mutation('core/generation.py',
+                            'or any(MISSING_RECORD_VALUE.fullmatch(reading) for reading in safety_readings(value))',
+                            'or False', checked)
 
     def test_imported_compiler_and_single_and_batch_sends_share_the_reviewed_price(self):
         expected = ('profile', frozenset({6000, 8000, 16000, 20000}))

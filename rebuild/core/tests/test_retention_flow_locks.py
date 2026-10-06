@@ -541,7 +541,9 @@ class DispositionAgainstClinicianRequests(ExecutionFixture, TransactionTestCase)
             page = doctor.get(f'/encounters/{row.pk}/')
             self.assertEqual(page.status_code, 200)
             quote = page.context.get('usage_quote')
-            racing, executed = self.disposed_during('store_upload', instruction)
+            # Admission now holds the encounter before storing bytes. Disposition must finish in the remaining
+            # pre-lock window; waiting synchronously inside store_upload would deadlock the test's own schedule.
+            racing, executed = self.disposed_during('VoiceForm', instruction)
             with racing:
                 response = doctor.post(f'/encounters/{row.pk}/voice/', {
                     'audio': SimpleUploadedFile('rf3.wav', wav_bytes(seconds=2, tag='rf3'), content_type='audio/wav'),
@@ -552,6 +554,42 @@ class DispositionAgainstClinicianRequests(ExecutionFixture, TransactionTestCase)
         followed = doctor.get(response['Location'])
         self.assertEqual(followed.status_code, 200)
         self.assertContains(followed, 'no longer available')
+
+    def test_disposition_waits_for_a_recording_admitted_first_and_preserves_its_job(self):
+        """Opposite lock order: an approved empty draft becomes nonempty while disposition waits, so it refuses."""
+        from django.core.exceptions import ValidationError
+        row, instruction = self.approved()
+        doctor = self.clinician()
+        paused, resume = threading.Event(), threading.Event()
+        real_store = views.store_upload
+        def pause_stored(*args, **kwargs):
+            result = real_store(*args, **kwargs)
+            paused.set()
+            if not resume.wait(15):raise RuntimeError('Synthetic upload deadline expired')
+            return result
+        with patch.dict(os.environ, STANDARD_ENV), patch('core.views.store_upload', side_effect=pause_stored):
+            quote = doctor.get(f'/encounters/{row.pk}/').context['usage_quote']
+            uploading, uploaded = in_thread(lambda: doctor.post(f'/encounters/{row.pk}/voice/', {
+                'audio': SimpleUploadedFile('rf3-first.wav', wav_bytes(seconds=2, tag='rf3-first'), content_type='audio/wav'),
+                'consent': 'on', 'usage_quote': quote}))
+            try:
+                self.assertTrue(paused.wait(10), 'upload never reached private storage')
+                disposing, disposed = in_thread(lambda: x.execute(self.admin, instruction.pk, self.genesis))
+                blocked = wait_for_blocked_backend(timeout=2)
+            finally:
+                resume.set()
+            for thread in (uploading, disposing):
+                thread.join(20)
+                self.assertFalse(thread.is_alive(), 'bounded synthetic admission race did not finish')
+        self.assertTrue(blocked, 'disposition did not wait for recording admission')
+        self.assertNotIn('error', uploaded, uploaded.get('error'))
+        self.assertEqual(uploaded['value'].status_code, 302)
+        self.assertIsInstance(disposed.get('error'), ValidationError)
+        self.assertTrue(m.Encounter.objects.filter(pk=row.pk).exists())
+        job = m.Job.objects.get(encounter_id=row.pk, kind='transcription')
+        self.assertTrue(private_path(job.input_path).exists())
+        self.assertEqual(self.orphaned_recordings(), [])
+        self.assertFalse(m.DispositionTombstone.objects.filter(target_id=str(row.pk)).exists())
 
     def test_a_generation_requested_while_the_draft_is_disposed_is_refused(self):
         """generate_view reaches the same lookup (the finding, from reading)."""

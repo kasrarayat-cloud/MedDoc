@@ -123,13 +123,9 @@ class Pages(TestCase):
 
 @override_settings(**TEST_SETTINGS)
 class HeldListScope(TestCase):
-    """Refutation F11 (dc33e094): the list of requests holding funds was every held reservation on the viewer's wallets, and a
-    clinician whose request held funds on the organization's wallet saw nothing. Refutation M1 (4cfa4301): the repair scoped
-    the list to departments the viewer owns while the wallet strip and the charge page use organization ownership, so the
-    owner of another department of the PAYING organization saw that wallet's funds reserved, "No request is holding funds",
-    and still opened the charge page. ONE scope now (core.views.owned_organizations): the viewer's own requests, and those
-    an organization the viewer owns pays for (the Organization owner role, held in any of its departments) — what the
-    wallet strip shows and what the charge page opens."""
+    """Own billing history and active department-owner oversight share one request scope. Earlier M1 expected
+    organization-wide visibility from a single owner membership; the October 2 authorization repair replaces that
+    interpretation and hides global organization balances, which include other departments' money and metadata."""
     workflow = test_workflow.DocumentWorkflow
     setUp, make_docx, upload, create_encounter = workflow.setUp, workflow.make_docx, workflow.upload, workflow.create_encounter
 
@@ -172,7 +168,7 @@ class HeldListScope(TestCase):
             'requester': (self.client, paid_by_org, False),                                # dc33e094: []
             'owner of the requesting department': (self.member('m1-owner', self.department, 'owner')[1], paid_by_org, True),
             'owner of another department of the paying organization':                      # 4cfa4301: [] beside $0.80 reserved
-                (self.member('m1-other-owner', other_department, 'owner')[1], paid_by_org, True),
+                (self.member('m1-other-owner', other_department, 'owner')[1], [], False),
             'colleague, personally paid': (colleague_client, [(str(personal.pk), Decimal('0.40'), 'Generation')], False),
             'former owner (membership inactive)':                                          # FG-3
                 (self.member('m1-former-owner', self.department, 'owner', active=False)[1], [], False),
@@ -182,9 +178,8 @@ class HeldListScope(TestCase):
             with self.subTest(viewer=viewer):
                 page = client.get('/billing/')
                 self.assertEqual(self.held(client), expected)
-                # The organization's wallet is on the strip exactly for its owners, and beside it the requests holding its
-                # funds are listed: never its funds reserved beside "No request is holding funds" (M1).
-                self.assertEqual(org_wallet.pk in [wallet.pk for wallet in page.context['wallets']], owner)
+                # Shared global balances are restricted; authorized jobs carry their own reservation amounts.
+                self.assertNotIn(org_wallet.pk, [wallet.pk for wallet in page.context['wallets']])
                 text = page.content.decode()
                 self.assertEqual('No request is holding funds' in text, not expected)
                 for row in page.context['held_requests']:                                 # FG-10: every row links, and opens

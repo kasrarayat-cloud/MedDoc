@@ -1,0 +1,529 @@
+"""Prepared metadata-only union for the fixed native/V3 DEV33 application run.
+
+Default invocation performs no reads or writes. Execution never runs application,
+database, renderer, provider or scorer code. A completed DEV ledger is not a pass.
+"""
+import argparse
+import hashlib
+import json
+import math
+import re
+import subprocess
+from pathlib import Path
+
+THRESHOLDS = {'overall_required': 54, 'overall_denominator': 60,
+              'holdout_required': 18, 'holdout_denominator': 20, 'family_fraction': .75}
+MANIFEST_SHA = '3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33'
+RIGHTS_SHA = '5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7'
+VERSION = 'dev33-supported-layout-peer-v3'
+ORIGINAL_PREPARED_SHA = 'e1ca082b8c7ddff09a054cf9f581ef6bbbbb4c35b693380b1bc698ef90822d39'
+PREPARED_SHA = 'b5e20bc3eee78e53e541ba380e18aa3e77e1da8130994dc8d6f89a64653cb1f1'
+PEER_SHA = '00a5c8eb0a9bf944fe22d06ae552a9ed4a42ff73bf527287cef5f813d4b66d49'
+CHECKER_SHA = 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e'
+DRIVERS = {
+    'v3': {'run_dev_application_gate_v2.py': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7',
+           'dev_application_gate_v2.py': 'fbf37994963d6a39ba546eb35e5bec7a3967e545a707ab253c746be9f45ab918',
+           'fixed_render_checker.py': CHECKER_SHA},
+    'native': {'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5',
+               'dev_application_gate_native_v1.py': '3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5',
+               'fixed_render_checker.py': CHECKER_SHA},
+}
+INSTRUMENT_R4_VERSION = 'word48-shared-segmented-r4-v1'
+INSTRUMENT_R4_FAMILIES = {'fixed33': {'dev_application_gate_v2.py': '32c30861a6a56079b1c10cf883bdda98597b4a3851a8efacb2373f1807990f22',
+             'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'run_dev_application_gate_v2.py': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7'},
+ 'additiveDEV': {'dev_application_gate_v2.py': '32c30861a6a56079b1c10cf883bdda98597b4a3851a8efacb2373f1807990f22',
+                 'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+                 'run_dev_application_gate_v2.py': '94f4270a7618a9452c9a935b1da38c3d80762ea9dccc06bb2d70deea91294714'},
+ 'holdout': {'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'holdout-rights.json': 'dac2183e8263491ceccd402dba5bec9984186c3457c495bf964a95dd6679ff13',
+             'run_holdout_application.py': '0de47ec3c87ed690d6df6902bba8c5d271dba2b5d242e3f8a5dff211a8709bf9',
+             'holdout_application.py': '13dfc13cc27ffbb732abe45ca4fc08f53133f343dae81be784a4a1d553884549',
+             'prepared-plan.json': '8008d18b5405227c373b6e0d6a0220877ff6a845387c531c291827f2c08a57f0'},
+ 'native': {'dev_application_gate_native_v1.py': '3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5',
+            'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+            'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5'}}
+INSTRUMENT_R5_VERSION = 'word48-shared-segmented-r5-v1'
+INSTRUMENT_R5_FAMILIES = {'fixed33': {'dev_application_gate_v2.py': 'c088b9ffdbd226002378def8816116d0c7ae91133c09f1f0e3b9798968b883a3',
+             'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'run_dev_application_gate_v2.py': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7'},
+ 'additiveDEV': {'dev_application_gate_v2.py': 'c088b9ffdbd226002378def8816116d0c7ae91133c09f1f0e3b9798968b883a3',
+                 'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+                 'run_dev_application_gate_v2.py': '94f4270a7618a9452c9a935b1da38c3d80762ea9dccc06bb2d70deea91294714'},
+ 'holdout': {'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'holdout-rights.json': 'dac2183e8263491ceccd402dba5bec9984186c3457c495bf964a95dd6679ff13',
+             'run_holdout_application.py': '0de47ec3c87ed690d6df6902bba8c5d271dba2b5d242e3f8a5dff211a8709bf9',
+             'holdout_application.py': 'eb547fc3a26b0d54a429ee5ba08fb2ed141225a6812a12c48cf0f02b4b081c8d',
+             'prepared-plan.json': '8008d18b5405227c373b6e0d6a0220877ff6a845387c531c291827f2c08a57f0'},
+ 'native': {'dev_application_gate_native_v1.py': '3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5',
+            'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+            'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5'}}
+FIXED_PROFILES = ('empty', 'ordinary', 'long')
+NATIVE_PROFILES = ('native-ordinary', 'native-long')
+
+# Additive instrument identity; historical DRIVERS/validate_seal remain unchanged.
+INSTRUMENT_VERSION = 'word48-shared-segmented-r3-v1'
+INSTRUMENT_FAMILIES = {'fixed33': {'dev_application_gate_v2.py': '5b2b28cf02f19bdf68c2c5f87c036f61ad56e3c416ad0e27e62803046e48d39f',
+             'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'run_dev_application_gate_v2.py': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7'},
+ 'additiveDEV': {'dev_application_gate_v2.py': '5b2b28cf02f19bdf68c2c5f87c036f61ad56e3c416ad0e27e62803046e48d39f',
+                 'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+                 'run_dev_application_gate_v2.py': '94f4270a7618a9452c9a935b1da38c3d80762ea9dccc06bb2d70deea91294714'},
+ 'holdout': {'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+             'holdout-rights.json': 'dac2183e8263491ceccd402dba5bec9984186c3457c495bf964a95dd6679ff13',
+             'run_holdout_application.py': '0de47ec3c87ed690d6df6902bba8c5d271dba2b5d242e3f8a5dff211a8709bf9',
+             'holdout_application.py': '2fe225cf11e5c23439d90e96789ee3ce3efe0713162c247b2dbee163ba7226c5',
+             'prepared-plan.json': '8008d18b5405227c373b6e0d6a0220877ff6a845387c531c291827f2c08a57f0'},
+ 'native': {'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5',
+            'dev_application_gate_native_v1.py': '3de3c34f5451b57fbf3a65b92294ea7cb242b38431f19242ca881d3635d500c5',
+            'fixed_render_checker.py': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e'}}
+INSTRUMENT_FIXED_HELPERS = {'fill_eval.py': '7c74e1d3a46a0252d0b79169ac7cf0905222e7d741ee8061130bc37a2bf2a848',
+ 'final_eval.py': '97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a',
+ 'render_eval.py': '265ff7ad137889717a2f93554c8926f93f4cccd76b8c120eeda50bd5bf8f8a76',
+ 'score.py': 'd9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c',
+ 'v2/answering.py': '75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4',
+ 'v2/ticked.py': 'e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79'}
+
+
+class IntegrityError(ValueError):
+    pass
+
+
+def require(condition, message):
+    if not condition:
+        raise IntegrityError(message)
+
+
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def integer(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def validate_qualification_identity(version, families, fixed_helpers, peer_sha):
+    """Admit only the old identity or the separately reviewed r3/r4/r5 instruments.
+
+    This is metadata admission, not a resource grant or qualification result.
+    Every GT/scorer/profile/choice/render helper and the authenticated peer stays
+    fixed. Unknown versions, hybrid families and extra helpers fail closed.
+    """
+    if version == VERSION:
+        expected = DRIVERS
+    elif version == INSTRUMENT_VERSION:
+        expected = INSTRUMENT_FAMILIES
+    elif version == INSTRUMENT_R4_VERSION:
+        expected = INSTRUMENT_R4_FAMILIES
+    elif version == INSTRUMENT_R5_VERSION:
+        expected = INSTRUMENT_R5_FAMILIES
+    else:
+        raise IntegrityError('Unsupported qualification instrument version.')
+    require(families == expected, 'Qualification driver/workflow identity differs.')
+    require(fixed_helpers == INSTRUMENT_FIXED_HELPERS, 'Fixed qualification helper differs.')
+    require(peer_sha == PEER_SHA, 'Authenticated qualification peer differs.')
+
+
+def validate_derivative(prepared, original):
+    added = {'plan_version', 'original_prepared_plan', 'supported_layout_driver_sources', 'layout_peer_helper_sha256'}
+    require(set(prepared) == set(original) | added and all(prepared[k] == v for k, v in original.items()),
+            'Original membership/GT/scorer/profile/threshold preparation changed.')
+
+
+def validate_metadata(prepared, manifest, rights):
+    require(prepared.get('plan_version') == VERSION and prepared.get('original_prepared_plan') == {
+        'path': 'docs/rebuild/v1/word-dev33-final-plan-prepared-20261004.json', 'sha256': ORIGINAL_PREPARED_SHA},
+        'No exact original preparation reference.')
+    require(prepared.get('layout_peer_helper_sha256') == PEER_SHA, 'Undeclared layout peer binding.')
+    require(prepared['thresholds'] == THRESHOLDS, 'Prepared thresholds changed.')
+    require(len(manifest['sets']['dev']) == 40 and len(manifest['sets']['holdout']) == 20,
+            'Original denominator changed.')
+    by_id = {r['development_id']: r for r in rights['records']}
+    require(len(by_id) == len(rights['records']) == 40, 'Rights membership changed.')
+    eligible = {k for k, v in by_id.items() if v['offline_filled_copy_replay_supported'] is True}
+    held = set(by_id) - eligible
+    require(eligible == set(prepared['eligible_dev']) and len(eligible) == 33,
+            'Eligible original membership changed.')
+    require(held == {'D06', 'D19', 'D20', 'D23', 'D24', 'D25', 'D32'}, 'Held membership changed.')
+    records = {r['identity']: r for r in prepared['records']}
+    require(set(records) == eligible and len(prepared['records']) == 33, 'Prepared members changed.')
+    for row in manifest['sets']['dev']:
+        identity = Path(row['corpus_file']).stem.split('-')[0]
+        require(identity in by_id and row['sha256'] == by_id[identity]['sha256'], 'Original identity changed.')
+        if identity in records:
+            record = records[identity]
+            require(row['families_declared'] == record['families'], 'Declared family changed.')
+            require(record['original_sha256'] == row['sha256'] and record['fixed_profiles'] == list(FIXED_PROFILES),
+                    'Source or profile changed.')
+    packets = prepared['packets']
+    require(len(packets) == 17, 'Declared packet membership changed.')
+    all_ids = [k for p in packets for k in p['identities']]
+    require(len(all_ids) == len(set(all_ids)) == 33 and set(all_ids) == eligible,
+            'Missing or duplicate declared original.')
+    return records, by_id, packets
+
+
+def validate_seal(prepared, seal, source_inventory):
+    require(re.fullmatch('[0-9a-f]{40}', seal.get('source_commit', '')) is not None, 'No exact source S.')
+    require(seal.get('frozen_for_word_acceptance') is True and seal.get('sealed_before_execution') is True,
+            'No prospective final-source seal.')
+    require(seal.get('thresholds') == THRESHOLDS and seal.get('provider_calls') == 0, 'Freeze scope changed.')
+    require(seal.get('manifest_sha256') == MANIFEST_SHA and seal.get('rights_sha256') == RIGHTS_SHA
+            and seal.get('prepared_plan_sha256') == PREPARED_SHA, 'Frozen metadata bytes changed.')
+    require(seal.get('drivers') == DRIVERS, 'Undeclared processor/harness identity.')
+    require(seal.get('driver_sources') == {name: row['path'] for name, row in prepared['supported_layout_driver_sources'].items()},
+            'Supported layout driver locations differ from the prospective preparation.')
+    require(seal.get('plan_version') == VERSION and seal.get('layout_peer_helper_sha256') == PEER_SHA,
+            'Missing supported layout peer/version seal.')
+    require(seal.get('raw_capture_required') is True, 'No independently pinned raw capture contract.')
+    require(seal.get('helpers') == prepared['unchanged_helpers'], 'Scorer or profile helper changed.')
+    require(bool(source_inventory) and seal.get('source_hashes') == source_inventory,
+            'Prospective source differs from independently verified full source inventory.')
+    require(seal.get('packet_memberships') == {p['packet']: p['identities'] for p in prepared['packets']},
+            'Prospective packet membership changed.')
+
+
+def profile_flags(profile, name):
+    require(profile.get('profile') == name, 'Profile identity changed.')
+    if name in NATIVE_PROFILES:
+        require(profile.get('profile_kind') == 'native_manual_recovery'
+                and profile.get('fixed_automatic_gate_credit') is False, 'Manual recovery claimed automatic.')
+        return False, False
+    require(not profile.get('manual_value_corrections'), 'Fixed profile contains clinician corrections.')
+    require(profile.get('profile_kind', 'fixed_protocol') == 'fixed_protocol', 'Fixed profile replaced by recovery.')
+    if 'unchanged_fixed_profile_answers' in profile:
+        require(profile['fixed_answers'] == profile['unchanged_fixed_profile_answers'], 'Fixed answers changed.')
+    fixed = profile.get('fixed_protocol_passed') is True
+    complete = profile.get('passed') is True
+    if fixed:
+        require(profile.get('fixed_mechanical_passed') is True and not profile.get('fixed_failures'),
+                'Fixed pass contradicts mechanical evidence.')
+        require(profile.get('independent_choice_reader', {}).get('passed') is True,
+                'Fixed pass contradicts choice readback.')
+        if name != 'empty':
+            render = profile.get('render')
+            require(isinstance(render, dict) and render.get('exit_code') in (0, 1)
+                    and not render.get('problems'), 'Fixed pass lacks successful fixed render criterion.')
+            require(render['exit_code'] == 0 or bool(render.get('supplemental_problems')),
+                    'Caught checker failure claimed fixed pass.')
+    if complete:
+        require(fixed and not profile.get('failures') and not profile.get('supplemental_failures'),
+                'Complete pass contradicts retained failures.')
+        if name != 'empty':
+            require(profile['render']['exit_code'] == 0 and not profile['render'].get('supplemental_problems'),
+                    'Complete pass contradicts render evidence.')
+    return fixed, complete
+
+
+def consolidate(prepared, manifest, rights, seal, source_inventory, bundles):
+    """Pure ledger assembly after the caller independently verifies source bytes.
+
+    Each bundle has the unchanged original driver's JSON plus independently read
+    raw case/profile/export evidence and an actual outer process receipt.
+    """
+    records, by_id, packets = validate_metadata(prepared, manifest, rights)
+    validate_seal(prepared, seal, source_inventory)
+    expected_packets = {p['packet']: p for p in packets}
+    require(len(bundles) == 17, 'Missing or duplicate packet.')
+    seen_packets, results, batch_hashes = set(), {}, {}
+    execution_complete = True
+    for bundle in bundles:
+        packet_id = bundle['packet']
+        require(packet_id in expected_packets and packet_id not in seen_packets, 'Duplicate or foreign packet.')
+        seen_packets.add(packet_id)
+        expected = expected_packets[packet_id]
+        ids = expected['identities']
+        engine = 'native' if ids == ['D01', 'D02'] else 'v3'
+        plan, summary = bundle['plan'], bundle['summary']
+        require(plan.get('source_commit') == summary.get('source_commit') == seal['source_commit'], 'Batch source changed.')
+        require(plan.get('thresholds') == summary.get('thresholds') == THRESHOLDS and plan.get('set') == 'dev',
+                'Batch scope or threshold changed.')
+        require(plan.get('provider_calls') == summary.get('provider_calls') == 0, 'Provider evidence is outside scope.')
+        require(plan.get('rights_sha256') == RIGHTS_SHA and plan.get('manifest_sha256') == MANIFEST_SHA
+                and plan.get('helpers') == prepared['unchanged_helpers'], 'Batch metadata/scorer/profile changed.')
+        require([r['development_id'] for r in plan['records']] == ids, 'Packet originals changed.')
+        require(set(summary['results']) <= set(ids), 'Foreign result substituted.')
+        require(bundle['harness_before'] == bundle['harness_after'] == DRIVERS[engine], 'Batch harness changed.')
+        require(bundle['source_before'] == bundle['source_after'] == plan['source_hashes'] == source_inventory,
+                'Batch source inventory changed.')
+        require(bundle['freeze_sha256'] == bundle['expected_seal_sha256'] and bundle['freeze'] == seal,
+                'Batch did not use the prospective final seal.')
+        require(bundle.get('raw_capture_verified') is True, 'Raw results are not bound to the independent outer receipt.')
+        child = summary.get('actual_test_exit')
+        outer = bundle['outer_receipt'].get('actual_outer_child_exit')
+        require(integer(child) and integer(outer), 'Missing actual process exit.')
+        require(bundle['process_teardown'].get('worker_exit') == child, 'Child exit receipts disagree.')
+        teardown = bundle['database_after']
+        db = plan['database_name']
+        require(db.startswith('quillmd_qa_sol_ops_dev33') and len(db) < 50, 'Foreign database identity.')
+        require(teardown.get('requested_database') == db and teardown.get('checked_names') == [db, 'test_' + db],
+                'Teardown watched a different database.')
+        healthy = (child == 0 and not bundle['outer_receipt'].get('timed_out')
+                   and bundle['process_teardown'].get('timed_out') is False
+                   and bundle['process_teardown'].get('socket_removed') is True
+                   and bundle['process_teardown'].get('renderer_exit') is not None
+                   and teardown.get('verified') is True and teardown.get('all_absent') is True
+                   and teardown.get('present') == [] and summary.get('database_teardown_verified') is True
+                   and bundle.get('pid_and_container_absence_verified') is True)
+        execution_complete = execution_complete and healthy
+        batch_hashes[packet_id] = bundle['raw_hashes']
+        packet_automatic = True
+        for original_record in plan['records']:
+            identity = original_record['development_id']
+            require(identity not in results and identity in records, 'Duplicate or foreign original.')
+            expected_record = records[identity]
+            require(original_record['sha256'] == expected_record['original_sha256']
+                    and original_record['prior_expected_map_path'] == expected_record['groundtruth']
+                    and original_record['families'] == expected_record['families'], 'Original/GT/family changed.')
+            result = summary['results'].get(identity)
+            raw = bundle['raw_cases'].get(identity)
+            if raw is None or result is None:
+                require(not result or result.get('automatic_success') is not True,
+                        'Missing raw result claimed success.')
+                execution_complete = False
+                packet_automatic = False
+                results[identity] = {'state': 'execution_incomplete', 'automatic_success': False,
+                                     'fixed_protocol_success': False, 'retained_result': result,
+                                     'actual_child_exit': child, 'actual_outer_exit': outer}
+                continue
+            require(raw['adjudication'] == result, 'Summary differs from raw adjudication.')
+            require(result.get('identity') == identity and result.get('source_commit') == seal['source_commit']
+                    and result.get('source_sha256') == expected_record['original_sha256'], 'Raw case identity changed.')
+            require(result.get('groundtruth_sha256') == expected_record['groundtruth_sha256']
+                    and result.get('destinations') == expected_record['fixed_answer_area_denominator'], 'Ground truth changed.')
+            require(result.get('manual_mapping_corrections') == 0, 'Manual mapping claimed automatic.')
+            require(result.get('families') == expected_record['families'] and result.get('previously_exposed') is True,
+                    'Family or exposure status changed.')
+            profiles = result.get('profiles', {})
+            allowed = set(FIXED_PROFILES) | (set(NATIVE_PROFILES) if engine == 'native' else set())
+            require(set(profiles) <= allowed, 'Foreign profile substituted.')
+            if result.get('mapping'):
+                require(raw.get('mapping') == result['mapping'], 'Raw mapping score changed.')
+                require(raw.get('import_contract') == ('v3' if engine == 'v3' else ''),
+                        'Selected processor was substituted.')
+            fixed_flags, complete_flags = {}, {}
+            for name, profile in profiles.items():
+                original_plan = raw['profile_plans'].get(name)
+                require(original_plan is not None, 'Missing original profile plan.')
+                for key in ('profile', 'fixed_answers', 'chosen_groundtruth_options', 'answer_plan_notes'):
+                    require(profile.get(key) == original_plan.get(key), 'Profile values changed after planning.')
+                fixed_flags[name], complete_flags[name] = profile_flags(profile, name)
+                if profile.get('export_sha256'):
+                    require(raw['exports'].get(name) == profile['export_sha256'], 'Export missing or changed.')
+            strict = result.get('mapping', {}).get('strict') is True
+            fixed = strict and not result.get('failures') and all(fixed_flags.get(n) is True for n in FIXED_PROFILES)
+            automatic = strict and not result.get('failures') and all(complete_flags.get(n) is True for n in FIXED_PROFILES)
+            require(result.get('automatic_success') is automatic and result.get('fixed_protocol_success') is fixed,
+                    'Supplied aggregate contradicts raw fixed profiles.')
+            packet_automatic = packet_automatic and automatic
+            results[identity] = {'state': 'evaluated' if healthy else 'execution_incomplete',
+                                 'automatic_success': automatic and healthy, 'fixed_protocol_success': fixed and healthy,
+                                 'retained_result': result, 'actual_child_exit': child, 'actual_outer_exit': outer,
+                                 'manual_recovery_counted': False}
+        expected_outer = 0 if healthy and packet_automatic else 1
+        if child == 0 and healthy:
+            require(outer == expected_outer, 'Outer exit contradicts product outcome.')
+        else:
+            require(outer != 0, 'Caught child/teardown failure claimed outer success.')
+    require(set(results) == set(records), 'Missing eligible original.')
+    members = []
+    for set_name in ('dev', 'holdout'):
+        for record in manifest['sets'][set_name]:
+            identity = Path(record['corpus_file']).stem.split('-')[0]
+            result = results.get(identity)
+            state = result['state'] if result else 'rights_or_provenance_held' if set_name == 'dev' else 'original_holdout_not_evaluated'
+            members.append({**record, 'identity': identity, 'set': set_name, 'state': state,
+                            'automatic_success': bool(result and result['automatic_success']),
+                            'fixed_protocol_success': bool(result and result['fixed_protocol_success']),
+                            'manual_recovery_counted': False, 'result': result, 'previously_exposed': True})
+    require(len(members) == 60 and sum(m['set'] == 'holdout' for m in members) == 20, 'Final denominator changed.')
+    counts = {name: {'successes': sum(m['fixed_protocol_success'] for m in members if name == 'overall' or m['set'] == 'holdout'),
+                     'denominator': denominator, 'required': needed}
+              for name, denominator, needed in [('overall', 60, 54), ('holdout', 20, 18)]}
+    families = {}
+    for family in ['F' + str(n) for n in range(1, 11)]:
+        subset = [m for m in members if family in m['families_declared']]
+        families[family] = {'successes': sum(m['fixed_protocol_success'] for m in subset),
+                            'denominator': len(subset), 'required': math.ceil(.75 * len(subset))}
+    return {'source_commit': seal['source_commit'], 'thresholds': THRESHOLDS, 'original_members': members,
+            'counts': counts, 'families': families, 'batch_hashes': batch_hashes,
+            'execution_complete': execution_complete,
+            'status': 'execution_complete_product_gate_unmet' if execution_complete else 'execution_incomplete_product_gate_unmet',
+            'recommended_exit': 1 if execution_complete else 2,
+            'supplemental_complete_export_successes': sum(m['automatic_success'] for m in members),
+            'gate_pass': False, 'ci_pass_claim': False, 'independence_requirement_met': False,
+            'independence_note': 'Original exposed holdout remains unevaluated here; no new unseen claim or qualification replacement.',
+            'maximum_overall_if_all_eligible_and_original_holdout_pass': 53,
+            'rights_held_development_members': sorted(set(by_id) - set(records)),
+            'native_word': 'unverified', 'clinical_generation_usefulness': 'Separate qualification; fixed profiles do not assess model answers.',
+            'provider_calls': 0, 'manual_mapping_corrections_counted_as_automatic': 0}
+
+
+def read_raw(path, expected=None):
+    require(path.is_file() and not path.is_symlink(), 'Missing or symlinked raw evidence: ' + str(path))
+    raw = path.read_bytes()
+    if expected is not None:
+        require(sha(raw) == expected, 'Evidence byte identity changed: ' + str(path))
+    return raw
+
+
+def verified_source(source, commit):
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(source), *args], timeout=15)
+    require(git('rev-parse', 'HEAD').decode().strip() == commit and not git('status', '--porcelain').strip(),
+            'Final source is not clean exact S.')
+    require(not (source / 'rebuild/.env').exists(), 'Final source carries an installed environment.')
+    entries = git('ls-tree', '-r', '-z', commit, 'rebuild').split(b'\0')
+    files = {}
+    for entry in entries:
+        if not entry:
+            continue
+        metadata, encoded_name = entry.split(b'\t', 1)
+        mode, kind, object_id = metadata.decode().split()
+        name = encoded_name.decode()
+        require(kind == 'blob' and mode in ('100644', '100755'), 'Unexpected tracked source object: ' + name)
+        raw = read_raw(source / name)
+        git_id = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+        require(git_id == object_id, 'Source bytes differ from S: ' + name)
+        if name.endswith('.py'):
+            files[name] = sha(raw)
+    require(bool(files), 'Full source inventory absent.')
+    return files
+
+
+def load_bundle(path, packet, seal_sha, outer_receipt_sha):
+    hashes = {}
+    def read(name):
+        raw = read_raw(path / name)
+        hashes[name] = sha(raw)
+        return json.loads(raw)
+    outer_raw = read_raw(path / 'outer-result.json', outer_receipt_sha)
+    outer_receipt = json.loads(outer_raw)
+    capture_sha = outer_receipt.get('raw_evidence_manifest_sha256', '')
+    require(re.fullmatch('[0-9a-f]{64}', capture_sha) is not None, 'No sealed raw capture hash in outer receipt.')
+    capture_raw = read_raw(path / 'raw-evidence-manifest.json', capture_sha)
+    capture = json.loads(capture_raw)
+    require(capture.get('captured_after_child_exit') is True and isinstance(capture.get('files'), dict),
+            'No completed raw capture manifest.')
+    for name, expected in capture['files'].items():
+        relative = Path(name)
+        require(not relative.is_absolute() and '..' not in relative.parts
+                and name not in ('outer-result.json', 'raw-evidence-manifest.json'), 'Foreign raw capture path.')
+        require(isinstance(expected, str) and re.fullmatch('[0-9a-f]{64}', expected) is not None,
+                'Raw capture has an unbound file hash.')
+        read_raw(path / relative, expected)
+    plan = read('plan.json')
+    require(capture.get('source_commit') == plan['source_commit'], 'Raw capture source changed.')
+    ids = packet['identities']
+    require([r['development_id'] for r in plan['records']] == ids, 'Foreign packet before evidence reads.')
+    provenance = read('freeze-provenance.json')
+    cases = {}
+    for identity in ids:
+        result_file = path / identity / 'adjudication.json'
+        if not result_file.exists():
+            continue
+        result = read(identity + '/adjudication.json')
+        case = {'adjudication': result, 'profile_plans': {}, 'exports': {}}
+        if (path / identity / 'automatic-groundtruth.json').exists():
+            case['mapping'] = read(identity + '/automatic-groundtruth.json')
+            imported = read(identity + '/initial-mapping.json')
+            case['import_contract'] = imported.get('contract')
+        for name, profile in result.get('profiles', {}).items():
+            require(name in FIXED_PROFILES + NATIVE_PROFILES, 'Foreign profile before evidence reads.')
+            case['profile_plans'][name] = read(identity + '/' + name + '-profile-plan.json')
+            if profile.get('export_sha256'):
+                export_path = path / identity / (name + '-export.docx')
+                case['exports'][name] = sha(read_raw(export_path))
+                hashes[str(export_path.relative_to(path))] = case['exports'][name]
+        cases[identity] = case
+    absence = read('independent-teardown.json')
+    require(absence.get('source_commit') == plan['source_commit'], 'Independent teardown source changed.')
+    bundle = {'packet': packet['packet'], 'plan': plan, 'summary': read('partial-summary.json'),
+            'harness_before': read('prospective-harness-before.json'), 'harness_after': read('prospective-harness-after.json'),
+            'source_before': read('source-before.json'), 'source_after': read('source-after.json'),
+            'freeze_sha256': provenance['sha256'], 'freeze': provenance['freeze'], 'expected_seal_sha256': seal_sha,
+            'outer_receipt': outer_receipt, 'process_teardown': read('process-teardown.json'),
+            'database_after': read('database-after.json'), 'raw_cases': cases,
+            'pid_and_container_absence_verified': absence.get('all_recorded_pids_absent') is True
+                and absence.get('active_layout_containers') == [] and absence.get('socket_removed') is True,
+            'raw_capture_verified': True, 'raw_hashes': hashes}
+    require(all(capture['files'].get(name) == value for name, value in hashes.items()),
+            'Read result/profile/export was absent from independent raw capture.')
+    bundle['raw_hashes'] = {**hashes, 'outer-result.json': sha(outer_raw),
+                            'raw-evidence-manifest.json': sha(capture_raw)}
+    return bundle
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--source', type=Path)
+    parser.add_argument('--seal', type=Path)
+    parser.add_argument('--seal-sha256')
+    parser.add_argument('--prepared-plan', type=Path)
+    parser.add_argument('--rights-ledger', type=Path)
+    parser.add_argument('--batch', action='append', default=[], help='P01=/absolute/retained/batch; all 17 required')
+    parser.add_argument('--batch-receipt', action='append', default=[], help='P01=independently retained outer-result SHA256')
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args(argv)
+    if not args.execute:
+        print(json.dumps({'state': 'PREPARED_NOT_EXECUTED', 'provider_calls': 0, 'database_connections': 0,
+                          'application_execution': False, 'gate_pass': False}))
+        return 0
+    require(all((args.source, args.seal, args.seal_sha256, args.prepared_plan, args.rights_ledger, args.output)),
+            'Missing final-source metadata execution inputs.')
+    require(not args.output.exists(), 'Output already exists; never overwrite prior evidence.')
+    prepared = json.loads(read_raw(args.prepared_plan, PREPARED_SHA))
+    original = json.loads(read_raw(args.source / prepared['original_prepared_plan']['path'], ORIGINAL_PREPARED_SHA))
+    validate_derivative(prepared, original)
+    read_raw(args.source / 'rebuild/ops/fixtures/word_dev33_layout_peer.source', PEER_SHA)
+    rights = json.loads(read_raw(args.rights_ledger, RIGHTS_SHA))
+    manifest = json.loads(read_raw(args.source / 'docs/rebuild/v1/word-corpus-manifest.json', MANIFEST_SHA))
+    seal = json.loads(read_raw(args.seal, args.seal_sha256))
+    source_before = verified_source(args.source, seal['source_commit'])
+    records, _, packets = validate_metadata(prepared, manifest, rights)
+    validate_seal(prepared, seal, source_before)
+    for name, expected in prepared['unchanged_helpers'].items():
+        read_raw(args.source / 'docs/rebuild/v1/word-eval' / name, expected)
+    declared_paths = seal.get('driver_sources', {})
+    driver_hashes = {name: value for engine in DRIVERS.values() for name, value in engine.items()}
+    require(set(declared_paths) == set(driver_hashes), 'Missing declared exact driver source paths.')
+    for name, expected in driver_hashes.items():
+        path = Path(declared_paths[name])
+        require(path.is_absolute() and path.name == name, 'Declared driver source path changed.')
+        read_raw(path, expected)
+    for record in records.values():
+        read_raw(Path(record['original']), record['original_sha256'])
+        read_raw(Path(record['groundtruth']), record['groundtruth_sha256'])
+        read_raw(Path(record['annotator']), record['annotator_sha256'])
+    by_packet = {p['packet']: p for p in packets}
+    receipt_hashes = {}
+    for item in args.batch_receipt:
+        identity, value = item.split('=', 1)
+        require(identity in by_packet and identity not in receipt_hashes
+                and re.fullmatch('[0-9a-f]{64}', value) is not None, 'Invalid independent outer receipt hash.')
+        receipt_hashes[identity] = value
+    require(set(receipt_hashes) == set(by_packet), 'Missing independent outer receipt hash.')
+    bundles, seen = [], set()
+    for item in args.batch:
+        identity, value = item.split('=', 1)
+        require(identity in by_packet and identity not in seen, 'Duplicate or foreign batch argument.')
+        seen.add(identity)
+        path = Path(value)
+        require(path.is_absolute() and path.is_dir() and not path.is_symlink(), 'Invalid retained batch path.')
+        bundles.append(load_bundle(path, by_packet[identity], args.seal_sha256, receipt_hashes[identity]))
+    report = consolidate(prepared, manifest, rights, seal, source_before, bundles)
+    require(verified_source(args.source, seal['source_commit']) == source_before, 'Source changed during consolidation.')
+    with args.output.open('x') as stream:
+        stream.write(json.dumps(report, indent=2) + '\n')
+    args.output.chmod(0o600)
+    print(json.dumps({k: report[k] for k in ('status', 'counts', 'execution_complete', 'gate_pass', 'recommended_exit')}))
+    return report['recommended_exit']
+
+
+if __name__ == '__main__':
+    try:
+        raise SystemExit(main())
+    except IntegrityError as error:
+        print(json.dumps({'status': 'integrity_refused', 'reason': str(error), 'gate_pass': False}))
+        raise SystemExit(3)

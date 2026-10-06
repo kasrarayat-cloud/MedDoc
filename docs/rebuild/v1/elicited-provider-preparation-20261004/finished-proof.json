@@ -1,0 +1,51 @@
+{
+  "code_commit": "713da110fb5773d774e9ae883583c81e375d4523",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-campaign5-bd82576d",
+  "pending_root_hook_applied": false,
+  "standing_qa_unchanged": true,
+  "actual_pure_tests": 12,
+  "actual_exit": 0,
+  "timed_out": false,
+  "reaped": true,
+  "network_attempts": [],
+  "database_calls": 0,
+  "provider_calls": 0,
+  "credential_reads": 0,
+  "new_runtime_created": false,
+  "source_unchanged": true,
+  "elapsed_seconds": 9.85319743299624,
+  "scope": "Tests explicitly load the reviewed prospective normal-standing literal in this pure process. They do not apply it to the writer/root or confer live eligibility. Root integration/refutation and actual source/financial checks remain required. Task-owned temporary synthetic fixture ledger only; no historical or live provider ledger mutation.",
+  "candidate_source_requirement": "Full clinical repair chain through505ee668 plus later root final clean freeze, live-profile/account/quote confirmation and priced binding before any request.",
+  "prospective_sends": 24,
+  "historical_api_attempts": 195,
+  "historical_calculated_exposure_usd": "2.147100264000",
+  "original_denominators": {
+    "comparison_sends": 28,
+    "qualified_typed_sends": 14,
+    "qualified_text_desired_positive": 36,
+    "qualified_text_required_hold": 40,
+    "voice_provider_sends": 4
+  },
+  "new_elicited_denominators": {
+    "sends": 5,
+    "desired_positive_answers": 8,
+    "required_holds": 3
+  },
+  "artifacts": {
+    "README.md": "0517446e8db0840498427b8da905728ae7d1bc6a290b7c7091bbda456c3222dc",
+    "child-pending-hooks.py": "9c81f28f7089f4e9d53af13eaf20c64c7a9f0959a70b81d5fada1f5241d4c8fe",
+    "child-result-r1.json": "cab87cd80fbdbff67969cc564d49f0a99d3ac18a89d1af68c762217d89f04f48",
+    "elicited-qualification-v1-r2.json": "4d6960106954bbdeb8e3725a08e969431f4e86bd524852d0f5cb215b3eaab8ee",
+    "hook-bindings.json": "a10c9497d5e7ecd32ea8beb76ea2ccc39a7698f2589c470287c3ad37b45af6ce",
+    "new-authored-fields-offline-r1.json": "d749d3d350e284925cd67658eee1c57c9e022f589ea1a1e674320a2b4e511abd",
+    "new-authored-fields-offline-r3.json": "c4c62d58b3ccd9c0a724f3da8cc5f4c2353141cdd45fea1ece0c1a05a95e4ab4",
+    "pending-standing_qa.source": "3b5c1d2866be9d592aa6ba5bece03f5d5780448b5e7e24f5d1c8e65b20168583",
+    "prepare-freeze-r1-failure.json": "16809c08db0d57889c4a4a5469e18caab0dd7b25890776de8ddbc00f794df2b4",
+    "prepare-hooks.py": "2aae83a5b8a79b426338375e2d69548fb5802933ba3dda92ec4fe3c2f01be75e",
+    "result-r1.json": "568c58afc9a3acebbb41bfa9801a7644be67fa3f8743a6d1048815ce12ee1ec7",
+    "run-pending-hooks.py": "94c9c4e2806f39fc412a511df8913458bd9c9fd5ea89788baa69825d62f73f16",
+    "standing-hook.patch": "1a8e41c392863c1a5373ff3489cb62f07e76de9b57df2dd6f132210df00034e6",
+    "tests-r1.stderr.log": "5d05a9a1031c2d3848f6dabd796fb26da1e52324ae3c794587db24d3020e80ed",
+    "tests-r1.stdout.log": "e2269973f1e3835bc37c5d478ba7c86bc3537a27c286df08393a94baf2e6f53a"
+  }
+}

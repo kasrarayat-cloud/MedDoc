@@ -1,0 +1,17 @@
+{
+  "base_commit": "3d612a4f51f5b8ee5803928b7bd7b8fca2236da2",
+  "files": {
+    "rebuild/core/tests/test_stripe_credentials.py": "af08b1664326e303c6597070aacac0fc117d0070b6e5ec4dc55cdf1d735e5574",
+    "rebuild/core/tests/test_isolation_matrix.py": "4019533641282a4d7231cf72d2e8681082de6944fc6d87b09a95d4c0fef5da3f",
+    "rebuild/core/context.py": "1fb355ed2a558b2b34fbaa7667e6711ae3eb2d8dc7f59b824ce23d558990e52e",
+    "rebuild/core/destination_roles.py": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418",
+    "rebuild/core/middleware.py": "35f987f92bba9d5ddb56c46e137f971617677b882fd50997138b4b994f5bd965",
+    "rebuild/core/views.py": "409e2ab5a634208a6a8eabf2306514b0c073d106228de873020fba97f5e3d7c8",
+    "rebuild/quillmd/urls.py": "33d0c0e0958613120fbf8d2a0ba2957ca82bb3550acf5762ae2d81f642a4c6b9",
+    "rebuild/quillmd/urls_doctor.py": "5ca4d166286298e6f90ef922ab1c7f69abeee8d218b365676207386dd78e6e94",
+    "rebuild/quillmd/urls_doctor_role_suggestions.py": "4a27dc24e1cd7c2ba76221d319ceaf638ec60383adc84c47f02e47b8794f3f63",
+    "rebuild/core/soap_views.py": "56c1158002e99e5dd67899f89e32e40c9b95b400c249788f209c484e0d94c012"
+  },
+  "only_test_files_modified": true,
+  "provider_requests": 0
+}

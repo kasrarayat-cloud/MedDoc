@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/new2c-saved-export-refutation-20261004/refute.py", line 36, in <module>
+    assert not positive['frozen_export_verification']['workflow_success']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

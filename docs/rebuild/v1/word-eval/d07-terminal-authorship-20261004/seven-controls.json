@@ -1,0 +1,18 @@
+{
+  "tests": 7,
+  "failures": 0,
+  "errors": 0,
+  "success": true,
+  "elapsed": 13.259801040003367,
+  "source_hashes": {
+    "rebuild/documents/word_v3.py": "92e856ecd22b3656d965cd8a93f2652121f150b93c6bfbfc702395647a900f44",
+    "rebuild/documents/test_source_coverage.py": "8cd69cf66c5f3cc57eb7291fa6668d954481f0b9359294ab38cf6a590fb23bd6"
+  },
+  "source_unchanged": true,
+  "fill_attempts": 54,
+  "refused": 19,
+  "exports": 35,
+  "provider_calls": 0,
+  "db_calls": 0,
+  "render_calls": 0
+}

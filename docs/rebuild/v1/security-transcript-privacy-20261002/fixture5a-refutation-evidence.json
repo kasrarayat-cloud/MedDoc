@@ -1,0 +1,60 @@
+{
+  "claim_reviewed": "Fixture branch only; fullunits/signingunknownholds/simulatedzero/livepathunchanged",
+  "result": "NOTHING FOUND in scoped claims",
+  "root_head": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+  "first_instrument_exit": 1,
+  "corrected_instrument_exit": 0,
+  "provider_requests": 0,
+  "database_connections": 0,
+  "cases": 13,
+  "additional_controls": [
+    "Truncatedofferedunits refused byvalidator",
+    "Multipartfullcontextschema",
+    "LivegenerateASTidentity excludingonlychangedfixturebranch"
+  ],
+  "files": [
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_fixture_5a.py",
+      "retained_file": "fixture5a-refute_fixture_5a.py",
+      "sha256": "cd3a7d012b5bfb856eb5d20d1e8dbf37151578d0c36cfd9dde66020d39c1b0fc",
+      "bytes": 6343
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-fixture-5a.log",
+      "retained_file": "fixture5a-refute-fixture-5a.log",
+      "sha256": "c706b0b6c1d8570606188f16c2ba74b738cd0e6bdc239100dd3adea5066e0e30",
+      "bytes": 383
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_fixture_5a_2.py",
+      "retained_file": "fixture5a-refute_fixture_5a_2.py",
+      "sha256": "4d3bc327154a6819578b236cb249f7c5ea4508f4f373da7f3fcf604a39750669",
+      "bytes": 6267
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-fixture-5a-2.log",
+      "retained_file": "fixture5a-refute-fixture-5a-2.log",
+      "sha256": "f9dac59bda59c4b55729bf1ca138c5aa351516191bcbd8973b299080102fe5d7",
+      "bytes": 19153
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-fixture-5a-2.json",
+      "retained_file": "fixture5a-refute-fixture-5a-2.json",
+      "sha256": "320c9513f2dd541001f5c368ede28244d62ddbe9fbec5859d3a49fb4162e291c",
+      "bytes": 19152
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/fixture-refutation-5a-source/manifest.json",
+      "retained_file": "fixture5a-fixture-refutation-5a-source--manifest.json",
+      "sha256": "40f9257d46c1353c09c42dccf93c85d677db06fc821a2c1bc8cffb27ce66e05b",
+      "bytes": 514
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/fixture-refutation-5a-source/relations_fixture.py",
+      "retained_file": "fixture5a-fixture-refutation-5a-source--relations_fixture.py",
+      "sha256": "e956b562b5a48aa0132aaa995980047fc30a033a74f7b211ef763d01a3eaa92f",
+      "bytes": 2949
+    }
+  ],
+  "full_source_witness": "Protected fixture-refutation-5a-source retains all4files; rootcommit binds exact source"
+}

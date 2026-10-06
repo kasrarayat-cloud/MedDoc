@@ -248,8 +248,14 @@ class ProtectedAndPolicy(unittest.TestCase):
         roles = [r for r in w.destination_roles(blob, engine)['roles'] if r['source'] == 'attestation']
         self.assertEqual([r['place'] for r in roles], [BODY + 'b/tbl[0]/tr[0]/tc[1]'])
         self.assertEqual(w.destination_roles(blob, engine)['violations'], {})
-        relabelled = {**{k: v for k, v in engine[0].items() if k != 'answer_policy'}, 'label': 'Comments'}
-        self.assertEqual(w.destination_roles(blob, [relabelled])['violations'][relabelled['key']]['class'], 'policy')
+        self.assertTrue(engine[0]['write_protected'])
+        relabelled = {**{k: v for k, v in engine[0].items()
+                        if k not in ('answer_policy', 'write_protected', 'review_reason')}, 'label': 'Comments'}
+        # The retained original now also binds an explicit human action. A
+        # protection marker means the unchanged mapping cannot write at all;
+        # stripping it still cannot convert that place to ordinary comments.
+        self.assertEqual(w.destination_roles(blob, [relabelled])['violations'][relabelled['key']]['class'], 'protected')
+        self.assertEqual(refusal(blob, [relabelled], relabelled['key'], 'Yes'), 'protected_signing_area')
 
     def test_a_locked_content_control_is_protected(self):
         doc = Document(); p = doc.add_paragraph('Hospital number: ')
@@ -656,15 +662,28 @@ class ReadingsReleased(unittest.TestCase):
         self.assertEqual(located(blob, BODY + 'b/tbl[0]/tr[0]/tc[0]', 'long_text', 'Capacity')[1], 'destination_role')
 
     def test_r2_04_a_clinical_reading_the_kind_rule_types_initials_is_not_a_role(self):
-        """R2-04: 'Initial GCS: ____' is still an initials field (never generated), but it is no longer a role, so the
-        clinician can remove it and add the text answer the form asks for."""
+        """Retain the seven historical controls with current physical-source behavior.
+
+        Initial clinical readings now import as ordinary text automatically.
+        The unresolved consent action remains held; it cannot be manually
+        re-added as a clinical answer. Historical expectations are retained in
+        the continuation's pre-resume replay, rather than weakening the source.
+        """
         for label in ('Initial GCS', 'Initial assessment', 'Initial dose', 'Initial ECG', 'Initial lactate',
                       'Consent form signed', 'Time signed'):
             with self.subTest(label=label):
                 blob = line_form(label + ': ______')
                 engine = w.inspect(blob)['fields']
-                self.assertIn(engine[0]['kind'], ('signature', 'initials'))
                 self.assertEqual([r for r in w.destination_roles(blob)['roles'] if r['class'] == 'signing'], [])
+                if label == 'Consent form signed':
+                    self.assertTrue(engine[0].get('write_protected'))
+                    self.assertEqual(located(blob, BODY + 'b/p[1]', label=label)[1], 'destination_role')
+                    self.assertEqual(refusal(blob, engine, engine[0]['key'], 'Yes'), 'protected_signing_area')
+                    continue
+                if label.startswith('Initial '):
+                    self.assertEqual(engine[0]['kind'], 'text')
+                    self.assertFalse(engine[0].get('write_protected'))
+                    self.assertIn('SYNVAL', xml(w.fill(blob, engine, {engine[0]['key']: 'SYNVAL'})))
                 added, code = located(blob, BODY + 'b/p[1]', label=label)
                 self.assertIsNone(code)
                 self.assertIn('SYNVAL', xml(w.fill(blob, engine[1:] + [added], {added['key']: 'SYNVAL'})))
@@ -826,3 +845,210 @@ class RepairLogColumns(unittest.TestCase):
                 out = xml(w.fill(blob, engine, {rows['key']: [row]}))
                 for value in row:
                     self.assertIn(value, out)
+
+
+class ExportedWritingCoordinates(unittest.TestCase):
+    """Coverage consumers have the original's coordinates, not its XML index.
+
+    Inline native boxes and an unrelated write-in share a paragraph. A source-
+    proven extent permits the disjoint exclusion without granting a whole
+    paragraph, a table, or an unknown control permission to receive an answer.
+    """
+
+    def form(self, native, container='body', label='Symptoms'):
+        from .test_word_v3 import _sdt, ff_field
+        doc = Document()
+        if container == 'table':
+            p = doc.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0]
+        elif container == 'header':
+            p = doc.sections[0].header.paragraphs[0]
+        else:
+            p = doc.add_paragraph()
+        p.add_run(label + ': ')
+        for number, option in enumerate(('Yes', 'No')):
+            if native == 'sdt': p._p.append(_sdt('checkbox'))
+            else: ff_field(p, 'checkbox', name='Box' + str(number))
+            p.add_run(' ' + option + ' ')
+        p.add_run('Other: ______')
+        raw = data(doc)
+        index = w.SlotIndex(w.open_package(raw))
+        controls = [slot for slot in index.slots if slot.kind == native]
+        paragraph = controls[0].parent
+        field = {'key': 'native', 'kind': 'choice', 'label': label,
+                 'locator': {'part': paragraph.part, 'slot': paragraph.path,
+                             'target': {'type': 'checkboxes', 'boxes': [
+                                 {'kind': native, 'part': slot.part, 'slot': slot.path} for slot in controls]}}}
+        return raw, index, field
+
+    def empty_reader(self):
+        from types import SimpleNamespace
+        return w._PlaceReader(SimpleNamespace(by_id={}))
+
+    def test_disjoint_write_in_is_proven_in_each_original_container(self):
+        for native in ('sdt', 'ff'):
+            for container in ('body', 'table', 'header'):
+                with self.subTest(native=native, container=container):
+                    raw, index, field = self.form(native, container)
+                    p = next(slot for slot in index.slots if slot.kind == native).parent
+                    text = w.paragraph_text(p.el)[0]
+                    start = text.index('______')
+                    excluded = {'place': p.id, 'start': start, 'end': start + 6}
+                    original = w._PlaceReader(index)
+                    raw_places = original.of(field)
+                    # Retain the original false refusal as the negative instrument control.
+                    self.assertTrue(any(self.empty_reader().touches(place, excluded) for place in raw_places))
+                    proven = w.writing_places(raw, [field])['native']
+                    expected = [(p.id, *original.inline(p.id, place[0])) for place in raw_places]
+                    self.assertEqual(proven, expected)
+                    self.assertFalse(any(self.empty_reader().touches(place, excluded) for place in proven))
+
+    def test_overlapping_control_and_whole_parent_exclusions_still_refuse(self):
+        for native in ('sdt', 'ff'):
+            raw, index, field = self.form(native, 'table')
+            places = w.writing_places(raw, [field])['native']
+            p = next(slot for slot in index.slots if slot.kind == native).parent
+            regions = [{'place': p.id, 'start': places[0][1], 'end': places[0][2]},
+                       {'place': p.id, 'start': None, 'end': None},
+                       {'place': p.parent.id, 'start': None, 'end': None},
+                       {'place': p.parent.parent.id, 'start': None, 'end': None}]
+            for region in regions:
+                with self.subTest(native=native, region=region):
+                    self.assertTrue(any(self.empty_reader().touches(place, region) for place in places))
+
+    def test_unknown_and_block_native_controls_keep_whole_slot_fallback(self):
+        from .test_word_v3 import _sdt
+        doc = Document()
+        inner = OxmlElement('w:p')
+        inner.append(OxmlElement('w:r'))
+        doc.element.body.insert(0, _sdt('rich', nested=inner))
+        raw = data(doc)
+        index = w.SlotIndex(w.open_package(raw))
+        control = next(slot for slot in index.slots if slot.kind == 'sdt')
+        paths = (control.path, 'b/p[50]/sdt[0]')
+        for path in paths:
+            field = {'key': 'native', 'locator': {'part': 'word/document.xml', 'slot': path,
+                     'target': {'type': 'sdt'}}}
+            self.assertEqual(w.writing_places(raw, [field])['native'], [(BODY + path, None, None)])
+        zero = self.form('sdt')[0]
+        # A fabricated control offset is never consumed from the mapping.
+        field = {'key': 'forged', 'locator': {'part': 'word/document.xml', 'slot': 'b/p[90]/sdt[0]',
+                 'target': {'type': 'sdt', 'start': 0, 'end': 0}}}
+        self.assertEqual(w.writing_places(zero, [field])['forged'], [(BODY + 'b/p[90]/sdt[0]', None, None)])
+
+    def test_same_process_different_originals_recomputes_native_offsets(self):
+        results = []
+        for label in ('Symptoms', 'A longer ordinary clinical question', 'Symptoms'):
+            raw, index, field = self.form('sdt', label=label)
+            before = raw
+            results.append(w.writing_places(raw, [field])['native'])
+            self.assertEqual(raw, before)
+            p = next(slot for slot in index.slots if slot.kind == 'sdt').parent
+            self.assertEqual(results[-1][0], (p.id, len(label) + 2, len(label) + 3))
+        self.assertEqual(results[0], results[2])
+        self.assertNotEqual(results[0], results[1])
+
+    def test_coordinate_read_has_no_effect_on_export_bytes_or_physical_roles(self):
+        from .test_word_v3 import _sdt, ff_field
+        for native in ('sdt', 'ff'):
+            for label, source_act in (('Symptoms', ''), ('Witness name',
+                    'I certify that I witnessed the patient sign this consent form.')):
+                with self.subTest(native=native, label=label):
+                    doc = Document()
+                    if source_act: doc.add_paragraph(source_act)
+                    p = doc.add_paragraph(label + ': ')
+                    if native == 'sdt': p._p.append(_sdt('checkbox'))
+                    else: ff_field(p, 'checkbox')
+                    raw = data(doc); fields = w.inspect(raw)['fields']
+                    field = next(f for f in fields if f['locator']['target'].get('type') == 'checkboxes')
+                    forged = {**field, 'kind': 'checkbox', 'label': 'Clinical observation'}
+                    forged.pop('write_protected', None)
+                    if source_act:
+                        with self.assertRaises(w.V3Failure): w.fill(raw, [forged], {forged['key']: True})
+                        w.writing_places(raw, [forged])
+                        with self.assertRaises(w.V3Failure): w.fill(raw, [forged], {forged['key']: True})
+                    else:
+                        before = w.fill(raw, fields, {field['key']: True})
+                        w.writing_places(raw, fields)
+                        self.assertEqual(w.fill(raw, fields, {field['key']: True}), before)
+
+
+class ByteStableNoOpBoxes(unittest.TestCase):
+    def form(self, checked=False):
+        doc = Document();doc.add_paragraph('Plan: ______')
+        footer=doc.sections[0].footer.paragraphs[0]
+        footer.add_run('Final page ');footer.add_run('☒' if checked else '☐')
+        original=data(doc)
+        # XML tree equality does not imply raw byte equality: this accepted
+        # source has a BOM and a declaration spelling the serializer changes.
+        source=zipfile.ZipFile(io.BytesIO(original));out=io.BytesIO()
+        with zipfile.ZipFile(out,'w') as rewritten:
+            for info in source.infolist():
+                raw=source.read(info.filename)
+                if info.filename=='word/footer1.xml':raw=b'\xef\xbb\xbf'+raw
+                rewritten.writestr(info,raw)
+        return out.getvalue()
+
+    def fields(self, raw):
+        fields=w.inspect(raw)['fields']
+        return fields, next(field for field in fields if field['kind']=='checkbox'), next(field for field in fields if field['label']=='Plan')
+
+    def test_an_already_correct_footer_box_keeps_every_original_package_entry(self):
+        for state in (False,True):
+            with self.subTest(state=state):
+                raw=self.form(state);fields,box,plan=self.fields(raw)
+                out=w.fill(raw,fields,{box['key']:state})
+                self.assertEqual(out,raw)
+
+    def test_a_body_answer_does_not_reserialize_an_unchanged_footer(self):
+        raw=self.form();fields,box,plan=self.fields(raw)
+        out=w.fill(raw,fields,{box['key']:False,plan['key']:'Complete synthetic plan'})
+        before=zipfile.ZipFile(io.BytesIO(raw));after=zipfile.ZipFile(io.BytesIO(out))
+        self.assertEqual(before.read('word/footer1.xml'),after.read('word/footer1.xml'))
+        self.assertIn('Complete synthetic plan',xml(out))
+        self.assertNotEqual(before.read('word/document.xml'),after.read('word/document.xml'))
+
+    def test_an_intentional_tick_and_untick_still_change_and_read_back_the_actual_box(self):
+        for original,requested in ((False,True),(True,False)):
+            with self.subTest(original=original,requested=requested):
+                raw=self.form(original);fields,box,plan=self.fields(raw)
+                out=w.fill(raw,fields,{box['key']:requested})
+                a=zipfile.ZipFile(io.BytesIO(raw));b=zipfile.ZipFile(io.BytesIO(out))
+                self.assertNotEqual(a.read('word/footer1.xml'),b.read('word/footer1.xml'))
+                self.assertEqual(a.read('word/document.xml'),b.read('word/document.xml'))
+                states=w.option_states(w.SlotIndex(w.open_package(out)),box)
+                self.assertEqual(states,[requested])
+
+    def test_later_text_containing_boxes_does_not_redirect_the_original_box_readback(self):
+        from .test_word_v3 import SourceBoundGlyphWrites
+        raw,fields=SourceBoundGlyphWrites().form()
+        out=w.fill(raw,fields,{'c':['Before','After'],'t':'Ordinary text with ☐ and ☒'})
+        self.assertIn('Ordinary text with',xml(out))
+        p=w.SlotIndex(w.open_package(out)).by_id[BODY+'b/p[0]']
+        self.assertEqual(w.text_of(p.el),'Choices? ☒ Before: Ordinary text with ☐ and ☒ ☒ After')
+
+
+class OriginalArchiveComments(unittest.TestCase):
+    def original(self, comment):
+        raw=ByteStableNoOpBoxes().form()
+        stream=io.BytesIO(raw)
+        with zipfile.ZipFile(stream,'a') as archive:archive.comment=comment
+        return stream.getvalue()
+
+    def test_changed_body_preserves_original_archive_comment_and_untouched_footer(self):
+        for comment in (b'',b'Synthetic archive comment',b'Binary\x00comment\nretained'):
+            with self.subTest(comment=comment):
+                raw=self.original(comment);fields,box,plan=ByteStableNoOpBoxes().fields(raw)
+                out=w.fill(raw,fields,{plan['key']:'Complete synthetic plan',box['key']:False})
+                old=zipfile.ZipFile(io.BytesIO(raw));new=zipfile.ZipFile(io.BytesIO(out))
+                self.assertEqual(new.comment,comment)
+                self.assertEqual(new.read('word/footer1.xml'),old.read('word/footer1.xml'))
+                self.assertIn('Complete synthetic plan',xml(out))
+
+    def test_changed_footer_preserves_archive_comment_and_untouched_body(self):
+        raw=self.original(b'Footer tick with retained archive comment')
+        fields,box,plan=ByteStableNoOpBoxes().fields(raw)
+        out=w.fill(raw,fields,{box['key']:True})
+        old=zipfile.ZipFile(io.BytesIO(raw));new=zipfile.ZipFile(io.BytesIO(out))
+        self.assertEqual(new.comment,old.comment)
+        self.assertEqual(new.read('word/document.xml'),old.read('word/document.xml'))
+        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),box),[True])

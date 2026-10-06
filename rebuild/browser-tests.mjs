@@ -39,6 +39,7 @@ assert(['localhost', '127.0.0.1', '[::1]'].includes(adminBase.hostname), 'Browse
 assert(!adminBase.username && !adminBase.password, 'Do not put credentials in the preview URL.');
 assert.notEqual(adminBase.origin, base.origin, 'The administration surface is a separate server.');
 const checks = [];
+let servedProfile = null;
 let activeCheck = 'Initialize browser dependencies and private credentials';
 let browser;
 
@@ -63,6 +64,24 @@ try {
   const scriptErrors = [];
   page.on('pageerror', () => scriptErrors.push('Client script error'));
   page.setDefaultTimeout(20_000);
+
+  await check('Doctor and administrator health bind the same synthetic release on separate hosts', async () => {
+    const health = {};
+    for (const [surface, origin] of [['doctor', base], ['admin', adminBase]]) {
+      const response = await page.request.get(new URL('/health/', origin).href);
+      assert.equal(response.status(), 200);
+      const value = await response.json();
+      assert.deepEqual(Object.keys(value).sort(), ['data_mode', 'release', 'status', 'surface']);
+      assert.equal(value.status, 'ok');
+      assert.equal(value.data_mode, 'synthetic-only');
+      assert.equal(value.surface, surface);
+      assert.match(value.release, /^[a-f0-9]{40}$/);
+      if (process.env.QUILLMD_RELEASE_SHA) assert.equal(value.release, process.env.QUILLMD_RELEASE_SHA);
+      health[surface] = { origin: origin.origin, ...value };
+    }
+    assert.equal(health.doctor.release, health.admin.release);
+    servedProfile = { health, live_model_qualification: false };
+  });
 
   async function accessibility(name) {
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
@@ -189,6 +208,33 @@ try {
     await accessibility('Administrator overview accessibility');
     await noPageOverflow();
   });
+  await check('Served administrator configuration records the inactive Sonnet 5.5 ordinary-v4 profile', async () => {
+    const response = await page.goto(new URL('/console/services/', adminBase).href);
+    assert.equal(response.status(), 200);
+    const rows = await page.locator('#language-model tbody tr').evaluateAll(nodes =>
+      Object.fromEntries(nodes.map(node => [...node.querySelectorAll('td')].map(cell => cell.innerText.trim()))));
+    assert.match(rows['provider requests'], /^(?:warning\s+)?NONE — QUILLMD_AI_MODE is fixture,/);
+    assert.match(rows.QUILLMD_AI_MODEL, /^claude-sonnet-5-5 \(inactive:/);
+    assert.match(rows['ordinary field contract'], /^ordinary-field-relations-v4 —/);
+    assert(rows['request profile'].includes('INACTIVE — no provider request is sent'));
+    assert.match(rows['request profile'], /"max_output_tokens":\s*20000/);
+    assert.match(rows['request profile'], /"type":\s*"between_tools"/);
+    assert.match(rows['request profile'], /"effort":\s*"medium"/);
+    assert.match(rows.pricing_version, /^configured-v1:[a-f0-9]{64} \(inactive:/);
+    const gates = await page.getByRole('table').filter({ has: page.getByText('Release gates and the surface this page is served from.', { exact: true }) })
+      .locator('tbody tr').evaluateAll(nodes => Object.fromEntries(nodes.map(node =>
+        [...node.querySelectorAll('td')].map(cell => cell.innerText.trim()))));
+    assert.equal(gates.ADMIN_SITE, 'True');
+    assert.equal(gates.SYNTHETIC_ONLY, 'True');
+    assert.equal(gates.STRIPE_LIVE_ENABLED, 'False');
+    assert.equal(gates.Release, servedProfile.health.admin.release);
+    const worker = await page.locator('#worker tbody tr').evaluateAll(nodes =>
+      Object.fromEntries(nodes.map(node => [...node.querySelectorAll('td')].map(cell => cell.innerText.trim()))));
+    const lock = Object.entries(worker).find(([name]) => name.startsWith('single-worker lock (advisory key '));
+    assert(lock && /held by database session [0-9]/.test(lock[1]));
+    servedProfile = { ...servedProfile, language_model: rows, gates, worker };
+    await page.goto(new URL('/console/', adminBase).href);
+  });
   await check('Admin financial drill-down renders explicit fixture costs without clinical notes', async () => {
     const link = page.locator('#jobs a[href^="/console/jobs/"]').first();
     await link.click();
@@ -220,6 +266,6 @@ try {
 } finally {
   await browser?.close();
   await fs.mkdir(artifacts, { recursive: true, mode: 0o700 });
-  await fs.writeFile(path.join(artifacts, 'report.json'), JSON.stringify({ checks }, null, 2), { mode: 0o600 });
+  await fs.writeFile(path.join(artifacts, 'report.json'), JSON.stringify({ checks, served_profile: servedProfile }, null, 2), { mode: 0o600 });
   console.log(`${checks.filter(item => item.passed).length} browser checks passed; ${checks.filter(item => !item.passed).length} failed.`);
 }

@@ -1,0 +1,240 @@
+"""Prepared actual application rehearsal with mocked provider transport only.
+
+Run a sealed literal copy through qa_test_with_artifacts.py after root grants the
+serialized QA slot. This never uses the live -3 ledger or a provider credential.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+import traceback
+
+sys.dont_write_bytecode = True
+os.umask(0o077)
+started = time.monotonic()
+parser = argparse.ArgumentParser()
+parser.add_argument('--execute', action='store_true')
+parser.add_argument('--catalog-absence', action='store_true')
+parser.add_argument('--source', type=Path)
+parser.add_argument('--revision')
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+if not args.execute:
+    print(json.dumps({'status': 'prepared', 'mocked_provider': True, 'provider_requests': 0,
+                      'database_queries': 0, 'live_campaign_started': False}))
+    raise SystemExit(0)
+if (args.source is None or args.output is None or not re.fullmatch('[0-9a-f]{40}', args.revision or '')):
+    parser.error('Execution needs an exact isolated source/revision and a new owned output directory.')
+if args.source.is_symlink() or args.source.parent != Path('/opt/meddoc-pro/.worktrees'):
+    raise ValueError('Only a direct isolated worktree may be rehearsed.')
+source = args.source.resolve(strict=True)
+def identity():
+    return {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip(),
+            'dirty': subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'],
+                                             cwd=source, text=True).strip()}
+before = identity()
+if before != {'head': args.revision, 'dirty': ''} or (source / 'rebuild/.env').exists():
+    raise ValueError('The exact frozen source must be clean and have no environment file.')
+owned = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations')
+if args.output.is_symlink() or not args.output.parent.resolve(strict=True).is_relative_to(owned):
+    raise ValueError('Rehearsal output must be a new task-owned directory.')
+if (os.environ.get('QUILLMD_DB_HOST'), os.environ.get('QUILLMD_DB_PORT'), os.environ.get('QUILLMD_DB_NAME')) != (
+        '127.0.0.1', '55731', 'quillmd_qa_sol_ops_batchrehearsal1004'):
+    raise ValueError('Only the specifically owned synthetic QA database is allowed.')
+if os.environ.get('QUILLMD_DB_USER') != 'quillmd_qa':
+    raise ValueError('The normal protected synthetic QA role is required.')
+if os.environ.get('QUILLMD_DATA_MODE') != 'synthetic' or os.environ.get('QUILLMD_AI_MODE') != 'fixture':
+    raise ValueError('Use the normal fixture-only protected QA launcher.')
+args.output.mkdir(mode=0o700, exist_ok=False)
+out = args.output
+if args.catalog_absence:
+    # The same normal protected launcher supplies this QA password; this
+    # literal never reads a credential file or an installed database.
+    import psycopg
+    names = [os.environ['QUILLMD_DB_NAME'], 'test_' + os.environ['QUILLMD_DB_NAME']]
+    with psycopg.connect(host='127.0.0.1', port='55731', user='quillmd_qa',
+                        password=os.environ['QUILLMD_DB_PASSWORD'], dbname='postgres', connect_timeout=5) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SET statement_timeout = '5s'")
+            cursor.execute('SELECT datname FROM pg_database WHERE datname=ANY(%s)', (names,))
+            present = [row[0] for row in cursor.fetchall()]
+    result = {'databases': names, 'present': present, 'absent': not present,
+              'source_unchanged': identity() == before, 'mocked_provider': True, 'provider_requests': 0}
+    (out / 'catalog-result.json').write_text(json.dumps(result, indent=2))
+    print(json.dumps(result), flush=True)
+    raise SystemExit(0 if not present and result['source_unchanged'] else 1)
+sys.path.insert(0, str(source / 'rebuild'))
+os.environ['DJANGO_SETTINGS_MODULE'] = 'quillmd.settings'
+import django
+django.setup()
+from django.conf import settings
+from django.test import TestCase, override_settings
+from django.test.utils import get_runner
+from unittest.mock import patch
+from decimal import Decimal
+from ops import provider_campaign as pc, standing_qa as standing, standing_qa_batch as batch
+from ops import sonnet5_stages as stages
+from ops.tests import network_guard
+import httpx
+
+if not settings.SYNTHETIC_ONLY:
+    raise ValueError('Synthetic-only enforcement is required.')
+network_guard.start()
+module_name = 'ordinary_batch_application_rehearsal'
+sys.modules[module_name] = sys.modules[__name__]
+flags = {'AI_MODE': 'live', 'AI_PROVIDER': 'anthropic', 'AI_MODEL': 'claude-sonnet-5-5',
+         'AI_INPUT_RATE': '2', 'AI_OUTPUT_RATE': '10', 'AI_CACHED_RATE': '0.20',
+         'AI_THINKING': 'between_tools', 'AI_EFFORT': 'medium', 'AI_INFERENCE_GEO': '',
+         'V3_FIELD_RELATIONS': False, 'V3_FIELD_RELATIONS_SWITCH': False,
+         'V3_GENERATION_BATCHES': False, 'V3_HISTORY_CONTEXT': False, 'WM_NARRATIVE': False,
+         'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_LAYOUT_SOCKET': '',
+         'QUILLMD_MAPPING_ASSISTANCE': False, 'QUILLMD_MAPPING_ASSISTANCE_LIVE': False}
+
+@override_settings(**flags)
+class ActualBatchRehearsal(TestCase):
+    @override_settings(STORAGES=stages.sq.STATIC_STORAGES)
+    @patch.dict(os.environ, stages.sq.PRICE_SETTINGS)
+    def test_actual_upload_two_sdk_children_complete_union_review_and_export(self):
+        from core.models import Department, Membership, Organization, ProviderReceipt, Reservation, Usage, User
+        from core import batch_jobs
+        from django.utils import timezone
+        fixture_root = pc.private_directory(out / 'test-declaration-repository')
+        folder = pc.private_directory(fixture_root / 'docs/foundation/mutations')
+        authority = source / standing.AUTHORITY_RECORD
+        copied_authority = fixture_root / standing.AUTHORITY_RECORD
+        copied_authority.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+        copied_authority.write_bytes(authority.read_bytes())
+        runtime = pc.private_directory(out / 'mocked-application')
+        text = (batch.BASE / 'fixtures/ordinary-batch-declaration-3.prepared.source').read_text()
+        replacements = {
+            'campaign: quillmd-v1-standing-api-testing-20261004-3':
+                'campaign: ordinary-batch-mocked-rehearsal-20261004',
+            'declaration_use: live': 'declaration_use: test',
+            'root: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004-3': 'root: ' + str(runtime),
+            'qa_database: quillmd_qa_standing_20261004_3':
+                'qa_database: quillmd_qa_sol_ops_batchrehearsal1004',
+            'credential_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/anthropic-api-key':
+                'credential_file: ' + str(out / 'never-created-provider-credential'),
+        }
+        for old, new in replacements.items():
+            self.assertEqual(text.count(old), 1)
+            text = text.replace(old, new)
+        text = re.sub(r'^qa_signing_key_file:.*\n', '', text, flags=re.M)
+        declaration_path = folder / 'mocked-ordinary-batch-rehearsal-test.md'
+        declaration_path.write_text(text)
+        for command in [['git', 'init', '-q'], ['git', 'add', 'docs'],
+                        ['git', '-c', 'user.name=Synthetic Rehearsal', '-c', 'user.email=rehearsal@synthetic.invalid',
+                         '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Synthetic test declaration only']]:
+            subprocess.run(command, cwd=fixture_root, check=True, capture_output=True, timeout=20)
+        declaration = standing.declared_standing(declaration_path, repository=fixture_root, uses=('test',))
+        self.assertEqual(declaration.use, 'test')
+        self.assertNotEqual(declaration.campaign, 'quillmd-v1-standing-api-testing-20261004-3')
+        campaign = standing.StandingCampaign(declaration, runtime)
+        campaign.ledger.acquire()
+        self.addCleanup(campaign.ledger.release)
+        # Test prerequisite only. This is never model-access or paid evidence.
+        campaign.ledger.write_stage('model_check', 'passed', {'mocked_test_fixture': True, 'provider_requests': 0})
+        inputs = batch.frozen_inputs()
+        sends = batch.plan_sends(inputs)
+        forms = batch.build_forms(runtime / 'forms', inputs)
+        run = standing.begin_run(campaign, 'ordinary_batch', sends, inputs, 2, {'runner_commit': args.revision})
+        world = stages.seed_account(runtime)
+        worker = batch.BatchRun(campaign, 'ordinary_batch', secret='synthetic-mocked-batch-key-not-real',
+            provenance={'runner_commit': args.revision}, inputs=inputs, forms=forms, world=world,
+            checked={'mocked_provider': True, 'data_mode': 'synthetic', 'synthetic_only': True}, deadline=180)
+        with override_settings(**stages.steps.PATH_FLAGS['field_relations']):
+            priced = batch.price_sends(sends, inputs, runtime / 'prices', declaration, declaration.limits())
+        worker.planned = {key: value['maximum_cost'] for key, value in priced.items()}
+        sdk_bodies = []
+        def mocked_http(transport, request):
+            self.assertEqual((request.method, str(request.url)), ('POST', pc.PROVIDER_URL))
+            body = json.loads(request.content)
+            sdk_bodies.append(body)
+            self.assertLessEqual(len(sdk_bodies), 2)
+            part = worker.batch.parts.get(ordinal=len(sdk_bodies))
+            message = batch_jobs.fixture_response(worker.batch.plan, part)
+            message.update(type='message', role='assistant', stop_sequence=None)
+            message['usage'] = {'input_tokens': 100, 'output_tokens': 50, 'cache_read_input_tokens': 0,
+                                'cache_creation_input_tokens': 0, 'inference_geo': 'global'}
+            return httpx.Response(200, json=message, headers={'request-id': f'mocked-batch-{part.ordinal}'}, request=request)
+        pc.SENT.clear()
+        pc.REQUEST_BOUNDS.update(model=declaration.model, max_tokens=20000)
+        try:
+            with patch.object(httpx.HTTPTransport, 'handle_request', mocked_http), \
+                    patch.dict(os.environ, {'ANTHROPIC_API_KEY': worker.secret}):
+                pc.install_request_capture()
+                pc.install_transport_guard()
+                first, stopped = worker.run_send(sends[0])
+                pc.write_new(out / 'first-child-before-assertions.json', first)
+                self.assertFalse(stopped, first)
+                worker.encounter.refresh_from_db()
+                self.assertEqual(worker.encounter.answers, {})
+                self.assertEqual(list(worker.batch.parts.order_by('ordinal').values_list('job__state', flat=True)),
+                                 ['staged', 'queued'])
+                second, stopped = worker.run_send(sends[1])
+                pc.write_new(out / 'second-child-before-assertions.json', second)
+                # Export is already archived by the actual helper before this assertion.
+                self.assertFalse(stopped, second)
+        finally:
+            pc.CURRENT_ATTEMPT.clear()
+            pc.REQUEST_BOUNDS.clear()
+            pc.uninstall_transport_guard()
+            pc.uninstall_request_capture()
+        worker.batch.refresh_from_db()
+        worker.encounter.refresh_from_db()
+        self.assertEqual(worker.batch.state, 'succeeded')
+        self.assertEqual(worker.encounter.status, 'finalized')
+        self.assertEqual(len(sdk_bodies), 2)
+        self.assertEqual([len(json.loads(body['messages'][0]['content'])['requested_field_ids'])
+                          for body in sdk_bodies], [100, 1])
+        self.assertEqual(ProviderReceipt.objects.filter(job__generation_part__batch=worker.batch).count(), 2)
+        self.assertEqual(Usage.objects.filter(job__generation_part__batch=worker.batch).count(), 2)
+        self.assertFalse(Reservation.objects.filter(job__generation_part__batch=worker.batch, state='held').exists())
+        foreign = User.objects.create_user(username='foreign-batch-rehearsal@synthetic.invalid', password='synthetic-only',
+                                           verified_at=timezone.now())
+        foreign_org = Organization.objects.create(name='SYNTHETIC foreign batch-rehearsal clinic')
+        foreign_department = Department.objects.create(organization=foreign_org, name='SYNTHETIC foreign department')
+        Membership.objects.create(user=foreign, department=foreign_department, role='clinician')
+        from django.test import Client
+        denied = Client()
+        denied.force_login(foreign)
+        self.assertEqual(denied.get(f'/encounters/{worker.encounter.pk}/export/').status_code, 404)
+        campaign.runs.close(campaign.ledger, run['run'], {'closed_as': 'mocked_rehearsal', 'sends': worker.sends,
+                            'not_paid_qualification': True, 'provider_requests': 0})
+        pc.write_new(out / 'persisted-result.json', {'mocked_provider': True, 'real_provider_requests': 0,
+            'live_campaign_started': False, 'model_access_verified': False, 'source_revision': args.revision,
+            'original_sha256': worker.template.sha256, 'version': str(worker.version.pk),
+            'mapping_coverage': worker.version.import_manifest['coverage'], 'mapping_corrections': 0,
+            'sdk_bodies': len(sdk_bodies), 'child_sizes': [100, 1], 'complete_union': True,
+            'first_partial_adoption': False, 'batch': str(worker.batch.pk), 'encounter': str(worker.encounter.pk),
+            'status': worker.encounter.status, 'export_sha256': worker.encounter.export_sha256,
+            'supported_first_pass': second['supported'], 'missing_first_pass': second['missing'],
+            'foreign_export_status': 404, 'normal_attempts_in_test_ledger': len(campaign.rows())})
+
+try:
+    failures = get_runner(settings)(verbosity=2, interactive=False).run_tests([module_name + '.ActualBatchRehearsal'])
+    if identity() != before:
+        raise ValueError('Source changed during the rehearsal.')
+    (out / 'process-result.json').write_text(json.dumps({'test_failures': failures, 'mocked_provider': True,
+        'provider_requests': 0, 'live_campaign_started': False, 'source_unchanged': True,
+        'elapsed_seconds': time.monotonic() - started,
+        'harness_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}, indent=2))
+    raise SystemExit(1 if failures else 0)
+except Exception:
+    # Preserve the original exception under the protected owned directory. The
+    # summary seals it without displaying clinical source or credentials.
+    failure = traceback.format_exc().encode()
+    (out / 'process-exception.txt').write_bytes(failure)
+    (out / 'process-result.json').write_text(json.dumps({'test_failures': None, 'mocked_provider': True,
+        'provider_requests': 0, 'live_campaign_started': False,
+        'elapsed_seconds': time.monotonic() - started, 'source_unchanged': identity() == before,
+        'original_exception_file': 'process-exception.txt',
+        'original_exception_sha256': hashlib.sha256(failure).hexdigest()}, indent=2))
+    raise
+finally:
+    network_guard.stop()

@@ -1,0 +1,327 @@
+{
+  "parent_commit": "a161bd75d51aa1b10ced06001ee2974941dc4ed5",
+  "source_hashes": {
+    "rebuild/documents/word_v3.py": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+    "rebuild/documents/test_source_coverage.py": "f9ff10027bd79b15aa7d78cd149f20bfc28c1e43ff02fb22a2be36aac22cd6f5"
+  },
+  "root_original_wrong_exports": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-scalar-signing-a161-concrete/result.json",
+  "runs": [
+    {
+      "id": "scalar-temporal-first-six-20261004",
+      "actual_exit": 0,
+      "result_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/scalar-temporal-first-six-20261004/result.json",
+      "result": {
+        "source_before": {
+          "rebuild/documents/word_v3.py": "34446176aec9bfa5cc528e0f6859c353ebc3995d8c974da360c741f4ea6f8c6d",
+          "rebuild/documents/test_source_coverage.py": "0740dad1b0d83cda7cf09f6567d1f6890eb3b8327ede9a140797c9c88cc7c87f"
+        },
+        "source_unchanged": true,
+        "controls": 6,
+        "wrong": 0,
+        "expected": "writable",
+        "rows": [
+          {
+            "id": "glyph-unknown",
+            "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+            "refused": false,
+            "export_sha256": "5e94c59b13d3cd5dd78c029592d2be461afb0baa721cee874d636960334533b3",
+            "identical_to_retained_wrong_export": true,
+            "destination_text": [
+              "Date Alex Reed should sign:",
+              "\u2612 Or Unknown"
+            ],
+            "correct": true
+          },
+          {
+            "id": "glyph-signing-date",
+            "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+            "refused": false,
+            "export_sha256": "5f847ee72a018496fe32a9dfd456ad110cc3996777306ded080f3faa74ff0abb",
+            "identical_to_retained_wrong_export": true,
+            "destination_text": [
+              "Date Alex Reed should sign: 04-Oct-2026",
+              "\u2610 Or Unknown"
+            ],
+            "correct": true
+          },
+          {
+            "id": "ff-unknown",
+            "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+            "refused": false,
+            "export_sha256": "0b52b1684f60b0f629aa556f84152ac3800fe028771553aab9cf76aee9bb1344",
+            "identical_to_retained_wrong_export": true,
+            "destination_text": [
+              "Date Alex Reed should sign:",
+              " Or Unknown"
+            ],
+            "correct": true
+          },
+          {
+            "id": "ff-signing-date",
+            "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+            "refused": false,
+            "export_sha256": "c955fd407b39b079315efd3c2fb4d3a2f250b9c32b584fc3aa5944970000cee4",
+            "identical_to_retained_wrong_export": true,
+            "destination_text": [
+              "Date Alex Reed should sign: 04-Oct-2026",
+              " Or Unknown"
+            ],
+            "correct": true
+          },
+          {
+            "id": "sdt-unknown",
+            "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+            "refused": false,
+            "export_sha256": "35f1bc4e424d07cea6e999d38fc01bc5cc9401d0cb0c85c0723ef2c105e5aaf3",
+            "identical_to_retained_wrong_export": true,
+            "destination_text": [
+              "Date Alex Reed should sign:",
+              " Or Unknown"
+            ],
+            "correct": true
+          },
+          {
+            "id": "sdt-signing-date",
+            "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+            "refused": false,
+            "export_sha256": "b07e9067caed6781a77d41878bd85a6a1001fc07b868d6d42725ec585961934d",
+            "identical_to_retained_wrong_export": true,
+            "destination_text": [
+              "Date Alex Reed should sign: 04-Oct-2026",
+              " Or Unknown"
+            ],
+            "correct": true
+          }
+        ],
+        "elapsed_seconds": 2.5920078509952873,
+        "provider_calls": 0,
+        "database_calls": 0,
+        "renderer_calls": 0
+      }
+    },
+    {
+      "id": "scalar-temporal-corrective-first-20261004",
+      "actual_exit": 1,
+      "result_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/scalar-temporal-corrective-first-20261004/result.json",
+      "result": {
+        "tests": 10,
+        "failures": 0,
+        "errors": 15,
+        "success": false,
+        "elapsed": 39.091924375003146,
+        "source_hashes": {
+          "rebuild/documents/word_v3.py": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+          "rebuild/documents/test_source_coverage.py": "77b1bf35e537f37fccbd5d65493d95bf825df19cc645066f847e9365e8fb0627"
+        },
+        "source_unchanged": true,
+        "fill_attempts": 116,
+        "refused": 57,
+        "exports": 59,
+        "provider_calls": 0,
+        "db_calls": 0,
+        "render_calls": 0
+      }
+    },
+    {
+      "id": "scalar-temporal-corrective-fixed-20261004",
+      "actual_exit": 0,
+      "result_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/scalar-temporal-corrective-fixed-20261004/result.json",
+      "result": {
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "success": true,
+        "elapsed": 47.53897824299929,
+        "source_hashes": {
+          "rebuild/documents/word_v3.py": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+          "rebuild/documents/test_source_coverage.py": "f9ff10027bd79b15aa7d78cd149f20bfc28c1e43ff02fb22a2be36aac22cd6f5"
+        },
+        "source_unchanged": true,
+        "fill_attempts": 146,
+        "refused": 57,
+        "exports": 89,
+        "provider_calls": 0,
+        "db_calls": 0,
+        "render_calls": 0
+      }
+    },
+    {
+      "id": "scalar-temporal-affected-20261004",
+      "actual_exit": 0,
+      "result_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/scalar-temporal-affected-20261004/result.json",
+      "result": {
+        "tests": 27,
+        "failures": 0,
+        "errors": 0,
+        "success": true,
+        "elapsed": 69.87253996299842,
+        "source_hashes": {
+          "rebuild/documents/word_v3.py": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+          "rebuild/documents/test_source_coverage.py": "f9ff10027bd79b15aa7d78cd149f20bfc28c1e43ff02fb22a2be36aac22cd6f5"
+        },
+        "source_unchanged": true,
+        "fill_attempts": 232,
+        "refused": 98,
+        "exports": 134,
+        "provider_calls": 0,
+        "db_calls": 0,
+        "render_calls": 0
+      }
+    },
+    {
+      "id": "scalar-temporal-fixed-six-20261004",
+      "actual_exit": 0,
+      "result_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/scalar-temporal-fixed-six-20261004/result.json",
+      "result": {
+        "source_before": {
+          "rebuild/documents/word_v3.py": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+          "rebuild/documents/test_source_coverage.py": "f9ff10027bd79b15aa7d78cd149f20bfc28c1e43ff02fb22a2be36aac22cd6f5"
+        },
+        "source_unchanged": true,
+        "controls": 6,
+        "wrong": 0,
+        "expected": "refused",
+        "rows": [
+          {
+            "id": "glyph-unknown",
+            "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+            "refused": true,
+            "refusal": "unresolved_source_range",
+            "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+            "correct": true
+          },
+          {
+            "id": "glyph-signing-date",
+            "original_sha256": "2bfea721ac88c00cdbdb0bfd01d0bde82365c4044fcbb5dca14d762b20e22a4a",
+            "refused": true,
+            "refusal": "unresolved_source_range",
+            "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+            "correct": true
+          },
+          {
+            "id": "ff-unknown",
+            "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+            "refused": true,
+            "refusal": "unresolved_source_range",
+            "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+            "correct": true
+          },
+          {
+            "id": "ff-signing-date",
+            "original_sha256": "aae90a7caa0573d3010076d7005a6d903997e8d57574e9b67c867509343ad54e",
+            "refused": true,
+            "refusal": "unresolved_source_range",
+            "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+            "correct": true
+          },
+          {
+            "id": "sdt-unknown",
+            "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+            "refused": true,
+            "refusal": "unresolved_source_range",
+            "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+            "correct": true
+          },
+          {
+            "id": "sdt-signing-date",
+            "original_sha256": "511006b191a33e834fb1ccf80529d1d7dc41b498242d44f6160e2d3a48ff1fb1",
+            "refused": true,
+            "refusal": "unresolved_source_range",
+            "message": "This answer touches an unresolved printed source range. Keep that exact range unchanged and review its mapping before generation or export.",
+            "correct": true
+          }
+        ],
+        "elapsed_seconds": 2.087925270003325,
+        "provider_calls": 0,
+        "database_calls": 0,
+        "renderer_calls": 0
+      }
+    },
+    {
+      "id": "scalar-temporal-fixed-d07-20261004",
+      "actual_exit": 0,
+      "result_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/scalar-temporal-fixed-d07-20261004/result.json",
+      "result": {
+        "source_commit": "a161bd75d51aa1b10ced06001ee2974941dc4ed5",
+        "source_word_sha256": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+        "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+        "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+        "scorer_sha256": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+        "mapping_summary": {
+          "n": 28,
+          "ok": 23,
+          "missed": 5,
+          "wrong": 0,
+          "extras": 4,
+          "strict": false
+        },
+        "new_alternatives": 2,
+        "full_application_route": false,
+        "manual_mapping_corrections": 0,
+        "provider_calls": 0,
+        "db_calls": 0,
+        "render_calls": 0,
+        "attempts": [
+          {
+            "plan": "unknown",
+            "refused": false,
+            "export_sha256": "017c44897babca29e91544c2ff1b3b949fc4b4abaa6c1beb4e9c87387a9e2870",
+            "states": [
+              [
+                true
+              ],
+              [
+                true
+              ]
+            ],
+            "scalar_values": [
+              "",
+              ""
+            ],
+            "untargeted_parts_unchanged": true,
+            "instruction_unchanged": true
+          },
+          {
+            "plan": "dates",
+            "refused": false,
+            "export_sha256": "0271cec8957d45811e6005671d2f5e5b64a3d85a8c1b75b84b2858c62119acd1",
+            "states": [
+              [
+                false
+              ],
+              [
+                false
+              ]
+            ],
+            "scalar_values": [
+              "04-Oct-2026",
+              "05-Oct-2026"
+            ],
+            "untargeted_parts_unchanged": true,
+            "instruction_unchanged": true
+          },
+          {
+            "plan": "conflict",
+            "refused": true,
+            "code": "conflicting_alternative_answers",
+            "message": "The printed Or control and its scalar answer cannot both be filled. Review the answer and explicitly untick the alternative before entering a value."
+          }
+        ],
+        "no_answer_original_bytes": true,
+        "source_unchanged": true
+      }
+    }
+  ],
+  "artifact_seal_sha256": "4d56937612a4db1f7629628373dbb74f961183ec2e3f8eebe482e6a4cd1d917e",
+  "full_application_route": false,
+  "full_acceptance_gate": false,
+  "manual_mapping_corrections": 0,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "word_thresholds_unchanged": {
+    "overall": "54/60",
+    "holdout": "18/20"
+  },
+  "cleanup_bytes": 0
+}

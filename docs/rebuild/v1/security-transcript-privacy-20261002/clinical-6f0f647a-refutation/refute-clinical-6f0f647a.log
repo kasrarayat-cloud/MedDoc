@@ -1,0 +1,50 @@
+{
+  "source_commit": "6f0f647a3d10227fc7ed9a30698c1877a7fff22f",
+  "cases": 28,
+  "elapsed_seconds": 8.69,
+  "unsafe": [
+    "without_same_swelling",
+    "absent_same_swelling",
+    "free_same_swelling",
+    "without_left_pain",
+    "same_polarity_exclusive"
+  ],
+  "unnecessary_holds": [
+    "same_topic_explicit_other"
+  ],
+  "errors": [],
+  "original_replay": [
+    {
+      "patient_context": false,
+      "supported": [],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    },
+    {
+      "patient_context": true,
+      "supported": [
+        "v3_7"
+      ],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    }
+  ]
+}

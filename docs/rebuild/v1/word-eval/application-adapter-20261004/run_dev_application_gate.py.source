@@ -1,0 +1,213 @@
+"""Bounded exact-source DEV original acceptance adapter. Explicit root freeze required.
+No original/field catalogue may reach a provider; no conversions, replacements or manual mappings.
+"""
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+import traceback
+
+BASE=Path(__file__).resolve().parent
+PY=Path('/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python')
+WRAPPER=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/integration/qa_test_with_artifacts.py')
+CORPUS=Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus')
+LEDGER=CORPUS/'custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json'
+LEDGER_SHA='5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7'
+MANIFEST_SHA='3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33'
+THRESHOLDS={'overall_required':54,'overall_denominator':60,'holdout_required':18,'holdout_denominator':20,'family_fraction':0.75}
+HELPERS={'score.py':'d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c',
+ 'final_eval.py':'97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a',
+ 'fill_eval.py':'7c74e1d3a46a0252d0b79169ac7cf0905222e7d741ee8061130bc37a2bf2a848',
+ 'render_eval.py':'265ff7ad137889717a2f93554c8926f93f4cccd76b8c120eeda50bd5bf8f8a76',
+ 'v2/answering.py':'75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4',
+ 'v2/ticked.py':'e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79'}
+
+
+def digest(raw):return hashlib.sha256(raw).hexdigest()
+
+
+def write(path,value):
+ with path.open('x') as output:json.dump(value,output,indent=2,default=str);output.write('\n')
+ path.chmod(0o600)
+
+
+def stop(child):
+ if child is None or child.poll() is not None:return
+ os.killpg(child.pid,signal.SIGTERM)
+ try:child.wait(timeout=10)
+ except subprocess.TimeoutExpired:os.killpg(child.pid,signal.SIGKILL);child.wait(timeout=10)
+
+
+def database_presence(source, name):
+ """Read-only protected-QA catalog proof; credentials never leave this process."""
+ assert name.startswith('quillmd_qa_sol_') and len(name)<50
+ import stat
+ import psycopg
+ sys.path.insert(0,str(source/'rebuild/ops'))
+ from provider_campaign import load_credential
+ credential=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/qa-db/password')
+ info=credential.lstat()
+ assert stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_uid==os.getuid() and stat.S_IMODE(info.st_mode)==0o600
+ for parent in (credential.parent,credential.parent.parent):
+  assert not parent.is_symlink() and stat.S_IMODE(parent.stat().st_mode)==0o700
+ with psycopg.connect(host='127.0.0.1',port=55731,user='quillmd_qa',dbname='postgres',
+   password=load_credential(credential),connect_timeout=5) as connection:
+  with connection.cursor() as cursor:
+   cursor.execute('SET statement_timeout = 5000')
+   cursor.execute('SELECT datname FROM pg_database WHERE datname = ANY(%s)',([name,'test_'+name],))
+   present=[row[0] for row in cursor.fetchall()]
+ return {'verified':True,'requested_database':name,'checked_names':[name,'test_'+name],
+         'present':present,'all_absent':not present,'provider_calls':0}
+
+
+def main():
+ if sys.executable!=str(PY):
+  os.execv(str(PY),[str(PY),'-B',str(Path(__file__).resolve()),*sys.argv[1:]])
+ os.umask(0o077)
+ parser=argparse.ArgumentParser();parser.add_argument('source',type=Path);parser.add_argument('commit')
+ parser.add_argument('--freeze',type=Path,required=True);parser.add_argument('--ids',required=True)
+ args=parser.parse_args();source=args.source.resolve();commit=args.commit
+ assert len(commit)==40 and set(commit)<=set('0123456789abcdef')
+ freeze=json.loads(args.freeze.read_text())
+ assert freeze.get('frozen_for_word_acceptance') is True and freeze.get('source_commit')==commit
+ assert freeze.get('thresholds')==THRESHOLDS and freeze.get('provider_calls')==0
+ assert digest(LEDGER.read_bytes())==LEDGER_SHA
+ manifest_path=source/'docs/rebuild/v1/word-corpus-manifest.json';assert digest(manifest_path.read_bytes())==MANIFEST_SHA
+ manifest=json.loads(manifest_path.read_text());rights=json.loads(LEDGER.read_text())['records']
+ by_id={row['development_id']:row for row in rights}
+ ids=args.ids.split(',');assert len(ids)==len(set(ids)) and 1<=len(ids)<=3
+ assert all(identity in by_id and by_id[identity]['offline_filled_copy_replay_supported'] for identity in ids)
+ families={row['sha256']:row['families_declared'] for row in manifest['sets']['dev']}
+ records=[dict(by_id[identity],families=families[by_id[identity]['sha256']]) for identity in ids]
+ out=BASE/('dev-application-'+commit[:12]+'-'+str(time.time_ns()));out.mkdir(mode=0o700)
+ deadline=1200;started=time.monotonic()
+
+ def proof():
+  assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=source).decode().strip()==commit
+  assert not subprocess.check_output(['git','status','--porcelain'],cwd=source).strip()
+  assert not (source/'rebuild/.env').exists()
+  hashes={}
+  for name in subprocess.check_output(['git','ls-tree','-r','--name-only',commit,'rebuild'],cwd=source).decode().splitlines():
+   if not name.endswith('.py'):continue
+   raw=subprocess.check_output(['git','show',commit+':'+name],cwd=source)
+   assert (source/name).read_bytes()==raw,name
+   hashes[name]=digest(raw)
+  for name,expected in HELPERS.items():
+   assert digest((source/'docs/rebuild/v1/word-eval'/name).read_bytes())==expected,name
+  return hashes
+
+ before=proof();write(out/'source-before.json',before)
+ write(out/'freeze-provenance.json',{'path':str(args.freeze.resolve()),'sha256':digest(args.freeze.read_bytes()),'freeze':freeze})
+ socket_dir=Path('/tmp')/('quillmd-dev-gate-'+str(os.getpid()));socket_dir.mkdir(mode=0o700)
+ socket=socket_dir/'layout.sock';assert len(str(socket).encode())<108
+ preparation={'source_commit':commit,'frozen_for_word_acceptance':True,'thresholds':THRESHOLDS,'provider_calls':0,
+  'set':'dev','records':records,'output':str(out),'layout_socket':str(socket),
+  'rights_ledger':str(LEDGER),'rights_sha256':LEDGER_SHA,'manifest_sha256':MANIFEST_SHA,
+  'source_hashes':before,'database_name':'quillmd_qa_sol_word_dev'+str(os.getpid()),
+  'helpers':HELPERS,'original_profile_scope':'Fixed existing mechanical/GT-choice profiles; no first-generation clinical quality claim',
+  'historical_pdfium_version':'unverified','prospective_pdfium_version':'4.30.0'}
+ database_before=database_presence(source,preparation['database_name'])
+ write(out/'database-before.json',database_before)
+ assert database_before['all_absent'],'Prospective task database already exists; nothing was launched'
+ write(out/'plan.json',preparation)
+ harness_before={name:digest((BASE/name).read_bytes()) for name in ('run_dev_application_gate.py','dev_application_gate.py','fixed_render_checker.py')}
+ preparation['prospective_harness_sha256']=harness_before
+ # Bind the prepared code before any process starts; the plan is already an
+ # immutable output, so retain this additional identity separately.
+ write(out/'prospective-harness-before.json',harness_before)
+ harness=BASE/'dev_application_gate.py';text=harness.read_text();assert text.count('__PLAN__')==1
+ derived=out/'workflow.py';derived.write_text(text.replace('__PLAN__',str(out/'plan.json')));derived.chmod(0o600)
+ write(out/'harness-provenance.json',{'original':str(harness),'sha256':digest(harness.read_bytes()),'derived_sha256':digest(derived.read_bytes()),
+  'render_checker_sha256':digest((BASE/'fixed_render_checker.py').read_bytes()),'automatic_mapping_corrections':0,'all_cases_previously_exposed':True})
+ server=None;child=None;test_exit=None;results={};timed_out=False
+ print('DEV original application gate evidence: '+str(out),flush=True)
+ try:
+  renderer_log=(out/'renderer.log').open('xb')
+  server=subprocess.Popen([str(PY),'-I','-B',str(source/'rebuild/documents/layout_server.py'),'--socket',str(socket),
+     '--client-uid',str(os.getuid()),'--evidence',str(out/'layout-evidence')],cwd=source/'rebuild',
+     env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','TZ':'UTC'},stdout=renderer_log,stderr=subprocess.STDOUT,start_new_session=True)
+  while not socket.exists():
+   assert server.poll() is None and time.monotonic()-started<15
+   time.sleep(0.1)
+  command=['python3','-B',str(WRAPPER),str(source),preparation['database_name'],str(out/'qa'),'manage.py','shell','-c',
+   'import runpy;runpy.run_path('+repr(str(derived))+')']
+  write(out/'command.json',{'command':command,'deadline_seconds':deadline,'layout_pid':server.pid,'layout_socket':str(socket)})
+  with (out/'workflow.log').open('xb') as log:
+   child=subprocess.Popen(command,cwd=source,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+   try:child.wait(timeout=min(900,deadline-(time.monotonic()-started)))
+   except subprocess.TimeoutExpired:timed_out=True;stop(child)
+  test_exit=child.returncode
+  if server.poll() is None:server.send_signal(signal.SIGINT);server.wait(timeout=10)
+  renderer_log.close()
+  sys.path.insert(0,str(source/'rebuild'))
+  from documents import layout_server,layout_source,word_v3
+  for record in records:
+   identity=record['development_id'];file=out/identity/'result.json'
+   if not file.exists():results[identity]={'automatic_success':False,'failures':['Application method did not finish; original remains in denominator']};continue
+   result=json.loads(file.read_text());original=(CORPUS/record['corpus_file']).read_bytes();assert digest(original)==record['sha256']
+   for profile,data in result.get('profiles',{}).items():
+    export=out/identity/(profile+'-export.docx')
+    if not export.exists() or profile=='empty':
+     if profile=='empty':
+      data['passed']=data.get('mechanical_passed',False)
+      data['fixed_protocol_passed']=data.get('fixed_mechanical_passed',False)
+     continue
+    if time.monotonic()-started>deadline-75:
+     data['failures'].append('Global bounded render deadline reached; remains unverified');continue
+    workspace=out/identity/('render-'+profile);workspace.mkdir(mode=0o700)
+    (workspace/'document.docx').write_bytes(original);(workspace/'instrumented.docx').write_bytes(export.read_bytes())
+    try:
+     fonts=sorted(set(layout_source.safety(word_v3.open_package(original))+layout_source.safety(word_v3.open_package(export.read_bytes()))))
+     (workspace/'requested-fonts.txt').write_text('\n'.join(fonts or ['sans-serif'])+'\n')
+     rendered=layout_server.render(workspace)
+     config=workspace/'checker-input.json';write(config,{'fields':json.loads((out/identity/'initial-mapping.json').read_text())['fields'],'answers':data['fixed_answers']})
+     response=subprocess.run([str(PY),'-I','-B',str(BASE/'fixed_render_checker.py'),str(source/'docs/rebuild/v1/word-eval/final_eval.py'),
+      str(rendered/'document.pdf'),str(rendered/'instrumented.pdf'),str(config)],capture_output=True,text=True,timeout=min(90,deadline-(time.monotonic()-started)))
+     (workspace/'checker.stdout').write_text(response.stdout);(workspace/'checker.stderr').write_text(response.stderr)
+     data['render']=json.loads(response.stdout) if response.stdout else {'error':response.stderr[-2000:]}
+     data['render']['exit_code']=response.returncode
+     data['render']['renderer_image']=layout_server.IMAGE
+     data['render']['font_files_sha256']=digest((rendered/'fonts.sha256').read_bytes())
+     data['render']['font_resolution_sha256']=digest((rendered/'font-resolution.txt').read_bytes())
+     data['failures'].extend(data['render'].get('problems',[]))
+     data['fixed_failures'].extend(data['render'].get('problems',[]))
+     data['fixed_protocol_passed']=not data['fixed_failures']
+     data['failures'].extend(data['render'].get('supplemental_problems',[]))
+     if response.returncode and not (data['render'].get('problems') or data['render'].get('supplemental_problems')):data['failures'].append('Independent render checker failed')
+     if response.returncode and not (data['render'].get('problems') or data['render'].get('supplemental_problems')):data['fixed_protocol_passed']=False
+     data['passed']=not data['failures']
+    except Exception as error:
+     data['failures'].append('Bounded renderer refused: '+repr(error));data['render']={'error':repr(error)}
+   result['automatic_success']=bool(result.get('mapping',{}).get('strict')) and not result['failures'] and all(
+       result.get('profiles',{}).get(profile,{}).get('passed') is True for profile in ('empty','ordinary','long'))
+   result['fixed_protocol_success']=bool(result.get('mapping',{}).get('strict')) and not result['failures'] and all(
+       result.get('profiles',{}).get(profile,{}).get('fixed_protocol_passed') is True for profile in ('empty','ordinary','long'))
+   write(out/identity/'adjudication.json',result);results[identity]=result
+ except Exception:
+  write(out/'campaign-error.json',{'traceback':traceback.format_exc()});raise
+ finally:
+  stop(child);stop(server)
+  write(out/'process-teardown.json',{'worker_exit':child.returncode if child else None,'renderer_exit':server.returncode if server else None,
+    'socket_removed':not socket.exists(),'timed_out':timed_out})
+  try:database_after=database_presence(source,preparation['database_name'])
+  except Exception as error:database_after={'verified':False,'error_type':type(error).__name__,'all_absent':False}
+  write(out/'database-after.json',database_after)
+  after=proof();assert before==after;write(out/'source-after.json',after)
+  harness_after={name:digest((BASE/name).read_bytes()) for name in harness_before}
+  write(out/'prospective-harness-after.json',harness_after);assert harness_after==harness_before
+  write(out/'partial-summary.json',{'source_commit':commit,'thresholds':THRESHOLDS,'results':results,'actual_test_exit':test_exit,
+   'elapsed_seconds':round(time.monotonic()-started,3),'all_original_denominators_preserved':True,'provider_calls':0,
+   'new_independence_claim':False,'gate_pass':False,'remaining_originals':'Not evaluated by this small batch; retain original members and prior outcomes',
+   'database_teardown_verified':database_after['all_absent'],
+   'fixed_protocol_successes':sum(value.get('fixed_protocol_success') is True for value in results.values()),
+   'automatic_complete_successes':sum(value.get('automatic_success') is True for value in results.values())})
+ raise SystemExit(0 if test_exit==0 and database_after['all_absent'] and len(results)==len(ids) and all(value.get('automatic_success') for value in results.values()) else 1)
+
+
+if __name__=='__main__':main()

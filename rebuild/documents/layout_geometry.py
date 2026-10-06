@@ -336,7 +336,16 @@ def printed_key(text):
     return ''.join(text.split()).translate(UNPRINTED_KEY).replace('\u2612', '\u2610')
 
 
-def rendered_elsewhere(lines, page, own, sequence):
+def painting_stream(lines):
+    """The complete immutable projection of this call's parsed painting order."""
+    stream = tuple((number, r['order'], char) for number, page_lines in enumerate(lines)
+                   for r in sorted((r for line in page_lines for r in line['records'] if r['type'] == 'glyph'),
+                                   key=lambda r: r['order'])
+                   for char in printed_key(r['text']))
+    return stream, ''.join(char for _, _, char in stream)
+
+
+def _rendered_elsewhere(stream, text, page, own, sequence):
     """Whether the source sequence's printed characters are painted, in order and as one run, anywhere
     other than the matched lines. The renderer paints a place's paragraphs as one run; a place that
     prints the same text but not as whole lines (a neighbour on its baselines, a wrapped paragraph) is
@@ -345,11 +354,6 @@ def rendered_elsewhere(lines, page, own, sequence):
                               for item in segment))
     if not key:
         return True
-    stream = [(number, r['order'], char) for number, page_lines in enumerate(lines)
-              for r in sorted((r for line in page_lines for r in line['records'] if r['type'] == 'glyph'),
-                              key=lambda r: r['order'])
-              for char in printed_key(r['text'])]
-    text = ''.join(char for _, _, char in stream)
     at = text.find(key)
     while at >= 0:
         if not all(number == page and order in own for number, order, _ in stream[at:at + len(key)]):
@@ -358,7 +362,12 @@ def rendered_elsewhere(lines, page, own, sequence):
     return False
 
 
-def measure(lines, candidate):
+def rendered_elsewhere(lines, page, own, sequence):
+    # Standalone callers always compile their own current complete source.
+    return _rendered_elsewhere(*painting_stream(lines), page, own, sequence)
+
+
+def _measure(lines, candidate, source_run_check):
     """Measure one candidate's complete printed sequence; absent, ambiguous or incomplete raises."""
     model = candidate['rendered_source']
     matches = []
@@ -417,7 +426,7 @@ def measure(lines, candidate):
         raise ValueError('The matched lines are not one contiguous rendering of the source sequence')
     # The source count is taken over source characters, some of which never print. A place the
     # renderer paints with the same text is a second place, whatever the source count says.
-    if rendered_elsewhere(lines, page, own, sequence):
+    if source_run_check(page, own, sequence):
         raise ValueError('The printed source sequence is rendered more than once')
     headers, rows = headers[1:], rows[1:]
     if len(headers) != len(candidate['source']['options']) or len(rows) != len(headers) or any(r is None for r in headers+rows):
@@ -443,6 +452,12 @@ def measure(lines, candidate):
     return measurements
 
 
+def measure(lines, candidate):
+    """Public single-candidate reader retains its fresh-source behavior."""
+    return _measure(lines, candidate,
+                    lambda page, own, sequence: rendered_elsewhere(lines, page, own, sequence))
+
+
 def holdable(candidate):
     """Only an optional proposal whose source the export leaves byte-identical and unanswered
     can be held on its own. Everything else keeps the all-candidates refusal."""
@@ -451,10 +466,16 @@ def holdable(candidate):
 
 def containment(pages, candidates):
     lines = [geometry(page) for page in pages]
+    # Geometry is compiled from this invocation's exact PDF pages before any
+    # candidate is measured. Only this closed-over immutable projection is
+    # reused; callers cannot provide a cache or a foreign document's stream.
+    stream, text = painting_stream(lines)
+    def source_run_check(page, own, sequence):
+        return _rendered_elsewhere(stream, text, page, own, sequence)
     measurements, held = [], []
     for candidate in candidates:
         try:
-            found = measure(lines, candidate)
+            found = _measure(lines, candidate, source_run_check)
         except ValueError as error:
             if not holdable(candidate): raise
             held.append({'candidate': candidate['id'], 'reason': str(error)})

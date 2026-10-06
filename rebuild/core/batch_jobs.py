@@ -24,7 +24,9 @@ def pending(encounter):
 
 
 def quote(encounter, config):
-    plan = b.plan_for(encounter, config)
+    from . import transcript_context
+    context=transcript_context.current(encounter) if config.get('ordinary_field_contract') else ''
+    plan = b.plan_for(encounter, config,patient_context=context)
     return {**config, 'batch_quote': {'admission_key': str(uuid.uuid4()), 'plan_sha256': b.digest(plan),
                                     'maximum_charge': plan['maximum_charge']}}, Decimal(plan['maximum_charge'])
 
@@ -74,7 +76,9 @@ def enqueue(encounter, user, config, expected_revision=None):
     if held:
         raise ValidationError(destination_roles.GENERATION_HELD_REFUSAL.format(
             labels=', '.join(v3_mapping.label_of(f) for f in e.template_version.fields if f['key'] in held)))
-    plan = b.plan_for(e, base_config)
+    from . import transcript_context
+    context=transcript_context.current(e) if base_config.get('ordinary_field_contract') else ''
+    plan = b.plan_for(e, base_config,patient_context=context)
     if b.digest(plan) != authorization['plan_sha256'] or plan['maximum_charge'] != authorization['maximum_charge']:
         b.refuse('The complete form or charge changed after the quote.')
     batch = GenerationBatch.objects.create(encounter=e, user=user, admission_key=admission, revision=e.revision,
@@ -134,6 +138,10 @@ def fixture_response(plan, part):
     selected = {p.key:p.quotes for p in picks.fields}
     body = {'fields':[{'key':key,'unit_ids':[u['id'] for u in plan['units'] if u['quote'] in selected[key]],
                       'conflict':False} for key in part.field_ids]}
+    if plan['config'].get('ordinary_field_contract'):
+        from . import relations_fixture
+        body = relations_fixture.body(plan['notes'], plan['fields'], plan['asked'], plan['context_labels'],
+                                     requested_ids=part.field_ids, units=plan['units'])
     if plan['history_targets']:
         # No invented semantic partitions in the deterministic fixture.
         body['history_context'] = [{'key':key,'units':[{'unit_id':u['id'],'relation':'unresolved'}

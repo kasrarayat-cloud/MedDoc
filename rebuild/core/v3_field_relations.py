@@ -46,6 +46,12 @@ INSTRUCTIONS = (
     'one list that states its relation to this field. '
     'No unit is omitted, repeated or implicitly independent. '
     'Every answer and qualifier must be selected in full. Contrary or unresolved context holds the answer. '
+    'For each field, unit_ids must be exactly the union of context.answer and context.qualifier, '
+    'without duplicates and in source order. Never select independent, contrary or unresolved units. '
+    'For example, context.answer [2] and context.qualifier [1] require unit_ids [1,2], not [2]. '
+    'A bare source heading that only repeats this field\'s complete printed label can be independent catalogue '
+    'context. A heading that adds a subject, negation, time, uncertainty or other clinical qualification cannot '
+    'be made independent merely because it is a heading. '
     'Independent means the complete statement cannot change the subject, time, negation, qualification or clinical '
     'meaning of this specific answer; another Assessment is not automatically independent. '
     'Only fields with printed options select option_ids; select only the option IDs bound to this original field '
@@ -279,10 +285,15 @@ def compile_request(notes, catalogue, config, *, context_labels=(), requirements
                'context_labels': context, 'requirements': list(requirements), 'form_constraints': constraints,
                'notes': notes, 'source_units': list(units), 'context_order': [u['id'] for u in units],
                'requested_field_ids': wanted}
+    instructions=INSTRUCTIONS
+    if config.get('patient_default_context'):
+        from . import transcript_context
+        payload['patient_default_context']=transcript_context.payload(notes,config['patient_default_context'])
+        instructions+=transcript_context.INSTRUCTIONS
     # Stable both before and after JSONB serialization; source/list order stays.
     payload = json.loads(json.dumps(payload, sort_keys=True))
     schema = response_schema(requested, units)
-    wire = g.anthropic_request(config['model'], profile, INSTRUCTIONS, payload, schema)
+    wire = g.anthropic_request(config['model'], profile, instructions, payload, schema)
     if wire['output_config']['format']['schema'] != schema:
         raise ValidationError('The closed ordinary answer schema would not reach the provider unchanged; nothing was sent.')
     if len(json.dumps(wire).encode()) > MAX_REQUEST_BYTES:
@@ -324,7 +335,7 @@ def claimed(item, units):
             if u['id'] in selected or relation in ('answer', 'qualifier')]
 
 
-def records(notes, catalogue, context, units, selections, model):
+def records(notes, catalogue, context, units, selections, model, *, patient_context=''):
     """One signed record per field. Structure (every field once, a context per unit, known unit and option IDs, none
     repeated) refuses the WHOLE response; a field whose selection disagrees with its relations (`disagrees`) is
     recorded as returned and held by `read`, never adopted, and no other field changes. `competing_output` carries
@@ -348,6 +359,11 @@ def records(notes, catalogue, context, units, selections, model):
                    'competing_output': {key: claimed(all_selections[key], units) for key in competitors(catalogue, field)
                                         if key in all_selections},
                    'selection': item.model_dump()}
+        if patient_context:
+            from . import transcript_context
+            if not transcript_context.verified(notes,patient_context):
+                raise ValidationError('Reviewed transcript context is no longer valid.')
+            payload['patient_default_context']=patient_context
         result[item.key] = signing.dumps(payload, salt=SALT, compress=True)
     return result
 
@@ -447,6 +463,8 @@ def sole_independent(reading, unit, chosen, label):
         word that may describe the state it denies ('There is no swelling.' beside 'The knee is swollen.') - round 5,
         R1: a general noun, a synonym or another spelling shares no word with it, so only the class tells, fail closed.
     The lines it selected are its answer. Read only for a single-patient release; nothing else is changed by it."""
+    from .ordinary_source_scope import effective, clinical_denial_apart
+    reading = effective(reading, unit, chosen, label)
     from .v3_actors import SOLE_CLINICAL, sole_bears_on
     units, actors = reading['units'], reading['actors']
     mine = actors[unit['id']]['sole']
@@ -494,7 +512,10 @@ def sole_independent(reading, unit, chosen, label):
         # insulin.', 'Chief complaint: diarrhoea.' beside 'She has no diarrhea.') - or, for a clinical or allergy denial,
         # carrying a word that may describe the state it denies ('The knee is swollen.' beside 'There is no swelling.').
         # The model's 'independent' for that line is not believed: nothing in the note shows it apart.
-        if bears and (theirs['classes'] & bears or (denies and theirs['descriptive'] and bears & SOLE_CLINICAL)):
+        distinct_denial = clinical_denial_apart(reading, unit, other, chosen)
+        other_distinct_denial = clinical_denial_apart(reading, other, unit, chosen)
+        if (bears and (theirs['classes'] & bears or (denies and theirs['descriptive'] and bears & SOLE_CLINICAL))
+                and not distinct_denial):
             return False
         # (round 5, R2; refutation round 6, L1:F3) a line that denies, ends, restricts or doubts something holds every
         # answer whose topic class BEARS on its own, in either direction (`v3_actors.sole_bears_on`), not only one
@@ -507,10 +528,12 @@ def sole_independent(reading, unit, chosen, label):
             return False
         if 'class' in theirs['reach'] and (shared_class or mine['classes'] & sole_bears_on(theirs['classes'])
                                            or theirs['classes'] & sole_bears_on(mine['classes'])):
-            return False
+            from .source_scope import distinct_observation_and_assessment
+            if not (other_distinct_denial or distinct_observation_and_assessment(reading, unit, other, label)):
+                return False
         if owner is not None and owner == label:
             return False
-        if shared_class and oid != first and owner is None:
+        if shared_class and oid != first and owner is None and not (distinct_denial or other_distinct_denial):
             return False
         if mine['reach'] and shared_key:
             return False
@@ -529,9 +552,100 @@ def option_view(reading, units, valid=True):
             else u for u in units]
 
 
+def own_heading_reference(reading, field, chosen, related, literal_ids):
+    """An exact bare field heading cannot couple its own proved adjacent answer.
+
+    This discharges only the question-name reference, not a clinical qualifier
+    or source actor. The complete relation must already be valid; declared
+    unselected qualifiers still refuse before this helper can run.
+    """
+    extra=related-chosen
+    if (field.get('kind') not in ('text', 'long_text') or field.get('write_protected')
+            or len(extra)!=1 or not chosen or not chosen<=related
+            or len(reading['named'].get(g.question_key(field['label']),()))!=1):return False
+    heading=next(u for u in reading['units'] if u['id'] in extra)
+    if heading['quote'].casefold()!=field['label'].strip().rstrip(':').casefold()+'.':return False
+    positions=sorted(reading['position'][uid] for uid in chosen)
+    if positions!=list(range(reading['position'][heading['id']]+1,positions[-1]+1)):return False
+    return all((reading['actors'][uid]['kind']=='patient' and not reading['actors'][uid]['other_floor'])
+        or uid in reading.get('confirmed_patient',()) or uid in literal_ids for uid in chosen)
+
+
+def elicited_reference_holds(reading, field, elicited_ids):
+    """A source pointer cannot be independent of the reported assertion.
+
+    Reuse the full-source bearer guard, then retain explicit denial of a
+    pointed record assertion or its creation. Reading/receiving another
+    document is not a retraction of what the patient said.
+    """
+    from . import reviewed_source, v3_syntax, v3_actors as a
+    docs = v3_syntax.docs(u['quote'] for u in reading['units'])
+    labels = v3_syntax.docs([field['label']])
+    if docs is None or labels is None or labels[0] is None or any(doc is None for doc in docs):
+        return True
+    selected = [u for u in reading['units'] if u['id'] in elicited_ids]
+    if reviewed_source.backward_attribution(reading, selected, docs, labels[0]):
+        return True
+    for unit, doc in zip(reading['units'], docs):
+        if unit['id'] in elicited_ids:
+            continue
+        for target in doc:
+            if (target.pos_ != 'NOUN' or target.dep_ not in ('dobj', 'nsubjpass', 'nsubj')
+                    or not (g.V3_RECORD_REFERENCE.fullmatch(target.text) or a._lemma(target) == 'report')
+                    or not any('Dem' in t.morph.get('PronType') or 'Def' in t.morph.get('Definite')
+                               for t in target.children if t.dep_ == 'det')
+                    or any(t.dep_ == 'poss' for t in target.children)):
+                continue
+            action = target.head
+            if target.dep_ == 'nsubj':
+                # An adjectival predicate about this pointed assertion is a
+                # source dependency, irrespective of its adjective's spelling.
+                # Only the already-qualified, complete literal truth atoms
+                # discharge it; unknown/qualified qualities require review.
+                qualities = [t for t in action.children
+                             if t.dep_ in ('acomp', 'attr', 'oprd') and t.pos_ == 'ADJ']
+                if qualities:
+                    negatives = [t for t in action.children if t.dep_ == 'neg']
+                    atom = qualities[0]
+                    allowed = set(target.subtree) | {action, atom} | set(negatives)
+                    positive = ((a._lemma(atom) in ('true', 'accurate') and not negatives)
+                                or (a._lemma(atom) == 'false' and len(negatives) == 1))
+                    closed = (len(qualities) == 1 and a._lemma(action) == 'be'
+                              and action.dep_ == 'ROOT' and 'Fin' in action.morph.get('VerbForm')
+                              and '?' not in doc.text and all(t in allowed or t.is_punct for t in doc))
+                    if not (positive and closed):
+                        return True
+                continue
+            if target.dep_ == 'nsubjpass' and a._lemma(action) == 'make' and a._negates(action):
+                # A passive patient assertion differs from a document's
+                # author. "Not made by the clinician" does not deny what
+                # the patient said. An omitted maker leaves the retraction
+                # attached to the pointed statement itself.
+                agents = [t for prep in action.children if prep.dep_ == 'agent'
+                          for t in prep.children if t.dep_ == 'pobj']
+                if not agents or any(a.this_patient(t) for t in agents):
+                    return True
+                continue
+            # A direct denial of that assertion, or denial of making it.
+            # The closed creation complement cannot borrow a separate read,
+            # request or appointment action merely because it names a report.
+            if a._lemma(action) == 'deny':
+                denial = action
+            elif a._lemma(action) == 'make' and action.dep_ in ('xcomp', 'ccomp') and a._lemma(action.head) == 'deny':
+                denial = action.head
+            elif a._lemma(action) == 'make' and a._negates(action):
+                return True
+            else:
+                continue
+            if not a._negates(denial):
+                return True
+    return False
+
+
 def read(reading, label, evidence, record, *, text=None, field_key=None):
     """One revalidation on generation, review, save and finalization."""
-    empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False, 'syntax_ids': set()}
+    empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False,
+             'syntax_ids': set(), 'elicited_ids': set()}
     if record is None: return empty
     units = reading['units']; refused = {**empty, 'warnings': units or [reading['source']]}
     if not enabled() or not isinstance(record, str) or len(record) > 50000: return refused
@@ -549,8 +663,14 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             break
         if value is None:
             return refused
-        if not isinstance(value, dict) or set(value) != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:
+        if not isinstance(value, dict) or set(value)-{'patient_default_context'} != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:
             return refused
+        if 'patient_default_context' in value:
+            from . import transcript_context
+            proof=transcript_context.verified(reading['source']['quote'],value['patient_default_context'])
+            if not proof:return refused
+            reading=transcript_context.apply(reading,value['patient_default_context'])
+            reading={**reading,'_transcript_review_proof':proof}
         catalogue = reading.get('catalogue', reading['fields'])
         field = next((f for f in catalogue if f['key'] == value['key']), None)
         if (value['contract'] not in READABLE or value['model'] not in g.NATIVE_MODELS or not enabled(value['model'])
@@ -585,6 +705,13 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         if (item.conflict or disagrees(item, units) or any(relation in ('contrary', 'unresolved')
                 or (relation == 'qualifier' and u['id'] not in chosen)
                 for u, relation in zip(units, item.context))): return refused
+        if value['contract'] == CONTRACT:
+            from .ordinary_source_scope import apply
+            reading = apply(reading)
+        scoped_roles = reading.get('_ordinary_scoped_roles', {})
+        scoped_owned = {uid for uid in chosen if scoped_roles.get(uid, {}).get('owner') == g.question_key(label)}
+        if any(uid in scoped_roles and uid not in scoped_owned for uid in chosen): return refused
+        reading = {**reading, 'unresolved_subjects': reading['unresolved_subjects'] - scoped_owned}
         if len(group) > 1:
             contexts = [g.question_key(f.get('context') or '') for f in catalogue if f['key'] in group]
             # Source ordinals distinguish controls, not indistinguishable questions.
@@ -598,10 +725,24 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         # completed-review predicate in every unit; it also establishes its actor.
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
-        literal_ids = complete_ids(field, ordered, reading)
+        # The literal reader's elicited-report proof belongs to this exact
+        # field/read. Capture it before other admission routes extend syntax
+        # IDs; neither caller caches nor another field can supply this proof.
+        literal_reading = {**reading, '_literal_elicited': set()}
+        literal_ids = complete_ids(field, ordered, literal_reading)
+        elicited_ids = {uid for uid in literal_ids
+                        if (g.question_key(label), uid) in literal_reading['_literal_elicited']}
+        if elicited_ids and elicited_reference_holds(reading, field, elicited_ids):
+            return refused
+        from . import reviewed_source
+        reviewed_ids = reviewed_source.complete_ids(reading, field, ordered)
+        literal_ids |= reviewed_ids
+        from .source_scope import resumed_current
+        literal_ids |= {u['id'] for u in ordered if any(resumed_current(reading,u,other) for other in units)}
         def evidenced(u):
             own = reading['parsed'][u['id']]
             return bool(own or reading['patients'].get(u['id']) or policy_patient
+                        or u['id'] in reading.get('confirmed_patient',())
                         or predicate_polarity(field, u) is not None
                         or (destination_temporal_scopes(field) and explicit_patient_report(u['quote']))
                         or u['id'] in reading['syntax_complete'] or u['id'] in reading['actor_relations']['units']
@@ -625,6 +766,7 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         # A single-patient unit read as one complete current clause ('She attends the clinic every week.') is complete
         # without the finite-verb list (`v3_actors._sole_reading` 'current').
         literal_ids = set(literal_ids) | {uid for uid in sole_ids if reading['actors'][uid]['sole']['current']}
+        literal_ids |= chosen & reading.get('confirmed_patient',frozenset())
         values = [reading['parsed'][u['id']][1] if reading['parsed'][u['id']] else u['quote'] for u in ordered]
         answer = '\n'.join(values)
         choices = options(field); selected_options = set(item.option_ids)
@@ -645,10 +787,23 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         elif item.option_ids: return refused
         if text is not None and text != answer: return refused
         related = reading['coupled'].get(g.question_key(label), set())
-        self_reference = bool(chosen and related == chosen and len(group) == 1
+        reviewed = chosen <= reading.get('confirmed_patient',frozenset())
+        # An exact question-name prefix on a confirmed clinical nominal
+        # assertion names this destination, rather than coupling every later
+        # topic in the paragraph. Bare headings/foreign actors never gain this
+        # nominal proof; every model relation and hold remains binding.
+        prefix=field['label'].strip().rstrip(':?').casefold()+' '
+        named_nominal=bool(reviewed and any(u['id'] in reading.get('nominal_patient',())
+            and u['quote'].casefold().startswith(prefix) for u in ordered))
+        headed = own_heading_reference(reading,field,chosen,related,literal_ids)
+        self_reference = bool(headed or reviewed_source.self_reference(reading, field, chosen, reviewed_ids | scoped_owned)
+            or (chosen and related and len(group) == 1
+            and (related == chosen or (reviewed and related <= chosen) or named_nominal)
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
-                    and reading['patients'].get(u['id']) for u in ordered))
-        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference, 'syntax_ids': literal_ids}
+                    and (reading['patients'].get(u['id']) or reviewed) for u in ordered)))
+        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference,
+                'syntax_ids': literal_ids, 'elicited_ids': elicited_ids,
+                'shared_ids': reviewed_ids, 'owned_subject_ids': scoped_owned}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
 
@@ -657,7 +812,9 @@ def generate(notes, fields, config, *, context_labels=(), requirements=()):
     with g.before_the_provider(config.get('mode') == 'live'):
         compiled = compile_request(notes, fields, config, context_labels=context_labels, requirements=requirements)
         if config.get('mode') != 'live':
-            raise ValidationError('Ordinary semantic decisions require a qualified model response; no fixture interpretation is invented.')
+            from . import relations_fixture
+            answers = relations_fixture.result(notes, fields, compiled, config)
+            return answers, Decimal(0), {}, {}, 'synthetic-labelled-relations-fixture', '', True
         from anthropic import Anthropic
         profile = g.job_request_profile(config)
         client = Anthropic(timeout=profile['timeout_seconds'], max_retries=0)
@@ -667,6 +824,7 @@ def generate(notes, fields, config, *, context_labels=(), requirements=()):
     raw = {'anthropic_response': response, 'ordinary_field_contract': CONTRACT,
            'notes': notes, 'fields': compiled['asked'], 'full_catalogue': fields,
            'context_labels': compiled['context'], 'requested_model': config['model']}
+    if config.get('patient_default_context'):raw['patient_default_context']=config['patient_default_context']
     return raw, cost, units, recorded, f"anthropic:{config['model']}", getattr(response, '_request_id', None) or '', False
 
 
@@ -681,7 +839,8 @@ def validated(result):
     notes, catalogue, context = result['notes'], result['full_catalogue'], result['context_labels']
     units = g.source_units(notes, result['fields'], context_labels=context)[0]
     selections = parse(''.join(b.text for b in response.content if b.type == 'text'), result['fields'], units)
-    retained = records(notes, catalogue, context, units, selections, response.model)
+    retained = records(notes, catalogue, context, units, selections, response.model,
+                       patient_context=result.get('patient_default_context',''))
     g.unit_selections(notes, result['fields'], selections, context_labels=context)
     answers = g.validate_selections(notes, result['fields'], selections, context_labels=context,
         evidence_contract=g.TAB_CONTRACT, ordinary_records=retained, catalogue=catalogue)

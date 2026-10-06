@@ -1,0 +1,22 @@
+--- run_d30_archived_word_workflow.py
++++ run_d30_manager_blank_workflow.py
+@@ -19,8 +19,8 @@
+ BASE = Path(__file__).resolve().parent
+ PY = '/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python'
+ WRAPPER = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/integration/qa_test_with_artifacts.py')
+-INNER = BASE / 'development_renderer_d30_archive_v1.py'
+-INNER_SHA = '1142f9d93966e62a1db765adf14f861d8bdb513131f205eca6a0c1e1851cbbd8'
++INNER = BASE / 'development_renderer_d30_manager_blank_v2.py'
++INNER_SHA = 'cab0d227abf9a37ced08b3cf206333519a076ba0ecf4c4d55fecd7257d64b995'
+ PRIOR = BASE / 'development_renderer_numeric_archive_v2.py'
+ PRIOR_SHA = '81e292d47f7e9c92aec9a6a61eef1cb62907dde77337a13234cd45d6e63ae9e5'
+ HISTORICAL = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word/development_renderer_workflow_v2.py')
+@@ -78,7 +78,7 @@
+     started = time.monotonic()
+     out = BASE / ('d30-archived-original-word-' + commit[:12] + '-' + str(time.time_ns()))
+     out.mkdir(mode=0o700)
+-    database_name = 'quillmd_qa_sol_word_d30_' + str(os.getpid())
++    database_name = 'quillmd_qa_sol_word_d30m_' + str(os.getpid())
+     deadline = 1200
+ 
+     def proof():

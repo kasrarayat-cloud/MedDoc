@@ -1,0 +1,52 @@
+{
+  "prior_commit": "f33762cfa2d7f8498fa5e13382496a6dd671969b",
+  "base_commit": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "source_sha256": "31ff3f8ef16375011a9c1832e60c9132cf7f9b5cc2786573106e36fe9d251266",
+  "test_sha256": "2611db5c3c4622771b9f0714f38be9e0d430afc92c2723413a4f5134c5c64b51",
+  "root_original_result": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-layout-f337-finished-refute-20261004-r2/result.json",
+    "sha256": "8f6962e5bf5a99a7715b2bfebc505af7048c281293e3706146219ddbf3c440b3"
+  },
+  "artifact_manifest": {
+    "siblings-r2/result.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/siblings-r2/result.json",
+      "sha256": "7670b4ea65ffe922a1b6636cf69f472e06455954e72f80256162ea374c75eb3e"
+    },
+    "siblings-r2/pure-exit.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/siblings-r2/pure-exit.json",
+      "sha256": "cdc8d9854c7a3a600b67a5e41b5c7cbe2aba60ff2444360d69287e2409aea824"
+    },
+    "siblings-r2/pure.stdout.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/siblings-r2/pure.stdout.log",
+      "sha256": "70871ea2f46b4fd796278c78fe362ac4879280736a9245875bf744c3922e4c74"
+    },
+    "siblings-r2/pure.stderr.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/siblings-r2/pure.stderr.log",
+      "sha256": "a062c0cadc1d6cda3f58e8ebcea1747e4e58f90712d2437d9a8d2e8e843bf136"
+    },
+    "siblings-r2/prior-f337-layout_source.py.source": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/siblings-r2/prior-f337-layout_source.py.source",
+      "sha256": "fd5b322a3e1c8c40e3349375e257eed8a3ce0f3dff5a4dad5ef662b8abcd2928"
+    },
+    "verify-siblings.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/verify-siblings.py",
+      "sha256": "65ce74652aa06c058646cba0686b793983396ca3be8fd761f5abde34e20c696f"
+    }
+  },
+  "actual_exit": {
+    "actual_child_exit": 0,
+    "timed_out": false,
+    "reaped": true,
+    "elapsed_seconds": 2.1232355990068754,
+    "stdout_sha256": "70871ea2f46b4fd796278c78fe362ac4879280736a9245875bf744c3922e4c74",
+    "stderr_sha256": "a062c0cadc1d6cda3f58e8ebcea1747e4e58f90712d2437d9a8d2e8e843bf136"
+  },
+  "methods": 10,
+  "independent_root_controls": 6,
+  "exact_P01_sources": 7,
+  "network_attempts": [],
+  "QA_calls": 0,
+  "renderer_calls": 0,
+  "provider_calls": 0,
+  "scope": "Pure complete parsed XML policy, not renderer execution or external-resource execution allegation."
+}

@@ -1,0 +1,178 @@
+{
+  "status": "original failure preserved; route adaptation prepared, regression pending",
+  "source_commit": "d020dfd6c28926b6ab22349cefe2d9b98619eb1d",
+  "root_comparison_commit": "2157f506ed5482150dffe230b620d8d9352cebdc",
+  "original_method": "core.tests.test_signing_areas.SigningGenerationAdmission.test_http_refuses_before_quote_and_leaves_original_and_mapping_available",
+  "original_result": {
+    "tests": 1,
+    "seconds": 2.955,
+    "exit_status": 1,
+    "database_destroyed": true,
+    "http_status": 400,
+    "jobs": [],
+    "reservations": 0,
+    "usage": 0
+  },
+  "first_error": "This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.",
+  "original_sha256": "a0c0879a0a0d06b71f584e1298bd517337060c9747ec1b9591310afc77a137c9",
+  "contract": "v3",
+  "fields": [
+    {
+      "key": "v3_1",
+      "kind": "text",
+      "label": "Participant ID",
+      "context": "",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/p[0]",
+        "target": {
+          "end": 26,
+          "type": "span",
+          "shape": "blank",
+          "start": 16
+        },
+        "contract": "v3",
+        "fingerprint": "b3c742812cc21a164beeff6d377e912d3906b6c18d1e91959e027cadcc5ce647"
+      }
+    },
+    {
+      "key": "v3_2",
+      "kind": "initials",
+      "label": "Floating initials box 1 (placement unresolved)",
+      "context": "Protected floating initials box: its visual question is unresolved because an anchor can sit in another row. Check each box against the original; QuillMD leaves it unchanged. \u00b7 occurrence 1 of 2 (table row 1: )",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "none",
+          "drawing": 1
+        },
+        "contract": "v3",
+        "fingerprint": "cb78a385cac6fdc7e14dc940cde4d3ee9abc7b00030671ba25d3b10be3b29bc6"
+      },
+      "review_reason": "Protected floating initials box: its visual question is unresolved because an anchor can sit in another row. Check each box against the original; QuillMD leaves it unchanged.",
+      "write_protected": true
+    },
+    {
+      "key": "v3_3",
+      "kind": "initials",
+      "label": "Floating initials box 1 (placement unresolved)",
+      "context": "Protected floating initials box: its visual question is unresolved because an anchor can sit in another row. Check each box against the original; QuillMD leaves it unchanged. \u00b7 occurrence 2 of 2 (table row 2: )",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "none",
+          "drawing": 1
+        },
+        "contract": "v3",
+        "fingerprint": "cb78a385cac6fdc7e14dc940cde4d3ee9abc7b00030671ba25d3b10be3b29bc6"
+      },
+      "review_reason": "Protected floating initials box: its visual question is unresolved because an anchor can sit in another row. Check each box against the original; QuillMD leaves it unchanged.",
+      "write_protected": true
+    },
+    {
+      "key": "v3_4",
+      "kind": "text",
+      "label": "Name of Participant",
+      "context": "Protected signing block: its name, date and signature areas remain unchanged. Complete them by hand after checking the actual signing act; ordinary notes do not authorize them.",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/p[2]",
+        "target": {
+          "end": 3,
+          "type": "span",
+          "shape": "utab",
+          "start": 0
+        },
+        "contract": "v3",
+        "fingerprint": "0840260f9a94ebc7a86634367e8fb455d3b2e9cfc640925fe1131d6e549c5e8e"
+      },
+      "review_reason": "Protected signing block: its name, date and signature areas remain unchanged. Complete them by hand after checking the actual signing act; ordinary notes do not authorize them.",
+      "write_protected": true
+    },
+    {
+      "key": "v3_5",
+      "kind": "date",
+      "label": "Date",
+      "context": "Protected signing block: its name, date and signature areas remain unchanged. Complete them by hand after checking the actual signing act; ordinary notes do not authorize them.",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/p[2]",
+        "target": {
+          "end": 7,
+          "type": "span",
+          "shape": "utab",
+          "start": 4
+        },
+        "contract": "v3",
+        "fingerprint": "0840260f9a94ebc7a86634367e8fb455d3b2e9cfc640925fe1131d6e549c5e8e"
+      },
+      "review_reason": "Protected signing block: its name, date and signature areas remain unchanged. Complete them by hand after checking the actual signing act; ordinary notes do not authorize them.",
+      "write_protected": true
+    },
+    {
+      "key": "v3_6",
+      "kind": "signature",
+      "label": "Signature",
+      "context": "Protected signing block: its name, date and signature areas remain unchanged. Complete them by hand after checking the actual signing act; ordinary notes do not authorize them.",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/p[2]",
+        "target": {
+          "end": 11,
+          "type": "span",
+          "shape": "utab",
+          "start": 8
+        },
+        "contract": "v3",
+        "fingerprint": "0840260f9a94ebc7a86634367e8fb455d3b2e9cfc640925fe1131d6e549c5e8e"
+      },
+      "review_reason": "Protected signing block: its name, date and signature areas remain unchanged. Complete them by hand after checking the actual signing act; ordinary notes do not authorize them.",
+      "write_protected": true
+    }
+  ],
+  "import_manifest": {
+    "engine": "v3",
+    "coverage": {
+      "legacy_unmapped": [],
+      "review_required": true,
+      "block_generation": true,
+      "legacy_omissions": [],
+      "requested_engine": "v3",
+      "automatic_complete": false,
+      "selected_engine_issues": [
+        {
+          "id": "b4c35d65f971fd900972af4ebfda80a5d53c708140d06b15c4843b6bff7fe9f0",
+          "code": "unmapped_answer",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]",
+          "detail": "Blank cells in the floating-initials table are not assigned text answers; check the original for additional areas. Location: word/document.xml#b/tbl[0]"
+        }
+      ]
+    },
+    "strategy": "physical-coverage-v1",
+    "v3_refusal": "",
+    "source_sha256": "a0c0879a0a0d06b71f584e1298bd517337060c9747ec1b9591310afc77a137c9",
+    "engine_version": "word-v3-ec3-v1",
+    "legacy_refusal": "no_fields",
+    "mapping_sha256": "9186f26f946479862f3520b27adec78bcee62c6478b64225d7f2210bd954e2bc",
+    "engine_code_sha256": "580380a732367de0144a9f8fa4c297fc027df99a9910f42b5d2c208b0bc1176d",
+    "initial_mapping_sha256": "9186f26f946479862f3520b27adec78bcee62c6478b64225d7f2210bd954e2bc"
+  },
+  "confirmation": null,
+  "raw_artifacts": [
+    {
+      "path": "v3-confirmation/actual-confirmation.json",
+      "sha256": "c6d9025bb869cd09bbdf056a78d9bd344738c45a399afcbd7189fdfa8d1cdce5"
+    },
+    {
+      "path": "v3-confirmation/original-1588a881-6339-45a8-9620-fba3b4c697f7.docx",
+      "sha256": "a0c0879a0a0d06b71f584e1298bd517337060c9747ec1b9591310afc77a137c9"
+    },
+    {
+      "path": "v3-confirmation.log",
+      "sha256": "406c6d5f230cdd457c16a6a7c931375bfa9db65ef731100ac2247b0ecdaa9156"
+    }
+  ]
+}

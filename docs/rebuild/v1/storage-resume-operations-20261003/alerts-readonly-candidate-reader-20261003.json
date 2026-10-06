@@ -1,0 +1,30 @@
+{
+  "recorded_utc": "2026-10-03T22:02:10.345406+00:00",
+  "reader_revision": "58e11826807fe9d5eb6158eaf96682e833e27277",
+  "state": {
+    "condition": "offsite_policy_expired",
+    "format": 1,
+    "incident_attempt": "28b35bbe9d92aaed5927912d9f824bba",
+    "incident_id": "28b35bbe9d92aaed5927912d9f824bba",
+    "last_attempt_at": "2026-09-23T05:05:02.816725+00:00",
+    "last_check_at": "2026-10-03T21:58:37.565122+00:00",
+    "incident_opened_at": "2026-09-23T05:05:02.816725+00:00",
+    "incident_attempt_condition": "offsite_policy_renewal_due",
+    "incident_attempt_notice": "initial",
+    "incident_attempt_count": 1,
+    "incident_conditions_announced": [
+      "offsite_policy_renewal_due"
+    ],
+    "announced_at": {
+      "warning": "2026-09-23T05:05:02.816725+00:00",
+      "failure": null
+    }
+  },
+  "last_alert": {
+    "outcome": "provider_accepted",
+    "provider_message_id": "01a0cca7-2cee-755e-9e15-c37f84ff45bb",
+    "provider_accepted": true,
+    "delivery_confirmed": false,
+    "inbox_receipt_confirmed": false
+  }
+}

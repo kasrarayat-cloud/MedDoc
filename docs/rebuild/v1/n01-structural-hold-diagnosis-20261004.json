@@ -1,0 +1,22 @@
+{
+  "source_revision": "7a22e3c2660b47b26276fe745f62bf9d3cb5cbb6",
+  "source_dirty": "",
+  "application_repair_applied": false,
+  "proposal_rejected": true,
+  "controls": 10,
+  "second_actual_exit": 1,
+  "seconds": 10.25513788900571,
+  "DB_calls": 0,
+  "provider_calls": 0,
+  "files": {
+    "trace-first.py": "767b763ed4c7708a330fe3916675ad2aa1ec13f61e74d9ab26d2028d544143f1",
+    "trace-first.log": "c4b35eea10055b2f47090129fd1a59b49e0fd7edf7c7db12aee2dcc4a4272925",
+    "trace-first.json": "c40cd706c833439aef11a547ac0ef224bc7f59a958b62a7960b7c6222e683bc2",
+    "counterfactual-first.py": "8477f8ac1b4b1775c6bf6781b1534671a59cf91ade19a686397b01c2da8c68fc",
+    "counterfactual-first.log": "62baad6fad830e997ff6460b3a27fc87e67beb82ffcc4d4db91dbcffa6732b45",
+    "counterfactual-second.py": "f9004c0a6b300fd81d46810644d39bbe344c4ab2e2241b68d4fc1bd6fea84f9a",
+    "counterfactual-second.log": "9d0f9f94df524305e4694c21436b3839ec3f3de44646ea8768255672dcd5360e",
+    "counterfactual-second.json": "e6905817b829e9f7de534604916d3b30623470016a928325c817df4f5bd425fd",
+    "REPORT.md": "6892642b7831b4f411fc74c22c919f4b06b0c6ac376a9f7ace9d0806500faac7"
+  }
+}

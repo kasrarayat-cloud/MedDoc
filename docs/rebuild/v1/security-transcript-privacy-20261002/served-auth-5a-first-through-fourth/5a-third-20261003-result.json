@@ -1,0 +1,971 @@
+{
+  "after_fixture_financial": {
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Job": {
+      "count": 16,
+      "sha256": "b4a2603c5d671edadf464551677b4089150f45373e734940aeb08e723bbca8ee"
+    },
+    "LedgerEntry": {
+      "count": 11,
+      "sha256": "aeb5fb3acebcc322eb517daa8158c17c0a9d5d842917eb91b474883e1de7638f"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Reservation": {
+      "count": 12,
+      "sha256": "f92d37adec4fabf4647834cd23b05fb8aa65f960702836bde22e9e63823f869b"
+    },
+    "Usage": {
+      "count": 4,
+      "sha256": "02caa96ebd7fa083af7682d07453b851bbc7a12e336edd2c496a373f0b32b43f"
+    },
+    "Wallet": {
+      "count": 12,
+      "sha256": "a7b1df80fc8ad85181edc270779b5811edaa49632655458684958345abe07869"
+    }
+  },
+  "at_exit_financial": {
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Job": {
+      "count": 16,
+      "sha256": "b4a2603c5d671edadf464551677b4089150f45373e734940aeb08e723bbca8ee"
+    },
+    "LedgerEntry": {
+      "count": 11,
+      "sha256": "aeb5fb3acebcc322eb517daa8158c17c0a9d5d842917eb91b474883e1de7638f"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Reservation": {
+      "count": 12,
+      "sha256": "f92d37adec4fabf4647834cd23b05fb8aa65f960702836bde22e9e63823f869b"
+    },
+    "Usage": {
+      "count": 4,
+      "sha256": "02caa96ebd7fa083af7682d07453b851bbc7a12e336edd2c496a373f0b32b43f"
+    },
+    "Wallet": {
+      "count": 12,
+      "sha256": "a7b1df80fc8ad85181edc270779b5811edaa49632655458684958345abe07869"
+    }
+  },
+  "before_fixture_financial": {
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Job": {
+      "count": 8,
+      "sha256": "3d664d6ea5e729f1471af604b6c1dc79cedd4d315df13952620a3c0d30b2a42e"
+    },
+    "LedgerEntry": {
+      "count": 8,
+      "sha256": "5a1c6588a48ef2cf014c0fa76b0732aabfc705ffde66395c9831cdf308cd59bd"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Reservation": {
+      "count": 6,
+      "sha256": "48bd160c43faabd6bc28ffe8cc9603750179dfbc690fe615caf92e382c5f2a0e"
+    },
+    "Usage": {
+      "count": 2,
+      "sha256": "01bc9f0db7e9d8eb77003e897f33b9166acd475cd3a8ef43912ce095d5792cdc"
+    },
+    "Wallet": {
+      "count": 11,
+      "sha256": "2301387695962a127918e184a92b5af7072753670008bdd713fa3e1f57c60ff5"
+    }
+  },
+  "credentials_recorded": false,
+  "database": "quillmd_qa_int_sol_5a06295a",
+  "elapsed_seconds": 3.404,
+  "failure_frames": [
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/ops/verify_qa_authorization.py",
+      "function": "main",
+      "line": 394
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/ops/verify_qa_authorization.py",
+      "function": "expect",
+      "line": 120
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-sol-security/rebuild/ops/verify_qa_authorization.py",
+      "function": "require",
+      "line": 36
+    }
+  ],
+  "failure_reason": "unexpected_served_status:nonadmin_alternate_surface_denied",
+  "failure_type": "RuntimeError",
+  "financial_history_deleted": false,
+  "fixture_ids": {
+    "departments": [
+      "812e2346-3b4c-4a76-8268-e30ffcf2ac5a",
+      "e50ec223-2776-49c8-8bdc-45c9555ff837"
+    ],
+    "encounters": [
+      "c0885e8a-ff52-4733-bdee-e85b7035ae69",
+      "521d0121-8b6e-427c-9a94-eae904a19555"
+    ],
+    "file_sha256": "b16dfe0401b5a2b67bdbb4546eaf23209a0398e6106881d33b02ef18a121fbac",
+    "jobs": [
+      "bf44ca2c-6f69-4468-abbf-cf9d7366845d",
+      "0e5f7c2c-d42e-429e-b9ac-9f265ba9c09f",
+      "9954a32c-99d4-45ee-9998-8523e604e7e4",
+      "0ba46960-9907-4078-bc40-cab961279d65",
+      "d06843eb-46d9-4974-a5f7-c2228fb1df3d",
+      "02f1caa3-d3a8-4227-9fa6-20e6d95e954e",
+      "3bc1ee5e-e1b0-43f4-9796-350f4dd619e9",
+      "660c5dac-acfa-4373-a01a-4cb136447bd9"
+    ],
+    "organization": "fd3388df-55ef-462a-a952-8985af7b39ff",
+    "users": [
+      "5de37c42-84c9-45c6-a575-0fe9fcbc3b3c",
+      "42bc58ed-5c23-4006-9628-344e1011bdca",
+      "d4f4d441-6fd9-4035-b157-7e523388e1ae",
+      "94a60b14-cb3b-453d-9105-c7be649b274f",
+      "e27c4089-fa48-481c-ba16-3bf56075c650",
+      "c8458d87-d54b-4ae9-b8b6-5f57c638e1e4"
+    ]
+  },
+  "fixture_scope": "Direct synthetic authorization rows/files; no clinical workflow qualification",
+  "fixture_stage": "foreign:settled",
+  "http_evidence": [
+    {
+      "body_sha256": "19ec214cc4392e1aae3ccd5d2b09209bb548a3aa68dba86a983105c885babd65",
+      "host": "127.0.0.1:9160",
+      "label": "synthetic_health",
+      "location": null,
+      "method": "GET",
+      "path": "/health/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "bb1369b54f667389c4d57b166a6e374b4928049956eb7a2e3404c3a320c5407d",
+      "host": "127.0.0.1:9161",
+      "label": "synthetic_health",
+      "location": null,
+      "method": "GET",
+      "path": "/health/",
+      "port": 9161,
+      "status": 200
+    },
+    {
+      "body_sha256": "026432c3adadac81569a371f5ede076267b6b65286daccc32acb67d6e6ff9363",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    },
+    {
+      "body_sha256": "82a5d66fe31ec20c4385f9ab77afe901a2a23c39ab179bb241fed5c33b190b15",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    },
+    {
+      "body_sha256": "356306e0ceedf8b099d9747fad8a7c076ea7834555467bda4685dadde822f461",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    },
+    {
+      "body_sha256": "d125dded12b66e03fb03c553dc1203bd3b32cb3bee0480fc0dd36483d4c9c6c9",
+      "host": "127.0.0.1:9160",
+      "label": "login_form",
+      "location": null,
+      "method": "GET",
+      "path": "/login/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "login_submit",
+      "location": "/",
+      "method": "POST",
+      "path": "/login/",
+      "port": 9160,
+      "status": 302
+    },
+    {
+      "body_sha256": "acf58f038123f3e6b57a32196f01058542d844ffc5589829720b2e5468fcf96e",
+      "host": "127.0.0.1:9160",
+      "label": "doctor_positive_and_csrf",
+      "location": null,
+      "method": "GET",
+      "path": "/patients/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "ee28e63bc85186f3f021bda8e5a68ee7920d55214eb6ad4e74e88f285a7d2a83",
+      "host": "127.0.0.1:9160",
+      "label": "owner_scoped_billing",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "9a90441cf1cb74cea78c5e024fe108d696bca6d284080ee20dd094476528dc48",
+      "host": "127.0.0.1:9160",
+      "label": "owner_scoped_billing",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/?q=FOREIGN",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "54f5b3e7a53b97535b9f9ad564076b9ee7563fffc7387fbed145ca08d1c6c9d0",
+      "host": "127.0.0.1:9160",
+      "label": "owner_scoped_billing",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/?q=3bc1ee5e-e1b0-43f4-9796-350f4dd619e9",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "6417cab9528fabe827f7f66d7e267a146a399ecadfa8f82b5620b1b76fee1399",
+      "host": "127.0.0.1:9160",
+      "label": "owner_scoped_billing",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/?usage_page=100&ledger_page=100",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "223c48dda08287e16d740f644f1e20e3af816f801a9aeb7406c671dd69438948",
+      "host": "127.0.0.1:9160",
+      "label": "second_owner_positive",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "57a1f7c26b8d23d3fdef9752cd01a74a81ebc0e70c79104c113df459cc9bb9f4",
+      "host": "127.0.0.1:9160",
+      "label": "nonowner_financial_denial",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "5151701266dc9ee7d28b0cbf8949d04b79c37574889bcc11b8de9c7ba3779b79",
+      "host": "127.0.0.1:9160",
+      "label": "owned_department_detail",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/bf44ca2c-6f69-4468-abbf-cf9d7366845d/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_valid_csrf_post_denied",
+      "location": null,
+      "method": "POST",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "672fad838058371740f4cb71423e7118754ee86718c0a1c8a221b1714a644892",
+      "host": "127.0.0.1:9160",
+      "label": "second_owner_detail_positive",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "manager_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/bf44ca2c-6f69-4468-abbf-cf9d7366845d/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "b81e273fa98796666b37178b58ebc6292198ce46d5a2c26d19edc5abb56f8f6d",
+      "host": "127.0.0.1:9160",
+      "label": "owned_department_detail",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/0e5f7c2c-d42e-429e-b9ac-9f265ba9c09f/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_valid_csrf_post_denied",
+      "location": null,
+      "method": "POST",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "d9daf82d7a8624c69865ac6b1e761bedc488c5ada0540259b2829423557c5ba1",
+      "host": "127.0.0.1:9160",
+      "label": "second_owner_detail_positive",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/02f1caa3-d3a8-4227-9fa6-20e6d95e954e/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "manager_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/0e5f7c2c-d42e-429e-b9ac-9f265ba9c09f/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "552565f1bf29b741a226b5bea3afe8caa6a55099c4709cf3c994800dcbf18c27",
+      "host": "127.0.0.1:9160",
+      "label": "owned_department_detail",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/9954a32c-99d4-45ee-9998-8523e604e7e4/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_valid_csrf_post_denied",
+      "location": null,
+      "method": "POST",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "43238eb0b3517562bcccaadc4c0fc51459d8603fbcc7ab5a83f52d5990bbf096",
+      "host": "127.0.0.1:9160",
+      "label": "second_owner_detail_positive",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/3bc1ee5e-e1b0-43f4-9796-350f4dd619e9/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "manager_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/9954a32c-99d4-45ee-9998-8523e604e7e4/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "3a7624cd4894e888f13f8080f01b83046869b9af4646f3fc207774abb2e87be8",
+      "host": "127.0.0.1:9160",
+      "label": "owned_department_detail",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/0ba46960-9907-4078-bc40-cab961279d65/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "localhost:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "app.quillmd.com",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "ADMIN.QUILLMD.COM.:9160",
+      "label": "foreign_detail_denied",
+      "location": null,
+      "method": "HEAD",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_detail_valid_csrf_post_denied",
+      "location": null,
+      "method": "POST",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "fc39f0bc525df602840e504487d90a1af8741fbbb5262bd1c59e1d4e6fc4e62b",
+      "host": "127.0.0.1:9160",
+      "label": "second_owner_detail_positive",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/660c5dac-acfa-4373-a01a-4cb136447bd9/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "manager_detail_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/billing/jobs/0ba46960-9907-4078-bc40-cab961279d65/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "7ba648c31a59fed30aa95bf1c7ea9ab9ef3de81b68ba6ee36e5bfb5ef7c5df7e",
+      "host": "127.0.0.1:9160",
+      "label": "authorized_clinical_or_export",
+      "location": null,
+      "method": "GET",
+      "path": "/api/encounters/c0885e8a-ff52-4733-bdee-e85b7035ae69/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_clinical_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/api/encounters/521d0121-8b6e-427c-9a94-eae904a19555/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "4a0a198654e9d9b92372d881115c18d825b2b05d6f1831864c34e44b985bf0be",
+      "host": "127.0.0.1:9160",
+      "label": "authorized_clinical_or_export",
+      "location": null,
+      "method": "GET",
+      "path": "/encounters/c0885e8a-ff52-4733-bdee-e85b7035ae69/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_clinical_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/encounters/521d0121-8b6e-427c-9a94-eae904a19555/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "b16dfe0401b5a2b67bdbb4546eaf23209a0398e6106881d33b02ef18a121fbac",
+      "host": "127.0.0.1:9160",
+      "label": "authorized_clinical_or_export",
+      "location": null,
+      "method": "GET",
+      "path": "/encounters/c0885e8a-ff52-4733-bdee-e85b7035ae69/export/",
+      "port": 9160,
+      "status": 200
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_clinical_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/encounters/521d0121-8b6e-427c-9a94-eae904a19555/export/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "10560ace6b44331341296ebfbea992ac09b980e6b91bf5863f27884771dbddf3",
+      "host": "127.0.0.1:9160",
+      "label": "foreign_job_result_denied",
+      "location": null,
+      "method": "GET",
+      "path": "/jobs/d06843eb-46d9-4974-a5f7-c2228fb1df3d/result/",
+      "port": 9160,
+      "status": 404
+    },
+    {
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host": "127.0.0.1:9161",
+      "label": "nonadmin_alternate_surface_denied",
+      "location": "/login/?next=/billing/",
+      "method": "GET",
+      "path": "/billing/",
+      "port": 9161,
+      "status": 302
+    }
+  ],
+  "processes": [
+    {
+      "command_sha256": "f8f7f425763f76f193fa7941bb36ab8c0a031e39b5f4158de2773bf4aac3fce6",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160039,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352256",
+      "surface": "doctor"
+    },
+    {
+      "command_sha256": "3f00328e6cee338d519c584e2c4cd1635e49f81e8e8989058e983ee0be0a3fae",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160043,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352279",
+      "surface": "admin"
+    },
+    {
+      "command_sha256": "8d6685b1f4fab45c105c4b02b46b1cadcd31720fac04a08329b8a218ad8c227d",
+      "cwd": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild",
+      "database": "quillmd_qa_int_sol_5a06295a",
+      "pid": 1160044,
+      "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+      "start_ticks": "87352279",
+      "surface": "doctor"
+    }
+  ],
+  "provider_requests": 0,
+  "release": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+  "request_count": 73,
+  "retired_accounts": [
+    {
+      "id": "94a60b14-cb3b-453d-9105-c7be649b274f",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "c8458d87-d54b-4ae9-b8b6-5f57c638e1e4",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "5de37c42-84c9-45c6-a575-0fe9fcbc3b3c",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "42bc58ed-5c23-4006-9628-344e1011bdca",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "d4f4d441-6fd9-4035-b157-7e523388e1ae",
+      "is_active": false,
+      "session_version": 1
+    },
+    {
+      "id": "e27c4089-fa48-481c-ba16-3bf56075c650",
+      "is_active": false,
+      "session_version": 1
+    }
+  ],
+  "run_id": "5a-third-20261003",
+  "source_manifest_sha256": "af423f03ba96dcc2a89504cab88a3beaf9aa28d7a409970177fea42b5169ba33",
+  "source_members": 629,
+  "status": "failed"
+}

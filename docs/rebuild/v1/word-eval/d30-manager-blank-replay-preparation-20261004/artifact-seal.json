@@ -1,0 +1,7 @@
+{
+  "runtime_artifact_seal_sha256": "5906af513e558f77bbf5b27a5cfc6e1df2839f91ff3dec65c99f66e7b2aeb228",
+  "runtime_checkpoint_sha256": "89ff73cb89ebcaea371ec6f4bb17e810a92f7911ba20823c6a2103579983d617",
+  "file_count": 7,
+  "bytes": 104600,
+  "new_execution_claim": false
+}

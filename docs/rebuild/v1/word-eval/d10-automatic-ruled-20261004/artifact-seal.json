@@ -1,0 +1,1703 @@
+{
+  "scope": "Owned raw D10 automatic ruled repair evidence; no original or historical result removal",
+  "files": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/03bcbbd44abdba29b996f53f0d62a03a40b5c04829fd2f91f5687bfcfe301b64.docx",
+      "bytes": 36691,
+      "sha256": "03bcbbd44abdba29b996f53f0d62a03a40b5c04829fd2f91f5687bfcfe301b64"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0496eba7c51ce9e98e56dac097473fa267fa35daaceb02140eae95f02f4279dd-inspect.json",
+      "bytes": 10260,
+      "sha256": "249ad368d2a09d2e1940da1cab87393ffefa7f1614d2bf01d548164fd0653eaa"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0496eba7c51ce9e98e56dac097473fa267fa35daaceb02140eae95f02f4279dd.docx",
+      "bytes": 37892,
+      "sha256": "0496eba7c51ce9e98e56dac097473fa267fa35daaceb02140eae95f02f4279dd"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0816587ea78a1f3be0de8e06aee4254c83b03c87f45e611ab1a639fd94733542.docx",
+      "bytes": 36725,
+      "sha256": "0816587ea78a1f3be0de8e06aee4254c83b03c87f45e611ab1a639fd94733542"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0956f05895e8852569c3ce7dcbdf173b8e81dda8dfc92f4c85915594befb4bb2.docx",
+      "bytes": 36612,
+      "sha256": "0956f05895e8852569c3ce7dcbdf173b8e81dda8dfc92f4c85915594befb4bb2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0a3fbb96af311289e47d84ef956ea830419d89eb4f0bf8e38025cc75c69ba3dc.docx",
+      "bytes": 36727,
+      "sha256": "0a3fbb96af311289e47d84ef956ea830419d89eb4f0bf8e38025cc75c69ba3dc"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0a4bfa245490e212ee7cc33c8df2872c99f2ac0defb877fe3bf563a911db2c8a.docx",
+      "bytes": 36656,
+      "sha256": "0a4bfa245490e212ee7cc33c8df2872c99f2ac0defb877fe3bf563a911db2c8a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0d68a88dd638827be3ad48f1f522e0ef858e8583def0c3eb7d7528bc0f8dd974-inspect.json",
+      "bytes": 8483,
+      "sha256": "37504ac94bf2f21a50449e2f7a5b460ce981218e4a91d701bd3c82cf7ddb6d06"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0d68a88dd638827be3ad48f1f522e0ef858e8583def0c3eb7d7528bc0f8dd974.docx",
+      "bytes": 37897,
+      "sha256": "0d68a88dd638827be3ad48f1f522e0ef858e8583def0c3eb7d7528bc0f8dd974"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/0ffc4663b21c9e4dceeb128dbf7c079c7c166d3820d54fdef46601f5c7669b18.docx",
+      "bytes": 36775,
+      "sha256": "0ffc4663b21c9e4dceeb128dbf7c079c7c166d3820d54fdef46601f5c7669b18"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/11c02323b5246028ac90b82ae79f0513e01b4958b0facf06b7fa52264bf92bd1.docx",
+      "bytes": 36607,
+      "sha256": "11c02323b5246028ac90b82ae79f0513e01b4958b0facf06b7fa52264bf92bd1"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/13d45b8033a9b75054050518751d65d6013c5a0b7ec6935241a78870d46c3f23.docx",
+      "bytes": 36770,
+      "sha256": "13d45b8033a9b75054050518751d65d6013c5a0b7ec6935241a78870d46c3f23"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/15dac88b027a77e1f87bf77e564c41935d0f805f88c76c7d61bb9d5b35592099.docx",
+      "bytes": 36792,
+      "sha256": "15dac88b027a77e1f87bf77e564c41935d0f805f88c76c7d61bb9d5b35592099"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/16240328e1e3947ad54f8277b5e7088268a8a4dd782df8b7b77308ce93cdb9c5.docx",
+      "bytes": 36763,
+      "sha256": "16240328e1e3947ad54f8277b5e7088268a8a4dd782df8b7b77308ce93cdb9c5"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/17bd853bd473edb6bfde6c5e9b9aee07ed0fbe3f3876bd0ce1d670d26ae270ef-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/17bd853bd473edb6bfde6c5e9b9aee07ed0fbe3f3876bd0ce1d670d26ae270ef.docx",
+      "bytes": 37877,
+      "sha256": "17bd853bd473edb6bfde6c5e9b9aee07ed0fbe3f3876bd0ce1d670d26ae270ef"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/17db6aa3c31acfed0728dd5c3d5313bbc079908c5f0ed7a1b8717c9cc9d3eb42.docx",
+      "bytes": 36797,
+      "sha256": "17db6aa3c31acfed0728dd5c3d5313bbc079908c5f0ed7a1b8717c9cc9d3eb42"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/1a624975c52c20ef4aa2df68b19adc2a894632ddcbf2cac40fad355d465b844e.docx",
+      "bytes": 37810,
+      "sha256": "1a624975c52c20ef4aa2df68b19adc2a894632ddcbf2cac40fad355d465b844e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/1aa16022a031ee411b5be0d8bbe7cf1896acc09997da77e5eb7e03c63343a51a.docx",
+      "bytes": 36657,
+      "sha256": "1aa16022a031ee411b5be0d8bbe7cf1896acc09997da77e5eb7e03c63343a51a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/1c3290a2e4686d5c65ae85e528236e41d0c0a54bfbfb8be4294a600d11117d4b.docx",
+      "bytes": 37806,
+      "sha256": "1c3290a2e4686d5c65ae85e528236e41d0c0a54bfbfb8be4294a600d11117d4b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/1d1901fd0c5619b2af305b24d3ae4989e35d367904b09debb96eb301676e3213.docx",
+      "bytes": 37787,
+      "sha256": "1d1901fd0c5619b2af305b24d3ae4989e35d367904b09debb96eb301676e3213"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/22163317d0a9f4b8fb7adcc6d4b86ac43c8b76ae5c9235cb953c9a1b8dcaf8e4-inspect.json",
+      "bytes": 10867,
+      "sha256": "ae241544105382f99adf1926420b28194e1bc9d6ec6fd9058800a5caad3ffe3e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/22163317d0a9f4b8fb7adcc6d4b86ac43c8b76ae5c9235cb953c9a1b8dcaf8e4.docx",
+      "bytes": 37862,
+      "sha256": "22163317d0a9f4b8fb7adcc6d4b86ac43c8b76ae5c9235cb953c9a1b8dcaf8e4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/25aabf7b792f3997c1298af02cecd013049b65841f453b0a2a14077135207d85.docx",
+      "bytes": 36772,
+      "sha256": "25aabf7b792f3997c1298af02cecd013049b65841f453b0a2a14077135207d85"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/2a16a9fe3e6eab47e12e20f2778a0715e7fa14c4d0791de3510ff88f60c6b72c.docx",
+      "bytes": 37802,
+      "sha256": "2a16a9fe3e6eab47e12e20f2778a0715e7fa14c4d0791de3510ff88f60c6b72c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/2a369fcbeb3920b63f38d50eb34817f78ea83b3ad9947447e1540f4c4fd4143b.docx",
+      "bytes": 37773,
+      "sha256": "2a369fcbeb3920b63f38d50eb34817f78ea83b3ad9947447e1540f4c4fd4143b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/3566c9f28195cb239493c86bc26c9608f066089ac1b1deefe0d7086404a95d83.docx",
+      "bytes": 36771,
+      "sha256": "3566c9f28195cb239493c86bc26c9608f066089ac1b1deefe0d7086404a95d83"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/3795d5b8ea067790ee9abe459a9e531102aeee5ece1144d45fc945400027c28c.docx",
+      "bytes": 36780,
+      "sha256": "3795d5b8ea067790ee9abe459a9e531102aeee5ece1144d45fc945400027c28c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/3aead995f91606baa5c26404e80587255a6a92591d5285273ee391283bdb7f0c.docx",
+      "bytes": 37858,
+      "sha256": "3aead995f91606baa5c26404e80587255a6a92591d5285273ee391283bdb7f0c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/410598ea999c1725b25ae63bd6e6dc60b7013f4d315a3ae725d6ef0cae1c837d.docx",
+      "bytes": 36686,
+      "sha256": "410598ea999c1725b25ae63bd6e6dc60b7013f4d315a3ae725d6ef0cae1c837d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/448d140a66c1a3b510b94a4718762a8bd57699817176e77a25ae315dabd47064.docx",
+      "bytes": 36652,
+      "sha256": "448d140a66c1a3b510b94a4718762a8bd57699817176e77a25ae315dabd47064"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/538fe67a3dc7fbd51e8aba43b03dec31f65f5dc2d8f35102d0f8ea3ab94c0351.docx",
+      "bytes": 36739,
+      "sha256": "538fe67a3dc7fbd51e8aba43b03dec31f65f5dc2d8f35102d0f8ea3ab94c0351"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/5981431bbec733b19b2610d93ab6fcac1776809ba17eb8733fd4798b4f671608.docx",
+      "bytes": 36732,
+      "sha256": "5981431bbec733b19b2610d93ab6fcac1776809ba17eb8733fd4798b4f671608"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/5a0ef452a39b20dd8b404588f4a53b45baed72a025a25e0420469881d12c7871.docx",
+      "bytes": 36767,
+      "sha256": "5a0ef452a39b20dd8b404588f4a53b45baed72a025a25e0420469881d12c7871"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/68d23553f97f67cf3247f36e13592214409fda8fcb26e946f504d3cc828b58e5.docx",
+      "bytes": 36611,
+      "sha256": "68d23553f97f67cf3247f36e13592214409fda8fcb26e946f504d3cc828b58e5"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/6bd11e5bdd4c47d8acf9e26c748239b8fb50a8eb3e83c4b2c90afe371877afa2.docx",
+      "bytes": 36800,
+      "sha256": "6bd11e5bdd4c47d8acf9e26c748239b8fb50a8eb3e83c4b2c90afe371877afa2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/6cc74cf701db8de2aaa827789fc85167ad795b1341384257bfe3bad8770df3a3.docx",
+      "bytes": 36660,
+      "sha256": "6cc74cf701db8de2aaa827789fc85167ad795b1341384257bfe3bad8770df3a3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/6d46fa49c907b61307c9acf1d5c9fa19c0f8703bb125ccdf6c9543c2b3dc9d32.docx",
+      "bytes": 36651,
+      "sha256": "6d46fa49c907b61307c9acf1d5c9fa19c0f8703bb125ccdf6c9543c2b3dc9d32"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/6dc0b6fd1caa52b0d6b7f6d11765d28d107d92b18c1778f3500405fe0929c956-inspect.json",
+      "bytes": 9052,
+      "sha256": "271106460b5b9842f385b8f89e2515c1be22b37a94bcfb0695910e24c5eef84d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/6dc0b6fd1caa52b0d6b7f6d11765d28d107d92b18c1778f3500405fe0929c956.docx",
+      "bytes": 37858,
+      "sha256": "6dc0b6fd1caa52b0d6b7f6d11765d28d107d92b18c1778f3500405fe0929c956"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/6e918cc060eafa39610d9be8858b6f2e3d0a46458734772de78a701b38e6e608-inspect.json",
+      "bytes": 8948,
+      "sha256": "dcd0af7f884b5dcee0b10677eb831d6d7e1ef85c3c63d5173e823afb2ba61099"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/6e918cc060eafa39610d9be8858b6f2e3d0a46458734772de78a701b38e6e608.docx",
+      "bytes": 37897,
+      "sha256": "6e918cc060eafa39610d9be8858b6f2e3d0a46458734772de78a701b38e6e608"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/707ef2b90a3c1a71a850890512b89cb38105550defc51a22398a95c897cf450e.docx",
+      "bytes": 36657,
+      "sha256": "707ef2b90a3c1a71a850890512b89cb38105550defc51a22398a95c897cf450e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/70f64a2ce0996bce1b77f643119207f6e963d14d4a3d12784b7b9a077c9823c8.docx",
+      "bytes": 36683,
+      "sha256": "70f64a2ce0996bce1b77f643119207f6e963d14d4a3d12784b7b9a077c9823c8"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/7261e73bb78bfb5c5a46cd9f17d855c9ef0de07b4f0f1a16b77cf02b6cbb1f43.docx",
+      "bytes": 36737,
+      "sha256": "7261e73bb78bfb5c5a46cd9f17d855c9ef0de07b4f0f1a16b77cf02b6cbb1f43"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/728e998aa68f0ee782cc327c23276cbbffbf4def49ff875fcde3e7e4ee5dbdc3-inspect.json",
+      "bytes": 9526,
+      "sha256": "b40697684f8f24fabf924528ab85ba7da7a9b2428be01a8d951c189bca4a91c2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/728e998aa68f0ee782cc327c23276cbbffbf4def49ff875fcde3e7e4ee5dbdc3.docx",
+      "bytes": 37846,
+      "sha256": "728e998aa68f0ee782cc327c23276cbbffbf4def49ff875fcde3e7e4ee5dbdc3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/73f499a7749bfc569825c057a9814cdcb8d90d6ef7e2f8ec7246060ce60eec39.docx",
+      "bytes": 36774,
+      "sha256": "73f499a7749bfc569825c057a9814cdcb8d90d6ef7e2f8ec7246060ce60eec39"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/74f53b3a01a2de2f1f2c0b338dd0a83d7b01cde698201b60f41bc282e3014dd8.docx",
+      "bytes": 36686,
+      "sha256": "74f53b3a01a2de2f1f2c0b338dd0a83d7b01cde698201b60f41bc282e3014dd8"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/7554dd87799de9c839e1e8c37ab7ed0b14f88065385bc4629c6d06fbf48b4ce3.docx",
+      "bytes": 37775,
+      "sha256": "7554dd87799de9c839e1e8c37ab7ed0b14f88065385bc4629c6d06fbf48b4ce3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/7ae38c2d2c0f09aa8e134a1b92198fa6dcdbf7443014b92b09fe82b45764e37a.docx",
+      "bytes": 37877,
+      "sha256": "7ae38c2d2c0f09aa8e134a1b92198fa6dcdbf7443014b92b09fe82b45764e37a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/7b8a8da82c0a7ce5e814065e084efce2d8c6b45d1b02fc4ddf8dd52651915905.docx",
+      "bytes": 38012,
+      "sha256": "7b8a8da82c0a7ce5e814065e084efce2d8c6b45d1b02fc4ddf8dd52651915905"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/81d07740397bda73df47d305700bf68237180c7827e62811bba33ff6641c22b2.docx",
+      "bytes": 36760,
+      "sha256": "81d07740397bda73df47d305700bf68237180c7827e62811bba33ff6641c22b2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/823faf43cae847fb87f3f6bf968be49a9f8c6aae594e38d8058e946065a57d26.docx",
+      "bytes": 36687,
+      "sha256": "823faf43cae847fb87f3f6bf968be49a9f8c6aae594e38d8058e946065a57d26"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/826acad15a2145f7319dd127ead193555995136ff6ac34b607b7ce63b59f8b04.docx",
+      "bytes": 36619,
+      "sha256": "826acad15a2145f7319dd127ead193555995136ff6ac34b607b7ce63b59f8b04"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/83e623d9c479858582d9254aee4cd0b3e0c31ebc8c1cd2193d91d3ed4f96cdc5.docx",
+      "bytes": 36615,
+      "sha256": "83e623d9c479858582d9254aee4cd0b3e0c31ebc8c1cd2193d91d3ed4f96cdc5"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/86b7dcc6fc7670d2e3f6b4044e5c52b57f43481e1f983373474c373afc756197.docx",
+      "bytes": 37771,
+      "sha256": "86b7dcc6fc7670d2e3f6b4044e5c52b57f43481e1f983373474c373afc756197"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/88cc18403180e9ccb35c3a5d2c5628af3963fd96cfe599fcb6c0e09b29655914.docx",
+      "bytes": 36663,
+      "sha256": "88cc18403180e9ccb35c3a5d2c5628af3963fd96cfe599fcb6c0e09b29655914"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/8ae87a94cdc0870e8007b0063802cea16b09336bc2d665ad0ef2f4cd2608671b-inspect.json",
+      "bytes": 9052,
+      "sha256": "5b6402b65278a6613b8e29412b295625f63d748874f1346b1d62821386e2a11e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/8ae87a94cdc0870e8007b0063802cea16b09336bc2d665ad0ef2f4cd2608671b.docx",
+      "bytes": 37886,
+      "sha256": "8ae87a94cdc0870e8007b0063802cea16b09336bc2d665ad0ef2f4cd2608671b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/8ef07b1c263297d7ea0d6c08eda78ff895136a9e73b1c02cc1ba66894f6a215a.docx",
+      "bytes": 36656,
+      "sha256": "8ef07b1c263297d7ea0d6c08eda78ff895136a9e73b1c02cc1ba66894f6a215a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/91265546701e3e00ebd55d843b6c87c95a99104fac72787da9802e5a5aa3f236-inspect.json",
+      "bytes": 9136,
+      "sha256": "9aa81eacff45fd03f87d9b49ef3ea04a382eaf879ce147e89e89713eb782e8cf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/91265546701e3e00ebd55d843b6c87c95a99104fac72787da9802e5a5aa3f236.docx",
+      "bytes": 37903,
+      "sha256": "91265546701e3e00ebd55d843b6c87c95a99104fac72787da9802e5a5aa3f236"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/915b814a0fb1cd288060ebcaf0675f9394d799cbdbb13f1db640ba0064cfd5a0-inspect.json",
+      "bytes": 8555,
+      "sha256": "52a5bedb6b0308327c1b1ed1222025a23f8380f04a09f2ba0ac398a9d1dc3319"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/915b814a0fb1cd288060ebcaf0675f9394d799cbdbb13f1db640ba0064cfd5a0.docx",
+      "bytes": 37856,
+      "sha256": "915b814a0fb1cd288060ebcaf0675f9394d799cbdbb13f1db640ba0064cfd5a0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/999a8582e39fb4919bdc5f85ca52d5036da0212a64df9fdce30c47da3c9c052f.docx",
+      "bytes": 36626,
+      "sha256": "999a8582e39fb4919bdc5f85ca52d5036da0212a64df9fdce30c47da3c9c052f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/9ae053a9ae008c66bf6603d85ffb1012511599b71c296723148b4f96eb62e925.docx",
+      "bytes": 36659,
+      "sha256": "9ae053a9ae008c66bf6603d85ffb1012511599b71c296723148b4f96eb62e925"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/9c5e82d0562f5feaed367e79d2f22b4eedde43da60b3d9ad79e488773c5cb0cb.docx",
+      "bytes": 36723,
+      "sha256": "9c5e82d0562f5feaed367e79d2f22b4eedde43da60b3d9ad79e488773c5cb0cb"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/9e1ca2d7c02eeaa0d430ffbea628c717620f4db9b7864a29fa9645e970a6a1ca.docx",
+      "bytes": 37857,
+      "sha256": "9e1ca2d7c02eeaa0d430ffbea628c717620f4db9b7864a29fa9645e970a6a1ca"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/a3a4fa9a9c51e2fee2ed671f690102a2e1e4e3fd71f5ed32a68ab05ea6a1ede0.docx",
+      "bytes": 36625,
+      "sha256": "a3a4fa9a9c51e2fee2ed671f690102a2e1e4e3fd71f5ed32a68ab05ea6a1ede0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/a3e69abfc4eb4b37ee0b3e0ec06d8d4e52ba485a75aeb29b509c2969ec1b1f59.docx",
+      "bytes": 36663,
+      "sha256": "a3e69abfc4eb4b37ee0b3e0ec06d8d4e52ba485a75aeb29b509c2969ec1b1f59"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/a76f0f89bc30921e41c3acd85770ce3df90933518a8d8a4377fa1f0d26463664.docx",
+      "bytes": 36730,
+      "sha256": "a76f0f89bc30921e41c3acd85770ce3df90933518a8d8a4377fa1f0d26463664"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/a8392004c31149a46085164656f196e1f709df37949f47c9f75b962feb3ebe97.docx",
+      "bytes": 36734,
+      "sha256": "a8392004c31149a46085164656f196e1f709df37949f47c9f75b962feb3ebe97"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/ac15a4544097cfdab6f8c9eb4be944c0bb9ab3ccc1aef6dbd56a245f9bafe2fa.docx",
+      "bytes": 36650,
+      "sha256": "ac15a4544097cfdab6f8c9eb4be944c0bb9ab3ccc1aef6dbd56a245f9bafe2fa"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/ac6f619e4ccea70cda7de21861b4d5d9915a1fc350fe03374180c80048f5d56c.docx",
+      "bytes": 36691,
+      "sha256": "ac6f619e4ccea70cda7de21861b4d5d9915a1fc350fe03374180c80048f5d56c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/attempts.json",
+      "bytes": 462415,
+      "sha256": "efe92e94ab8cee75ee34e431320c195bfb070a86161b2d4512a997e77d515f9c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/b0716196151e7ceffa21f3746bb2f9c69b592407f9611c8d634fd3e0f7b5619c.docx",
+      "bytes": 36655,
+      "sha256": "b0716196151e7ceffa21f3746bb2f9c69b592407f9611c8d634fd3e0f7b5619c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/b1632f4762fa2dda262c4521aaf880e5a0ef3bf7991dba04fb78f9f22c3311de.docx",
+      "bytes": 38056,
+      "sha256": "b1632f4762fa2dda262c4521aaf880e5a0ef3bf7991dba04fb78f9f22c3311de"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/b5156d69f1b853d04324b487de3a49a321af50b3529a9cbeaad08fc7c89e08c4.docx",
+      "bytes": 36773,
+      "sha256": "b5156d69f1b853d04324b487de3a49a321af50b3529a9cbeaad08fc7c89e08c4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/b8bba29c83640156e165cfc5b889c1c3bded535243ffef29743959ca0cff6b3d.docx",
+      "bytes": 36799,
+      "sha256": "b8bba29c83640156e165cfc5b889c1c3bded535243ffef29743959ca0cff6b3d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/baba075a8f6396dd7c1505902cf6219c4df7131a316723161e531eb81e622a1a-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/baba075a8f6396dd7c1505902cf6219c4df7131a316723161e531eb81e622a1a.docx",
+      "bytes": 37877,
+      "sha256": "baba075a8f6396dd7c1505902cf6219c4df7131a316723161e531eb81e622a1a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/bd6d5d6ba7139d5ab2fe9b0981d3996994bb1089cbd492ec67cab236e307f9d5.docx",
+      "bytes": 37928,
+      "sha256": "bd6d5d6ba7139d5ab2fe9b0981d3996994bb1089cbd492ec67cab236e307f9d5"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/c419a7d957c89a06b6e5f2c33c7369b0865c6ce6993d7200d44f18bf550e6889.docx",
+      "bytes": 36742,
+      "sha256": "c419a7d957c89a06b6e5f2c33c7369b0865c6ce6993d7200d44f18bf550e6889"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/c6f693ea74223ba5f38d3d55b7ef2ebde4bf7aa13da1a01b322464dd3b576de4.docx",
+      "bytes": 36655,
+      "sha256": "c6f693ea74223ba5f38d3d55b7ef2ebde4bf7aa13da1a01b322464dd3b576de4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/c7d9e1c2dfe444c2440ecc0cab4c2229c95a024ab5ece04fdf8b6d929b27ef75-inspect.json",
+      "bytes": 9453,
+      "sha256": "f812783a348b9f94d0ceea57bc0d91abaec179a4ecaafa2dfd21bab2746da9ab"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/c7d9e1c2dfe444c2440ecc0cab4c2229c95a024ab5ece04fdf8b6d929b27ef75.docx",
+      "bytes": 37843,
+      "sha256": "c7d9e1c2dfe444c2440ecc0cab4c2229c95a024ab5ece04fdf8b6d929b27ef75"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/c9e070385407b9bf010fb3e4a4491cd8e9fc7060c96c6598e8c4939de60f6045.docx",
+      "bytes": 36654,
+      "sha256": "c9e070385407b9bf010fb3e4a4491cd8e9fc7060c96c6598e8c4939de60f6045"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/ca8035a7de0c0d96a3edf8f7994f3e524567d4ea54cca3c80ee4568682df4060-inspect.json",
+      "bytes": 9050,
+      "sha256": "ae855b17e6f82aee57c04a031c45c8ae933ab816e3e47b621c1e09731540d51f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/ca8035a7de0c0d96a3edf8f7994f3e524567d4ea54cca3c80ee4568682df4060.docx",
+      "bytes": 37883,
+      "sha256": "ca8035a7de0c0d96a3edf8f7994f3e524567d4ea54cca3c80ee4568682df4060"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/d8d900672c25c75c05d074270e1fbf7ea9ab30a1a3a8d90519e43647b170ec57.docx",
+      "bytes": 36620,
+      "sha256": "d8d900672c25c75c05d074270e1fbf7ea9ab30a1a3a8d90519e43647b170ec57"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/dbe7edb5cbb2c6475249538c400f73259366661229829d344bdc4eb2f4d9a2fc-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/dbe7edb5cbb2c6475249538c400f73259366661229829d344bdc4eb2f4d9a2fc.docx",
+      "bytes": 37877,
+      "sha256": "dbe7edb5cbb2c6475249538c400f73259366661229829d344bdc4eb2f4d9a2fc"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/dcc6d1f5681906fd5ce06b32fd9ddee536bc9150983c0c3aa8d2b08bcb901018.docx",
+      "bytes": 36795,
+      "sha256": "dcc6d1f5681906fd5ce06b32fd9ddee536bc9150983c0c3aa8d2b08bcb901018"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/dcd8e1a2d94f21cbd97e684bb6e31427138e7b107adf2040513dd2b22e358a64.docx",
+      "bytes": 37771,
+      "sha256": "dcd8e1a2d94f21cbd97e684bb6e31427138e7b107adf2040513dd2b22e358a64"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/dd4aebd0c1c2681e90cf6d36f7e29e87df75151ec591684b0d27644cfc8230f3.docx",
+      "bytes": 37785,
+      "sha256": "dd4aebd0c1c2681e90cf6d36f7e29e87df75151ec591684b0d27644cfc8230f3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/de666fc8c7c2ead88b67f0f2711b4a47ffc241033adf81a921b39ee4281aef3e.docx",
+      "bytes": 36619,
+      "sha256": "de666fc8c7c2ead88b67f0f2711b4a47ffc241033adf81a921b39ee4281aef3e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/e005fc7033d9beb10ee2d2a182aea871160b2b24a8d58e70708e16677233c3f4.docx",
+      "bytes": 36773,
+      "sha256": "e005fc7033d9beb10ee2d2a182aea871160b2b24a8d58e70708e16677233c3f4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/e4162abdf1a3879955512889f441ac9cd615a8c2efd155adb930db182cded95b.docx",
+      "bytes": 36796,
+      "sha256": "e4162abdf1a3879955512889f441ac9cd615a8c2efd155adb930db182cded95b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/eac8f00a919a89dd314d15a6e8e87bcc7cd3f0961375e140aea0c5c7dccfd374.docx",
+      "bytes": 37800,
+      "sha256": "eac8f00a919a89dd314d15a6e8e87bcc7cd3f0961375e140aea0c5c7dccfd374"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/eba514fb9edd545b87453b3e2dafaafc8a15d49200453f43dde916cfe155c2bc.docx",
+      "bytes": 36762,
+      "sha256": "eba514fb9edd545b87453b3e2dafaafc8a15d49200453f43dde916cfe155c2bc"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/eea8e347b4234fae2c7dc4e5588c00f4e31f4737e3b1a85a76b9018d73d90bdb-inspect.json",
+      "bytes": 1054,
+      "sha256": "15afec353a07bbafbd68f58bb2937eb64300f5ab1b7df12cbf0764e21dd17e3d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/eea8e347b4234fae2c7dc4e5588c00f4e31f4737e3b1a85a76b9018d73d90bdb.docx",
+      "bytes": 37771,
+      "sha256": "eea8e347b4234fae2c7dc4e5588c00f4e31f4737e3b1a85a76b9018d73d90bdb"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/ef30c37aa2369304061bdaf217b8f955c6034b93a8162f8a1316bae0a06958c2-inspect.json",
+      "bytes": 10097,
+      "sha256": "e8b046a6fb99748914d74b622039b285440b8355be21a1f85b3130d27a4efc75"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/ef30c37aa2369304061bdaf217b8f955c6034b93a8162f8a1316bae0a06958c2.docx",
+      "bytes": 37877,
+      "sha256": "ef30c37aa2369304061bdaf217b8f955c6034b93a8162f8a1316bae0a06958c2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/f0b11705b8c7862f622536dee96269aeaa7670a1a750ef55705deb3f480e41d2.docx",
+      "bytes": 37805,
+      "sha256": "f0b11705b8c7862f622536dee96269aeaa7670a1a750ef55705deb3f480e41d2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/f22840749cdcb553ad2470921e7b428f45f9c26c66399800b73c9a30aa7893ea.docx",
+      "bytes": 37877,
+      "sha256": "f22840749cdcb553ad2470921e7b428f45f9c26c66399800b73c9a30aa7893ea"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/f5c8dc165dd91e977e9a76ba1418079d7de94036c4299b227879f9e916b28dc0.docx",
+      "bytes": 36796,
+      "sha256": "f5c8dc165dd91e977e9a76ba1418079d7de94036c4299b227879f9e916b28dc0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/f688140ce0365c3efac499864c5d2106f48b21098094e25b45eddc8dfba39c48.docx",
+      "bytes": 36686,
+      "sha256": "f688140ce0365c3efac499864c5d2106f48b21098094e25b45eddc8dfba39c48"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/fb14b7f4f532528e00bc1d38795e624f886dbcfc8f391afc4f034a5a9c288a4b.docx",
+      "bytes": 37770,
+      "sha256": "fb14b7f4f532528e00bc1d38795e624f886dbcfc8f391afc4f034a5a9c288a4b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/fc0dd2adcac03c0a8816ec395f0b3105922ded3d57eb2fc560586913f81a5e55.docx",
+      "bytes": 36665,
+      "sha256": "fc0dd2adcac03c0a8816ec395f0b3105922ded3d57eb2fc560586913f81a5e55"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/fd35a767da5df0b67cfb6e776a80976d2a6dca6811f56a3d0b51926b044fbb22.docx",
+      "bytes": 37798,
+      "sha256": "fd35a767da5df0b67cfb6e776a80976d2a6dca6811f56a3d0b51926b044fbb22"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/result.json",
+      "bytes": 493,
+      "sha256": "8c60d634ec592a0fdccc4e0ab8078c300c2cb0fb0b6a57270598524aa974db63"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/source-before.json",
+      "bytes": 219,
+      "sha256": "7817626ffc8ac04b3652857815778cc1eef1db584f9743025c2e228b89d89759"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/source-tests.py",
+      "bytes": 14009,
+      "sha256": "e5e057b89614e838087c02c801c61ac05ca71300433694bcf4edb6da9b1d4c21"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004/source-word.py",
+      "bytes": 663974,
+      "sha256": "bbc872463a2611bd7a3f36165daadd478569027fa3ef24023ad04488df5fe23f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-final-affected-20261004.log",
+      "bytes": 7113,
+      "sha256": "880139974f08ff38cded42e31bbf95a7eaf5835fc041c3326e42d271dce865c9"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-finished-source-20261004/test_ruled_paragraph_recovery.py",
+      "bytes": 14009,
+      "sha256": "e5e057b89614e838087c02c801c61ac05ca71300433694bcf4edb6da9b1d4c21"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-finished-source-20261004/word_v3.py",
+      "bytes": 664111,
+      "sha256": "1a937e88b3aa34b4d4e4c9c549eef5fa63e0c2455958d821aec5ec8902f3eb27"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/084f90e4067d2fd4dbcfad87e631765fc2d052172ea0929cec21b538ecd6b9cf-inspect.json",
+      "bytes": 8555,
+      "sha256": "52a5bedb6b0308327c1b1ed1222025a23f8380f04a09f2ba0ac398a9d1dc3319"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/084f90e4067d2fd4dbcfad87e631765fc2d052172ea0929cec21b538ecd6b9cf.docx",
+      "bytes": 37856,
+      "sha256": "084f90e4067d2fd4dbcfad87e631765fc2d052172ea0929cec21b538ecd6b9cf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/20855647826f80dc4b00305088e1d526daf6d4bdd7967227bd6d64f9498c8b4f-inspect.json",
+      "bytes": 10260,
+      "sha256": "249ad368d2a09d2e1940da1cab87393ffefa7f1614d2bf01d548164fd0653eaa"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/20855647826f80dc4b00305088e1d526daf6d4bdd7967227bd6d64f9498c8b4f.docx",
+      "bytes": 37892,
+      "sha256": "20855647826f80dc4b00305088e1d526daf6d4bdd7967227bd6d64f9498c8b4f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/307e99b36da68711fe182209df0cbf0f57edc508a16e067de6c3f1fbd6b92ce6-inspect.json",
+      "bytes": 8948,
+      "sha256": "dcd0af7f884b5dcee0b10677eb831d6d7e1ef85c3c63d5173e823afb2ba61099"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/307e99b36da68711fe182209df0cbf0f57edc508a16e067de6c3f1fbd6b92ce6.docx",
+      "bytes": 37897,
+      "sha256": "307e99b36da68711fe182209df0cbf0f57edc508a16e067de6c3f1fbd6b92ce6"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/34ba7ee6eeec6dcd686fb4f5207fa5ca131db0587404658f60c89f8674b7f34d-inspect.json",
+      "bytes": 9136,
+      "sha256": "9aa81eacff45fd03f87d9b49ef3ea04a382eaf879ce147e89e89713eb782e8cf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/34ba7ee6eeec6dcd686fb4f5207fa5ca131db0587404658f60c89f8674b7f34d.docx",
+      "bytes": 37903,
+      "sha256": "34ba7ee6eeec6dcd686fb4f5207fa5ca131db0587404658f60c89f8674b7f34d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/4b995a0cd68372888a36aec883f17faff2fbdfce5364f4470ccecadad8bb0cb8.docx",
+      "bytes": 37877,
+      "sha256": "4b995a0cd68372888a36aec883f17faff2fbdfce5364f4470ccecadad8bb0cb8"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/85764e927f8d85d43b91284bfad93cbc90fd37b580fe14001f09efc3e524eca5-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/85764e927f8d85d43b91284bfad93cbc90fd37b580fe14001f09efc3e524eca5.docx",
+      "bytes": 37877,
+      "sha256": "85764e927f8d85d43b91284bfad93cbc90fd37b580fe14001f09efc3e524eca5"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/892e30b5ff7589a26971bfef42c34d5e3dbc9deb485028008e79c908a845178e-inspect.json",
+      "bytes": 9052,
+      "sha256": "5b6402b65278a6613b8e29412b295625f63d748874f1346b1d62821386e2a11e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/892e30b5ff7589a26971bfef42c34d5e3dbc9deb485028008e79c908a845178e.docx",
+      "bytes": 37886,
+      "sha256": "892e30b5ff7589a26971bfef42c34d5e3dbc9deb485028008e79c908a845178e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/attempts.json",
+      "bytes": 198106,
+      "sha256": "ed59ea917c9b5c126fc6b504e67b9c6e4869bde87cda989726da747b9b651784"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/b04dcfcfb97e1437091384915fbfa16e62dcde0eeb637d908267cef2525d35df-inspect.json",
+      "bytes": 10955,
+      "sha256": "56bd39dedaacf4ed4fccd4e5341a437b1311c55ce4fef516de44a213c937568c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/b04dcfcfb97e1437091384915fbfa16e62dcde0eeb637d908267cef2525d35df.docx",
+      "bytes": 37858,
+      "sha256": "b04dcfcfb97e1437091384915fbfa16e62dcde0eeb637d908267cef2525d35df"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/c295d95434ce44804c5dc76fe14bc66946390224668c5f76d9311ae01c640e37-inspect.json",
+      "bytes": 10097,
+      "sha256": "e8b046a6fb99748914d74b622039b285440b8355be21a1f85b3130d27a4efc75"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/c295d95434ce44804c5dc76fe14bc66946390224668c5f76d9311ae01c640e37.docx",
+      "bytes": 37877,
+      "sha256": "c295d95434ce44804c5dc76fe14bc66946390224668c5f76d9311ae01c640e37"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/d1a5140fc2e3f448190fca7ea9e07beb4b1d4156385d7a98e0ed74fc18403789-inspect.json",
+      "bytes": 9050,
+      "sha256": "ae855b17e6f82aee57c04a031c45c8ae933ab816e3e47b621c1e09731540d51f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/d1a5140fc2e3f448190fca7ea9e07beb4b1d4156385d7a98e0ed74fc18403789.docx",
+      "bytes": 37883,
+      "sha256": "d1a5140fc2e3f448190fca7ea9e07beb4b1d4156385d7a98e0ed74fc18403789"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/e3e1e18fce6feffba32d1ff94f7e8c2bc13d82fd44daf49c54720a784ca00ae4.docx",
+      "bytes": 38056,
+      "sha256": "e3e1e18fce6feffba32d1ff94f7e8c2bc13d82fd44daf49c54720a784ca00ae4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/eb67a956daaf7cb16990f0b8386062d424b8efdab41e67b6de8ae4fb3e544326-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/eb67a956daaf7cb16990f0b8386062d424b8efdab41e67b6de8ae4fb3e544326.docx",
+      "bytes": 37877,
+      "sha256": "eb67a956daaf7cb16990f0b8386062d424b8efdab41e67b6de8ae4fb3e544326"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/ef53d8c8e4e8c3020766709b760b5701c05554dd4ada0da640698cb9301fccc9.docx",
+      "bytes": 37877,
+      "sha256": "ef53d8c8e4e8c3020766709b760b5701c05554dd4ada0da640698cb9301fccc9"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/f4e20e7958657689d5c2f3054fc9143e87345b1fcfc573c0a9a7762767df9cca-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/f4e20e7958657689d5c2f3054fc9143e87345b1fcfc573c0a9a7762767df9cca.docx",
+      "bytes": 37877,
+      "sha256": "f4e20e7958657689d5c2f3054fc9143e87345b1fcfc573c0a9a7762767df9cca"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/f4f3e9153b7eeaa5dba95a7989bead3cc363bf84a363347c816b373931ecf5f3.docx",
+      "bytes": 38012,
+      "sha256": "f4f3e9153b7eeaa5dba95a7989bead3cc363bf84a363347c816b373931ecf5f3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/feaceec842d2ad646d192bd58b0df0721012b0f002afba35e34cf0b2cafed5fa-inspect.json",
+      "bytes": 8483,
+      "sha256": "37504ac94bf2f21a50449e2f7a5b460ce981218e4a91d701bd3c82cf7ddb6d06"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/feaceec842d2ad646d192bd58b0df0721012b0f002afba35e34cf0b2cafed5fa.docx",
+      "bytes": 37897,
+      "sha256": "feaceec842d2ad646d192bd58b0df0721012b0f002afba35e34cf0b2cafed5fa"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/result.json",
+      "bytes": 492,
+      "sha256": "56bed15383631a69476b30686761ec84d1c877b4c33e6e3820025d46677191e3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/source-before.json",
+      "bytes": 219,
+      "sha256": "3460a9865c60ed668e9de93e3bc5f25507ab05cba7d93e6306c61b43280e1176"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/source-tests.py",
+      "bytes": 11170,
+      "sha256": "d19a0238b388367076299fdc856e117a22e8fdeead9f6c717b6d42cc0e0dfa6e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004/source-word.py",
+      "bytes": 663793,
+      "sha256": "cac4e8d06660acfbd20671e14b82c0d1bd959513f5a5485024d27d0f8d0c6578"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-controls-20261004.log",
+      "bytes": 13328,
+      "sha256": "cc58ba5aa83cbe7a1fa91244625ed6c17ff19c57b5e52e0dd3361ddabf7a9560"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-original-proof-20261004/automatic-answers.json",
+      "bytes": 1648,
+      "sha256": "aa5d8fa5457cf78683f9fe3fbd26cfa4407ccf599bf3427003d5c041c4a32428"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-original-proof-20261004/automatic-fields.json",
+      "bytes": 10263,
+      "sha256": "b89ed4e619a8dc2b4773b2eddce276ed0e0144cf652a217d71fa95e5aedc666d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-original-proof-20261004/groundtruth.json",
+      "bytes": 109535,
+      "sha256": "47145449ca9d46858f169d21f8c09dc77017fa28fe04028f41b0270d984ec67b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-original-proof-20261004/initial-mapping.json",
+      "bytes": 136659,
+      "sha256": "59b14748897c2a21468f5585ead2b642b1333a1abf4d5e9d431942916abf48f0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-original-proof-20261004/original.docx",
+      "bytes": 45415,
+      "sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-original-proof-20261004/source-only-groundtruth.json",
+      "bytes": 200468,
+      "sha256": "d4c5541dc3c7ac3e3d8f8efed279ee563174b4c8d4843ebe6b0d8d56465ac67c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-first-original-proof-20261004.log",
+      "bytes": 758,
+      "sha256": "263898357512acf7d4d2136241990cb817791896bb50490d248f0d88ea855899"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/1a7b37e4963c63aa839d4ecde4f7a0f87181ee42f9e2c63c1a0cb07b01fa51ef-inspect.json",
+      "bytes": 10097,
+      "sha256": "e8b046a6fb99748914d74b622039b285440b8355be21a1f85b3130d27a4efc75"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/1a7b37e4963c63aa839d4ecde4f7a0f87181ee42f9e2c63c1a0cb07b01fa51ef.docx",
+      "bytes": 37877,
+      "sha256": "1a7b37e4963c63aa839d4ecde4f7a0f87181ee42f9e2c63c1a0cb07b01fa51ef"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/4d63acce448179e7b1893f37d414a02a27de767c1fd7963dff9cdf920b61989f-inspect.json",
+      "bytes": 8948,
+      "sha256": "dcd0af7f884b5dcee0b10677eb831d6d7e1ef85c3c63d5173e823afb2ba61099"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/4d63acce448179e7b1893f37d414a02a27de767c1fd7963dff9cdf920b61989f.docx",
+      "bytes": 37897,
+      "sha256": "4d63acce448179e7b1893f37d414a02a27de767c1fd7963dff9cdf920b61989f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/565e2e80208bc469778a7cd2491c2205fd259e63625daf0e485b15f710d1b449-inspect.json",
+      "bytes": 10260,
+      "sha256": "249ad368d2a09d2e1940da1cab87393ffefa7f1614d2bf01d548164fd0653eaa"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/565e2e80208bc469778a7cd2491c2205fd259e63625daf0e485b15f710d1b449.docx",
+      "bytes": 37892,
+      "sha256": "565e2e80208bc469778a7cd2491c2205fd259e63625daf0e485b15f710d1b449"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/7d925d8f0f3419abe08a0a592304605ed8a56c50ca0f8b366ad229cbfc107a05-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/7d925d8f0f3419abe08a0a592304605ed8a56c50ca0f8b366ad229cbfc107a05.docx",
+      "bytes": 37877,
+      "sha256": "7d925d8f0f3419abe08a0a592304605ed8a56c50ca0f8b366ad229cbfc107a05"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/9c9d80414787627ac586e604556e94c5576166c7746f84714ff857066bdcfc42.docx",
+      "bytes": 38012,
+      "sha256": "9c9d80414787627ac586e604556e94c5576166c7746f84714ff857066bdcfc42"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/a628129496cfb5af5158ffec39b7abcb435c429949829655c91aa459d3da0abd-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/a628129496cfb5af5158ffec39b7abcb435c429949829655c91aa459d3da0abd.docx",
+      "bytes": 37877,
+      "sha256": "a628129496cfb5af5158ffec39b7abcb435c429949829655c91aa459d3da0abd"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/attempts.json",
+      "bytes": 299862,
+      "sha256": "fef5c65036a9c3ebb6953605efd6f5e94d5290fdf12296183276fb411ba78b0d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/b0c4858b3a1ef85208f67d073456b338669aea202b01e2b0f53a3489b4c97e84-inspect.json",
+      "bytes": 8555,
+      "sha256": "52a5bedb6b0308327c1b1ed1222025a23f8380f04a09f2ba0ac398a9d1dc3319"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/b0c4858b3a1ef85208f67d073456b338669aea202b01e2b0f53a3489b4c97e84.docx",
+      "bytes": 37856,
+      "sha256": "b0c4858b3a1ef85208f67d073456b338669aea202b01e2b0f53a3489b4c97e84"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/b29bb28d057b6d672ad1ad3f931d8201c2d7714fa9aeabdeecf03467677e708d-inspect.json",
+      "bytes": 9052,
+      "sha256": "5b6402b65278a6613b8e29412b295625f63d748874f1346b1d62821386e2a11e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/b29bb28d057b6d672ad1ad3f931d8201c2d7714fa9aeabdeecf03467677e708d.docx",
+      "bytes": 37886,
+      "sha256": "b29bb28d057b6d672ad1ad3f931d8201c2d7714fa9aeabdeecf03467677e708d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/c345eea538adc3b6f633bd32d6e0663fadecf5f5b80adb020a307affcf4d5ec1.docx",
+      "bytes": 38056,
+      "sha256": "c345eea538adc3b6f633bd32d6e0663fadecf5f5b80adb020a307affcf4d5ec1"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/ce1245252f34a305c0c7175c88efabbb8f0b3f8e62485ee365e92789b2ba9578.docx",
+      "bytes": 37877,
+      "sha256": "ce1245252f34a305c0c7175c88efabbb8f0b3f8e62485ee365e92789b2ba9578"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/ce2b864c493894cd601d64744f2b3c2fb003d5c80e25f54c03ef8cdc29378271-inspect.json",
+      "bytes": 8483,
+      "sha256": "37504ac94bf2f21a50449e2f7a5b460ce981218e4a91d701bd3c82cf7ddb6d06"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/ce2b864c493894cd601d64744f2b3c2fb003d5c80e25f54c03ef8cdc29378271.docx",
+      "bytes": 37897,
+      "sha256": "ce2b864c493894cd601d64744f2b3c2fb003d5c80e25f54c03ef8cdc29378271"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/d26ca499597b825be3f8609c822e5d54f310cf342bfce930c3579325045cd0ea-inspect.json",
+      "bytes": 9052,
+      "sha256": "271106460b5b9842f385b8f89e2515c1be22b37a94bcfb0695910e24c5eef84d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/d26ca499597b825be3f8609c822e5d54f310cf342bfce930c3579325045cd0ea.docx",
+      "bytes": 37858,
+      "sha256": "d26ca499597b825be3f8609c822e5d54f310cf342bfce930c3579325045cd0ea"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/eea9d6b8ccd7519598bf5f913447e0e4d901254aea62cdea77101d6b26a8d4c2-inspect.json",
+      "bytes": 9050,
+      "sha256": "ae855b17e6f82aee57c04a031c45c8ae933ab816e3e47b621c1e09731540d51f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/eea9d6b8ccd7519598bf5f913447e0e4d901254aea62cdea77101d6b26a8d4c2.docx",
+      "bytes": 37883,
+      "sha256": "eea9d6b8ccd7519598bf5f913447e0e4d901254aea62cdea77101d6b26a8d4c2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/f2538c10b2df90171cf54c6577401c8dac21a549cb019e41af6508a6ff5d2e03-inspect.json",
+      "bytes": 9136,
+      "sha256": "9aa81eacff45fd03f87d9b49ef3ea04a382eaf879ce147e89e89713eb782e8cf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/f2538c10b2df90171cf54c6577401c8dac21a549cb019e41af6508a6ff5d2e03.docx",
+      "bytes": 37903,
+      "sha256": "f2538c10b2df90171cf54c6577401c8dac21a549cb019e41af6508a6ff5d2e03"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/result.json",
+      "bytes": 490,
+      "sha256": "6514d2c78cf5a6998f46ff7f1ff2bf14d26ae93f5dccd592f45d5caeb8070d95"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004/source-before.json",
+      "bytes": 219,
+      "sha256": "7817626ffc8ac04b3652857815778cc1eef1db584f9743025c2e228b89d89759"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-second-controls-20261004.log",
+      "bytes": 2498,
+      "sha256": "2c64dd9950bd19bd5eba11a6b2061d85c208e0917b695bd86d4572f985f1b803"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/automatic-answers.json",
+      "bytes": 1648,
+      "sha256": "aa5d8fa5457cf78683f9fe3fbd26cfa4407ccf599bf3427003d5c041c4a32428"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/automatic-fields.json",
+      "bytes": 10263,
+      "sha256": "b89ed4e619a8dc2b4773b2eddce276ed0e0144cf652a217d71fa95e5aedc666d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/automatic-refusal.json",
+      "bytes": 185,
+      "sha256": "f56e13e9e3b9d4d472439c4de055e21e3707153fe9df2ce54361fd9c2c14bac0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/groundtruth.json",
+      "bytes": 109535,
+      "sha256": "47145449ca9d46858f169d21f8c09dc77017fa28fe04028f41b0270d984ec67b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/historical-manual-answers.json",
+      "bytes": 1658,
+      "sha256": "493eeb47a4b3e2955d9d68e84a4fad5d5620cd8065f342f652e9a6f977c3550a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/historical-manual-fields.json",
+      "bytes": 10261,
+      "sha256": "80d90f6e5435ff4337be9127b79284bf8cc8c618cb359fd7455d3982d5216edb"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/historical-manual-refusal.json",
+      "bytes": 193,
+      "sha256": "0db4c70a247b7f9f95798b0a508a0323ddafe1fa697fc1405451ba36b5dc03cf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/initial-mapping.json",
+      "bytes": 136659,
+      "sha256": "59b14748897c2a21468f5585ead2b642b1333a1abf4d5e9d431942916abf48f0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/original.docx",
+      "bytes": 45415,
+      "sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/result.json",
+      "bytes": 3354,
+      "sha256": "970c44598696202d39567b43a6e8a2bff78b42db7d5a3b3216fe56ab88a4fc0e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004/source-only-groundtruth.json",
+      "bytes": 200468,
+      "sha256": "d4c5541dc3c7ac3e3d8f8efed279ee563174b4c8d4843ebe6b0d8d56465ac67c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-source-admission-proof-20261004.log",
+      "bytes": 1699,
+      "sha256": "c1cedbcac34bd16dd26d9d21915a616e8e16471152cdbfaf53fa05abe7f24e24"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/04cdcadb416529dbe3113d76ea40226839753a0c2079be5264c8f10c33c374a7.docx",
+      "bytes": 37771,
+      "sha256": "04cdcadb416529dbe3113d76ea40226839753a0c2079be5264c8f10c33c374a7"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/05fb0a77a66285cb00302c804b47dad06e0697af09bfe21021abb4461cd10a19.docx",
+      "bytes": 36665,
+      "sha256": "05fb0a77a66285cb00302c804b47dad06e0697af09bfe21021abb4461cd10a19"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/091d913935c1386379decfeac786ff3ac26193895c97831c1518a4c0328e29be-inspect.json",
+      "bytes": 10097,
+      "sha256": "e8b046a6fb99748914d74b622039b285440b8355be21a1f85b3130d27a4efc75"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/091d913935c1386379decfeac786ff3ac26193895c97831c1518a4c0328e29be.docx",
+      "bytes": 37877,
+      "sha256": "091d913935c1386379decfeac786ff3ac26193895c97831c1518a4c0328e29be"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/09c2c697b91b3687942011425f5225e9cd462b4c8200baaba1a09ac124314650.docx",
+      "bytes": 36800,
+      "sha256": "09c2c697b91b3687942011425f5225e9cd462b4c8200baaba1a09ac124314650"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/0b042f409fc907b5d00a2e179d8bec139a2f0d665a36a164730b442b890b5a3f.docx",
+      "bytes": 36663,
+      "sha256": "0b042f409fc907b5d00a2e179d8bec139a2f0d665a36a164730b442b890b5a3f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/0b0494e0b36a888d691784e5369e237e5297e7e132ee199d4557b8a06cecd43c.docx",
+      "bytes": 37857,
+      "sha256": "0b0494e0b36a888d691784e5369e237e5297e7e132ee199d4557b8a06cecd43c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/1270f2d9249eb928f7c2279b1f37c1e835945fab4b31597e6846970daa3f99af-inspect.json",
+      "bytes": 10851,
+      "sha256": "db9bbef51f6023018443617ab5e76bd548f3cec2ae4cc7f3b516426e52e0c3bf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/1270f2d9249eb928f7c2279b1f37c1e835945fab4b31597e6846970daa3f99af.docx",
+      "bytes": 37843,
+      "sha256": "1270f2d9249eb928f7c2279b1f37c1e835945fab4b31597e6846970daa3f99af"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/190639c5ff011a68b78605a0966014194f6c034dcfea549578e29c2cb35f6b8f.docx",
+      "bytes": 36767,
+      "sha256": "190639c5ff011a68b78605a0966014194f6c034dcfea549578e29c2cb35f6b8f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/1db1803b589053ecf2150435409927bcd270549cf6bdd8a233234057365fc207.docx",
+      "bytes": 37770,
+      "sha256": "1db1803b589053ecf2150435409927bcd270549cf6bdd8a233234057365fc207"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/1f09ab9b6f3e579f313b87e2351fb4140e73e5ba1b5b4e4fe2e9347ac81d7ab8.docx",
+      "bytes": 36687,
+      "sha256": "1f09ab9b6f3e579f313b87e2351fb4140e73e5ba1b5b4e4fe2e9347ac81d7ab8"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/1f70f13c9ea7ee09a95a75b62edfd6586eea2b0b27a68693eaae8fdef3964fe7.docx",
+      "bytes": 36650,
+      "sha256": "1f70f13c9ea7ee09a95a75b62edfd6586eea2b0b27a68693eaae8fdef3964fe7"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/26d80ead7bdffe4589c27ec09080dd42ba3663880a0314250f18ceda27a043d4-inspect.json",
+      "bytes": 8483,
+      "sha256": "37504ac94bf2f21a50449e2f7a5b460ce981218e4a91d701bd3c82cf7ddb6d06"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/26d80ead7bdffe4589c27ec09080dd42ba3663880a0314250f18ceda27a043d4.docx",
+      "bytes": 37897,
+      "sha256": "26d80ead7bdffe4589c27ec09080dd42ba3663880a0314250f18ceda27a043d4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/27a12ce88638255bc0cca34dfe0c454bf8f032d9687a216260317c0496357957.docx",
+      "bytes": 37802,
+      "sha256": "27a12ce88638255bc0cca34dfe0c454bf8f032d9687a216260317c0496357957"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/28b8679ad7e8232243af3090da6db35fc8ee4663b5fb4a97ee58fe3a625ee613.docx",
+      "bytes": 36620,
+      "sha256": "28b8679ad7e8232243af3090da6db35fc8ee4663b5fb4a97ee58fe3a625ee613"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/2ac34f0838c32400294e7d2b0aef4c9094b34ca6bc66d52394f22d079dadca2c.docx",
+      "bytes": 37773,
+      "sha256": "2ac34f0838c32400294e7d2b0aef4c9094b34ca6bc66d52394f22d079dadca2c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/3c2e114b66c0381715303340d154441644facc2ac00aa96bfc015586fd0e2216.docx",
+      "bytes": 37771,
+      "sha256": "3c2e114b66c0381715303340d154441644facc2ac00aa96bfc015586fd0e2216"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/3c44fdb2b4b2d99b03ad4198709200794666f1ded75e5382983ab24b7591abf4.docx",
+      "bytes": 36660,
+      "sha256": "3c44fdb2b4b2d99b03ad4198709200794666f1ded75e5382983ab24b7591abf4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/3d813c6b442e19a66e104747cbf3ddb1019c5d3e99a7034d781f921722aa584f.docx",
+      "bytes": 36654,
+      "sha256": "3d813c6b442e19a66e104747cbf3ddb1019c5d3e99a7034d781f921722aa584f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/4a34bbd5cde587bf17ca1c7a1d678ec86f32bc63b38d3cabdb75249e56a314a1.docx",
+      "bytes": 36691,
+      "sha256": "4a34bbd5cde587bf17ca1c7a1d678ec86f32bc63b38d3cabdb75249e56a314a1"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/4a70adfa3c5f69bcec6796069a3c532fc5492be3743c153abb350e7dbd567f32-inspect.json",
+      "bytes": 10849,
+      "sha256": "c497a7d6dffdbbfbb1b29037af6633f26d95f1a36cc8541fb14222533e942f12"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/4a70adfa3c5f69bcec6796069a3c532fc5492be3743c153abb350e7dbd567f32.docx",
+      "bytes": 37846,
+      "sha256": "4a70adfa3c5f69bcec6796069a3c532fc5492be3743c153abb350e7dbd567f32"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/4cb72f709331554d452a60525511977a00e435ad9c97493383540a0b0bed7cfb.docx",
+      "bytes": 36615,
+      "sha256": "4cb72f709331554d452a60525511977a00e435ad9c97493383540a0b0bed7cfb"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/4d3d72091a634d260e383da3a033e6dc9aac844d45ed79b48c2d818ddbb022e4.docx",
+      "bytes": 36773,
+      "sha256": "4d3d72091a634d260e383da3a033e6dc9aac844d45ed79b48c2d818ddbb022e4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/5193e98493e84468c506f6021ce9f7b19add6388f1dd9dfe4754c8b8d0d917b7.docx",
+      "bytes": 36651,
+      "sha256": "5193e98493e84468c506f6021ce9f7b19add6388f1dd9dfe4754c8b8d0d917b7"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/538fba083966f606782b519d4ea64ffa69ead4e5e5f48ea38c73b494f14f06ac.docx",
+      "bytes": 36739,
+      "sha256": "538fba083966f606782b519d4ea64ffa69ead4e5e5f48ea38c73b494f14f06ac"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/55db37c11287156ee577d1d718c0f38a223e001f664ae49e6fc27d05dccc68e0-inspect.json",
+      "bytes": 9136,
+      "sha256": "9aa81eacff45fd03f87d9b49ef3ea04a382eaf879ce147e89e89713eb782e8cf"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/55db37c11287156ee577d1d718c0f38a223e001f664ae49e6fc27d05dccc68e0.docx",
+      "bytes": 37903,
+      "sha256": "55db37c11287156ee577d1d718c0f38a223e001f664ae49e6fc27d05dccc68e0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/5902d1087e63c069a6df72e6cb883253489b9f2fb881ff617810bb091957b133.docx",
+      "bytes": 37877,
+      "sha256": "5902d1087e63c069a6df72e6cb883253489b9f2fb881ff617810bb091957b133"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/5c0e87c8d7807460c666d99f32debd0cdee4b5f899801f8bbd33df35ab668775-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/5c0e87c8d7807460c666d99f32debd0cdee4b5f899801f8bbd33df35ab668775.docx",
+      "bytes": 37877,
+      "sha256": "5c0e87c8d7807460c666d99f32debd0cdee4b5f899801f8bbd33df35ab668775"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/5d248f9ae1c9f103a1b179ef421e3d10ed89f250167f7704eb7eae8b7c5ce432.docx",
+      "bytes": 36655,
+      "sha256": "5d248f9ae1c9f103a1b179ef421e3d10ed89f250167f7704eb7eae8b7c5ce432"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/65726e8b1b35a63a1de114e1eb26e29517cc80fae33da2ed4fa8063dc1dfd8de.docx",
+      "bytes": 36730,
+      "sha256": "65726e8b1b35a63a1de114e1eb26e29517cc80fae33da2ed4fa8063dc1dfd8de"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/663137be6fa8296245f5ba55f59b46f1ce10f2ee3daf2e0206f9e5d350dbc8d9.docx",
+      "bytes": 36797,
+      "sha256": "663137be6fa8296245f5ba55f59b46f1ce10f2ee3daf2e0206f9e5d350dbc8d9"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/6aa1282e221fd7b5fc552327fe13b12c690ead8f09fee2c3fa85cbf3f955b312.docx",
+      "bytes": 36725,
+      "sha256": "6aa1282e221fd7b5fc552327fe13b12c690ead8f09fee2c3fa85cbf3f955b312"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/6b788eea9011bd60b6529adbb2d6a14cf31dbb85e7dcabf4d459f487a2a1863b-inspect.json",
+      "bytes": 8555,
+      "sha256": "52a5bedb6b0308327c1b1ed1222025a23f8380f04a09f2ba0ac398a9d1dc3319"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/6b788eea9011bd60b6529adbb2d6a14cf31dbb85e7dcabf4d459f487a2a1863b.docx",
+      "bytes": 37856,
+      "sha256": "6b788eea9011bd60b6529adbb2d6a14cf31dbb85e7dcabf4d459f487a2a1863b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/6c09c9102ff7320872ba641911c9f5689ac12a2ce5af85e7ac5f659a52e60db7.docx",
+      "bytes": 36795,
+      "sha256": "6c09c9102ff7320872ba641911c9f5689ac12a2ce5af85e7ac5f659a52e60db7"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/6d23aa49c0d6be92da9d24d22f7bf112085ca3e2d69c4bb5116b5655863e95c9.docx",
+      "bytes": 37785,
+      "sha256": "6d23aa49c0d6be92da9d24d22f7bf112085ca3e2d69c4bb5116b5655863e95c9"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/6d7613752d2e3586396d179456c7eb83f9bde8b52e26536925cf7babd9a9a111.docx",
+      "bytes": 36686,
+      "sha256": "6d7613752d2e3586396d179456c7eb83f9bde8b52e26536925cf7babd9a9a111"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/6db90a25903736d05b9b2285322fc1aa26bf6007a826c8ecc4535cd2225e46fd.docx",
+      "bytes": 37806,
+      "sha256": "6db90a25903736d05b9b2285322fc1aa26bf6007a826c8ecc4535cd2225e46fd"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/7110a2830640d31183f3d3a7c2d303666e9f1739f019c221ddf6f2c7aacbf067.docx",
+      "bytes": 38012,
+      "sha256": "7110a2830640d31183f3d3a7c2d303666e9f1739f019c221ddf6f2c7aacbf067"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/734a2c79c467f78b85b561f424c0f0ea0a0ef1be03dc7e9af570c9896bda7487.docx",
+      "bytes": 36656,
+      "sha256": "734a2c79c467f78b85b561f424c0f0ea0a0ef1be03dc7e9af570c9896bda7487"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/75afb6d497b6fc9b0d6c36e77732c259b988737c0ceea6770ad5a69e72bd7f1b-inspect.json",
+      "bytes": 8948,
+      "sha256": "dcd0af7f884b5dcee0b10677eb831d6d7e1ef85c3c63d5173e823afb2ba61099"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/75afb6d497b6fc9b0d6c36e77732c259b988737c0ceea6770ad5a69e72bd7f1b.docx",
+      "bytes": 37897,
+      "sha256": "75afb6d497b6fc9b0d6c36e77732c259b988737c0ceea6770ad5a69e72bd7f1b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/77a50ff9d0a0d5b98886d58b79e3bf51bd60b45d68de7b1ef693ae22d2c5e48c.docx",
+      "bytes": 36691,
+      "sha256": "77a50ff9d0a0d5b98886d58b79e3bf51bd60b45d68de7b1ef693ae22d2c5e48c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/7cd7548d4eb18f5fdc55675bcf27ae56c5f9339b483515fb71455dcb1e1be41f.docx",
+      "bytes": 36732,
+      "sha256": "7cd7548d4eb18f5fdc55675bcf27ae56c5f9339b483515fb71455dcb1e1be41f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/83b78097d3f862c36a400601b4fd19b821ed2da8b7eeabe422cac2cdd50f5978.docx",
+      "bytes": 36760,
+      "sha256": "83b78097d3f862c36a400601b4fd19b821ed2da8b7eeabe422cac2cdd50f5978"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/879ebdc32cf27d4efbbcb0e22c5ce4b0922aa24f19b94978f3a9bb85fa98ea05-inspect.json",
+      "bytes": 9052,
+      "sha256": "5b6402b65278a6613b8e29412b295625f63d748874f1346b1d62821386e2a11e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/879ebdc32cf27d4efbbcb0e22c5ce4b0922aa24f19b94978f3a9bb85fa98ea05.docx",
+      "bytes": 37886,
+      "sha256": "879ebdc32cf27d4efbbcb0e22c5ce4b0922aa24f19b94978f3a9bb85fa98ea05"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/925cc65ab4731c8c61b7c45f4e3cf9a92a6c9401badab4dcc47560cae55ea5b0.docx",
+      "bytes": 37928,
+      "sha256": "925cc65ab4731c8c61b7c45f4e3cf9a92a6c9401badab4dcc47560cae55ea5b0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/9355b324cb32402290a70849d28f44d2670b7b0e14ecaeb8a539d5b1cdc67944.docx",
+      "bytes": 36762,
+      "sha256": "9355b324cb32402290a70849d28f44d2670b7b0e14ecaeb8a539d5b1cdc67944"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/946c0092daff5ff67208eca829f20a62b7fb97f7720f1d4e14b63be89344258d.docx",
+      "bytes": 36734,
+      "sha256": "946c0092daff5ff67208eca829f20a62b7fb97f7720f1d4e14b63be89344258d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/9657f541c915985318a142f48cbee93b116e447fea167107afaffcfb22f15e02.docx",
+      "bytes": 37805,
+      "sha256": "9657f541c915985318a142f48cbee93b116e447fea167107afaffcfb22f15e02"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/9bbac7360f9339f1c27a18b75fd514788f0f442cf513579965cdf63157eda64a.docx",
+      "bytes": 37798,
+      "sha256": "9bbac7360f9339f1c27a18b75fd514788f0f442cf513579965cdf63157eda64a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/9bfe8f199472564ed67d74ea8d1d0565feb5e709c69dcf10a4282ebb68a0da0a.docx",
+      "bytes": 36799,
+      "sha256": "9bfe8f199472564ed67d74ea8d1d0565feb5e709c69dcf10a4282ebb68a0da0a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/9dc2eca100872796bc145f7ba1cf086e546d08eae29d9765359a2b39540cb6ce.docx",
+      "bytes": 36657,
+      "sha256": "9dc2eca100872796bc145f7ba1cf086e546d08eae29d9765359a2b39540cb6ce"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/9f6bb244c8faaa1a2b96621e64656d18261056e7d1e4c232441c8509baabb251.docx",
+      "bytes": 36683,
+      "sha256": "9f6bb244c8faaa1a2b96621e64656d18261056e7d1e4c232441c8509baabb251"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/a20d01c3b4ab2682fe1c281ec845a140cd781a1351022e4ca3224432eaba6c16.docx",
+      "bytes": 36792,
+      "sha256": "a20d01c3b4ab2682fe1c281ec845a140cd781a1351022e4ca3224432eaba6c16"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/a3c3632b3956b1b645f08f05f1fa229eb19187f52a388d6457b8b9ef685a312a.docx",
+      "bytes": 36686,
+      "sha256": "a3c3632b3956b1b645f08f05f1fa229eb19187f52a388d6457b8b9ef685a312a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/a6b97c3483f4ffce8839ee4bf1d2c5b8e77cf073d148c42ecbb219f33f19e936.docx",
+      "bytes": 36796,
+      "sha256": "a6b97c3483f4ffce8839ee4bf1d2c5b8e77cf073d148c42ecbb219f33f19e936"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/a752235a1529b37092a8d4b26fc555f204622aacb7fdb936b89d8fde9398e8fc-inspect.json",
+      "bytes": 9050,
+      "sha256": "ae855b17e6f82aee57c04a031c45c8ae933ab816e3e47b621c1e09731540d51f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/a752235a1529b37092a8d4b26fc555f204622aacb7fdb936b89d8fde9398e8fc.docx",
+      "bytes": 37883,
+      "sha256": "a752235a1529b37092a8d4b26fc555f204622aacb7fdb936b89d8fde9398e8fc"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/aa2abfa7b7885a5c2d3b7132aedfa56afa2ccabcd449e7de73ec81a609a2bbb8.docx",
+      "bytes": 37914,
+      "sha256": "aa2abfa7b7885a5c2d3b7132aedfa56afa2ccabcd449e7de73ec81a609a2bbb8"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ab6323480779f385b969a29a6cd0bf67fb85d601d1bacf75a9e5f5917a462d58.docx",
+      "bytes": 36686,
+      "sha256": "ab6323480779f385b969a29a6cd0bf67fb85d601d1bacf75a9e5f5917a462d58"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/abf7c40a4c2182eec8d7ce9219b23757cfc8843a1cce5bfb9d5e7c5e587e2f01.docx",
+      "bytes": 37787,
+      "sha256": "abf7c40a4c2182eec8d7ce9219b23757cfc8843a1cce5bfb9d5e7c5e587e2f01"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/aca7b1bbbf9d798537cad5f601dcf5244b7f1bd4e8b79fa082e773274de750b0.docx",
+      "bytes": 36619,
+      "sha256": "aca7b1bbbf9d798537cad5f601dcf5244b7f1bd4e8b79fa082e773274de750b0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/adb69709a57c29b7a7ef547e3fd391463b18d975ca29e215f34527544e1b7546.docx",
+      "bytes": 37858,
+      "sha256": "adb69709a57c29b7a7ef547e3fd391463b18d975ca29e215f34527544e1b7546"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ae42bdf33a1d5a638d1addbbefbb666a024334c9c91021baf4f37c63da51e613-inspect.json",
+      "bytes": 10867,
+      "sha256": "ae241544105382f99adf1926420b28194e1bc9d6ec6fd9058800a5caad3ffe3e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ae42bdf33a1d5a638d1addbbefbb666a024334c9c91021baf4f37c63da51e613.docx",
+      "bytes": 37862,
+      "sha256": "ae42bdf33a1d5a638d1addbbefbb666a024334c9c91021baf4f37c63da51e613"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/attempts.json",
+      "bytes": 529119,
+      "sha256": "8bc8e456707cc086a3ce06f43e619739cf24972d0bf957548c973716822e9634"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b06e32548994f47adaf93f2ea17029647cc4e2ab8d555f1f01258ccfde5e8e16.docx",
+      "bytes": 36763,
+      "sha256": "b06e32548994f47adaf93f2ea17029647cc4e2ab8d555f1f01258ccfde5e8e16"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b327895bdd6b20c11fd38e005847b78954a9f7a1b792fb54acbfd1047393dfc0.docx",
+      "bytes": 36772,
+      "sha256": "b327895bdd6b20c11fd38e005847b78954a9f7a1b792fb54acbfd1047393dfc0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b505dbd4581cef9268f8281dc745aab8583d8caccc1113b1e03ba34d13c953fc.docx",
+      "bytes": 36742,
+      "sha256": "b505dbd4581cef9268f8281dc745aab8583d8caccc1113b1e03ba34d13c953fc"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b514627bf5056c30369fd022186a80b53a0625061aa5f4bede042c8389c47f6c.docx",
+      "bytes": 36775,
+      "sha256": "b514627bf5056c30369fd022186a80b53a0625061aa5f4bede042c8389c47f6c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b5e76b5604d748a5ca1be6a7bd1c36ed3a752fadd6fb0b969f72df65459c78e0.docx",
+      "bytes": 37914,
+      "sha256": "b5e76b5604d748a5ca1be6a7bd1c36ed3a752fadd6fb0b969f72df65459c78e0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b6936222b99f7970b335a0029097fb6379ca0d3dc6201c8155cee2abaee867a2.docx",
+      "bytes": 36737,
+      "sha256": "b6936222b99f7970b335a0029097fb6379ca0d3dc6201c8155cee2abaee867a2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b8001bf361fbf21a8ba7d8c20b76b4bd055ec4c06180de7e5a5635ceb1bba8d4-inspect.json",
+      "bytes": 1054,
+      "sha256": "15afec353a07bbafbd68f58bb2937eb64300f5ab1b7df12cbf0764e21dd17e3d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b8001bf361fbf21a8ba7d8c20b76b4bd055ec4c06180de7e5a5635ceb1bba8d4.docx",
+      "bytes": 37771,
+      "sha256": "b8001bf361fbf21a8ba7d8c20b76b4bd055ec4c06180de7e5a5635ceb1bba8d4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/b88ea3bffe608835a91b4e1eeaafaf45ad8f926413ec84f3f78f2fc2c98c92b6.docx",
+      "bytes": 37775,
+      "sha256": "b88ea3bffe608835a91b4e1eeaafaf45ad8f926413ec84f3f78f2fc2c98c92b6"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/bdfde16f23caf77e3738f6e741f138e4ddd6dae74207d5865a13a3ef50a8c878.docx",
+      "bytes": 36619,
+      "sha256": "bdfde16f23caf77e3738f6e741f138e4ddd6dae74207d5865a13a3ef50a8c878"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/bf297560d225e7171674614500a5764c723e975cfd0ee9a2deaa2695292fc73a.docx",
+      "bytes": 36659,
+      "sha256": "bf297560d225e7171674614500a5764c723e975cfd0ee9a2deaa2695292fc73a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/bf8db0aedccf26d2230753febbd6625b38c88b931ffec5edffb898c20b6f54c4.docx",
+      "bytes": 36657,
+      "sha256": "bf8db0aedccf26d2230753febbd6625b38c88b931ffec5edffb898c20b6f54c4"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/c057ba6260dfaf29ccb1f99808a0e3e651479028af7768ea24440ccf5103b20f-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/c057ba6260dfaf29ccb1f99808a0e3e651479028af7768ea24440ccf5103b20f.docx",
+      "bytes": 37877,
+      "sha256": "c057ba6260dfaf29ccb1f99808a0e3e651479028af7768ea24440ccf5103b20f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/c37db5688182064de666b6dc1210e87f26def60eecb4622a3f0f23fa2b147e23.docx",
+      "bytes": 37800,
+      "sha256": "c37db5688182064de666b6dc1210e87f26def60eecb4622a3f0f23fa2b147e23"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/c578f840e35d38f319ffbc02260ea2f087263503a8d75b5a6f9d29491851607d.docx",
+      "bytes": 36774,
+      "sha256": "c578f840e35d38f319ffbc02260ea2f087263503a8d75b5a6f9d29491851607d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/c938c3cbc0bb2cf4640f4f54bae49ad1cd41d7fd510636484bda0663a1caca92-inspect.json",
+      "bytes": 9052,
+      "sha256": "271106460b5b9842f385b8f89e2515c1be22b37a94bcfb0695910e24c5eef84d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/c938c3cbc0bb2cf4640f4f54bae49ad1cd41d7fd510636484bda0663a1caca92.docx",
+      "bytes": 37858,
+      "sha256": "c938c3cbc0bb2cf4640f4f54bae49ad1cd41d7fd510636484bda0663a1caca92"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/caa415a5f562bf834e49d1ee7f4f77648934471db568c8e1ce9669ee98bbcb76.docx",
+      "bytes": 36780,
+      "sha256": "caa415a5f562bf834e49d1ee7f4f77648934471db568c8e1ce9669ee98bbcb76"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/cb20231065b6754787d0fd2d9db45af9531bad5414718d9cd45f0b82a29f6b1f.docx",
+      "bytes": 36796,
+      "sha256": "cb20231065b6754787d0fd2d9db45af9531bad5414718d9cd45f0b82a29f6b1f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ccba6cc61d68b5047ac7eddadc473f627788a8ed05017ac21422653ba69f41e0.docx",
+      "bytes": 38056,
+      "sha256": "ccba6cc61d68b5047ac7eddadc473f627788a8ed05017ac21422653ba69f41e0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/d9ebb643cd977599153aca896b6e6bd00cae9d9b22347bc8960b2fa566139795-inspect.json",
+      "bytes": 10260,
+      "sha256": "249ad368d2a09d2e1940da1cab87393ffefa7f1614d2bf01d548164fd0653eaa"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/d9ebb643cd977599153aca896b6e6bd00cae9d9b22347bc8960b2fa566139795.docx",
+      "bytes": 37892,
+      "sha256": "d9ebb643cd977599153aca896b6e6bd00cae9d9b22347bc8960b2fa566139795"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/dc32bd34b4e4fa23640675c6e483fd534b2c4e5d5c279d8e59d47f5eddf404be.docx",
+      "bytes": 36663,
+      "sha256": "dc32bd34b4e4fa23640675c6e483fd534b2c4e5d5c279d8e59d47f5eddf404be"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/dee8df275d531ddbb9ad06ba7831362afdd1d452113af88f0f6f3a0760970213.docx",
+      "bytes": 36652,
+      "sha256": "dee8df275d531ddbb9ad06ba7831362afdd1d452113af88f0f6f3a0760970213"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/e01e021b08c3da11a56b527655fb8b001067bbd2a6e4191cc3993fae50d59c91.docx",
+      "bytes": 36773,
+      "sha256": "e01e021b08c3da11a56b527655fb8b001067bbd2a6e4191cc3993fae50d59c91"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/e3ec37b2270980fc1b5aac4829f28f5121ca37bc0f3ec70195be6ee519521296.docx",
+      "bytes": 37810,
+      "sha256": "e3ec37b2270980fc1b5aac4829f28f5121ca37bc0f3ec70195be6ee519521296"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/e5144ef08a63048042aa7306c58c45052884216afcdb9e7e58e1adce7e37304a.docx",
+      "bytes": 36771,
+      "sha256": "e5144ef08a63048042aa7306c58c45052884216afcdb9e7e58e1adce7e37304a"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/e6235b650f35784ab2d9c8b0151261ce1cbff174fa96071e2118ff382cee44d6.docx",
+      "bytes": 36723,
+      "sha256": "e6235b650f35784ab2d9c8b0151261ce1cbff174fa96071e2118ff382cee44d6"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/e676869ba826d04e33f3ba0fb24d036424d16587e84b8def18ac7fe0f36b08cb.docx",
+      "bytes": 36626,
+      "sha256": "e676869ba826d04e33f3ba0fb24d036424d16587e84b8def18ac7fe0f36b08cb"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/e67882d3fc4c1db9b2a06c1f81105ab0f63cff46814289ef6b119d399141b204.docx",
+      "bytes": 36655,
+      "sha256": "e67882d3fc4c1db9b2a06c1f81105ab0f63cff46814289ef6b119d399141b204"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/e930861f82ada02776591ce5924793601e9ec530badf8a91357cda5e01774336.docx",
+      "bytes": 36625,
+      "sha256": "e930861f82ada02776591ce5924793601e9ec530badf8a91357cda5e01774336"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ee2dcef36638f3f751ad765e6c1d8dd8d4a02af77195f83afac12edf6e0b5670.docx",
+      "bytes": 37877,
+      "sha256": "ee2dcef36638f3f751ad765e6c1d8dd8d4a02af77195f83afac12edf6e0b5670"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/f2d5863eeeb6ec084722a31ffa626e174f7ddaa86fbdca5dd1dccc028fbbe058.docx",
+      "bytes": 36656,
+      "sha256": "f2d5863eeeb6ec084722a31ffa626e174f7ddaa86fbdca5dd1dccc028fbbe058"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/f6eedbb97b8cb8fc3f1390a2cb2c18f8ce6d624994167d75e719f21105a0c4e3.docx",
+      "bytes": 36611,
+      "sha256": "f6eedbb97b8cb8fc3f1390a2cb2c18f8ce6d624994167d75e719f21105a0c4e3"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/f982d2e0eca5cc0b51ea9c67c3959027f4c61e494e6a2aae78c647e927cc55ce.docx",
+      "bytes": 36612,
+      "sha256": "f982d2e0eca5cc0b51ea9c67c3959027f4c61e494e6a2aae78c647e927cc55ce"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/fa3410efe8d59737e4bfd71cb68392de76eb819e144969cff7e0ff27d8da8a27.docx",
+      "bytes": 36727,
+      "sha256": "fa3410efe8d59737e4bfd71cb68392de76eb819e144969cff7e0ff27d8da8a27"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/fefadce216e634951f6751317aa19cbddccedb8cb45bd5d3fe277ffa05807e8b.docx",
+      "bytes": 36607,
+      "sha256": "fefadce216e634951f6751317aa19cbddccedb8cb45bd5d3fe277ffa05807e8b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ff42502f42bc6fb704c8daa8e9ec9499d17acaf64637f81b71e2289d10cd4608-inspect.json",
+      "bytes": 11011,
+      "sha256": "3f20f59498cee812f1d84d04b18d0cc24cbc7f6e1a9ea529267caf6ba94eeebe"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ff42502f42bc6fb704c8daa8e9ec9499d17acaf64637f81b71e2289d10cd4608.docx",
+      "bytes": 37877,
+      "sha256": "ff42502f42bc6fb704c8daa8e9ec9499d17acaf64637f81b71e2289d10cd4608"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/ff5326fcc7ff4d236b40111ba35d1aa8942c4e3910808849a886c69c07b65e19.docx",
+      "bytes": 36770,
+      "sha256": "ff5326fcc7ff4d236b40111ba35d1aa8942c4e3910808849a886c69c07b65e19"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/result.json",
+      "bytes": 493,
+      "sha256": "611bb2d772a7ee6d6d498ce753cdef4b49ad1c5fbf803a92052f348576e6ad5f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004/source-before.json",
+      "bytes": 219,
+      "sha256": "999493e3e5fc270c419a7febcd0b4d51df48b4bd50b694982f8af394183b79c9"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-automatic-ruled-third-affected-20261004.log",
+      "bytes": 4742,
+      "sha256": "c41e462d87c33e20f0d0d16cde102a826de683a4980dfc7f069c2d474ad038bd"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-retained-15-source-trace-04fb-20261004/groundtruth.json",
+      "bytes": 109535,
+      "sha256": "47145449ca9d46858f169d21f8c09dc77017fa28fe04028f41b0270d984ec67b"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-retained-15-source-trace-04fb-20261004/original.docx",
+      "bytes": 45415,
+      "sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-retained-15-source-trace-04fb-20261004/result.json",
+      "bytes": 22030,
+      "sha256": "e81dd169b0644ef9880a8808e14967e38f451095d2c83122208453e7fcea1ad2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-retained-15-source-trace-04fb-20261004/retained-actual-groundtruth.json",
+      "bytes": 521458,
+      "sha256": "e590636ae59d592c74d36902fa1a81e1e4929c20dad9b66e69592ff357a9ddf5"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-retained-15-source-trace-04fb-20261004/source-word.py",
+      "bytes": 661609,
+      "sha256": "4c51ad1331da0ceace4424c79be9ad5ed775a426809347e0f38125ca68889995"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-retained-15-source-trace-74-20261004/instrument-failure.json",
+      "bytes": 252,
+      "sha256": "67e2ec5e4a5e5ed1ef6a65a32ae8bde2d40b4ead664bfc6eba71f10bcc132e29"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-retained-15-source-trace-74-corrected-20261004/instrument-failure.json",
+      "bytes": 273,
+      "sha256": "fe709a01b383402f61f8eb584102e0e2fc378f479cb69af528f34b7b7ef03c58"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-first-unsafe-export-20261004/answers.json",
+      "bytes": 38,
+      "sha256": "797ad48c8dcb8418e78f5761f510fc3bed0e44506b9bc0b70a7ad8ed1fe4ff3c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-first-unsafe-export-20261004/export.docx",
+      "bytes": 37902,
+      "sha256": "28a6cca3c24f5534a52a6dea972597ec413fd8eba52db09e89f79626a116f3b2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-first-unsafe-export-20261004/fields.json",
+      "bytes": 9816,
+      "sha256": "8ee36b001ec95055a42ea56155954d3dc2fe3d750284f9daae3c442e1b41de2d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-first-unsafe-export-20261004/original.docx",
+      "bytes": 37858,
+      "sha256": "b04dcfcfb97e1437091384915fbfa16e62dcde0eeb637d908267cef2525d35df"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-first-unsafe-export-20261004/readback.json",
+      "bytes": 38,
+      "sha256": "797ad48c8dcb8418e78f5761f510fc3bed0e44506b9bc0b70a7ad8ed1fe4ff3c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-first-unsafe-export-20261004/result.json",
+      "bytes": 481,
+      "sha256": "fdf07ea7d96f4a20a26a011c4ff3b590965052f564112822911be038a8d841c7"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-fixed-same-input-20261004/answers.json",
+      "bytes": 38,
+      "sha256": "797ad48c8dcb8418e78f5761f510fc3bed0e44506b9bc0b70a7ad8ed1fe4ff3c"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-fixed-same-input-20261004/fields.json",
+      "bytes": 9816,
+      "sha256": "8ee36b001ec95055a42ea56155954d3dc2fe3d750284f9daae3c442e1b41de2d"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-fixed-same-input-20261004/original.docx",
+      "bytes": 37858,
+      "sha256": "b04dcfcfb97e1437091384915fbfa16e62dcde0eeb637d908267cef2525d35df"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10-ruled-guidance-fixed-same-input-20261004/result.json",
+      "bytes": 472,
+      "sha256": "d83d22a9fce36ba289df1b6b347d9ff83a12ab817094b474a9ced7cf78dbf852"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10_automatic_ruled_original_proof.py",
+      "bytes": 5891,
+      "sha256": "d7536d334d03ca7d9b6d4401f1837160f06dcd2e4fe97aa4718caa0fc3b20a69"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10_retained_omission_trace.py",
+      "bytes": 3929,
+      "sha256": "bdfeb29616215a57504005d48cd59548686afc96ca47c2ce37c50a043d0f2ade"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d10_ruled_guidance_failure_replay.py",
+      "bytes": 2532,
+      "sha256": "c31c094516d23ca4f7d6586a6999a6ea4d710b2f8d546c11e3b9e8d9f40d877e"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/run_scalar_alternative_archive.py",
+      "bytes": 2251,
+      "sha256": "70764a54b50b81fbe7295d8fa7bef6916bd7893a1c22dc555441dc614acbd5bf"
+    }
+  ],
+  "files_count": 339,
+  "all_verified": true,
+  "cleanup_bytes": 0
+}

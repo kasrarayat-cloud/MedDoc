@@ -1,0 +1,408 @@
+{
+  "original_source_commit": "0b4ccfd5314e4729e321d04ec2ad04f4b920056c",
+  "original_exact_notes": "Signed consent received on: 2026-09-30\nUnrelated note: Synthetic review",
+  "original_first_answer": {
+    "status": "conflict",
+    "text": "",
+    "held_candidate": {
+      "text": "2026-09-30",
+      "evidence": [
+        {
+          "quote": "Signed consent received on: 2026-09-30",
+          "start": 0,
+          "end": 38
+        }
+      ],
+      "context": [
+        {
+          "quote": "Signed consent received on: 2026-09-30",
+          "start": 0,
+          "end": 38,
+          "after": false,
+          "same": true
+        },
+        {
+          "quote": "Unrelated note: Synthetic review",
+          "start": 39,
+          "end": 71,
+          "after": true,
+          "same": false
+        }
+      ],
+      "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+    }
+  },
+  "original_first_output_sha256": "bd1f15b77b2294fbc9d7429010b878b544cd6deee92014b8896c1300fc92f72b",
+  "original_original_docx_sha256": "02a12d4c7e4512800d32abb85138e4b7f85c6f8f80e0c08fce434f3a7281460d",
+  "repair_commit": "1708cbb88e984a54014eab1cd35900ff15ee1261",
+  "integration_commit": "15f87bb2e7a487225711fa52c8092e279767ad01",
+  "integrated_commit_is_s2_ancestor": true,
+  "historical_affected_gate": {
+    "methods": 76,
+    "seconds": 160.537,
+    "actual_exit_code": 0,
+    "runner": "offline unittest SimpleTestCase classes; socket/db connects prohibited",
+    "timeout_seconds": 420,
+    "log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/affected-receipt-final1.log"
+  },
+  "historical_new_fixed_source_scenarios": 53,
+  "historical_after_sha256": "8d114dde13ceda6e4f1feb63cac6717e12451a376bff74909edf138d9859c7fd",
+  "historical_after_provenance": "Replay recorded precommitHEAD0b4; finished1708 checkpoint binds tested source bytes and preserved gate. CurrentS2 replay independently identifies clean release source.",
+  "finished_checkpoint_sha256": "b58f50913f0396c11e190a4b9573004c5d09cdf4e1b70f78ef1846833b708c7f",
+  "root_original_controls": 17,
+  "root_original_sha256": "83196a0ad214ef791795511e97c42b16d97455718fa9f34b7c77fd79f69a1c26",
+  "root_addendum": {
+    "recorded_utc": "2026-10-03T22:17:11.213796+00:00",
+    "original_result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical-refutation-1708cbb88e98/result.json",
+    "original_sha256": "83196a0ad214ef791795511e97c42b16d97455718fa9f34b7c77fd79f69a1c26",
+    "original_unsafe_flags_retained": 3,
+    "claims_withdrawn": [
+      "R11",
+      "R12",
+      "R16"
+    ],
+    "reasons": {
+      "R11": "Helper form fabricated long_text without original physical Witness signature role. Actual source inspection returns signature and forged writer refuses protected_signing_area. No reachable bound workflow wrong output shown.",
+      "R12": "Helper form fabricated unprotected long_text without original Manager approval authority. Actual source inspection is write_protected and forged writer refuses protected_signing_area. No reachable bound workflow wrong output shown.",
+      "R16": "A date received for a signed consent does not assert patient personally signed. Source explicitly says mother signed and document received; no wrong receipt answer demonstrated. Signer attribution is a separate field/workflow."
+    },
+    "physical_proof": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-signing-physical-controls.json",
+    "applicable_receipt_controls": 14,
+    "applicable_unsafe_releases": 0,
+    "applicable_unnecessary_holds": 0,
+    "instrument_errors": 0,
+    "original_denominator": 17,
+    "limitations": "Three original flagged cases do not certify an actual signing/guardian workflow. Separate real bound destination controls required. This is simulated wire/page/final governance, no HTTP/export/provider qualification."
+  },
+  "root_addendum_sha256": "8222e0ad0cf68f24623b1c82299c150ece983a18333a4d9745ff2cf63c90ce62",
+  "actual_original_signing_guard_sha256": "c90c9b491b9b04a1a17e237c58bae82829c4524d1888e2953d7ab5475f2c8f14",
+  "current_pure_replay": {
+    "source_head": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+    "cases": [
+      {
+        "folder": "ordinary-source-auto-y3yxtpwr",
+        "notes": "Signed consent received on: 2026-09-30\nUnrelated note: Synthetic review",
+        "original_sha256": "02a12d4c7e4512800d32abb85138e4b7f85c6f8f80e0c08fce434f3a7281460d",
+        "fields": [
+          {
+            "key": "v3_1",
+            "kind": "text",
+            "label": "Signed consent received on",
+            "context": "Signed consent received on",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[1]",
+              "target": {
+                "type": "cell"
+              },
+              "contract": "v3",
+              "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+            }
+          },
+          {
+            "key": "v3_2",
+            "kind": "long_text",
+            "label": "Unrelated note",
+            "context": "Unrelated note",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[1]/tc[1]",
+              "target": {
+                "type": "cell"
+              },
+              "contract": "v3",
+              "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+            }
+          }
+        ],
+        "config": {
+          "mode": "fixture",
+          "provider": "anthropic",
+          "model": "claude-sonnet-5-5",
+          "input_rate": "2",
+          "output_rate": "10",
+          "cached_rate": "0.20",
+          "voice_rate_minute": "",
+          "voice_rate_second": "",
+          "voice_max_cost": "0.20",
+          "prompt_version": "extractive-v7-question-context",
+          "v3_evidence_contract": "natural-v1",
+          "discount_rate": "0",
+          "request_profile": {
+            "profile": "claude-sonnet-5-5-ordinary-v1",
+            "max_output_tokens": 20000,
+            "timeout_seconds": 120,
+            "thinking": {
+              "type": "between_tools"
+            },
+            "effort": "medium"
+          },
+          "pricing_version": "configured-v1:240ad0521f69c2b673e505f081f15b269d21073a9802055daed7167c9b20e0f1",
+          "ordinary_field_contract": "ordinary-field-relations-v4"
+        },
+        "answers": {
+          "v3_1": {
+            "text": "2026-09-30",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Signed consent received on: 2026-09-30",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yCVtkCSX6miyMGmQqMQAelWVfn3wTJN2guSfS4H4zczMZQEprCRxYQuQHpx68gjT-ShuBgyf15ZxxYXKr7XnNL9cpGD1lai7O3Z0EALCGUBUSlYqEclFm2FxhP0ZzqBsQoFAcnLMGhTZY-I5KvKeNiQeI4hUOGSy8o-6FXJ8zKLWpj4WKm4ElNm4-3oTn_tcJ_jVtatTv8-2HgT096xTJ5MG76Bf8ItuDI7zD_JJgrWu_Z9Cz5Tx-Larv0mjkChr9Ieh5A_KVVH3QStVI9Q2LTv3_Oyapw:1xDKgf:oezc7WScsnS10Tj3Nz-uQQkwpfDAvo8i6jVuyTHe2Ww"
+          },
+          "v3_2": {
+            "text": "Synthetic review",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Unrelated note: Synthetic review",
+                "start": 39,
+                "end": 71
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yA1SYEkv1JFkQOmQqMQgdOtqvLvg2WatBck-1wOxm-mY6AEmtjEYjIuQHpx69AbntADuRgyf15Zw1YXCr6XnFTD2otRKSuMGGynccQVWmnBGClhxcHIdlW2VeYCQ4cX0FaaFgFFP45KF9kjGvRFpT3sBnmOISBxwUVhH_gq5NkvXSl0fGxIjmLKbLqd3fmvHe5L3Gnby_Tvk023bj4altGjrsNX8E-4B0eLM_knWUXBele_b8FnbFjc6rXfxBkg_KL6eFkAbliOQEUEIX9iYvNxfAP5YWqi:1xDKgf:hewqeZB6p7WgWHd4iT0hRChnKvdU1xiQN4J5PY98LVU"
+          }
+        },
+        "page": {
+          "v3_1": {
+            "key": "v3_1",
+            "kind": "text",
+            "label": "Signed consent received on",
+            "context": "Signed consent received on",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[1]",
+              "target": {
+                "type": "cell"
+              },
+              "contract": "v3",
+              "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+            },
+            "text": "2026-09-30",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Signed consent received on: 2026-09-30",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yCVtkCSX6miyMGmQqMQAelWVfn3wTJN2guSfS4H4zczMZQEprCRxYQuQHpx68gjT-ShuBgyf15ZxxYXKr7XnNL9cpGD1lai7O3Z0EALCGUBUSlYqEclFm2FxhP0ZzqBsQoFAcnLMGhTZY-I5KvKeNiQeI4hUOGSy8o-6FXJ8zKLWpj4WKm4ElNm4-3oTn_tcJ_jVtatTv8-2HgT096xTJ5MG76Bf8ItuDI7zD_JJgrWu_Z9Cz5Tx-Larv0mjkChr9Ieh5A_KVVH3QStVI9Q2LTv3_Oyapw:1xDKgf:oezc7WScsnS10Tj3Nz-uQQkwpfDAvo8i6jVuyTHe2Ww"
+          },
+          "v3_2": {
+            "key": "v3_2",
+            "kind": "long_text",
+            "label": "Unrelated note",
+            "context": "Unrelated note",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[1]/tc[1]",
+              "target": {
+                "type": "cell"
+              },
+              "contract": "v3",
+              "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+            },
+            "text": "Synthetic review",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Unrelated note: Synthetic review",
+                "start": 39,
+                "end": 71
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yA1SYEkv1JFkQOmQqMQgdOtqvLvg2WatBck-1wOxm-mY6AEmtjEYjIuQHpx69AbntADuRgyf15Zw1YXCr6XnFTD2otRKSuMGGynccQVWmnBGClhxcHIdlW2VeYCQ4cX0FaaFgFFP45KF9kjGvRFpT3sBnmOISBxwUVhH_gq5NkvXSl0fGxIjmLKbLqd3fmvHe5L3Gnby_Tvk023bj4altGjrsNX8E-4B0eLM_knWUXBele_b8FnbFjc6rXfxBkg_KL6eFkAbliOQEUEIX9iYvNxfAP5YWqi:1xDKgf:hewqeZB6p7WgWHd4iT0hRChnKvdU1xiQN4J5PY98LVU"
+          }
+        },
+        "final_decisions": [],
+        "provider_simulated": true
+      },
+      {
+        "folder": "ordinary-source-auto-ru9nbiwf",
+        "notes": "Signed consent was received on: 2026-09-30\nUnrelated note: Synthetic review",
+        "original_sha256": "b6075c33e1215b4d912c817c090be49710c05180810603e027d5736cfdc4149b",
+        "fields": [
+          {
+            "key": "v3_1",
+            "kind": "text",
+            "label": "Signed consent was received on",
+            "context": "",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "target": {
+                "end": 38,
+                "type": "span",
+                "shape": "blank",
+                "start": 32
+              },
+              "contract": "v3",
+              "fingerprint": "e145b1c3528fc6e99e08995e685e9b80f53b3d007750fd5631a95c3ccda373f3"
+            }
+          },
+          {
+            "key": "v3_2",
+            "kind": "long_text",
+            "label": "Unrelated note",
+            "context": "",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/p[1]",
+              "target": {
+                "end": 22,
+                "type": "span",
+                "shape": "blank",
+                "start": 16
+              },
+              "contract": "v3",
+              "fingerprint": "10891d49256265ccfe7b16402e801ef23f95e1ec17bb66022e7ea40cce009338"
+            }
+          }
+        ],
+        "config": {
+          "mode": "fixture",
+          "provider": "anthropic",
+          "model": "claude-sonnet-5-5",
+          "input_rate": "2",
+          "output_rate": "10",
+          "cached_rate": "0.20",
+          "voice_rate_minute": "",
+          "voice_rate_second": "",
+          "voice_max_cost": "0.20",
+          "prompt_version": "extractive-v7-question-context",
+          "v3_evidence_contract": "natural-v1",
+          "discount_rate": "0",
+          "request_profile": {
+            "profile": "claude-sonnet-5-5-ordinary-v1",
+            "max_output_tokens": 20000,
+            "timeout_seconds": 120,
+            "thinking": {
+              "type": "between_tools"
+            },
+            "effort": "medium"
+          },
+          "pricing_version": "configured-v1:240ad0521f69c2b673e505f081f15b269d21073a9802055daed7167c9b20e0f1",
+          "ordinary_field_contract": "ordinary-field-relations-v4"
+        },
+        "answers": {
+          "v3_1": {
+            "text": "2026-09-30",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Signed consent was received on: 2026-09-30",
+                "start": 0,
+                "end": 42
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yCFkJCmv1JFkYNNhUYhAtKtqvLvg2WatBck-1wOxm-mg88RdGZXFiJaD_HFjSWHPJKDbINP_Nmzhq3WF3wvOTVK2XaqR1DYShiGdV2hm7oJDIBQpruMEgWSERpaIi1GqQd5mXrUqBSNRfYISK6otIMdiafgPWU-8KGwD3oV8pSLKIUOj42yzSEmdr2d3fmv7e9L2PO2l-nfJ7vexHw0LJEjXYev4J9w9zYvFtNPsoq8cbZ-34BL1LCw1Wu_iTOQ6SvXx8GnT4rFUTZBG5XDZzYfxzdBNWnk:1xDKgh:U1y3cxTCqZ9B6OBXfRR_YtS8zf31U3nrzuOPtwMRNJg"
+          },
+          "v3_2": {
+            "text": "Synthetic review",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Unrelated note: Synthetic review",
+                "start": 43,
+                "end": 75
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yAlkJCmv1JFkYNNhUYhAtKtqvLvg2WatBck-1wOxm-mg88RdGZXFiJaD_HFjSWHPJKDbINP_Nmzhq3WF3wvOTVK2QrVIyhsJQzDuq4gJjGBAeiUEZdRYodkOg0tke5GqQd5mXrUqBSNRfYISK6otIMdiafgPWU-8KGwD3oV8pSLKIUOj42yzSEmdr2d3fmv7e9L2PO2l-nfJ7vexHw0LJEjXYev4J9w9zYvFtNPsoq8cbZ-34BL1LCw1Wu_iTOQ6SvXx8sCaKNy-FxE4NMnRTYfxzdG5Gnq:1xDKgh:vKipjiy-JqaJHUwIV9i4G_X_M5v6WgGxHezTPLEiDu8"
+          }
+        },
+        "page": {
+          "v3_1": {
+            "key": "v3_1",
+            "kind": "text",
+            "label": "Signed consent was received on",
+            "context": "",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "target": {
+                "end": 38,
+                "type": "span",
+                "shape": "blank",
+                "start": 32
+              },
+              "contract": "v3",
+              "fingerprint": "e145b1c3528fc6e99e08995e685e9b80f53b3d007750fd5631a95c3ccda373f3"
+            },
+            "text": "2026-09-30",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Signed consent was received on: 2026-09-30",
+                "start": 0,
+                "end": 42
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yCFkJCmv1JFkYNNhUYhAtKtqvLvg2WatBck-1wOxm-mg88RdGZXFiJaD_HFjSWHPJKDbINP_Nmzhq3WF3wvOTVK2XaqR1DYShiGdV2hm7oJDIBQpruMEgWSERpaIi1GqQd5mXrUqBSNRfYISK6otIMdiafgPWU-8KGwD3oV8pSLKIUOj42yzSEmdr2d3fmv7e9L2PO2l-nfJ7vexHw0LJEjXYev4J9w9zYvFtNPsoq8cbZ-34BL1LCw1Wu_iTOQ6SvXx8GnT4rFUTZBG5XDZzYfxzdBNWnk:1xDKgh:U1y3cxTCqZ9B6OBXfRR_YtS8zf31U3nrzuOPtwMRNJg"
+          },
+          "v3_2": {
+            "key": "v3_2",
+            "kind": "long_text",
+            "label": "Unrelated note",
+            "context": "",
+            "locator": {
+              "part": "word/document.xml",
+              "slot": "b/p[1]",
+              "target": {
+                "end": 22,
+                "type": "span",
+                "shape": "blank",
+                "start": 16
+              },
+              "contract": "v3",
+              "fingerprint": "10891d49256265ccfe7b16402e801ef23f95e1ec17bb66022e7ea40cce009338"
+            },
+            "text": "Synthetic review",
+            "status": "supported",
+            "evidence": [
+              {
+                "quote": "Unrelated note: Synthetic review",
+                "start": 43,
+                "end": 75
+              }
+            ],
+            "reviewed": false,
+            "ordinary_relation": ".eJxVkNFuwyAMRf-F5yAlkJCmv1JFkYNNhUYhAtKtqvLvg2WatBck-1wOxm-mg88RdGZXFiJaD_HFjSWHPJKDbINP_Nmzhq3WF3wvOTVK2QrVIyhsJQzDuq4gJjGBAeiUEZdRYodkOg0tke5GqQd5mXrUqBSNRfYISK6otIMdiafgPWU-8KGwD3oV8pSLKIUOj42yzSEmdr2d3fmv7e9L2PO2l-nfJ7vexHw0LJEjXYev4J9w9zYvFtNPsoq8cbZ-34BL1LCw1Wu_iTOQ6SvXx8sCaKNy-FxE4NMnRTYfxzdG5Gnq:1xDKgh:vKipjiy-JqaJHUwIV9i4G_X_M5v6WgGxHezTPLEiDu8"
+          }
+        },
+        "final_decisions": [],
+        "provider_simulated": true
+      }
+    ],
+    "exact_retained_source_unchanged": true,
+    "network_attempts": [],
+    "provider_calls": 0,
+    "DB_calls": 0,
+    "elapsed_seconds": 5.991108060996339,
+    "scope": "Actual fixture g.generate plus page/final governance and public Word fill; noHTTP/database/provider/nativeWordclaim"
+  },
+  "current_result_sha256": "5a5560b7e4a6b804b3d1cb9a73968a270ce3b6f334b1d9c35aecdb294a01b86a",
+  "current_exit": {
+    "exit_code": 0,
+    "timeout": false,
+    "elapsed_seconds": 6.689977873000316,
+    "reaped": true,
+    "stdout_sha256": "134a06b3a9d439844c8056a6297e3b10fe5c8f329e5c17c3ef18257ef159e37b",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "provider_requests": 0,
+  "DB_calls": 0,
+  "source_changes": 0,
+  "C08": "Unchanged held; no source clarification invented",
+  "HTTP_or_native_Word_qualification_claimed": false
+}

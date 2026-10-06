@@ -107,6 +107,11 @@ class EvidenceClassification(PolicyFixture,TestCase):
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES)
 class EvidenceKindMigration(PolicyFixture,TransactionTestCase):
+    def make_scope(self, *args, **kwargs):
+        # Represent the original 0016 ledger with a genuine historical form,
+        # while every ordinary PolicyFixture retains current import evidence.
+        return super().make_scope(*args, **kwargs, historical_empty_import=True)
+
     def test_existing_evidence_is_preserved_as_unclassified(self):
         usage=self.settled(Decimal('0.5'))
         row=reconcile_usage(usage,Decimal('0.4'),'INV-LEGACY-UNCLASSIFIED',self.user)

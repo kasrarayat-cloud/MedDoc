@@ -1,0 +1,13 @@
+{
+  "state": "Finished D08 finite source proof, awaiting root independent refutation/integration and actual route",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-d08-visit-hierarchy-20261004",
+  "source_snapshot": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d08-hierarchy-finished-source-20261004",
+  "base_commit": "bbbc7a0e813f5d50fd17c7352dde77e60f689e8b",
+  "active_children": [],
+  "next": [
+    "Independent finished-diff refutation",
+    "Actual coherent D03/D07/D08 route replay",
+    "Finite remaining omissions/eligible DEV measurement"
+  ],
+  "receipt_sha256": "674cac64dbfc1822a9d2bbda0ae01d89f23e2d64a2bdb71536fddd6d11617cf9"
+}

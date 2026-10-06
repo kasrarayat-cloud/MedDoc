@@ -1,0 +1,144 @@
+"""Default-prepared bounded supervisor for the mocked application rehearsal.
+
+Copy both committed .source literals into owned scratch only after the source is
+frozen and root grants the serialized QA slot. No launch occurs by default.
+"""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import time
+import traceback
+
+os.umask(0o077)
+parser = argparse.ArgumentParser()
+parser.add_argument('--execute', action='store_true')
+parser.add_argument('--source', type=Path)
+parser.add_argument('--revision')
+parser.add_argument('--output', type=Path)
+parser.add_argument('--harness', type=Path)
+args = parser.parse_args()
+if not args.execute:
+    print(json.dumps({'status': 'prepared', 'mocked_provider': True, 'provider_requests': 0,
+                      'database_queries': 0, 'children_started': 0}))
+    raise SystemExit(0)
+if not all((args.source, args.output, args.harness)) or not re.fullmatch('[0-9a-f]{40}', args.revision or ''):
+    parser.error('Execution needs an exact source/revision and new owned output plus sealed harness.')
+owned = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations')
+if args.source.is_symlink() or args.source.parent != Path('/opt/meddoc-pro/.worktrees'):
+    raise ValueError('Use a direct isolated frozen source worktree.')
+source = args.source.resolve(strict=True)
+sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+
+def snapshot():
+    return {'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip(),
+        'dirty': subprocess.check_output(['git', 'status', '--porcelain'], cwd=source, text=True).strip(),
+        'files': {os.fsdecode(name): sha(source / os.fsdecode(name)) for name in
+                  subprocess.check_output(['git', 'ls-files', '-z'], cwd=source).split(b'\0') if name}}
+
+before = snapshot()
+if before['commit'] != args.revision or before['dirty'] or (source / 'rebuild/.env').exists():
+    raise ValueError('The exact source must be clean and contain no environment file.')
+if args.output.is_symlink() or not args.output.parent.resolve(strict=True).is_relative_to(owned):
+    raise ValueError('Use a new owned operations output directory.')
+if args.harness.is_symlink() or not args.harness.resolve(strict=True).is_relative_to(owned):
+    raise ValueError('The sealed harness copy must be owned operations scratch.')
+original = source / 'rebuild/ops/fixtures/ordinary_batch_application_rehearsal.source'
+supervisor = source / 'rebuild/ops/fixtures/ordinary_batch_rehearsal_packet.source'
+if args.harness.read_bytes() != original.read_bytes() or Path(__file__).read_bytes() != supervisor.read_bytes():
+    raise ValueError('Both executed copies must equal the literal bytes of this exact committed source.')
+wrapper = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/integration/qa_test_with_artifacts.py')
+python = '/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python'
+database = 'quillmd_qa_sol_ops_batchrehearsal1004'
+args.output.mkdir(mode=0o700, exist_ok=False)
+out = args.output
+helpers = {str(wrapper): sha(wrapper), str(args.harness): sha(args.harness), str(Path(__file__)): sha(Path(__file__))}
+
+def retain(name, data):
+    with (out / name).open('x') as stream:
+        json.dump(data, stream, indent=2, sort_keys=True)
+        stream.write('\n')
+    (out / name).chmod(0o400)
+
+def command(destination, catalog=False):
+    return [python, str(wrapper), str(source), database, str(out / 'qa-wrapper-state'), str(args.harness),
+            '--execute', '--source', str(source), '--revision', args.revision, '--output', str(out / destination)] + (
+            ['--catalog-absence'] if catalog else [])
+
+commands = {'catalog_before': command('catalog-before', True), 'application': command('application'),
+            'catalog_after': command('catalog-after', True)}
+retain('prospective-source.json', before)
+retain('execution-manifest.json', {'source_revision': args.revision, 'commands': commands,
+    'helper_hashes': helpers, 'database': database, 'test_database': 'test_' + database,
+    'deadlines_seconds': {'catalog_before': 30, 'application': 180, 'catalog_after': 30, 'per_reap': 11},
+    'mocked_provider': True, 'provider_requests': 0, 'live_campaign_started': False})
+
+def run(name, deadline):
+    if {path: sha(Path(path)) for path in helpers} != helpers:
+        raise ValueError('A sealed helper changed before its child start.')
+    started = time.monotonic()
+    timed_out = False
+    with (out / (name + '.log')).open('xb') as log:
+        child = subprocess.Popen(commands[name], cwd=source / 'rebuild', stdout=log,
+                                 stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            retain(name + '-start.json', {'pid': child.pid, 'started_at_utc': datetime.now(timezone.utc).isoformat(),
+                                         'command': commands[name], 'deadline_seconds': deadline})
+            child.wait(timeout=deadline)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try: os.killpg(child.pid, sig)
+                except ProcessLookupError: pass
+                try:
+                    child.wait(timeout=5)
+                    break
+                except subprocess.TimeoutExpired: pass
+            child.wait(timeout=1)
+        except BaseException:
+            if child.poll() is None:
+                try: os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+                child.wait(timeout=5)
+            raise
+    result = {'actual_exit': child.returncode, 'timed_out': timed_out, 'pid': child.pid,
+              'elapsed_seconds': time.monotonic() - started, 'log_sha256': sha(out / (name + '.log'))}
+    retain(name + '-result.json', result)
+    return result
+
+started = time.monotonic()
+try:
+    first = run('catalog_before', 30)
+    if first['actual_exit'] != 0 or first['timed_out']:
+        retain('result.json', {'actual_outer_exit': 1, 'workflow_started': False, 'catalog_before': first,
+            'mocked_provider': True, 'provider_requests': 0, 'source_unchanged': snapshot() == before})
+        raise SystemExit(1)
+    try:
+        child = run('application', 180)
+    finally:
+        # Direct catalog absence is required after every route result, including
+        # timeout/failure. An abandoned database remains evidence and refuses green.
+        after_db = run('catalog_after', 30)
+        after = snapshot()
+        retain('source-after.json', after)
+    good = child['actual_exit'] == 0 and not child['timed_out'] and after_db['actual_exit'] == 0 and not after_db['timed_out'] and after == before
+    retain('result.json', {'actual_outer_exit': 0 if good else 1, 'workflow_started': True,
+        'application': child, 'catalog_before': first, 'catalog_after': after_db, 'source_unchanged': after == before,
+        'elapsed_seconds': time.monotonic() - started, 'mocked_provider': True, 'provider_requests': 0,
+        'live_campaign_started': False, 'renderer_started': False, 'installed_mutations': 0})
+    raise SystemExit(0 if good else 1)
+except Exception:
+    original = traceback.format_exc().encode()
+    with (out / 'original-packet-exception.txt').open('xb') as stream:
+        stream.write(original)
+    if not (out / 'result.json').exists():
+        retain('result.json', {'actual_outer_exit': 1, 'mocked_provider': True, 'provider_requests': 0,
+            'original_exception_file': 'original-packet-exception.txt',
+            'original_exception_sha256': hashlib.sha256(original).hexdigest(),
+            'elapsed_seconds': time.monotonic() - started})
+    raise SystemExit(1)

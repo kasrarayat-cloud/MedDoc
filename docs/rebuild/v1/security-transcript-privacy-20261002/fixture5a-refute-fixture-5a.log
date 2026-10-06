@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_fixture_5a.py", line 10, in <module>
+    from core import generation as g,v3_field_relations as r,transcript_context as tc
+ImportError: cannot import name 'transcript_context' from 'core' (/opt/meddoc-pro/.worktrees/v1-sol-continuation/rebuild/core/__init__.py)

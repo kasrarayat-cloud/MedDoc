@@ -1,0 +1,271 @@
+{
+  "base_revision": "fcd68c9b43b0d65b0411d031b16ea66e2b2b104d",
+  "runtime_evidence_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/hpi-release-20261004",
+  "provider_calls": 0,
+  "database_calls": 0,
+  "accepted_pin_changes": 0,
+  "source_originals_or_gold_changed": false,
+  "modules": {
+    "rebuild/core/ordinary_source_scope.py": {
+      "before": {
+        "bytes": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+        "ast": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+        "functions": {
+          "apply": "e323fdfed937a8a7bdec81961b7540ef450854bc3ccc335f4c736b586af1175e",
+          "effective": "50e71ff01adab20df58c253548a4ceee1ca8cdd3b4ca9d36237a8b10e8f0df1f"
+        }
+      },
+      "after": {
+        "bytes": "2e9a63768f66529aa89dd89a9d259d51fcfe0ac91f00a29fc55ebe1a7b94bba4",
+        "ast": "42ef86c3e4f69222040edc6a630e694eac424b28a8066a311d90e00afd0a4338",
+        "functions": {
+          "apply": "e323fdfed937a8a7bdec81961b7540ef450854bc3ccc335f4c736b586af1175e",
+          "effective": "a7ee2515bc6417a6828274f46ec32defcf87bb342952a80fc9bc400cadc1b7e0",
+          "clinical_atoms": "3d32272b1b9a78f0f88c2fdddfb5af4b6a384f7e4cf056de7409cd5e4c84140c",
+          "nominal_denial_atoms": "3911ec434855e1b3eb901314704ae42c053cf66ae198a789bfd85263b65593a2",
+          "clinical_denial_apart": "03bc0995b30851164a8dc533e3d5ed12d46c861d247a110a7686f754d9ceab66"
+        }
+      },
+      "changed_functions": [
+        "clinical_atoms",
+        "clinical_denial_apart",
+        "effective",
+        "nominal_denial_atoms"
+      ],
+      "superseded_7d95_after": {
+        "bytes": "28fcf1ddc068a609f406bfb078b5c0933c3b77be4f8583b73f422abf0345afbc",
+        "ast": "8cc51db0ac23f3b11b85ec12658da716000851afbba97d65232d997cbecd4e05",
+        "functions": {
+          "apply": "e323fdfed937a8a7bdec81961b7540ef450854bc3ccc335f4c736b586af1175e",
+          "effective": "a7ee2515bc6417a6828274f46ec32defcf87bb342952a80fc9bc400cadc1b7e0",
+          "clinical_atoms": "3d32272b1b9a78f0f88c2fdddfb5af4b6a384f7e4cf056de7409cd5e4c84140c",
+          "nominal_denial_atoms": "3911ec434855e1b3eb901314704ae42c053cf66ae198a789bfd85263b65593a2",
+          "clinical_denial_apart": "3847039a27c8b1602c20caafee5576c065e8228cedc3e75ebf29f9d21b080288"
+        }
+      }
+    },
+    "rebuild/core/v3_field_relations.py": {
+      "before": {
+        "bytes": "e613ae90d7a3ebc0cc6138d6723939029939739dff1a509b06ac5e82b1db7c64",
+        "ast": "2819cea85a4e1a911603dd55b15dd21244f8a24064677c35ae61a2b72c4de1bc",
+        "functions": {
+          "digest": "9eef5209a1fa28b854d2b4a890951a0f2594b372227561a3c9e4fa0b5c14a836",
+          "enabled": "af0009d66dfc4c5c2b07055f17257e4ac1b8280e2f125297ba6a65efb2d2fc95",
+          "require_config": "20219617858e1c0ab047a519f8eaaeda2cebe526ce89118a7e09fdbcee3cc398",
+          "options": "e7d7e7cb3e5aaa1a3be14f570c89dc0c6c4b6b852bee732eb4b845b7492c743c",
+          "binding": "600c563a7c9f0cf5ac8ce386bc65ce33e2b11ebfad27e4fc1c582b2dac1ca706",
+          "competitors": "5273c0424d7f6587c56f995db351fe9064397ed9c958f8319c714066cd2d258c",
+          "response_bound": "9b141408872404362cb3631950be47f4ae73016780c4882dc29c8c4438e66ef7",
+          "response_schema": "04c22d3dfa3cb2a865d84e644d46bac88c5975b0da96cd5bab4053adca3ea979",
+          "_malformed": "299e07c1c5701d461b6d3bf2befeaa5f3d7fefca09d8edc834122a27d9816027",
+          "_members": "e8f9b0df1241538c9038341a1b9c09efda3e0c625b4ae3a1b1cf99539d173f98",
+          "_no_constant": "a2d1857bb2f7de95a0a81e4680f67c396df1c8cd261a404dc872d27a374ba553",
+          "parse": "40ba2b053c90f8242bc8124d2794d619b92ef9e4390997c322d915c73a4f293e",
+          "compile_request": "810780a5564ac47ce8a8291de12b9dcd9f8fb8cb8cc9beb09765895f493da623",
+          "maximum_cost": "3ee0145813390f0b92a1bc09e998b38dc68f1bd4c2276268aad9beea147f0538",
+          "disagrees": "b31cabf7662545024362494adcb51842fd8119137fbc332df58a7aeceeb3d3e9",
+          "claimed": "b233ddf2f351966b4b36eae000f677cbe97463b576dcfee82a7d35d564f09651",
+          "records": "40eafc912da3e02eee9704fd38b3ad342f0f352d5267ade9f560acd135120c35",
+          "sole_released": "ecf6c0c548980a1f6d961b05ac19cd82b4a60b58b66b815217debaa7862c6b92",
+          "_owner": "b074acd13c3fec8fb7e5623597d156afbcd08b37d7e79cc2f025f6a6630fd351",
+          "sole_independent": "d5305c2511d628c0e16a1fffd6801a8058720cdaa5f5d337e931b229b38b1201",
+          "option_view": "e6deb532331ed0dd901efb043e6b78f1c0a7cea20e8ca9012f2b618e08509dd3",
+          "own_heading_reference": "9a1070d56407269bfe0c26ce85020de525e5a45f955776867116cec8b0e72b26",
+          "elicited_reference_holds": "c8f70949466b1410caa2262737b7455acef0a3090badaa6ebda77c77cbbb0a42",
+          "read": "9fe8d0b5405640cb796c9eb8f04998ff942f3e8e73048f948ba75f6587c77ede",
+          "generate": "fa603584c728533e59036fcb6e3aae2bdc7712d2aa48845635b818838a014c10",
+          "validated": "f6e81b7413de75a4f1112a1dac5ac9092335018fa6d9b4e935c26c033805bfdc"
+        }
+      },
+      "after": {
+        "bytes": "2c4b1a83553ee28a11d3f93c83701df5625c95923bd51ebc34720045da444cc5",
+        "ast": "90cb7342ff9cbf1670947686cef085e0aa3083c96be6fb3283d5987e925365c5",
+        "functions": {
+          "digest": "9eef5209a1fa28b854d2b4a890951a0f2594b372227561a3c9e4fa0b5c14a836",
+          "enabled": "af0009d66dfc4c5c2b07055f17257e4ac1b8280e2f125297ba6a65efb2d2fc95",
+          "require_config": "20219617858e1c0ab047a519f8eaaeda2cebe526ce89118a7e09fdbcee3cc398",
+          "options": "e7d7e7cb3e5aaa1a3be14f570c89dc0c6c4b6b852bee732eb4b845b7492c743c",
+          "binding": "600c563a7c9f0cf5ac8ce386bc65ce33e2b11ebfad27e4fc1c582b2dac1ca706",
+          "competitors": "5273c0424d7f6587c56f995db351fe9064397ed9c958f8319c714066cd2d258c",
+          "response_bound": "9b141408872404362cb3631950be47f4ae73016780c4882dc29c8c4438e66ef7",
+          "response_schema": "04c22d3dfa3cb2a865d84e644d46bac88c5975b0da96cd5bab4053adca3ea979",
+          "_malformed": "299e07c1c5701d461b6d3bf2befeaa5f3d7fefca09d8edc834122a27d9816027",
+          "_members": "e8f9b0df1241538c9038341a1b9c09efda3e0c625b4ae3a1b1cf99539d173f98",
+          "_no_constant": "a2d1857bb2f7de95a0a81e4680f67c396df1c8cd261a404dc872d27a374ba553",
+          "parse": "40ba2b053c90f8242bc8124d2794d619b92ef9e4390997c322d915c73a4f293e",
+          "compile_request": "810780a5564ac47ce8a8291de12b9dcd9f8fb8cb8cc9beb09765895f493da623",
+          "maximum_cost": "3ee0145813390f0b92a1bc09e998b38dc68f1bd4c2276268aad9beea147f0538",
+          "disagrees": "b31cabf7662545024362494adcb51842fd8119137fbc332df58a7aeceeb3d3e9",
+          "claimed": "b233ddf2f351966b4b36eae000f677cbe97463b576dcfee82a7d35d564f09651",
+          "records": "40eafc912da3e02eee9704fd38b3ad342f0f352d5267ade9f560acd135120c35",
+          "sole_released": "ecf6c0c548980a1f6d961b05ac19cd82b4a60b58b66b815217debaa7862c6b92",
+          "_owner": "b074acd13c3fec8fb7e5623597d156afbcd08b37d7e79cc2f025f6a6630fd351",
+          "sole_independent": "97c297c54d885e1c4eaa14b80b680fefe49e974551f186fcae75a79f7ed0e8ae",
+          "option_view": "e6deb532331ed0dd901efb043e6b78f1c0a7cea20e8ca9012f2b618e08509dd3",
+          "own_heading_reference": "9a1070d56407269bfe0c26ce85020de525e5a45f955776867116cec8b0e72b26",
+          "elicited_reference_holds": "c8f70949466b1410caa2262737b7455acef0a3090badaa6ebda77c77cbbb0a42",
+          "read": "9fe8d0b5405640cb796c9eb8f04998ff942f3e8e73048f948ba75f6587c77ede",
+          "generate": "fa603584c728533e59036fcb6e3aae2bdc7712d2aa48845635b818838a014c10",
+          "validated": "f6e81b7413de75a4f1112a1dac5ac9092335018fa6d9b4e935c26c033805bfdc"
+        }
+      },
+      "changed_functions": [
+        "sole_independent"
+      ],
+      "superseded_7d95_after": {
+        "bytes": "04eb24b41d12b884118e7bc1d1c37592964071633eb1db225e0bc19fa5398448",
+        "ast": "1bc8588d51b6f958adf1274308181e3eac3241930802b8bdbbc7840e71aa2a68",
+        "functions": {
+          "digest": "9eef5209a1fa28b854d2b4a890951a0f2594b372227561a3c9e4fa0b5c14a836",
+          "enabled": "af0009d66dfc4c5c2b07055f17257e4ac1b8280e2f125297ba6a65efb2d2fc95",
+          "require_config": "20219617858e1c0ab047a519f8eaaeda2cebe526ce89118a7e09fdbcee3cc398",
+          "options": "e7d7e7cb3e5aaa1a3be14f570c89dc0c6c4b6b852bee732eb4b845b7492c743c",
+          "binding": "600c563a7c9f0cf5ac8ce386bc65ce33e2b11ebfad27e4fc1c582b2dac1ca706",
+          "competitors": "5273c0424d7f6587c56f995db351fe9064397ed9c958f8319c714066cd2d258c",
+          "response_bound": "9b141408872404362cb3631950be47f4ae73016780c4882dc29c8c4438e66ef7",
+          "response_schema": "04c22d3dfa3cb2a865d84e644d46bac88c5975b0da96cd5bab4053adca3ea979",
+          "_malformed": "299e07c1c5701d461b6d3bf2befeaa5f3d7fefca09d8edc834122a27d9816027",
+          "_members": "e8f9b0df1241538c9038341a1b9c09efda3e0c625b4ae3a1b1cf99539d173f98",
+          "_no_constant": "a2d1857bb2f7de95a0a81e4680f67c396df1c8cd261a404dc872d27a374ba553",
+          "parse": "40ba2b053c90f8242bc8124d2794d619b92ef9e4390997c322d915c73a4f293e",
+          "compile_request": "810780a5564ac47ce8a8291de12b9dcd9f8fb8cb8cc9beb09765895f493da623",
+          "maximum_cost": "3ee0145813390f0b92a1bc09e998b38dc68f1bd4c2276268aad9beea147f0538",
+          "disagrees": "b31cabf7662545024362494adcb51842fd8119137fbc332df58a7aeceeb3d3e9",
+          "claimed": "b233ddf2f351966b4b36eae000f677cbe97463b576dcfee82a7d35d564f09651",
+          "records": "40eafc912da3e02eee9704fd38b3ad342f0f352d5267ade9f560acd135120c35",
+          "sole_released": "ecf6c0c548980a1f6d961b05ac19cd82b4a60b58b66b815217debaa7862c6b92",
+          "_owner": "b074acd13c3fec8fb7e5623597d156afbcd08b37d7e79cc2f025f6a6630fd351",
+          "sole_independent": "fb14c2ffcfc2b0dd11521f9b977c956db6f8ce337e56549222da294d9432b56e",
+          "option_view": "e6deb532331ed0dd901efb043e6b78f1c0a7cea20e8ca9012f2b618e08509dd3",
+          "own_heading_reference": "9a1070d56407269bfe0c26ce85020de525e5a45f955776867116cec8b0e72b26",
+          "elicited_reference_holds": "c8f70949466b1410caa2262737b7455acef0a3090badaa6ebda77c77cbbb0a42",
+          "read": "9fe8d0b5405640cb796c9eb8f04998ff942f3e8e73048f948ba75f6587c77ede",
+          "generate": "fa603584c728533e59036fcb6e3aae2bdc7712d2aa48845635b818838a014c10",
+          "validated": "f6e81b7413de75a4f1112a1dac5ac9092335018fa6d9b4e935c26c033805bfdc"
+        }
+      }
+    }
+  },
+  "case_sha256": "23b68bc34559648bc33cabf6a6bc8d6860b605b7d766851753d1462fb5dc60ad",
+  "evidence_files": {
+    "baseline.py": "488734ad29c0e8cabfc667da6db8ff1114ae1966389504d88b29e5c15fbcb00d",
+    "baseline.json": "8ace0b584ed1afd968b5fe7d1ca67c7600ff4eeffceebfd546f3739e7e06c4ee",
+    "baseline.log": "6aff636e440ea620373651b3aa2dd5b1fda4534015b7b8efddb544427511b9fe",
+    "first-repair.py": "7261e0b05a0d2e65f659536a156d0d191f75405d9d84f8ab0d4e61a0eedb2bb4",
+    "first-repair.json": "46fa9b86675157466bbb048d7f58dc309c4e799119f099bb79c6f0e9a2d7f832",
+    "first-repair.log": "7dd01cbcb31ab00b5c5c48dc026c240a2172bb111a5ec306b80937164bf8b719",
+    "second-repair.py": "d3e287aa73a0735f4b7f4ca0f4339c8c5933b5547210bfe88543334921696a79",
+    "second-repair.json": "9fcc890e3a7b2b281c1b2227bbad77f1e4efa9fa49e3a25d22f12cf99bf28e52",
+    "second-repair.log": "91c0fd9295661f142aba900d2296e410e0fdf76cc89ae1df1e0c816c60b20d2e",
+    "third-repair.py": "2c60c72d33e276c9ab1896d89791df54403c12b73baf27e841ed8bde00dda24f",
+    "third-repair.json": "c1e09357a1016b1d95fc56b0a150d0a517957a3bf6c6ff343143bb843b384469",
+    "third-repair.log": "3e1e4b08e57d3812da5a40e8dee95d86c34d928f2c7abf12854d68daa0c36344",
+    "affected-run.py": "6638eb8084493b6cada8c78302fe5669582474aa7aed604fe582b6159950657c",
+    "affected-r1.json": "9f92157b2153b41456c19fbc0b708efeecf520026a96f9809a340fb3c71588f9",
+    "affected-r1.log": "b5e8bc9f4aec08ce7221e0afe85246da52a00cbc139897c680d6ca2dd4684686",
+    "class-regression-run.py": "bca3c9feb36c5b5f0bd8a945693734c1d043efaca1edc04f6849d4356bff4b39",
+    "class-regression-r1.json": "f142bd2f9d29449dbe3e4af2147b175013877daf32f27b078cd6e58c98cbe5e9",
+    "class-regression-r1.log": "6dfbbdd469367548bda006fac68445509566114ea373c9b07a5ff016c1ff69df",
+    "affected-r2-run.py": "27c6b477b7741fec1bd8131a280fa177685daa94c76c39bcb9fabffebf28f884",
+    "affected-r2.json": "3a8e6b2036ec6736a02ec98fb6a73c19a68ebca07ab4902d609da5696b363704",
+    "affected-r2.log": "8b15abe45738235214738c92e20b461eaf28c85e52616939d2ec4ca86b41c975",
+    "omission-fcd.py": "dd09a0e24927903f6e47d136e9250b39ce4f8674853b097a0544cb6172ba27aa",
+    "omission-fcd.log": "fd908122aa54885d80f4b7864b2e4b88356f39775cfe6803b8b2daa966badd41",
+    "baseline-result.json": "874190919d1f24fd058f955cb1c1cd3bb103e12ab8c60b706473a1d3e78110fb",
+    "baseline-progress.json": "2e6ec7d2d12aac8023fe4c3f354b019fee317a3e1863cc5c68d2016207a8bd1f",
+    "omission-7d95.py": "0f26c92c95765bed586c21a3cae209e550d320fd592ba89ff3a7b2e86e221d24",
+    "omission-7d95.log": "45e28cfc5ed080aef93caca2445fadb654530cc29cc2d9a508ab730c93248156",
+    "omission-7d95-result.json": "6d307a1871afcd8b9e554c353d5d81e32dfa6650b74fbed8b098b3c3e8ce82a2",
+    "omission-7d95-progress.json": "766f834b1404f31949d96eb6576ca632470a7f4e4f5ed0f66f1a7647fcb4cc56",
+    "affected-r3-run.py": "c4f9e685496f1f1192af68894574af05b1d47d04c78eb0e50d7614b2b9c82c9d",
+    "affected-r3.json": "ce312680d1acb5cf76f2e0470e0964e4ea5dc33ff6520393ec32733d70fc4cf3",
+    "affected-r3.log": "7383bc79bcefa664c24bbaef3ceeb4a430c137be0ffe74be2504bc07b24f2d35"
+  },
+  "packets": {
+    "affected-r1.json": {
+      "labels": [
+        "core.tests.test_nominal_denial_disjointness.NominalDenialDisjointness",
+        "core.tests.test_v3_ordinary_source_scope.OrdinarySourceScope.test_retained_complete_actual_wire_preserves_originals_and_supported_bytes",
+        "core.tests.test_v3_notes_sole_patient.SinglePatientRelease.test_the_freezes_answers_are_filled",
+        "core.tests.test_reviewed_speaker.ReviewedClinicalSpeaker.test_complete_reviewed_soap_wire_keeps_three_useful_answers_and_one_explicit_hold",
+        "core.tests.test_reviewed_procedure_source.ReviewedProcedureSource.test_unchanged_complete_reviewed_voice_wire_and_original_first_result",
+        "core.tests.test_reviewed_procedure_source.ReviewedProcedureSource.test_blood_loss_and_bare_unknown_quantity_remain_held"
+      ],
+      "methods": 13,
+      "errors": 0,
+      "failures": 0,
+      "skips": 0,
+      "seconds": 73.57972451900423,
+      "source_unchanged": true,
+      "network_or_db_allowed": false,
+      "passed": true
+    },
+    "class-regression-r1.json": {
+      "labels": [
+        "core.tests.test_v3_ordinary_source_scope.OrdinarySourceScope",
+        "core.tests.test_v3_notes_sole_patient.SinglePatientRelease",
+        "core.tests.test_v3_notes_sole_patient.DenialAgainstItsClass",
+        "core.tests.test_v3_notes_sole_patient.DoubtAboutItsClass",
+        "core.tests.test_v3_notes_sole_patient.AnotherLineDenyingABearingClass",
+        "core.tests.test_v3_notes_sole_patient.EachEarlierGuardStillHolds"
+      ],
+      "methods": 14,
+      "errors": 0,
+      "failures": 0,
+      "skips": 0,
+      "seconds": 123.01950943100383,
+      "source_unchanged": true,
+      "network_or_db_allowed": false,
+      "passed": true
+    },
+    "affected-r2.json": {
+      "labels": [
+        "core.tests.test_nominal_denial_disjointness.NominalDenialDisjointness",
+        "core.tests.test_v3_ordinary_source_scope.OrdinarySourceScope.test_retained_complete_actual_wire_preserves_originals_and_supported_bytes",
+        "core.tests.test_v3_notes_sole_patient.SinglePatientRelease.test_the_freezes_answers_are_filled",
+        "core.tests.test_reviewed_speaker.ReviewedClinicalSpeaker.test_complete_reviewed_soap_wire_keeps_three_useful_answers_and_one_explicit_hold",
+        "core.tests.test_reviewed_procedure_source.ReviewedProcedureSource.test_unchanged_complete_reviewed_voice_wire_and_original_first_result",
+        "core.tests.test_reviewed_procedure_source.ReviewedProcedureSource.test_blood_loss_and_bare_unknown_quantity_remain_held"
+      ],
+      "methods": 14,
+      "errors": 0,
+      "failures": 0,
+      "skips": 0,
+      "seconds": 71.70127350100665,
+      "source_unchanged": true,
+      "network_or_db_allowed": false,
+      "passed": true
+    },
+    "affected-r3.json": {
+      "labels": [
+        "core.tests.test_nominal_denial_disjointness.NominalDenialDisjointness",
+        "core.tests.test_v3_ordinary_source_scope.OrdinarySourceScope.test_retained_complete_actual_wire_preserves_originals_and_supported_bytes",
+        "core.tests.test_v3_notes_sole_patient.SinglePatientRelease.test_the_freezes_answers_are_filled",
+        "core.tests.test_reviewed_speaker.ReviewedClinicalSpeaker.test_complete_reviewed_soap_wire_keeps_three_useful_answers_and_one_explicit_hold",
+        "core.tests.test_reviewed_procedure_source.ReviewedProcedureSource.test_unchanged_complete_reviewed_voice_wire_and_original_first_result",
+        "core.tests.test_reviewed_procedure_source.ReviewedProcedureSource.test_blood_loss_and_bare_unknown_quantity_remain_held"
+      ],
+      "methods": 16,
+      "errors": 0,
+      "failures": 0,
+      "skips": 0,
+      "seconds": 68.04161351000948,
+      "source_unchanged": true,
+      "network_or_db_allowed": false,
+      "passed": true
+    }
+  },
+  "distinct_methods": 28,
+  "omission_regression": {
+    "superseded_revision": "7d95b49311e8f123e84cf696e4acd75f2ddf0a37",
+    "baseline_exact_core_bytes_revision": "fcd68c9b43b0d65b0411d031b16ea66e2b2b104d",
+    "cases": [
+      "HISTORY-only; omitted denial marked independent",
+      "DENIAL-only; omitted history marked independent"
+    ],
+    "baseline": "conflict at validation/page/stale finalization",
+    "superseded": "supported at validation/page/stale finalization",
+    "repair": "clinical pair requires complete denial and matching other clinical topic in selected source",
+    "final_regressions": "both conflict; complete 114-character HPI supported"
+  }
+}

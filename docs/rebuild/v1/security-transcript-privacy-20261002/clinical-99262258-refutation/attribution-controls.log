@@ -1,0 +1,45 @@
+{
+  "source_commit": "99262258ee6e316f6949258ead43e402ad3ac2d6",
+  "cases": 4,
+  "elapsed_seconds": 5.567,
+  "unsafe": [],
+  "unnecessary_holds": [
+    "selected_absence_without_context_baseline",
+    "explicit_patient_positive_opposite_exclusive_warfarin"
+  ],
+  "errors": [],
+  "original_replay": [
+    {
+      "patient_context": false,
+      "supported": [],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    },
+    {
+      "patient_context": true,
+      "supported": [
+        "v3_7"
+      ],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    }
+  ]
+}

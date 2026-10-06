@@ -1,0 +1,32 @@
+[
+  {
+    "path": "docs/rebuild/v1/storage-resume-operations-20261003/alerts-readonly-candidate-reader-20261003.json",
+    "bytes": 1043,
+    "sha256": "6e6a997f8d9fbc426a2b1828e240cd04de9961c60d5116cda6ee4c6d0b9c94c9"
+  },
+  {
+    "path": "docs/rebuild/v1/storage-resume-operations-20261003/alerts-readonly-observation-20261003.json",
+    "bytes": 242,
+    "sha256": "cd5e6090b2a73c8dfc934b7cfb96d9c914a2a51e2dcfae87e47a6af93054a9ec"
+  },
+  {
+    "path": "docs/rebuild/v1/storage-resume-operations-20261003/focused-1.log",
+    "bytes": 1881,
+    "sha256": "fb45d3d6580a086cb8f5be7453ef736dc9547540a9fb764fc885bf62b010980c"
+  },
+  {
+    "path": "docs/rebuild/v1/storage-resume-operations-20261003/focused-result.json",
+    "bytes": 2052,
+    "sha256": "eb29c593e6eea386148dbba003d6fa8ee62d4b1aa56f2c35a14408c860b1607e"
+  },
+  {
+    "path": "docs/rebuild/v1/storage-resume-operations-20261003/operations-local-observation-20261003.json",
+    "bytes": 3311,
+    "sha256": "1d2e8c35bdeb174b41200a879fcab5119d8004bdbeae57371ed78c43c886f534"
+  },
+  {
+    "path": "docs/rebuild/v1/storage-resume-operations-20261003/read-only-source-and-restore-manifest.json",
+    "bytes": 1700,
+    "sha256": "0e875cff9d73400be88228569d271152b4ced60752ab4762f332908b18e471ff"
+  }
+]

@@ -90,14 +90,16 @@ QUILLMD_LAYOUT_SERVICE_UID=os.getenv('QUILLMD_LAYOUT_SERVICE_UID','')
 QUILLMD_MAPPING_ASSISTANCE=os.getenv('QUILLMD_MAPPING_ASSISTANCE','0')=='1'
 # Separate admission: exposing offline review is never authority for provider spending.
 QUILLMD_MAPPING_ASSISTANCE_LIVE=os.getenv('QUILLMD_MAPPING_ASSISTANCE_LIVE','0')=='1'
-if QUILLMD_WORD_ENGINE not in ('legacy','v3'):
-    raise ImproperlyConfigured("QUILLMD_WORD_ENGINE must be 'legacy' or 'v3'.")
+if QUILLMD_WORD_ENGINE not in ('legacy','v3','auto'):
+    raise ImproperlyConfigured("QUILLMD_WORD_ENGINE must be 'legacy', 'v3' or 'auto'.")
 # Role suggestions on the legacy default path (core.destination_roles.suggestion_scope): '1' asks a field held ONLY
 # because its printed label reads as a signature or initials role as an ordinary question, and offers the reading as
 # an explicit-accept suggestion that is never adopted; '0' (the default) never asks it, exactly as before. Read like
 # every V1 0/1 switch (application_profile.flag): unset or empty is '0', anything but 0/1 refuses to start.
 try:
     QUILLMD_ROLE_SUGGESTIONS='1' if _profile.flag(os.environ,'QUILLMD_ROLE_SUGGESTIONS','0') else '0'
+    # NEW auto imports only, with strict source/destination parity in the parser.
+    QUILLMD_WORD_AUTO_PREFER_V3=_profile.flag(os.environ,'QUILLMD_WORD_AUTO_PREFER_V3','0')
 except _profile.ProfileError as exc:
     raise ImproperlyConfigured(str(exc)) from None
 QUILLMD_EMAIL_MODE=os.getenv('QUILLMD_EMAIL_MODE','file')
@@ -139,7 +141,11 @@ WM_NARRATIVE=os.getenv('QUILLMD_WM_NARRATIVE','0')=='1'
 # Prepared only: exact-model context qualification is still a release gate.
 V3_HISTORY_CONTEXT=os.getenv('QUILLMD_V3_HISTORY_CONTEXT','0')=='1'
 V3_GENERATION_BATCHES=os.getenv('QUILLMD_V3_GENERATION_BATCHES','0')=='1'
-V3_FIELD_RELATIONS=os.getenv('QUILLMD_V3_FIELD_RELATIONS','0')=='1'
+try:
+    V3_FIELD_RELATIONS_SWITCH=_profile.field_relations_switch(os.environ)
+except _profile.ProfileError as exc:
+    raise ImproperlyConfigured(str(exc)) from None
+V3_FIELD_RELATIONS=V3_FIELD_RELATIONS_SWITCH is True
 # Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
 AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')

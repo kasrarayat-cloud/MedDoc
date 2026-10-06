@@ -1,0 +1,234 @@
+{
+  "source_word_sha256": "1296fbbd4e76586808724989a7c8745524544ac872a683db123e3858272a8f4a",
+  "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "groundtruth_sha256": "172ad655015aaa9eb02d6c099e5424f7e09d80807966f9640c9bfe928bf05618",
+  "export_sha256": "b3675ca72236fa00abc903a8fff5090775eea77a13d8af0aa93d8f1c2c888db9",
+  "mapping_summary": {
+    "n": 88,
+    "ok": 45,
+    "missed": 32,
+    "wrong": 11,
+    "extras": 2,
+    "strict": false
+  },
+  "manual_mapping_corrections": 0,
+  "full_application_route": false,
+  "provider_calls": 0,
+  "db_calls": 0,
+  "render_calls": 0,
+  "branch_questions": [
+    {
+      "label": "Do you have more than one type of headache?",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+              "glyph": 0
+            },
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+              "glyph": 1
+            }
+          ],
+          "printed": [
+            "No",
+            "Yes \u2192 If yes, focus on your worst headache type while answering the following questions."
+          ]
+        },
+        "fingerprint": "caa27be710cc56285747cc43276f533c6402ae082c02fcdae4eb26efbb761af5"
+      },
+      "options": [
+        "No",
+        "Yes"
+      ],
+      "printed_options": [
+        "No",
+        "Yes \u2192 If yes, focus on your worst headache type while answering the following questions."
+      ],
+      "source_questions": [
+        {
+          "relation": "option_branch_instruction",
+          "question": "Do you have more than one type of headache?",
+          "context": "10 > How severe are your headaches on average? (please circle the number which mos > Printed instruction for Yes: focus on your worst headache type while answering the following questions.",
+          "options": [
+            "No",
+            "Yes"
+          ],
+          "printed": [
+            "No",
+            "Yes \u2192 If yes, focus on your worst headache type while answering the following questions."
+          ],
+          "branches": [
+            {
+              "caption": "Yes",
+              "condition": "If yes,",
+              "instruction": "focus on your worst headache type while answering the following questions.",
+              "printed": "Yes \u2192 If yes, focus on your worst headache type while answering the following questions.",
+              "control": {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              },
+              "qualified": true,
+              "protection": "",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]",
+                "fingerprint": "caa27be710cc56285747cc43276f533c6402ae082c02fcdae4eb26efbb761af5"
+              },
+              "source_text": "8. Do you have more than one type of headache?    \u2610 No    \u2610 Yes \u2192 If yes, focus on your worst headache type while answering the following questions."
+            }
+          ],
+          "original_target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "original_context": "10 > How severe are your headaches on average? (please circle the number which mos",
+          "original_relations": [],
+          "sources": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[7]/tc[0]/p[0]",
+              "fingerprint": "caa27be710cc56285747cc43276f533c6402ae082c02fcdae4eb26efbb761af5"
+            }
+          ]
+        }
+      ],
+      "states": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "Are there any other medications, or anything else, which improves your headache?",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+              "glyph": 0
+            },
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+              "glyph": 1
+            }
+          ],
+          "printed": [
+            "No",
+            "Yes \u2192 if yes, please expand"
+          ]
+        },
+        "fingerprint": "9510a80e70d554e6157ea611459da6e741dc40505102d880284dab9426330a60"
+      },
+      "options": [
+        "No",
+        "Yes"
+      ],
+      "printed_options": [
+        "No",
+        "Yes \u2192 if yes, please expand"
+      ],
+      "source_questions": [
+        {
+          "relation": "option_branch_instruction",
+          "question": "Are there any other medications, or anything else, which improves your headache?",
+          "context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago, > Printed instruction for Yes: please expand:",
+          "options": [
+            "No",
+            "Yes"
+          ],
+          "printed": [
+            "No",
+            "Yes \u2192 if yes, please expand"
+          ],
+          "branches": [
+            {
+              "caption": "Yes",
+              "condition": "if yes,",
+              "instruction": "please expand:",
+              "printed": "Yes \u2192 if yes, please expand",
+              "control": {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+                "glyph": 1
+              },
+              "qualified": true,
+              "protection": "",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]",
+                "fingerprint": "9510a80e70d554e6157ea611459da6e741dc40505102d880284dab9426330a60"
+              },
+              "source_text": "\u2610 No     \u2610 Yes \u2192 if yes, please expand: "
+            }
+          ],
+          "original_target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+                "glyph": 0
+              },
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]/glyphs",
+                "glyph": 1
+              }
+            ]
+          },
+          "original_context": "10 > When did your headaches start? #____ days ago, # _____ weeks ago,",
+          "original_relations": [],
+          "sources": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[27]/tc[0]/p[1]",
+              "fingerprint": "9510a80e70d554e6157ea611459da6e741dc40505102d880284dab9426330a60"
+            }
+          ]
+        }
+      ],
+      "states": [
+        false,
+        true
+      ]
+    }
+  ],
+  "untargeted_paragraphs_unchanged": true,
+  "untargeted_parts_raw_unchanged": true,
+  "no_answer_bytes_unchanged": true
+}

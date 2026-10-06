@@ -1,0 +1,226 @@
+{
+  "source": {
+    "source_commit": "9b5d55e050ecfe73f34b496f516061c1849128a5",
+    "source_clean": true,
+    "readonly_by_task_policy": true,
+    "path": "/opt/meddoc-pro/.worktrees/v1-clinical-source-refute-9b5d55e0",
+    "file_hashes": {
+      "rebuild/core/generation.py": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "rebuild/core/v3_field_relations.py": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "rebuild/core/ordinary_source_scope.py": "fda6c6f93992d80d4d5b8921a9fdd217010294abc82a7e41f374c39b45572086",
+      "rebuild/core/reviewed_source.py": "25b76782b192acd00767d8a1563a49220cf183b812a3657eae84a0d29f3dad0f",
+      "rebuild/core/reviewed_procedure_source.py": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "rebuild/core/tests/ordinary_scope_first_pass_control.json": "23b68bc34559648bc33cabf6a6bc8d6860b605b7d766851753d1462fb5dc60ad",
+      "rebuild/core/tests/reviewed_procedure_first_pass_control.json": "388546a0b52b4946e8bdf823858ef768c88ecdc543ff37190eef4a6fc4f1f268"
+    }
+  },
+  "frozen_tests": {
+    "source_commit": "9b5d55e050ecfe73f34b496f516061c1849128a5",
+    "source_clean_after": true,
+    "runs": [
+      {
+        "label": "frozen-new-source-tests",
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/ci-run-37158506012/clinical-cost/pure_tests.py",
+          "core.tests.test_v3_ordinary_source_scope",
+          "core.tests.test_reviewed_procedure_source"
+        ],
+        "deadline_seconds": 150,
+        "actual_exit": 0,
+        "seconds": 82.525,
+        "log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-new-source-tests.log",
+        "sha256": "6f2e6b71a0360775e0814ff553916663edcea3ae1aa00ddd1127ce938fedf9ea"
+      },
+      {
+        "label": "frozen-016-exact-wire",
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen_ordinary_procedure_9b5d55e0.py",
+          "016"
+        ],
+        "deadline_seconds": 90,
+        "actual_exit": 0,
+        "seconds": 21.394,
+        "log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-016-exact-wire.log",
+        "sha256": "e8bc47b759441a52fc617a4cfa58fbf62bab86c0b292046fa0cf0006109175a0"
+      },
+      {
+        "label": "frozen-033-exact-wire",
+        "command": [
+          "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen_ordinary_procedure_9b5d55e0.py",
+          "033"
+        ],
+        "deadline_seconds": 90,
+        "actual_exit": 0,
+        "seconds": 28.125,
+        "log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-033-exact-wire.log",
+        "sha256": "860e7a1064add7c804d41dc558ea8974c3362c096bfdd83412b8c31491394e25"
+      }
+    ],
+    "provider_calls": 0,
+    "database_connections": 0
+  },
+  "purpose": "Exposed offline source repair; historical paid outputs, corpus/gold/notes/reviews remain unchanged. No new provider, DB, clinical route or Word qualification.",
+  "results": {
+    "N01": {
+      "original_desired_supported": 2,
+      "replayed_desired_supported": 7,
+      "desired_supported_denominator": 8,
+      "remaining_hold": "History of present illness clinical source meaning remains unresolved. No synonym ontology added.",
+      "original_context": "Clinic visit record",
+      "explicit_transcript_proof": false
+    },
+    "reviewed_procedure": {
+      "original_supported": 7,
+      "replayed_supported": 10,
+      "all_field_denominator": 11,
+      "remaining_hold": "C08: original zero/less-than-one source and original model opposition retained."
+    }
+  },
+  "artifacts": {
+    "ordinary-source-scope-first.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/ordinary-source-scope-first.log",
+      "sha256": "2a0f0a576131e3f2a5e73ddad2bcef7fa8e345263f3b4403ccb04dc515e203dc",
+      "bytes": 3278
+    },
+    "ordinary-source-scope-second-affected.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/ordinary-source-scope-second-affected.log",
+      "sha256": "e3ff57b908e0f27d75710f050de93e917f8ce69293e37e36d510c02767cfef66",
+      "bytes": 18692
+    },
+    "reviewed-procedure-source-first.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/reviewed-procedure-source-first.log",
+      "sha256": "dacd3a62bfe7f391dff1c3fabe29f14bf5d8d0606d8bd54e2be9f3bc017f8c7a",
+      "bytes": 29312
+    },
+    "reviewed-procedure-invalidation-second.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/reviewed-procedure-invalidation-second.log",
+      "sha256": "e66ffa57f93ca805507dd62e98464b033d5858a20050319db2f5c03e0e2ea3eb",
+      "bytes": 350
+    },
+    "baseline-blood-loss-adjudication.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/baseline-blood-loss-adjudication.json",
+      "sha256": "604513b6a1cae71f7f11762d007402de1ce84233d9f8b233548cf6d78b022d76",
+      "bytes": 6076
+    },
+    "ordinary-procedure-coherent-first.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/ordinary-procedure-coherent-first.log",
+      "sha256": "f9377262e1c45319affe292dcd083f0338f1efa21d2a636c235c64ae9f626922",
+      "bytes": 7620
+    },
+    "ordinary-procedure-coherent-second.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/ordinary-procedure-coherent-second.log",
+      "sha256": "7d9e1d67c1c0bc3b8ee54bc153483c41e92d6686f5e9d6e4274a31345c893f6d",
+      "bytes": 3522
+    },
+    "ordinary-procedure-heading-speaker-first.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/ordinary-procedure-heading-speaker-first.log",
+      "sha256": "048fcc07d87679dc4a849b1cbdd062abd1001dc068ec73e31febf4413a6b439b",
+      "bytes": 12820
+    },
+    "ordinary-procedure-heading-speaker-second.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/ordinary-procedure-heading-speaker-second.log",
+      "sha256": "f9a992f4ee2a1e50670ea8defddd0cf59423a20625553cc733110bf3c3679c60",
+      "bytes": 7711
+    },
+    "ordinary-procedure-floors-final.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/ordinary-procedure-floors-final.log",
+      "sha256": "3e085141662c39f79faf5f600221846ffd3edf9b74a4e0c93535827e5123f1b3",
+      "bytes": 2750
+    },
+    "frozen-new-source-tests.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-new-source-tests.log",
+      "sha256": "6f2e6b71a0360775e0814ff553916663edcea3ae1aa00ddd1127ce938fedf9ea",
+      "bytes": 2918
+    },
+    "frozen-016-exact-wire.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-016-exact-wire.log",
+      "sha256": "e8bc47b759441a52fc617a4cfa58fbf62bab86c0b292046fa0cf0006109175a0",
+      "bytes": 2514
+    },
+    "frozen-033-exact-wire.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-033-exact-wire.log",
+      "sha256": "860e7a1064add7c804d41dc558ea8974c3362c096bfdd83412b8c31491394e25",
+      "bytes": 5215
+    },
+    "oct4-016-frozen-ordinary-procedure-9b5d55e0.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/oct4-016-frozen-ordinary-procedure-9b5d55e0.json",
+      "sha256": "959070c31949242d23994c7b96185f3ec02ca924ae68612e868de2968ff24279",
+      "bytes": 1562995
+    },
+    "oct4-033-frozen-ordinary-procedure-9b5d55e0.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/oct4-033-frozen-ordinary-procedure-9b5d55e0.json",
+      "sha256": "154b561170209e435c5e013a6bccdb6c3a8e11523c9785b5e5ca70f50533ad6e",
+      "bytes": 3981154
+    },
+    "frozen-9b5d55e0-source-manifest.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-9b5d55e0-source-manifest.json",
+      "sha256": "5cfff87ad0ff1a4fa1baf0c84ddc8843632f9e2f823c157d6adf20f8ebd19a68",
+      "bytes": 1042
+    },
+    "frozen-ordinary-procedure-9b5d55e0-test-manifest.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/frozen-ordinary-procedure-9b5d55e0-test-manifest.json",
+      "sha256": "855f0e52dfcb5a4f8cfeadf12202789af7ab470f319bb7cd3bcaf382cc10139c",
+      "bytes": 2342
+    }
+  },
+  "original_failures": {
+    "n01_first_test_instrument": "One missing offered subclause KeyError; fixed test selects unchanged full conditional source. No application failure or provider call.",
+    "stale_hold_expectations": "Nine reproduced subblocks for supported literal N01 answers or warfarin intake alongside direct symptom denial. Original log retained; explicit actual medication/therapy-ending/allergy/actor controls remain held.",
+    "procedure_source_first": "Ten new-proof backward report/finding dependency controls released; corrected proof requires existing structural backward-dependency guard. First wrong outputs retained.",
+    "numeric_probe_withdrawal": "One artificial independent zero/less-than-one expectation is withdrawn as a new unsafe claim: baseline7907 also supports exact zero and zero is less than one. Actual original C08 remains held; omitted qualifier control stays held.",
+    "new_destination_false_hold": "Repeated Recommendation breadcrumb parsed PROPN; corrected by reading the exact original terminal label once without removing earlier context. Both first false holds retained.",
+    "heading_old_expectations": "First36 methods included9 duplicate executions; 27 unique. Old exposed005 faithful Findings/Recommendation gains narrowly pinned; raw/first outputs and invalid qualifiers/garbled extent/C08 holds unchanged."
+  },
+  "affected_tests": {
+    "frozen_new_source": {
+      "methods": 13,
+      "actual_exit": 0,
+      "test_seconds": 79.478,
+      "outer_seconds": 82.525
+    },
+    "coherent_source_and_old_assertions": {
+      "methods": 17,
+      "actual_exit": 0,
+      "seconds": 115.638,
+      "note": "Before empty-context handling, which is separately covered on the final source; explicit actual nonempty-context paths unchanged."
+    },
+    "headings_and_soap": {
+      "unique_methods": 27,
+      "pass_in_second_packet": 26,
+      "remaining_stale_assertion_corrected_and_passed_in_floors_packet": 1,
+      "second_packet_methods_including_one_extra_empty_context_positive": 28,
+      "actual_first_second_packet_exit": 1,
+      "seconds": 111.165,
+      "note": "No unchanged broad rerun: final source new controls passed; the only final assertion edit pinned the newly supported exact Findings text/evidence."
+    },
+    "existing_safety_floor_and_fixed_raw_wire": {
+      "methods": 14,
+      "actual_exit": 0,
+      "seconds": 125.852
+    }
+  },
+  "source_files_affecting_transitive_priced_contract": [
+    "rebuild/core/generation.py",
+    "rebuild/core/v3_field_relations.py",
+    "rebuild/core/ordinary_source_scope.py",
+    "rebuild/core/reviewed_source.py",
+    "rebuild/core/reviewed_procedure_source.py"
+  ],
+  "unchanged_by_this_diff": [
+    "provider prompt/compiler/schema",
+    "model configuration",
+    "worker route",
+    "rating/payment/charge/reservation functions",
+    "frozen source originals/notes/raw ASR/review edits/corpus expectations",
+    "C08 source ambiguity"
+  ],
+  "provider_calls": 0,
+  "DB_connections": 0,
+  "required_next": "Independent finished-diff refutation before root integration; fresh prospective provider -2 requires final frozen source/Word/priced dependency authority. No paid qualification from this replay."
+}

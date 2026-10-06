@@ -17,7 +17,11 @@ jobs:
   python-checks:
     name: Fresh Python (${{ matrix.lane }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Exact 7907ae5a manifests covered 3538 disjoint core methods (1769 each).
+    # core-1 still completed methods immediately before the former 30-minute
+    # deadline, with at least 372 selected methods unfinished. Keep the full
+    # partition and aggregate gates; allow a bounded hour for this workload.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -160,12 +164,22 @@ jobs:
           --health-retries 10
     env:
       QUILLMD_SECRET_KEY: synthetic-browser-ci-only-key-no-external-access-20260917
+      QUILLMD_RELEASE_SHA: ${{ github.sha }}
       QUILLMD_DB_NAME: quillmd_browser_ci
       QUILLMD_DB_USER: quillmd_browser_ci
       QUILLMD_DB_PASSWORD: synthetic-browser-database-only
       QUILLMD_DB_HOST: 127.0.0.1
       QUILLMD_DB_PORT: '5432'
       QUILLMD_AI_MODE: fixture
+      QUILLMD_AI_PROVIDER: anthropic
+      QUILLMD_AI_MODEL: claude-sonnet-5-5
+      QUILLMD_AI_THINKING: between_tools
+      QUILLMD_AI_EFFORT: medium
+      QUILLMD_AI_INPUT_RATE: '2'
+      QUILLMD_AI_OUTPUT_RATE: '10'
+      QUILLMD_AI_CACHED_RATE: '0.20'
+      QUILLMD_WORD_ENGINE: auto
+      QUILLMD_V3_FIELD_RELATIONS: '1'
       QUILLMD_ADMIN_SITE: '0'
       QUILLMD_HTTPS: '0'
     steps:

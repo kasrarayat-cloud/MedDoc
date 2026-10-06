@@ -567,6 +567,51 @@ def replaced_once(old, new):
     return edit
 
 
+class DividedCalendarReadBackTests(unittest.TestCase):
+    def fixture(self, pattern='ddmmmyyyy'):
+        from documents.test_temporal_band import band_form, detected
+        separators = (2, 5) if pattern == 'ddmmmyyyy' else (4, 6) if pattern == 'yyyymmdd' else (2, 4)
+        original = band_form('Visit date:', pattern=pattern, separators=separators)
+        fields = detected(original)
+        date = next(f for f in fields if f['locator']['target'].get('shape') == 'temporal_band')
+        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
+        saved[date['key']] = {'status': 'supported', 'text': '03/14/2026', 'reviewed': True}
+        return original, fields, date, saved
+
+    def test_every_appointed_source_order_reads_the_same_calendar_in_exact_destination(self):
+        from documents import word_v3 as w
+        for pattern, expected in (('ddmmmyyyy','14/Mar/2026'), ('ddmmyyyy','14/03/2026'),
+                                  ('mmddyyyy','03/14/2026'), ('yyyymmdd','2026/03/14')):
+            with self.subTest(pattern=pattern):
+                original, fields, date, saved = self.fixture(pattern)
+                exported = w.fill(original, fields, {date['key']: '03/14/2026'})
+                result, reading = st.saved_export_verification(original, exported, fields, saved)
+                self.assertFalse(result['frozen_export_verification']['workflow_success'])
+                self.assertTrue(result['workflow_success'], reading['problems'])
+                self.assertEqual(reading['fields'][date['key']]['read'], expected)
+                self.assertEqual(result['divided_calendar_readback_corrections'][date['key']]['calendar'], '2026-03-14')
+
+    def test_scattered_date_wrong_calendar_or_changed_original_neighbors_refuse(self):
+        from documents import word_v3 as w
+        original, fields, date, saved = self.fixture()
+        plan = next(f for f in fields if f['label'] == 'Plan')
+        honest = w.fill(original, fields, {date['key']: '03/14/2026'})
+        wrong = w.fill(original, fields, {date['key']: '2026-03-15'})
+        scattered = w.fill(original, fields, {plan['key']: '03/14/2026'})
+        changed = rezip(honest, 'word/document.xml', replaced_once(b'>Visit date:', b'>Changed date:'))
+        for exported in (wrong, scattered, changed):
+            result, reading = st.saved_export_verification(original, exported, fields, saved)
+            self.assertFalse(result['workflow_success'])
+            self.assertEqual(result['divided_calendar_readback_corrections'], {})
+
+    def test_independent_calendar_reader_rejects_ambiguity_and_impossible_dates(self):
+        for value in ('05/10/2026', '02/30/2026', '2026-02-29', '29/Feb/2026', '14/Foo/2026', 'date 03/14/2026'):
+            self.assertIsNone(st.calendar_from_divided_date(value, 'ddmmmyyyy'), value)
+        self.assertEqual(st.calendar_from_divided_date('02/29/2024', 'ddmmmyyyy'), '2024-02-29')
+        self.assertEqual(st.calendar_from_divided_date('05/10/2026', 'mmddyyyy'), '2026-05-10')
+        self.assertEqual(st.calendar_from_divided_date('05/10/2026', 'ddmmyyyy'), '2026-10-05')
+
+
 class ExportReadBackTests(unittest.TestCase):
     """Refutation EXPORT-CHECK-DOES-NOT-READ: the frozen app-path check skipped held and blank fields, called a choice or
     checkbox written without reading its mark, and never looked at the rest of word/document.xml. The stage's own
@@ -576,10 +621,13 @@ class ExportReadBackTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import tempfile
+        from ops import standing_qa_notes_review as review
         cls.scratch = Path(tempfile.mkdtemp(prefix='stage-read-back-'))
         cls.inputs = st.frozen_inputs()
         cls.forms = st.build_forms(cls.scratch / 'forms', 'ordinary_notes', cls.inputs)
         cls.cases = {c['id']: c for c in cls.inputs['cases']['cases']}
+        cls.consent_review = review.frozen(review.MANIFEST_SHA256)
+        cls.reviewed_inputs = review.inputs_with_review(cls.inputs, cls.consent_review)
 
     @classmethod
     def tearDownClass(cls):
@@ -589,7 +637,9 @@ class ExportReadBackTests(unittest.TestCase):
         """(the form, its fields, what a clinician saved: each desired-supported field its first desired text, every
         other field left blank and reviewed)."""
         case = self.cases[case_id]
-        fields = self.inputs['cases']['forms'][case['form']]['fields']
+        # The explicit prospective exclusion preserves the frozen original
+        # and gold answers. Its human-owned Consent control is not exported.
+        fields = self.reviewed_inputs['cases']['forms'][case['form']]['fields']
         saved = {}
         for f in fields:
             ae = case['fields'][f['key']]['app_adoption_expectation']
@@ -598,6 +648,22 @@ class ExportReadBackTests(unittest.TestCase):
             else:
                 saved[f['key']] = {'status': 'left_blank', 'text': '', 'reviewed': True}
         return self.forms[case['form']], fields, saved
+
+    def ordinary_checkbox(self, checked=False):
+        """Independent ordinary control; the frozen Consent original stays human-owned."""
+        import io
+        from docx import Document
+        from documents import word_v3 as w
+        document = Document()
+        document.add_paragraph(('☒' if checked else '☐') + ' Smoker')
+        stream = io.BytesIO()
+        document.save(stream)
+        original = stream.getvalue()
+        fields = w.inspect(original)['fields']
+        box, = [f for f in fields if f['kind'] == 'checkbox']
+        self.assertFalse(box.get('write_protected'))
+        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
+        return original, fields, box, saved
 
     def export(self, original, fields, written):
         from documents import word_v3 as w
@@ -651,25 +717,18 @@ class ExportReadBackTests(unittest.TestCase):
 
     def test_a_checkbox_reviewed_and_left_blank_must_be_unticked(self):
         from core import v3_mapping
-        original, fields, saved = self.case('N06')
-        self.assertEqual(saved['v3_10']['status'], 'left_blank')
-        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), 'v3_10': True})
+        original, fields, box, saved = self.ordinary_checkbox()
+        self.assertEqual(saved[box['key']]['status'], 'left_blank')
+        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), box['key']: True})
         result = st.export_read_back(original, exported, fields, saved)
-        self.assertEqual(self.problems(result), ['v3_10'])
+        self.assertEqual(self.problems(result), [box['key']])
 
     def test_a_checkbox_the_blank_form_prints_ticked_follows_the_stated_rule(self):
-        # core.v3_mapping.fill_answers: a checkbox reviewed and left blank is exported UNTICKED even when the blank form
-        # prints it ticked; one never reviewed keeps what the form prints. (A synthetic variant of r1-11 whose consent
-        # box is printed ticked, inspected afresh.)
+        # Ordinary checkbox review unticks; an unreviewed control preserves its
+        # printed mark. The distinct protected Consent rule is tested below.
         from core import v3_mapping
-        from documents import word_v3 as w
-        original = rezip(self.forms['r1-11'], 'word/document.xml', replaced_once(
-            '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode(),
-            '<w:t>☒</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
-        fields = w.inspect(original)['fields']
-        box = next(f for f in fields if f['kind'] == 'checkbox')
+        original, fields, box, saved = self.ordinary_checkbox(checked=True)
         self.assertEqual(box.get('printed_ticked'), [0])
-        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
         unticked = self.honest(original, fields, saved)
         result = st.export_read_back(original, unticked, fields, saved)
         self.assertEqual((result['problems'], result['fields'][box['key']]['read']), ([], [False]))
@@ -679,6 +738,78 @@ class ExportReadBackTests(unittest.TestCase):
         never_reviewed = {**saved, box['key']: {'status': 'held', 'text': '', 'reviewed': False}}
         self.assertTrue(st.export_read_back(original, kept, fields, never_reviewed)['passed'])
         self.assertEqual(self.problems(st.export_read_back(original, unticked, fields, never_reviewed)), [box['key']])
+
+    def test_frozen_consent_exclusion_preserves_original_and_refuses_direct_ticks(self):
+        import hashlib
+        from core import v3_mapping
+        from documents import word_v3 as w
+        original, fields, saved = self.case('N06')
+        frozen = self.inputs['cases']['forms']['r1-11']['fields']
+        self.assertEqual(hashlib.sha256(original).hexdigest(), self.consent_review['source_sha256'])
+        consent = next(f for f in fields if f['key'] == self.consent_review['field_key'])
+        self.assertTrue(consent['write_protected'])
+        self.assertNotIn(consent['key'], v3_mapping.fill_answers(fields, saved))
+        for tick in (False, True):
+            with self.subTest(tick=tick), self.assertRaises(w.V3Failure) as caught:
+                self.export(original, frozen, {consent['key']: tick})
+            self.assertEqual(caught.exception.code, 'protected_signing_area')
+        exported = self.honest(original, fields, saved)
+        result = st.export_read_back(original, exported, fields, saved)
+        self.assertTrue(result['passed'])
+        self.assertFalse(result['fields'][consent['key']]['set_by_export'])
+
+    def test_reviewed_protected_checkbox_keeps_printed_mark_and_rejects_automatic_answer(self):
+        from documents import word_v3 as w
+        original = rezip(self.forms['r1-11'], 'word/document.xml', replaced_once(
+            '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode(),
+            '<w:t>☒</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
+        fields = w.inspect(original)['fields']
+        box = next(f for f in fields if f['kind'] == 'checkbox')
+        self.assertTrue(box['write_protected'])
+        self.assertEqual(box['label'], 'Consent obtained')
+        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
+        kept = self.honest(original, fields, saved)
+        result = st.export_read_back(original, kept, fields, saved)
+        self.assertEqual(result['problems'], [])
+        self.assertEqual(result['fields'][box['key']]['read'], [True])
+        self.assertFalse(result['fields'][box['key']]['set_by_export'])
+        wrong = {**saved, box['key']: {'status': 'supported', 'text': '☒', 'reviewed': True}}
+        self.assertEqual(self.problems(st.export_read_back(original, kept, fields, wrong)), [box['key']])
+        erased = rezip(kept, 'word/document.xml', replaced_once(
+            '<w:t>☒</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode(),
+            '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
+        self.assertEqual(self.problems(st.export_read_back(original, erased, fields, saved)), [box['key']])
+
+    def test_protected_scalars_read_original_entries_and_reject_changed_or_removed_content(self):
+        original, fields, _ = self.case('N01')
+        field = next(f for f in fields if f['key'] == 'v3_1')
+        existing = self.export(original, fields, {field['key']: 'Existing human text'})
+        changed = self.export(original, fields, {field['key']: 'Incorrect protected answer'})
+        # Both exports use the same inspected physical target. Protection here
+        # is the checker input; no signing/admission guard is bypassed.
+        blank = {'status': 'left_blank', 'text': '', 'reviewed': True}
+        for kind in ('text', 'long_text', 'date', 'time'):
+            with self.subTest(kind=kind):
+                protected = {**field, 'kind': kind, 'write_protected': True}
+                answers = {field['key']: blank}
+                kept = st.export_read_back(existing, existing, [protected], answers)
+                self.assertTrue(kept['passed'], kept['problems'])
+                self.assertEqual(kept['fields'][field['key']]['read'], 'Existing human text')
+                for bad in (changed, original):
+                    failed = st.export_read_back(existing, bad, [protected], answers)
+                    self.assertFalse(failed['passed'])
+                    self.assertIn(field['key'], self.problems(failed))
+                proposed = {field['key']: {'status': 'supported', 'text': 'Incorrect protected answer',
+                                           'reviewed': True}}
+                for output in (existing, changed):
+                    failed = st.export_read_back(existing, output, [protected], proposed)
+                    self.assertFalse(failed['passed'])
+                    self.assertFalse(failed['fields'][field['key']]['set_by_export'])
+                    self.assertEqual(failed['fields'][field['key']]['expected'], 'Existing human text')
+                    self.assertIn(field['key'], self.problems(failed))
+        ordinary = st.export_read_back(original, changed, [field], {
+            field['key']: {'status': 'supported', 'text': 'Incorrect protected answer', 'reviewed': True}})
+        self.assertTrue(ordinary['passed'], ordinary['problems'])
 
     def test_a_written_text_that_is_not_the_saved_one_fails(self):
         from core import v3_mapping
@@ -705,6 +836,131 @@ class ExportReadBackTests(unittest.TestCase):
         result = st.export_read_back(original, b'not a document', fields, saved)
         self.assertFalse(result['passed'])
         self.assertEqual(self.problems(result), ['export'])
+
+
+    def test_complete_multiline_saved_value_keeps_the_original_false_negative(self):
+        original, fields, saved = self.case('N01')
+        text = 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'
+        saved['v3_9'] = {'status': 'supported', 'text': text, 'reviewed': True}
+        exported = self.honest(original, fields, saved)
+        result, reading = st.saved_export_verification(original, exported, fields, saved)
+        self.assertFalse(result['frozen_export_verification']['workflow_success'])
+        self.assertTrue(result['workflow_success'])
+        self.assertIn('v3_9', result['visible_break_readback_corrections'])
+        for key in result['visible_break_readback_corrections']:
+            self.assertEqual(reading['fields'][key]['read'], saved[key]['text'])
+        self.assertEqual(reading['fields']['v3_9']['read'], text)
+
+    def test_complete_saved_tab_is_read_as_a_tab(self):
+        original, fields, saved = self.case('N01')
+        text = 'Synthetic medication\t10 mg\nSynthetic follow-up\t6 weeks'
+        saved['v3_9'] = {'status': 'supported', 'text': text, 'reviewed': True}
+        result, reading = st.saved_export_verification(original, self.honest(original, fields, saved), fields, saved)
+        self.assertTrue(result['workflow_success'])
+        self.assertEqual(reading['fields']['v3_9']['read'], text)
+
+    def test_a_break_replaced_by_a_space_cannot_correct_the_frozen_failure(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        written = v3_mapping.fill_answers(fields, saved)
+        for replacement in ('First sentence. Second sentence.', 'First sentence.',
+                            'Second sentence.\nFirst sentence.', 'First sentence.\nWrong sentence.'):
+            with self.subTest(replacement=replacement):
+                exported = self.export(original, fields, {**written, 'v3_9': replacement})
+                result, reading = st.saved_export_verification(original, exported, fields, saved)
+                self.assertFalse(result['workflow_success'])
+                self.assertFalse(result['supported_answers_in_their_fields']['v3_9'])
+                self.assertNotIn('v3_9', result['visible_break_readback_corrections'])
+
+    def test_complete_multiline_text_in_another_field_cannot_pass(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N01')
+        text = 'First sentence.\nSecond sentence.'
+        saved['v3_9'] = {'status': 'supported', 'text': text, 'reviewed': True}
+        written = v3_mapping.fill_answers(fields, saved)
+        exported = self.export(original, fields, {**written, 'v3_9': 'Wrong destination value.', 'v3_7': text})
+        result, reading = st.saved_export_verification(original, exported, fields, saved)
+        self.assertFalse(result['workflow_success'])
+        self.assertEqual(result['visible_break_readback_corrections'], {})
+
+    def test_correct_multiline_value_with_wrong_marks_still_refuses(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), 'v3_6': 'Yes'})
+        result, reading = st.saved_export_verification(original, exported, fields, saved)
+        self.assertFalse(result['workflow_success'])
+        self.assertIn('v3_6', self.problems(reading))
+        self.assertEqual(result['visible_break_readback_corrections'], {})
+
+    def test_correct_multiline_value_with_a_changed_question_still_refuses(self):
+        import io
+        from zipfile import ZipFile
+        from lxml import etree
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        stream = io.BytesIO()
+        with ZipFile(io.BytesIO(self.honest(original, fields, saved))) as source, ZipFile(stream, 'w') as out:
+            for item in source.infolist():
+                raw = source.read(item.filename)
+                if item.filename == 'word/document.xml':
+                    root = etree.fromstring(raw)
+                    question = root.xpath('.//w:tr[1]/w:tc[1]//w:t', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
+                    self.assertTrue(question)
+                    question[0].text = 'Changed neighboring question'
+                    raw = etree.tostring(root, xml_declaration=True, encoding='UTF-8', standalone=True)
+                out.writestr(item, raw)
+        result, reading = st.saved_export_verification(original, stream.getvalue(), fields, saved)
+        self.assertFalse(result['workflow_success'])
+        self.assertIn('outside the written fields', self.problems(reading))
+        self.assertEqual(result['visible_break_readback_corrections'], {})
+
+    def test_hidden_scalar_ink_refuses_and_explicit_visible_ink_passes(self):
+        import io
+        from zipfile import ZipFile
+        from lxml import etree
+        from documents import word_v3 as w
+        original, fields, saved = self.case('N01')
+        saved['v3_9'] = {'status': 'supported', 'text': 'First sentence.\nSecond sentence.', 'reviewed': True}
+        baseline = self.honest(original, fields, saved)
+        field = next(f for f in fields if f['key'] == 'v3_9')
+        for tag, value, visible in [('vanish', '1', False), ('vanish', None, False),
+                                    ('webHidden', 'true', False), ('specVanish', '1', False),
+                                    ('vanish', '0', True), ('vanish', 'false', True), ('vanish', 'off', True)]:
+            with self.subTest(tag=tag, value=value):
+                package = w.open_package(baseline)
+                index = w.SlotIndex(package)
+                refs = [field['locator'], *field['locator'].get('extra', [])]
+                altered = 0
+                for ref in refs:
+                    anchor = index.by_id[ref['part'] + '#' + ref['slot']]
+                    for run in anchor.el.iter(w.R):
+                        if not w.text_of(run):
+                            continue
+                        properties = run.find(w.q('w:rPr'))
+                        if properties is None:
+                            properties = etree.Element(w.q('w:rPr'))
+                            run.insert(0, properties)
+                        hidden = etree.SubElement(properties, w.q('w:' + tag))
+                        if value is not None:
+                            hidden.set(w.q('w:val'), value)
+                        altered += 1
+                self.assertGreater(altered, 0)
+                stream = io.BytesIO()
+                with ZipFile(io.BytesIO(baseline)) as source, ZipFile(stream, 'w') as out:
+                    for item in source.infolist():
+                        raw = source.read(item.filename)
+                        if item.filename == 'word/document.xml':
+                            raw = etree.tostring(package.tree(item.filename), xml_declaration=True,
+                                                 encoding='UTF-8', standalone=True)
+                        out.writestr(item, raw)
+                result, reading = st.saved_export_verification(original, stream.getvalue(), fields, saved)
+                self.assertEqual(result['workflow_success'], visible)
+                self.assertEqual(reading['passed'], visible)
+                if not visible:
+                    self.assertIn('v3_9', self.problems(reading))
+                    self.assertNotIn('v3_9', result['visible_break_readback_corrections'])
 
 
 def positional(body):

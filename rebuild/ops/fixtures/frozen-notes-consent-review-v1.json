@@ -1,0 +1,15 @@
+{
+  "id": "frozen-notes-consent-review-v1",
+  "form": "r1-11",
+  "source_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+  "field_key": "v3_10",
+  "label": "Consent obtained",
+  "issue_id": "8bc98dd6dd88823b77b44207e9c63e850742390ac50cad702d71b8185e9a4da8",
+  "part": "word/document.xml",
+  "slot": "b/tbl[9]/tr[0]/tc[0]/p[0]",
+  "disposition": "leave_unchanged",
+  "automatic_complete": false,
+  "provider_upload_allowed": true,
+  "corpus_qualification": false,
+  "review_reason": "This printed document action is human-owned. Complete it through the established signing workflow."
+}

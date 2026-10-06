@@ -1,0 +1,723 @@
+{
+  "actual_exit": {
+    "actual_child_exit": 0,
+    "elapsed_seconds": 1.772562,
+    "log_sha256": "776aee5f29c374a88e630a06efea32633970f299df4d1b916bbb398113c7f020",
+    "prospective_manifest_sha256": "bcf0b89143d7b6b3976fccf37fde8add7ad7793c672ba09a4ba7c9cf1f03deec",
+    "timed_out": false
+  },
+  "evidence": {
+    "child-exit-receipt.json": "28c306cb8974250754b2569375b1bf2cfe57468864e6412a846a4cfba5cbbf10",
+    "complete-physical-control-headers.json": "6b3b3c3c8d6dd1aea4e841403066b10eb488ccffcd2099605d172b6ba347daad",
+    "counterexample-duplicate-physical-format.xml": "9a403ada3edd74473cc4ed6662ecbd160eef90a8064845ddc84178efcb65e56c",
+    "counterexample-hidden-format-instruction.xml": "65648f5e10af91409d087d688863c6cdc1836a4ddd87c8f3f059e6c78387158b",
+    "counterexample-unique-owner-conflicting-instructions.xml": "abafbc5a8fe6bdf0c2e97bd67756771cc81ff76c517e6580a37e35f5ecb0f3ec",
+    "current-source-inspect.json": "c07307ceac7ae0cd4127e83d43d61e4a97a2f2f23d919cd2059bb67d857bd1a9",
+    "lens.py": "c31525aabfa65df43b82959b5b8265fd7b9cc191392667230b2f9d33cf48d60d",
+    "minimum-structural-controls.json": "e315b82e2742a1f18b7fb48b95fcc59e4c34510154c73dd6a33d1625d967fc5b",
+    "original-physical-paragraph-outline.json": "77ea782c802b9d9cd755c520aa578553d11e10ffe4f45ca82efe6d6872462c3d",
+    "original-single-choice-negative-sources.json": "c0c806da4f32735483fc833abd4579c929cc5aaa4ef86e9211d0abef9a83d4e0",
+    "original.docx": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+    "prospective-manifest.json": "bcf0b89143d7b6b3976fccf37fde8add7ad7793c672ba09a4ba7c9cf1f03deec",
+    "result.json": "0b02974dcd122bb78a5e918395b5be0a93774c96c27ee9ea1dfb4548522fbcfa",
+    "six-exact-caption-physical-bindings.json": "df93308d32b62b422b276860d91ac8528542e992d88171b1afc2b75344cd23b4",
+    "six-independent-omitted-destinations.json": "610290064c0aefc023701481b90c504c3570b23d087f49310aa30ede30008eba",
+    "source-after.json": "f371405b41b4815b1b3b48c042ea53589f60dfc187718dd479aebfa81c604d15",
+    "source-before.json": "f371405b41b4815b1b3b48c042ea53589f60dfc187718dd479aebfa81c604d15"
+  },
+  "evidence_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/d07-appendix-physical-lens-20261004/replay-02",
+  "first_instrument_refusal": {
+    "actual_exit": 1,
+    "cause": "Retained old Wmap source11d146 does not match actualb98Word5cd57c; binding assertion refused. A fresh current inspector result is separate; old16/28score unchanged.",
+    "elapsed_seconds": 0.164972,
+    "log_sha256": "dddf5a78068f077228144c32a9c92a3ff89b94d7724b63f7ca17943419b47cdd",
+    "prospective_manifest_sha256": "5b4cc991e08d7d465c48a88e33b87d85dfb0b4c3cd037cf40027de100be30831"
+  },
+  "independent_omissions": [
+    {
+      "appendix_cardinality_binding_closes_this": false,
+      "fixed_notes": "Standalone legacy FORMCHECKBOX; tick only when the start date is unknown (alternative to the date).",
+      "gt_id": "A13",
+      "kind": "checkbox",
+      "label": "Or Unknown",
+      "physical_destinations": [
+        {
+          "host_paragraph_text": " Or Unknown",
+          "host_raw_xml_sha256": "fa735309c8fb91f40730f38fa90c4eb377025eaf9c33cd0a39910370b9c52afd",
+          "legacy_checkboxes": 1,
+          "part": "word/document.xml",
+          "ptab_count": 0,
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[1]/tc[0]/p[1]/ff[0]",
+          "tab_count": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "appendix_cardinality_binding_closes_this": false,
+      "fixed_notes": "Standalone legacy FORMCHECKBOX; tick only when the end date is unknown.",
+      "gt_id": "A15",
+      "kind": "checkbox",
+      "label": "Or Unknown",
+      "physical_destinations": [
+        {
+          "host_paragraph_text": " Or Unknown",
+          "host_raw_xml_sha256": "d80c17aa5d0eb841f5727d02f7b8ae541a914c7c1e725cb98522c1a413280df5",
+          "legacy_checkboxes": 1,
+          "part": "word/document.xml",
+          "ptab_count": 0,
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[1]/tc[1]/p[1]/ff[0]",
+          "tab_count": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "appendix_cardinality_binding_closes_this": false,
+      "fixed_notes": "Same paragraph as item 5. Blank is a plain run of spaces between the label and the printed unit \"minutes\"; number goes before \"minutes\". Min=1, max=999.",
+      "gt_id": "A17",
+      "kind": "measurement",
+      "label": "6. Average duration of sessions:",
+      "physical_destinations": [
+        {
+          "host_paragraph_text": "5. Number of completed sessions:        6. Average duration of sessions:    minutes",
+          "host_raw_xml_sha256": "dbca6ad557ab2f5c582e2552a3d850c74460a3a4325eb83291dfb856dfd79275",
+          "legacy_checkboxes": 0,
+          "part": "word/document.xml",
+          "ptab_count": 0,
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[0]/tc[0]/p[0]",
+          "tab_count": 0,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "appendix_cardinality_binding_closes_this": false,
+      "fixed_notes": "Signature goes in the run of 10 plain (non-underlined) tabs between the label and \"Date:\" on the same paragraph. Never auto-fill with an invented signature; also listed under preserve.",
+      "gt_id": "A26",
+      "kind": "signature",
+      "label": "Recorder Signature:",
+      "physical_destinations": [
+        {
+          "host_paragraph_text": "Recorder Signature:Date:",
+          "host_raw_xml_sha256": "87f22be2179e56347c00f31e0b92cb474ed62635996a6f42f95ca69888c149fa",
+          "legacy_checkboxes": 0,
+          "part": "word/document.xml",
+          "ptab_count": 0,
+          "slot": "b/p[1]",
+          "tab_count": 10,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "appendix_cardinality_binding_closes_this": false,
+      "fixed_notes": "Signature date: goes after \"Date:\" at the end of the Recorder Signature paragraph (no printed blank).",
+      "gt_id": "A27",
+      "kind": "date",
+      "label": "Date:",
+      "physical_destinations": [
+        {
+          "host_paragraph_text": "Recorder Signature:Date:",
+          "host_raw_xml_sha256": "87f22be2179e56347c00f31e0b92cb474ed62635996a6f42f95ca69888c149fa",
+          "legacy_checkboxes": 0,
+          "part": "word/document.xml",
+          "ptab_count": 0,
+          "slot": "b/p[1]",
+          "tab_count": 10,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "appendix_cardinality_binding_closes_this": false,
+      "fixed_notes": "Footer \"Initials:\" between the version text and the page number (centre ptab); answer goes after the label. footer2 is the first-page footer rendered on page 1; footer1 is section 1's default footer, shown only if the form section overflows to a second page (latent: not displayed in the render; Word's cached page fields in footer2/footer3 also show a one-page form section). Kept as a secondary slot. The instructions-section footer (footer3) has no Initials. Never auto-fill with invented initials; also listed under preserve.",
+      "gt_id": "A28",
+      "kind": "initials",
+      "label": "Initials:",
+      "physical_destinations": [
+        {
+          "host_paragraph_text": "TBI CDE Version 3.0Initials:Page 1 of 4",
+          "host_raw_xml_sha256": "7e7df885668f74f8510a335f98088bcf061cae6413496c6e760e83e944ffc27b",
+          "legacy_checkboxes": 0,
+          "part": "word/footer2.xml",
+          "ptab_count": 2,
+          "slot": "hf/p[0]",
+          "tab_count": 0,
+          "visible": true
+        },
+        {
+          "host_paragraph_text": "TBI CDE Version 3.0Initials:Page 1 of 5",
+          "host_raw_xml_sha256": "5e956726f8b224aaf1e2c58c9dd3ebbf7cdd3c3d35ad71210a9d53f98aca9dae",
+          "legacy_checkboxes": 0,
+          "part": "word/footer1.xml",
+          "ptab_count": 2,
+          "slot": "hf/p[0]",
+          "tab_count": 0,
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "minimum_control_records": [
+    {
+      "actual_unique_owner_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "id": "original_six_whole_captions",
+      "result": "six unique physical owners; no original physical ambiguity demonstrated"
+    },
+    {
+      "id": "original_provider_subject_count",
+      "input": "Provider type \u2013If more than one provider was involved in the delivery of the potentially confounding non-study treatment, select the code for the most-involved provider. ",
+      "required_result": "single choice; no global more-than-one release"
+    },
+    {
+      "id": "original_repeated_delivered_commands",
+      "input": "Delivered \u2013 Select \u2018Yes\u2019 if the participant received the minimum amount of the intervention considered to be confounding, as defined in \u2018Quantity\u2019 above. If a participant received the potentially confounding non-study treatment, but the quantity cannot be reliably determined because of missing or incomplete information, select \u2018Yes.\u2019 Select \u2018No\u2019 when there is an absence of evidence that a participant received the potentially confounding non-study treatment (e.g., there is no mention of it in the medical record and the participant/family report having not received it). Select \u2018unknown\u2019 when a participant\u2019s treatment history cannot be accessed (e.g., medical records are unavailable and the participant/family cannot be interviewed).",
+      "required_result": "single choice; multiple Select verbs are not multiple-selected values"
+    },
+    {
+      "actual_owner_slots": [
+        "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]",
+        "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[7]/tc[0]/p[0]"
+      ],
+      "id": "duplicate_visible_format",
+      "required_result": "refuse automatic binding across distinct physical groups"
+    },
+    {
+      "actual_visible": false,
+      "id": "hidden_format_instruction",
+      "required_result": "hidden source cannot grant selection capacity"
+    },
+    {
+      "actual_owner_count": 1,
+      "commands": [
+        "Format \u2013 If the same potentially confounding non-study treatment was delivered in multiple formats, or the format changed during its delivery, select both formats. ",
+        "Format \u2013 Select one option only."
+      ],
+      "id": "unique_format_owner_conflicting_commands",
+      "required_result": "conflict/held despite a unique exact caption owner"
+    },
+    {
+      "existing_original_whole_caption_owners": [],
+      "id": "caption_extension",
+      "instruction_caption": "Format of delivery",
+      "required_result": "no stemming/prefix binding to original Format"
+    },
+    {
+      "format_owner_slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]",
+      "id": "neighbor_scope",
+      "modality_owner_slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]",
+      "required_result": "Format instruction must not become Modality local source"
+    },
+    {
+      "id": "human_destination_not_control_question",
+      "instruction_caption": "Recorder Signature",
+      "original_control_owners": [],
+      "required_result": "no selection binding; signing place stays human-owned"
+    }
+  ],
+  "original_negative_sources": [
+    {
+      "contains_more_than_one": false,
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "full_text": "Delivered \u2013 Select \u2018Yes\u2019 if the participant received the minimum amount of the intervention considered to be confounding, as defined in \u2018Quantity\u2019 above. If a participant received the potentially confounding non-study treatment, but the quantity cannot be reliably determined because of missing or incomplete information, select \u2018Yes.\u2019 Select \u2018No\u2019 when there is an absence of evidence that a participant received the potentially confounding non-study treatment (e.g., there is no mention of it in the medical record and the participant/family report having not received it). Select \u2018unknown\u2019 when a participant\u2019s treatment history cannot be accessed (e.g., medical records are unavailable and the participant/family cannot be interviewed).",
+      "oracle": "single-choice; mention of multiple subjects/repeated individual selection commands grants no multiple selection",
+      "raw_xml_sha256": "d2f1b3583af422cd60f787954db1be0ecda31dc6e5cfbd4c31ad9b6602484194",
+      "slot": "b/p[21]"
+    },
+    {
+      "contains_more_than_one": true,
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "full_text": "Provider type \u2013If more than one provider was involved in the delivery of the potentially confounding non-study treatment, select the code for the most-involved provider. ",
+      "oracle": "single-choice; mention of multiple subjects/repeated individual selection commands grants no multiple selection",
+      "raw_xml_sha256": "ad2d03d565e3d629afb21205289479ff390c7b9141599ba3e96ebd4529a2ccd1",
+      "slot": "b/p[27]"
+    }
+  ],
+  "result": {
+    "actual_existing_many_positive_count": 0,
+    "corpus_or_scorer_changes": 0,
+    "current_inspect_sha256": "c07307ceac7ae0cd4127e83d43d61e4a97a2f2f23d919cd2059bb67d857bd1a9",
+    "db_provider_render_calls": 0,
+    "elapsed_seconds": 1.580537,
+    "fixed_gt_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+    "historical_mapping_is_exact_current_source": false,
+    "independent_missing_destinations": 6,
+    "minimum_structural_control_records": 9,
+    "new_cardinality_source_diff_present": false,
+    "original_and_source_unchanged": true,
+    "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+    "original_six_unique_caption_owners": true,
+    "retained_fixed_score": {
+      "extras": 4,
+      "missed": 6,
+      "n": 28,
+      "ok": 16,
+      "strict": false,
+      "wrong": 6
+    },
+    "retained_gt_result_sha256": "5665b5849251f0ef9bbdf83e9b1dac23e67847b3ac32103724ee5c4c273f98df",
+    "retained_mapping_sha256": "518cb59b3eb86704bd183e53e073f97a2b20459c1be71a65b8ad9617abd7c559",
+    "retained_word_source_sha256": "11d14673fc955a93891d745ccccbdf7c5013e97267bec7a7097d7f83fd484eaf",
+    "scope": "Physical-source scope lens and existing grammar probes; no application qualification, future binding feature test or GT regrade",
+    "source": {
+      "commit": "b98b98fc893acf2b17004945e0e1721fd2b0da97",
+      "dirty": "",
+      "word_sha256": "5cd57ce0b01faa6037485f0f14433714a6b0b2550168acb2d09edba6d70e8511"
+    },
+    "source_edits": 0
+  },
+  "scope": "Independent raw-original physical source/destination lens plus existing grammar primitives; no new feature/product qualification, regrade or fullgate",
+  "six_bindings": [
+    {
+      "caption": "How researcher determined intervention was delivered",
+      "current_inspected_field": {
+        "key": "v3_7",
+        "kind": "choice",
+        "label": "2. How researcher determined intervention was delivered:",
+        "options": [
+          "Extracted from medical record",
+          "Reported by participant",
+          "Reported by caregiver/family member(s)",
+          "Action performed by research team"
+        ],
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[1]/ff[0]",
+        "target": {
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[1]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[2]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[3]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[4]/ff[0]"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "exact_normalized_caption": "how researcher determined intervention was delivered",
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "existing_one_only": false,
+      "fixed_gt_kind": "multi_choice",
+      "gt_id": "A11",
+      "physical_question_owners": [
+        {
+          "caption": "2. How researcher determined intervention was delivered:",
+          "complete_control_header": true,
+          "normalized_caption": "how researcher determined intervention was delivered",
+          "paragraph_raw_sha256": "dd7ab0a50ce6fd1f1bbfabd7d416de28c5a35e78b33331234151275b63b3c045",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]"
+        }
+      ],
+      "production_appendix_binding_executed": false,
+      "source": {
+        "full_text": "How researcher determined intervention was delivered \u2013 Select more than one source if relevant. If there is contradictory information across sources, favor administrative records over participant/family report (Hart et al., 2019).",
+        "part": "word/document.xml",
+        "raw_xml_sha256": "d6b1d5161f6ba9a9861772a566051e8fb8267a2defa346f1d5296820c2677a8c",
+        "slot": "b/p[22]",
+        "visible": true
+      }
+    },
+    {
+      "caption": "Recipient(s)",
+      "current_inspected_field": {
+        "key": "v3_13",
+        "kind": "choice",
+        "label": "Recipient(s)",
+        "options": [
+          "Participant",
+          "Caregiver/family member(s)",
+          "Unknown"
+        ],
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/ff[2]"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "exact_normalized_caption": "recipient(s)",
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "existing_one_only": false,
+      "fixed_gt_kind": "multi_choice",
+      "gt_id": "A20",
+      "physical_question_owners": [
+        {
+          "caption": "8. Recipient(s):",
+          "complete_control_header": true,
+          "normalized_caption": "recipient(s)",
+          "paragraph_raw_sha256": "aaddcf04988ff83b7266f93e1b940dd6ba558fb0a7b010c94e59744503759f73",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]"
+        }
+      ],
+      "production_appendix_binding_executed": false,
+      "source": {
+        "full_text": "Recipient(s) \u2013 If the potentially confounding non-study treatment was primarily delivered to one recipient (participant or family/caregiver), select that one recipient. If the treatment involved extensive participation from both the participant and their family/caregiver, select both. ",
+        "part": "word/document.xml",
+        "raw_xml_sha256": "b2a605a48248d2508978713a031fd1d753b964181f2830c10ec51d81e20f6e6d",
+        "slot": "b/p[28]",
+        "visible": true
+      }
+    },
+    {
+      "caption": "Format",
+      "current_inspected_field": {
+        "key": "v3_14",
+        "kind": "choice",
+        "label": "Format",
+        "options": [
+          "Individual",
+          "Group",
+          "Unknown"
+        ],
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/ff[2]"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "exact_normalized_caption": "format",
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "existing_one_only": false,
+      "fixed_gt_kind": "multi_choice",
+      "gt_id": "A21",
+      "physical_question_owners": [
+        {
+          "caption": "9. Format:",
+          "complete_control_header": true,
+          "normalized_caption": "format",
+          "paragraph_raw_sha256": "35cd61b755a78344f02b05e684a8a0dcc901b524cd85edde8e8217b7ea1a4c2a",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]"
+        }
+      ],
+      "production_appendix_binding_executed": false,
+      "source": {
+        "full_text": "Format \u2013 If the same potentially confounding non-study treatment was delivered in multiple formats, or the format changed during its delivery, select both formats. ",
+        "part": "word/document.xml",
+        "raw_xml_sha256": "f6fee4d457b9383466d034df89dd61976579924eba3547255d9293d2cd1b663b",
+        "slot": "b/p[29]",
+        "visible": true
+      }
+    },
+    {
+      "caption": "Modality",
+      "current_inspected_field": {
+        "key": "v3_15",
+        "kind": "choice",
+        "label": "Modality",
+        "options": [
+          "In-person",
+          "Videoconference",
+          "Telephone",
+          "Unknown"
+        ],
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]/ff[3]"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "exact_normalized_caption": "modality",
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "existing_one_only": false,
+      "fixed_gt_kind": "multi_choice",
+      "gt_id": "A22",
+      "physical_question_owners": [
+        {
+          "caption": "10. Modality:",
+          "complete_control_header": true,
+          "normalized_caption": "modality",
+          "paragraph_raw_sha256": "ed2286e697d39dcdf5182781f0ea3cdbdf3936124be2f90dcce7a1a00ff878ac",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[4]/tc[0]/p[0]"
+        }
+      ],
+      "production_appendix_binding_executed": false,
+      "source": {
+        "full_text": "Modality \u2013 If the same potentially confounding non-study treatment was delivered in multiple modalities, or the modality changed during its delivery, select all relevant modalities.",
+        "part": "word/document.xml",
+        "raw_xml_sha256": "036ba2a546724367eacf93062ab4c4dbcd1224b1e2089aaa171fcd74679f2eff",
+        "slot": "b/p[30]",
+        "visible": true
+      }
+    },
+    {
+      "caption": "In-person location",
+      "current_inspected_field": {
+        "key": "v3_16",
+        "kind": "choice",
+        "label": "In-person location",
+        "options": [
+          "Acute hospital",
+          "Inpatient rehabilitation",
+          "Outpatient",
+          "School",
+          "Workplace",
+          "Participant\u2019s home/residence",
+          "N/A (remote-delivered)"
+        ],
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]/ff[3]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[1]/ff[2]"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "exact_normalized_caption": "in-person location",
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "existing_one_only": false,
+      "fixed_gt_kind": "multi_choice",
+      "gt_id": "A23",
+      "physical_question_owners": [
+        {
+          "caption": "11. In-person location:",
+          "complete_control_header": true,
+          "normalized_caption": "in-person location",
+          "paragraph_raw_sha256": "5511070807e7238d31fd0aa84168d34bd50c399a8c4e1bd8070565b11fcd2839",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[5]/tc[0]/p[0]"
+        }
+      ],
+      "production_appendix_binding_executed": false,
+      "source": {
+        "full_text": "In-person location \u2013 If the same potentially confounding non-study treatment was delivered in multiple locations, or the location changed during its delivery, select all relevant locations. ",
+        "part": "word/document.xml",
+        "raw_xml_sha256": "6d832cdbe59189015bf387342bced906ca0bcd4b55a60bda75bf5c775d288328",
+        "slot": "b/p[31]",
+        "visible": true
+      }
+    },
+    {
+      "caption": "Reason not delivered",
+      "current_inspected_field": {
+        "key": "v3_17",
+        "kind": "choice",
+        "label": "Reason not delivered",
+        "options": [
+          "N/A (was delivered)",
+          "No indication",
+          "Contraindication",
+          "Insurance coverage/financial",
+          "Offered but participant/family declined",
+          "Other known",
+          "Unknown"
+        ],
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[0]",
+        "target": {
+          "boxes": [
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[0]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[1]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]/ff[2]"
+            },
+            {
+              "kind": "ff",
+              "part": "word/document.xml",
+              "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[2]/ff[0]"
+            }
+          ],
+          "type": "checkboxes"
+        }
+      },
+      "exact_normalized_caption": "reason not delivered",
+      "existing_many_evidence": [
+        false,
+        "",
+        "",
+        false
+      ],
+      "existing_one_only": false,
+      "fixed_gt_kind": "multi_choice",
+      "gt_id": "A24",
+      "physical_question_owners": [
+        {
+          "caption": "12. Reason not delivered:",
+          "complete_control_header": true,
+          "normalized_caption": "reason not delivered",
+          "paragraph_raw_sha256": "5f8f2756601dee47e9b0e98bdbdd3557f26a99f793f3b9144126b410622f13b5",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[0]"
+        }
+      ],
+      "production_appendix_binding_executed": false,
+      "source": {
+        "full_text": "Reason not delivered \u2013 If known, select a reason or reasons why the participant did not receive the potentially confounding non-study treatment. When it is unclear if the participant should have received it, select \u2018unknown.\u2019 ",
+        "part": "word/document.xml",
+        "raw_xml_sha256": "a96ba7bfb878b4689924e758034ab595a1591afb243f5636c3acbab312b0cfa1",
+        "slot": "b/p[32]",
+        "visible": true
+      }
+    }
+  ],
+  "source_files_owned_by_word_edited": false
+}

@@ -26,6 +26,7 @@ import re
 import unicodedata
 import zipfile
 from dataclasses import dataclass, field as dfield
+from datetime import date
 
 from lxml import etree
 
@@ -43,18 +44,163 @@ XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 NS = {"w": W, "w14": W14, "mc": MC}
 CONTRACT = "v3"
 MAX_FIELDS = 1500
+
+# Exact original blanks with retained rendered failures, not width guesses or
+# qualification of changed/proxy documents. Each remains unsupported until its
+# growth contract is independently qualified. Original stored exports are never
+# rewritten. New import manifests carry this evidence to the admission guard.
+KNOWN_LAYOUT_FAILURES = {
+    "bc002ff4594eb374f1748c8e80a66dfa432bc1432d98cd4e218a06d3515d0c66": {
+        "case": "D27",
+        "failed_anchors": [
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[5]/tr[6]/tc[1]",
+                "fingerprint": "f43b264a2a4e0d1a370968fa5f63910d8731f33825abffeb138a5e52389f12fb"
+            },
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[8]/tr[1]/tc[5]/p[0]",
+                "fingerprint": "0e258b98e64b64bc9716c7de1a01d30ca3fbddc88f3162203cdcc48a66d4784c"
+            },
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[9]/tr[1]/tc[5]/p[0]",
+                "fingerprint": "171d6aa4caade933fc6dfea8ece21f8b6407568ad01898d1327b4a5bdb1b07a3"
+            },
+            {
+                "part": "word/footer2.xml",
+                "slot": "hf/p[1]",
+                "fingerprint": "96beb00f4b0e94110ddf741159d52937818ab5031c51bac325620fb01d78767d",
+                "copies": [
+                    {
+                        "part": "word/footer3.xml",
+                        "slot": "hf/p[1]",
+                        "fingerprint": "04133e66bad8d8b0b6c6465ede81375c550085b692e94db332461f936a57fd7a"
+                    }
+                ]
+            },
+            {
+                "part": "word/header2.xml",
+                "slot": "hf/p[0]",
+                "fingerprint": "beb6a4109bd8d8d5f2274d2913507372a4e72378111505029f32ebcf41c48c07",
+                "copies": [
+                    {
+                        "part": "word/header3.xml",
+                        "slot": "hf/p[0]",
+                        "fingerprint": "f9d88e2f21fb7099ed0350ce25e35c239e4e2670fe653e888d95b4e63f1cff28"
+                    }
+                ]
+            }
+        ],
+        "evidence": [
+            "development-coverage-5a06295a6bcf-20261003T005255569947Z",
+            "retained-export-render-20261003T014550746568Z",
+            "fixed096-render-20261003T021326015945Z"
+        ],
+        "measurements": [
+            {
+                "artifact": "retained-export-render-20261003T014550746568Z/D27/pdfium-geometry-supplement.json",
+                "sha256": "698e72a9691a928ecf0df5e5ad4cf8ef653ab8b22a9b239a7511fd76cb46e32e",
+                "long_new_overlap_pairs": 96,
+                "long_missing_probes": [
+                    "v3_38"
+                ],
+                "original_pdf_sha256": "978aafae128d0f332bced93651ffd36778d4ea53bae3864d2bb18511f28c003f",
+                "export_pdf_sha256": "36a3122233ba93add830926554dccac5b80b8505843bd2432e7f08f0ea936eeb"
+            },
+            {
+                "artifact": "fixed096-render-20261003T021326015945Z/D27/pdfium-geometry-supplement.json",
+                "sha256": "353c6e5dab634dbc42a5e2cfd20bef63e105badbd32637cc66e0c071cfa3ee67",
+                "long_new_overlap_pairs": 0,
+                "long_missing_probes": [
+                    "v3_25",
+                    "v3_40"
+                ],
+                "original_pdf_sha256": "8620c0a9aee972042bbad25549253ca961ec3570392d019cead870c778f98656",
+                "export_pdf_sha256": "a8f09f15b57f4dfe9cb060506a313e7501470ca3e12c3364369c17d3760619d4"
+            }
+        ]
+    },
+    "cf9b240f3893f97bf168c7cd3ac808bb720b3bf0f65b168c9671c6827ca1a4b7": {
+        "case": "D35",
+        "failed_anchors": [
+            {
+                "part": "word/document.xml",
+                "slot": "b/tbl[9]/tr[18]/tc[2]",
+                "fingerprint": "8efb5bf6bca7de20a1417c7dd8ffad09a7fe5b92130ff7e90b82d947e6b837ca"
+            },
+            {
+                "part": "word/header1.xml",
+                "slot": "hf/p[0]/txbx[0]/p[0]",
+                "fingerprint": "2c4c5b60ecdb4e8144f1a37359bf132b2c4c6e81c7b20a06ecf30185913023ff",
+                "copies": [
+                    {
+                        "part": "word/header2.xml",
+                        "slot": "hf/p[0]/txbx[0]/p[0]",
+                        "fingerprint": "fbb2ee921630eb011e4a13957b286dd9a2a90e614e1f9c1f4c189ddee6b93bf7"
+                    },
+                    {
+                        "part": "word/header3.xml",
+                        "slot": "hf/p[0]/txbx[0]/p[0]",
+                        "fingerprint": "50150ee99595390e15fb340501ad3b64bc71817f7cfc1d05bae7069d24e7a5b8"
+                    }
+                ]
+            }
+        ],
+        "evidence": [
+            "development-coverage-5a06295a6bcf-20261003T005255569947Z",
+            "retained-export-render-20261003T014550746568Z",
+            "fixed096-render-20261003T021326015945Z"
+        ],
+        "measurements": [
+            {
+                "artifact": "retained-export-render-20261003T014550746568Z/D35/pdfium-geometry-supplement.json",
+                "sha256": "d208407ebd773ede29a1f46836d9dcf760bb0e0745ae187a39caa167c5905f55",
+                "long_new_overlap_pairs": 0,
+                "long_missing_probes": [
+                    "v3_257",
+                    "v3_299"
+                ],
+                "original_pdf_sha256": "094d4bd75cdd77f9e40e422765668bb9e0128d375e1e9e48a1eeb29ded000d06",
+                "export_pdf_sha256": "b99932f05c7ed36e4be51fb169a032bfad84617b666fed89366105f66f894896"
+            },
+            {
+                "artifact": "fixed096-render-20261003T021326015945Z/D35/pdfium-geometry-supplement.json",
+                "sha256": "eaafaa807b24ce3db7330b3d6ddd560befbda1d67522714ed866fee8a8dfaf06",
+                "long_new_overlap_pairs": 0,
+                "long_missing_probes": [
+                    "v3_257"
+                ],
+                "original_pdf_sha256": "53396a5797d748098e16f28454ca1baedff9254390f0f93b9982184f48931018",
+                "export_pdf_sha256": "13c16246fc72fa9a1e94bf146dc3b5f8a5fe8a0672e1be3c6be4fb20d47d520b"
+            }
+        ]
+    }
+}
 MAX_ANSWER = 100_000
 #: A content control the original locks (contentLocked / sdtContentLocked): its content cannot take an answer, so
 #: its area is protected and the control is a destination role (destination_roles).
+# Shared finite auxiliary grammar: prospective source actions and appointed
+# response authors read the same tense/aspect/obligation relationship.
+SOURCE_ACTION_AUXILIARY = (r'(?:will|would|shall|should|can|could|may|might|must|cannot|'
+                           r'am|is|are|was|were|has|have|had|do|does|did|been|being|not|yet|hereby|personally)')
+
 LOCKED_CONTROL = "This content control is locked in the original form. It remains unchanged; review it by hand."
 FLOATING_INITIALS_REFUSAL = ("Filled export is unavailable for this form's floating initials boxes: answer reflow can "
                            "clip or move a box away from its question. The unchanged original remains available. "
                            "This layout needs qualification before any nonempty export.")
 
 
+_QNAMES = {}
+
+
 def q(tag: str) -> str:
-    prefix, local = tag.split(":")
-    return "{%s}%s" % (NS[prefix], local)
+    name = _QNAMES.get(tag)
+    if name is None:
+        prefix, local = tag.split(":")
+        name = _QNAMES[tag] = "{%s}%s" % (NS[prefix], local)
+    return name
 
 
 class V3Failure(ValueError):
@@ -65,6 +211,13 @@ class V3Failure(ValueError):
 
 def fail(message, code="invalid_document"):
     raise V3Failure(message, code)
+
+
+def known_layout_failure(data):
+    """The exact-source declaration is independent of parser or engine success."""
+    source_hash=hashlib.sha256(data).hexdigest()
+    declaration=KNOWN_LAYOUT_FAILURES.get(source_hash)
+    return {'source_sha256':source_hash,**declaration} if declaration else None
 
 
 # ─── package ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -137,6 +290,7 @@ class Package:
         compression, same metadata)."""
         out = io.BytesIO()
         with zipfile.ZipFile(out, "w") as target:
+            target.comment = self.zip.comment
             for info in self.infos:
                 if info.filename in changed:
                     xml = etree.tostring(changed[info.filename], xml_declaration=True, encoding="UTF-8", standalone=True)
@@ -168,6 +322,8 @@ def open_package(data: bytes) -> Package:
     for info in infos:
         name = info.filename
         lower = name.lower()
+        if lower.startswith('_xmlsignatures/'):
+            fail('Digitally signed Word files are not editable templates. Upload an unsigned blank original.', 'signed_document')
         mode = info.external_attr >> 16
         if name.startswith("/") or "\\" in name or ".." in name.split("/") or ":" in name or (mode & 0o170000) == 0o120000 \
                 or info.flag_bits & 1:
@@ -185,6 +341,9 @@ def open_package(data: bytes) -> Package:
             tree = etree.fromstring(raw, PARSER)
             if tree.getroottree().docinfo.doctype:
                 fail("XML entities and document types are not supported.", "unsafe_upload")
+            if any(node.tag == q('w:documentProtection') and node.get(q('w:enforcement'), '0') not in ('0', 'false', 'off')
+                   for node in tree.iter()):
+                fail('Protected Word files are not editable templates. Upload an unprotected blank original.', 'protected_document')
             if lower.endswith(".rels"):
                 for rel in tree:
                     kind = (rel.get("Type") or "").lower()
@@ -221,6 +380,15 @@ SYMBOL_BOXES = {
 PUA_BOXES = ({0xF06F, 0xF071, 0xF072, 0xF0A8, 0xF0A3, 0xF02A, 0xF081}, {0xF0FE, 0xF0FD, 0xF078, 0xF052, 0xF053, 0xF054})
 T, TAB, PTAB, BR, CR, SYM, NBH = (q("w:t"), q("w:tab"), q("w:ptab"), q("w:br"), q("w:cr"), q("w:sym"), q("w:noBreakHyphen"))
 R, SDT, FLDCHAR, FALLBACK, TXBX = q("w:r"), q("w:sdt"), q("w:fldChar"), q("mc:Fallback"), q("w:txbxContent")
+#: Content that makes a paragraph more than an empty spacer: a drawn signing band never claims it.
+BAND_SPACER_CONTENT = frozenset({TXBX, SDT, FLDCHAR, q("w:fldSimple"), q("w:drawing"), q("w:pict"), q("w:object")})
+# The review a drawn band's line-drawing spacer raises (its detail, before 'Location: <place>'); engine.inspect_auto
+# reads it to keep this v3-only review off a legacy import, which cannot review or clear it.
+DRAWN_BAND_SPACER_REVIEW = ('A visible writing line follows this drawn signing band. It is kept unchanged; '
+                            'review whether it belongs to the signing event or to another field. ')
+#: Body-level range markers render nothing: they never separate a drawn band from its caption or spacer.
+BAND_INVISIBLE_MARKERS = frozenset(q(tag) for tag in (
+    "w:bookmarkStart", "w:bookmarkEnd", "w:permStart", "w:permEnd", "w:commentRangeStart", "w:commentRangeEnd"))
 PASS_THROUGH = {q("w:hyperlink"), q("w:smartTag"), q("w:fldSimple"), q("w:customXml"), q("w:dir"), q("w:bdo"),
                 q("mc:AlternateContent"), q("mc:Choice"), q("w:sdtContent")}
 
@@ -231,6 +399,29 @@ def run_font(r) -> str:
     if fonts is None:
         return ""
     return (fonts.get(q("w:ascii")) or fonts.get(q("w:hAnsi")) or fonts.get(q("w:cs")) or "").strip().lower()
+
+
+#: Every character map_char can change outside the symbol fonts: a box glyph or a private-use box code.
+MAPPED_CHARS = re.compile("[%s]" % re.escape(GLYPH_BOX + GLYPH_CHECKED
+                                             + "".join(chr(code) for codes in PUA_BOXES for code in codes)))
+
+
+def map_text(text: str, font: str) -> str:
+    """map_char over a whole text, exactly: outside the symbol fonts map_char changes only the characters MAPPED_CHARS
+    matches, so only those are replaced; in a symbol font every character it changes is in that font's glyph_table."""
+    table = _SYMBOL_GLYPH_TABLES.get(font)
+    if table is None:
+        return MAPPED_CHARS.sub(_map_plain_glyph, text)
+    return text.translate(table)
+
+
+def glyph_table(font: str) -> dict:
+    """Every character map_char changes in this font, and what it becomes: the box glyphs, the private-use box codes
+    and, in a symbol font, its own box codes plain or in the private-use area. map_char changes nothing else."""
+    table = SYMBOL_BOXES.get(font) or ()
+    candidates = set(GLYPH_BOX + GLYPH_CHECKED) | {chr(code) for codes in PUA_BOXES for code in codes}
+    candidates |= {chr(base + code) for codes in table for code in codes for base in (0, 0xF000)}
+    return {ord(ch): map_char(ch, font) for ch in candidates if map_char(ch, font) != ch}
 
 
 def map_char(ch: str, font: str) -> str:
@@ -253,6 +444,14 @@ def map_char(ch: str, font: str) -> str:
     if code in PUA_BOXES[1]:
         return CHECKED
     return ch
+
+
+_SYMBOL_GLYPH_TABLES = {font: glyph_table(font) for font in SYMBOL_BOXES}
+_PLAIN_GLYPHS = {chr(code): mapped for code, mapped in glyph_table('').items()}
+
+
+def _map_plain_glyph(match):
+    return _PLAIN_GLYPHS.get(match.group(), match.group())
 
 
 DIGIT_BOX = "\u25af"          # a symbol-font digit-entry box (one character position of a number)
@@ -284,7 +483,7 @@ def text_of(el, *, own=False) -> str:
                 continue
             if tag == T:
                 font = run_font(ch.getparent()) if ch.getparent() is not None and ch.getparent().tag == R else ""
-                out.append("".join(map_char(c, font) for c in (ch.text or "")))
+                out.append(map_text(ch.text or "", font))
             elif tag in (TAB, PTAB):
                 out.append("\t")
             elif tag in (BR, CR):
@@ -415,7 +614,7 @@ def piece_text(pc: Piece) -> str:
         if pc.node.tag == NBH:
             return "-"
         font = run_font(pc.run)
-        return "".join(map_char(c, font) for c in (pc.node.text or ""))
+        return map_text(pc.node.text or "", font)
     if pc.kind == "tab":
         return "\t"
     if pc.kind == "br":
@@ -685,6 +884,32 @@ def ff_info(data) -> dict:
 
 UNDERSCORES = re.compile(r"_{3,}(?:[ \t]*_{2,})*|_{2}(?:[ \t]+_{1,2}){1,}")   # ___ , or character positions __ __ __
 DIGIT_RUN = re.compile(r"\u25af+(?:\s*[/.:\-]\s*\u25af+)*")                     # digit-entry boxes (symbol font) as one blank
+NUMERIC_PARTS = re.compile(r"[ \t]*\u25af+(?:[ \t]*[/.:\-][ \t]*\u25af+)+[ \t]*")
+
+
+def numeric_part_ranges(text):
+    """A complete empty numeric band; separators identify parts, never their clinical labels."""
+    if not NUMERIC_PARTS.fullmatch(text):
+        return []
+    parts = [(match.start(), match.end()) for match in re.finditer(r'\u25af+', text)]
+    return parts if len(parts) <= 100 else []
+
+
+def numeric_part_value(source, current, number):
+    """Read one reviewed part independently of simultaneous edits to the other parts."""
+    parts = numeric_part_ranges(source)
+    if type(number) is not int or not 1 <= number <= len(parts):
+        return None
+    pattern, end = [], 0
+    for start, stop in parts:
+        pattern.extend((re.escape(source[end:start]), '([0-9]{1,%d}|%s)' % (stop - start, re.escape(source[start:stop]))))
+        end = stop
+    pattern.append(re.escape(source[end:]))
+    match = re.fullmatch(''.join(pattern), current)
+    if not match:
+        return None
+    value = match.group(number)
+    return '' if value == source[slice(*parts[number - 1])] else value
 SEGMENTED = re.compile(r"\|(?:[ _]*_[ _]*\|)+(?:\s*[/.:\-]?\s*\|(?:[ _]*_[ _]*\|)+)*")   # digit boxes |__|__| / |__|__|
 DOTS = re.compile(r"(?:\.{5,}|…{2,}|(?:\. ){4,}\.?)")    # a dotted leader: ....... or …… or . . . . .
 BRACKET_ANY = re.compile(r"\[([^\[\]\n]{2,120})\]")
@@ -1106,7 +1331,23 @@ def positive_command(text):
     return any(MANY_COMMAND.search(clause) and not negated_command(clause) for clause in _clauses(text))
 
 
+_LIMIT_MEMO = {}   # limit_language's answers by (sentence, local): a pure reading of the printed words, shared by every
+                   # detection in this process (a band's band-free reading repeats the main detection's sentences)
+_ACTION_MEMO = {}  # Detector.checkbox_source_action's answers by (text, governing), likewise
+
+
 def limit_language(sentence, *, local=False):
+    """_limit_language, read once per sentence in this process."""
+    key = (sentence or "", bool(local))
+    found = _LIMIT_MEMO.get(key)
+    if found is None:
+        if len(_LIMIT_MEMO) >= 200000:
+            _LIMIT_MEMO.clear()
+        found = _LIMIT_MEMO[key] = _limit_language(sentence, local=local)
+    return found
+
+
+def _limit_language(sentence, *, local=False):
     """One-only or limited-count language in one printed sentence (fail-closed): a selection command with a limit
     (limited_selection), a negated count, a count with a recording verb or an answer noun, a bare count, a one-only
     count with no verb, or exclusivity. Positive commands and open counts are never limits. A counted bound of two or
@@ -1388,6 +1629,8 @@ class Area:
     # structure (a drawn initials box) rather than from its label's wording.
     label_slot: object = None
     structural: bool = False
+    source_action: bool = False     # source-owned action; role bounded to this destination, not its whole paragraph
+    ordinary_reading: bool = False  # fresh physical argument, never a reviewed label or persisted permission
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -1484,15 +1727,32 @@ def response_word(txt: str) -> bool:
 
 
 class Detector:
-    def __init__(self, package: Package, *, layout_proposal=False):
+    def __init__(self, package: Package, *, layout_proposal=False, _table_instructions=True, _inline_bands=True):
         self.package = package
+        self._inline_bands = _inline_bands
+        self._band_free_areas = None   # the band-free reading's (areas, narrative places), read once for the band rule
         self.index = SlotIndex(package)
         self.areas: list[Area] = []
         self.layout_proposal = layout_proposal
+        self._table_instructions = _table_instructions
         self.layout_candidates = []
+        self.withdrawn_areas: list[Area] = []   # EC3: answer areas withdrawn from shared merged cells
+        self.source_guidance_areas: list[Area] = []  # preserved source controls, never clinical answer destinations
+        self.signing_band_places: list[str] = []  # every drawn band's line, caption and spacer place, in every part
+        self.signing_band_tokens: list[str] = []  # the band places that are a lone {{token}} line (band_token_line)
+        self.merged_copies: list = []            # (kept area, merged header/footer copy): the copy's own places
+        self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
+        self.narrative_bands: list[tuple] = []  # each unresolved printed narrative band's places: caption, blank lines
+        self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
+        self.protected_area_sources: dict[str, str] = {}  # existing whole-area roles retained by later source guards
+        self.response_header_corners: set[str] = set()
+        self.fixed_subheading_slots: set[str] = set()
+        self.box_action_reasons: dict[str, str] = {}
+        self.geometry_regions: dict[str, str] = {}
+        self.layout_quarantine = None
         self.floating_initials = False
         self._order = 0
         self._grid = {}
@@ -1503,10 +1763,24 @@ class Detector:
         self._numbering = None
         self._col_lists = {}
         self._pure = {}
+        self._visible = None   # tab_source_visible per slot during one detect() pass (kept with its slot)
+        # Only this detector's immutable source package owns these style readings.
+        # Physical paragraph/run visibility still reads its actual XML each time.
+        self._style_index = None
+        self._style_defaults = None
+        self._style_chains = {}
         self._form_wide = None
         self._form_wide_nodes = []        # keeps the guidance paragraphs alive: their ids key the scope reading
+        self._named_guidance = None       # immutable original's captions, physical owners and named instructions
         self._coded_problem = ""
         self._compute_headings()
+
+    def coverage_issue(self, slot, code, detail, *, start=None, end=None):
+        issue = {'part': slot.part, 'slot': slot.path, 'code': code, 'detail': detail}
+        if start is not None:issue.update(start=start,end=end)
+        issue['id'] = hashlib.sha256(repr((slot.part, slot.id, code, detail, start, end)).encode()).hexdigest()
+        if not any(prior['id'] == issue['id'] for prior in self.coverage_issues):
+            self.coverage_issues.append(issue)
 
     # -- cached reads ----------------------------------------------------------------------------------------------
     def text(self, el, own=True) -> str:
@@ -1539,8 +1813,50 @@ class Detector:
             # It need not use a Word heading style: e.g. 'Left knee:' over a grid.
             if side_phrase(txt) and txt.endswith(":") and len(txt.split()) <= 6 and "\x00" not in self.ptext(p)[0]:
                 result = True
+            slot = self.index.by_el.get(id(p))
+            if not result and slot is not None and self.fixed_underlined_subheading(slot):
+                result = True
+                self.fixed_subheading_slots.add(slot.id)
         self._is_heading[id(p)] = result
         return result
+
+    def fixed_underlined_subheading(self, slot) -> bool:
+        """A completely underlined caption owns two separate literal-list answer lines.
+
+        The caption itself has no answer gap. Underlining alone, a following
+        blank line or one question cannot establish this hierarchy. Actual XML
+        siblings, rather than a paragraph-only view across tables, own the scope.
+        """
+        if slot.kind != 'p':
+            return False
+        text, pieces = self.ptext(slot.el)
+        if (not text or text != text.strip() or not text.endswith(':')
+                or text.count(':') != 1 or len(text.split()) > MAX_LABEL_WORDS
+                or re.match(r'^[-\u2022]\s', text)
+                or '\x00' in text or BOX in text or CHECKED in text):
+            return False
+        runs = [r for r in slot.el.iter(R) if any((n.text or '').strip() for n in r.iter(T))]
+        if not runs or any((u := r.find('./' + q('w:rPr') + '/' + q('w:u'))) is None
+                           or u.get(q('w:val'), 'single') not in ('single', 'double') for r in runs):
+            return False
+        if (not self.tab_source_visible(slot) or self.list_info(slot.el) is not None
+                or self.blank_spans(text, pieces) or self.checkbox_source_action(text, governing=True)):
+            return False
+        children = []
+        node = slot.el.getnext()
+        while node is not None and node.tag == q('w:p'):
+            child = self.index.by_el.get(id(node))
+            if child is None or child.parent is not slot.parent or not self.tab_source_visible(child):
+                break
+            printed, _ = self.ptext(node)
+            match = re.fullmatch(r'\s*-\s+([^:?!\t\n\x00]+):([ \u00a0\u2002\u2003]+)', printed)
+            if (match is None or len(match.group(1).split()) > MAX_LABEL_WORDS
+                    or not re.search(r'[A-Za-z]', match.group(1))
+                    or BOX in printed or CHECKED in printed or self.list_info(node) is not None):
+                break
+            children.append(clean_label(match.group(1)))
+            node = node.getnext()
+        return len(children) >= 2 and len(set(children)) == len(children)
 
     def _compute_headings(self):
         last = {}
@@ -1583,6 +1899,134 @@ class Detector:
                 return False
         return True
 
+    def response_matrix_header_corner(self, tbl_slot, r):
+        """Fixed header spacing even when response controls cannot be qualified.
+
+        This proves where the header is, not whether any response may be written.
+        A physical response axis over captioned checkbox bands keeps its empty
+        corner fixed when merges, visibility or extra controls require review.
+        A drawn blank or another genuine answer in the corner is never excluded.
+        """
+        key = ("response-header-corner", id(tbl_slot), r)
+        if key in self._grid:
+            return self._grid[key]
+        self._grid[key] = None
+        rows = self.grid(tbl_slot)
+        if not rows or r != min(rows):
+            return None
+        cells = sorted(rows[r], key=lambda cell: cell.info["col"])
+        width = self.grid_cols(tbl_slot)
+        if len(cells) < 2 or width < 3:
+            return None
+        corner = cells[0]
+        if (corner.info["col"] != 0 or corner.info["span"] != 1 or corner.info["vmerge"]
+                or not self.is_empty_cell(corner) or not self.cell_is_plain(corner) or not corner.children
+                or any(p.kind != "p" or not self.plain_spacing_paragraph(p)
+                       or not self.tab_source_visible(p) for p in corner.children)):
+            return None
+        column, labels = 1, []
+        for cell in cells[1:]:
+            if cell.info["col"] != column or not cell.children:
+                return None
+            for para in cell.children:
+                if para.kind != "p" or self.box_units(para) or self.blank_spans(*self.ptext(para.el)):
+                    return None
+                text = self.ptext(para.el)[0].strip()
+                if not response_word(text):
+                    return None
+                labels.append(text)
+            column += cell.info["span"]
+        if column != width or len(labels) < 2:
+            return None
+        complete = 0
+        for row in sorted(rr for rr in rows if rr > r):
+            body = sorted(rows[row], key=lambda cell: cell.info["col"])
+            if row != r + complete + 1 or not body:
+                break
+            label = body[0]
+            if (label.info["col"] != 0 or label.info["span"] != 1 or label.info["vmerge"]
+                    or not self.is_label_cell(label, complete=True) or not label.children
+                    or any(p.kind != "p" or self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                           for p in label.children)):
+                break
+            column, boxed = 1, True
+            for cell in body[1:]:
+                source = self.merge_head(tbl_slot, cell)
+                paras = list(self.own_paragraphs(source))
+                text = "".join(self.ptext(p.el)[0] for p in paras)
+                if (cell.info["col"] != column or not paras or re.sub(r"[\s☐☒]", "", text)
+                        or not (BOX in text or CHECKED in text)):
+                    boxed = False
+                    break
+                column += cell.info["span"]
+            if not boxed or column != width:
+                break
+            complete += 1
+        if complete >= 2:
+            self._grid[key] = corner
+        return self._grid[key]
+
+    def response_matrix_corner(self, tbl_slot, r):
+        """A fixed empty corner above one complete, aligned response axis.
+
+        The empty first cell alone proves nothing. The original must print distinct
+        response headers over at least two consecutive captioned rows, each with
+        exactly one visible checkbox in every response column. A merge, gap,
+        additional caption/control or marked corner cannot establish this axis.
+        """
+        key = ("response-matrix-corner", id(tbl_slot), r)
+        if key in self._grid:
+            return self._grid[key]
+        self._grid[key] = None
+        rows = self.grid(tbl_slot)
+        if not rows or r != min(rows):
+            return None
+        cells = sorted(rows[r], key=lambda cell: cell.info["col"])
+        width = self.grid_cols(tbl_slot)
+        if (len(cells) < 3 or width != len(cells)
+                or any(c.info["col"] != i or c.info["span"] != 1 or c.info["vmerge"]
+                       for i, c in enumerate(cells))):
+            return None
+        corner = cells[0]
+        if (not self.is_empty_cell(corner) or not self.cell_is_plain(corner)
+                or not corner.children or any(p.kind != "p" or not self.plain_spacing_paragraph(p)
+                                              or not self.tab_source_visible(p) for p in corner.children)):
+            return None
+        headers = [self.cell_text(c) for c in cells[1:]]
+        if (len(set(h.casefold() for h in headers)) != len(headers)
+                or not all(response_word(h) for h in headers)):
+            return None
+        for cell in cells[1:]:
+            if (not cell.children or any(p.kind != "p" or not self.tab_source_visible(p)
+                                        or self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                                        for p in cell.children)):
+                return None
+        complete = 0
+        for row in sorted(rr for rr in rows if rr > r):
+            body = sorted(rows[row], key=lambda cell: cell.info["col"])
+            if (row != r + complete + 1 or len(body) != width
+                    or any(c.info["col"] != i or c.info["span"] != 1 or c.info["vmerge"]
+                           for i, c in enumerate(body))):
+                break
+            label = body[0]
+            if (not self.is_label_cell(label, complete=True) or not label.children
+                    or any(p.kind != "p" or not self.tab_source_visible(p)
+                           or self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                           for p in label.children)):
+                break
+            def one_response_box(cell):
+                paras = list(self.own_paragraphs(cell))
+                return (bool(paras) and all(self.tab_source_visible(p)
+                                           and not self.blank_spans(*self.ptext(p.el)) for p in paras)
+                        and "".join(self.ptext(p.el)[0] for p in paras).strip() in (BOX, CHECKED)
+                        and sum(len(self.box_units(p)) for p in paras) == 1)
+            if any(not one_response_box(c) for c in body[1:]):
+                break
+            complete += 1
+        if complete >= 2:
+            self._grid[key] = corner
+        return self._grid[key]
+
     def row_kind(self, tbl_slot, r) -> str:
         """data (has an empty/box/object cell) | divider (one text cell spanning the table) | label (text only)."""
         key = ("rowkind", id(tbl_slot), r)
@@ -1609,8 +2053,110 @@ class Detector:
         if len(texts) == 1 and texts[0].info["span"] >= max(2, width - 1) and all(
                 c is texts[0] or self.is_empty_cell(c) for c in cells):
             kind = "divider"
+        if self.response_matrix_corner(tbl_slot, r) is not None:
+            kind = "label"
         self._grid[key] = kind
         return kind
+
+    def merge_index(self, tbl_slot):
+        """(any vertical merge in the table, its row numbers in order, each row's position, the cell at (row, col)) -
+        read once per table, so the EC3 pass reads a merge in steps proportional to its own rows (WE3-m-3: re-sorting
+        every later row for each cell made a 2,400-row log exceed the sandbox's CPU limit)."""
+        key = ("merge-index", id(tbl_slot))
+        if key not in self._grid:
+            rows = self.grid(tbl_slot)
+            order = sorted(rows)
+            at = {(c.info["row"], c.info["col"]): c for r in order for c in rows[r]}
+            merged = any(c.info["vmerge"] for c in at.values())
+            self._grid[key] = (merged, order, {r: i for i, r in enumerate(order)}, at)
+        return self._grid[key]
+
+    def merge_head(self, tbl_slot, cell):
+        """The first cell of the vertical merge `cell` belongs to: `cell` itself unless it is a continuation; else the
+        nearest cell above it in its column that is no continuation (a restart, or a plain cell the continuation
+        continues), else the TOPMOST continuation of the run.
+
+        ⚠️ FAIL CLOSED (refutation of be743e94, WEC3-m-2/m-4): a merge with no explicit restart - a continuation under a
+        plain cell, or a run of continuations from the first row - is still ONE merge; Word and the export's readers
+        show it as one cell beside every row it spans."""
+        if cell.info["vmerge"] != "continue":
+            return cell
+        _, order, position, at = self.merge_index(tbl_slot)
+        head = cell
+        for i in range(position[cell.info["row"]] - 1, -1, -1):
+            above = at.get((order[i], cell.info["col"]))
+            if above is None:
+                break
+            head = above
+            if above.info["vmerge"] != "continue":
+                break
+        return head
+
+    def merge_rows(self, tbl_slot, head) -> list:
+        """The rows the vertical merge starting at `head` spans: its own and each following row continuing it."""
+        _, order, position, at = self.merge_index(tbl_slot)
+        spanned = [head.info["row"]]
+        for i in range(position[head.info["row"]] + 1, len(order)):
+            below = at.get((order[i], head.info["col"]))
+            if below is None or below.info["vmerge"] != "continue":
+                break
+            spanned.append(order[i])
+        return spanned
+
+    @staticmethod
+    def answers_only(text) -> bool:
+        """No printed question: empty, a drawn blank, box glyphs, or a control's placeholder or a format hint
+        ('Click here to enter text.', 'dd/mm/yyyy') - what a row of answer places prints (WE3-m-2)."""
+        text = re.sub("[%s]" % re.escape(GLYPH_BOX + GLYPH_CHECKED), " ", text).strip()
+        return not text or is_blank_text(text)
+
+    def shared_rows(self, tbl_slot, head, answer_rows) -> list:
+        """For the vertical merge starting at `head`, a description of each DISTINCT row it spans that is a question's
+        or an answer's own row, when there are two or more; else []. A row is
+          - what its printed cells LEFT of the merge say (where rule (d) reads a row's question), a continued cell read
+            as its merge's first cell (merge_head); two rows that read through the same cells are one row; or
+          - when it prints no question outside the merge (answers_only: nothing, a drawn blank, a box, a control's
+            placeholder or a format hint), an ANSWER row: a row where an engine area (a field, or a log's table_rows)
+            has a place (`answer_rows`) - two entries of a log, two rows of blank answer cells, two rows of controls
+            or of 'dd/mm/yyyy' date cells beside one merged cell (WEC3-m-1, WE3-m-2); or a row whose only answer
+            place is the merge's own continuation, which Word does not show (WEC3-m-3).
+        A tall answer cell beside ONE question (the continued rows print nothing and answer nothing, or a label merged
+        the same way) is that question's own place.
+
+        ⚠️ FAIL CLOSED (refutations of 8e00df9e, c1cae13d and be743e94): distinct LAST-label strings counted 'Right eye |
+        Visual acuity' over 'Left eye | Visual acuity' as one question (M2) and option words as none (M3); skipping a
+        continued label gave the cell to the question rule (d) labels it with while counting only the other (WEC2-m-2);
+        log rows, which print nothing, counted as no rows (WEC3-m-1). Any printed cell left of the merge counts - an
+        option word, a hint, a unit - so a single question beside a hint row is withdrawn too: declared cost (WEC2-m-4,
+        m-7). Recorded, not changed: a side printed to the RIGHT of a merged cell (WEC2-m-6, pre-existing) - counting the
+        right as well withdrew question cells on two dev forms."""
+        spanned = self.merge_rows(tbl_slot, head)
+        if len(spanned) < 2:
+            return []
+        rows = self.grid(tbl_slot)
+        low = head.info["col"]
+        seen, described = [], []
+        for r in spanned:
+            sources = []
+            for c in sorted(rows[r], key=lambda c: c.info["col"]):
+                if c.info["col"] + c.info["span"] > low:
+                    continue
+                source = self.merge_head(tbl_slot, c)
+                text = clean_label(self.cell_text(source))
+                if text and not is_blank_text(self.cell_text(source)):
+                    sources.append((id(source.el), text))
+            identity = frozenset(i for i, _ in sources)
+            if identity:
+                description = "'%s'" % " — ".join(text for _, text in sources)[:80]
+            elif r in answer_rows and all(self.answers_only(self.cell_text(c)) for c in rows[r]
+                                          if c.info["vmerge"] != "continue" and c.info["col"] != low):
+                identity, description = ("answers", r), "table row %d (answer places, no printed question)" % (r + 1)
+            else:
+                continue
+            if identity not in seen:
+                seen.append(identity)
+                described.append(description)
+        return described if len(described) >= 2 else []
 
     def header_rows(self, tbl_slot):
         key = ("headers", id(tbl_slot))
@@ -1890,6 +2436,9 @@ class Detector:
 
     def kind_for(self, label: str) -> str:
         label = re.sub(r"\s+", " ", label or "")
+        qualified = qualified_signing_role(label)
+        if qualified:
+            return qualified
         if SIGNATURE_DATE_PAIR.search(label):
             return "signature"
         if INITIALS_DATE_PAIR.search(label):
@@ -2076,22 +2625,47 @@ class Detector:
 
     # -- the rules -------------------------------------------------------------------------------------------------
     def detect(self):
+        self._visible = {}
+        try:
+            return self._detect()
+        finally:
+            self._visible = None
+
+    def _detect(self):
         self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
+        self.rule_captioned_blank_rows()
+        self.rule_temporal_bands()
+        self.rule_ruled_paragraphs()
+        self.rule_parenthetical_write_cells()
+        self.rule_lines_below_label(write_requests_only=True)
         self.rule_tab_columns()
         self.rule_coded_column_sequences()
+        self.rule_merged_checkbox_hierarchy()
+        self.rule_bracketed_checkbox_hierarchy()
+        self.rule_guided_other_response_rows()
         self.rule_checkboxes()
+        self.rule_adjacent_write_ins()
         self.rule_question_boxes(list_only=True)
         self.rule_text_option_choices()
         self.rule_tables()
         self.rule_question_boxes()
         self.rule_checkboxes(leftovers=True)
+        self.rule_unclassified_response_lists()
         self.rule_lines_below_label()
+        self.rule_temporal_format_pairs()
         self.rule_paragraph_fields()
         self.rule_inline_initial_boxes()
+        self.guard_source_actions()
+        self.guard_captioned_signing_bands()
+        self.guard_action_participants()
+        self.rule_scalar_alternatives()
+        self.guard_numeric_bands()
+        self.guard_fixed_containers()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
+        shared = self.shared_merged_answers()
         self.qualify_sides()
         self.surface_duplicates()
         for a in list(self.areas):
@@ -2099,13 +2673,565 @@ class Detector:
                 self.notes.append("Unassigned answer box at " + a.slot.id +
                                   ". The complete question or section exceeds the mapping limit; nothing was shortened. "
                                   "Printed text: " + a.label + " Section: " + a.context)
+                self.coverage_issue(a.slot, 'source_limit', self.notes[-1])
                 self.areas.remove(a)
                 # A withdrawn area is no longer a layout proposal either; its source stays claimed.
                 self.layout_candidates[:] = [c for c in self.layout_candidates if c[2] is not a]
                 continue
             a.capacity = self.capacity_for(a)
+        self.withdraw_shared_merged_answers(shared)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    def nominal_insertion_complement(self, area):
+        """A type argument in a reported decision does not perform its report.
+
+        The immutable sentence retains the historical actor and decision. Only
+        a proved nominal type/kind/category slot in its embedded clause owns
+        this answer; a signing, permission or author's-statement frame cannot
+        acquire this relationship from a reviewed label.
+        """
+        if (area.slot.kind != 'p' or area.target.get('shape') != 'insertion'
+                or not self.insertion_source_plain(area.slot)):
+            return None
+        printed = self.ptext(area.slot.el)[0]
+        start, end = area.target['start'], area.target['end']
+        request = printed[start:end]
+        if not re.fullmatch(r'\{(?:insert|enter|type|add|specify)\s+(?:type|kind|category)\}', request, re.I):
+            return None
+        relation = {'relation': 'explicit_insertion', 'question': printed, 'request': request,
+                    'source': {'part': area.slot.part, 'slot': area.slot.path,
+                               'fingerprint': fingerprint(area.slot.el)}}
+        if relation not in area.source_questions:
+            return None
+        frame = re.match(r'^\s*[^.;:?!\r\n]{1,80}?\s+(?:reviewed|considered|assessed)\s+'
+                         r'[^.;:?!\r\n]{1,160}?\s+and\s+(?:decided|determined|found)\s+that\s+',
+                         printed, re.I)
+        if frame is None or start < frame.end():
+            return None
+        if (self.question_box_authorship(printed)
+                or self.checkbox_source_action(printed, governing=True) == 'human_signing_action'
+                or re.search(r'\b(?:sign|signed|signing|signatures?|initials|consent|permission|'
+                             r'authori[sz]\w*|attest\w*|certif\w*|declar\w*|approv\w*|permit\w*|allow\w*)\b',
+                             printed, re.I)):
+            return None
+        complement = printed[frame.end():]
+        # The type slot must qualify a printed noun, rather than stand for an
+        # actor, predicate or a whole assertion. Unknown/multiple clauses stay
+        # with their existing complete-source action classification.
+        tail = printed[end:]
+        if (not re.search(r'\b(?:the|a|an|my|our|your|his|her|their|its)\s+$', printed[frame.end():start], re.I)
+                or not re.match(r'\s+[A-Za-z][A-Za-z-]*\s+(?:is|are|was|were|has|have|had|'
+                                r'should|will|would|can|could|may|might|must)\b', tail, re.I)
+                or re.search(r'[;?!]|\.(?=\s+\S)', complement)
+                or self.checkbox_source_action(complement, governing=True)
+                or self.question_box_authorship(complement)):
+            return None
+        return [area.label, complement]
+
+    def guard_source_actions(self):
+        """Human acts read from the physical source of each actual destination.
+
+        A checkbox is one representation of an act. Its ordinary paragraph
+        writing line or empty table answer cell grants no signing authority
+        either. Read only that destination's existing source relation: its own
+        line prefix/caption, or its row/column labels. No neighboring question,
+        unrelated cell, page heading or user-supplied field label supplies one.
+        """
+        for area in self.areas:
+            if area.protection:
+                continue
+            sources = []
+            if area.label_slot is not None:
+                sources.append(self.text(area.label_slot.el))
+            if area.slot.kind == 'p' and area.target.get('type') == 'span':
+                printed, pieces = self.ptext(area.slot.el)
+                start = area.target['start']
+                boundaries=list(re.finditer(r'[;?]|\.(?=\s+[^\W\d_])|\t{2,}| {4,}',printed))
+                clause_start=max((b.end() for b in boundaries if b.end()<=start),default=0)
+                clause_end=min((b.start() for b in boundaries if b.start()>=area.target['end']),
+                               default=len(printed))
+                before = max((end for _, end, _ in self.blank_spans(printed, pieces)
+                              if end <= start), default=0)
+                # A separately printed caption followed by its own blank is
+                # a different question even within one Word paragraph. Keep
+                # actor/predicate continuations in the original act clause:
+                # whitespace alone, or a modal verb after an actor blank,
+                # cannot establish an independent clinical destination.
+                prefix = printed[before:start]
+                caption = re.fullmatch(r'(?:[ \t]{2,}|\s*[\r\n]+\s*)([^:;?!\r\n]+):\s*', prefix) if before else None
+                if (caption and not self.checkbox_source_action(caption[1], governing=True)
+                        and clean_label(caption[1], limit=None) == area.label):
+                    clause_start = max(clause_start, before)
+                sources.append(printed[max(before,clause_start):start])
+                # A named author's abbreviation can contain a period. Read a
+                # complete ownership caption up to THIS blank, independently
+                # of sentence splitting, only when nothing but punctuation
+                # follows the caption. This cannot borrow a reservation across
+                # a subsequent clinical question or a previous answer blank.
+                ownership_prefix = printed[before:start]
+                ownership = self.question_box_authorship(ownership_prefix)
+                if ownership and not ownership_prefix[ownership.end():].strip(' \t\r\n:_.'):
+                    sources.append(ownership_prefix)
+                # Identity and response blanks belong to their original
+                # printed clause even when the acting predicate follows them.
+                # Bind every destination in that clause; never invent a signer
+                # or cross a sentence, question, or printed independent gap.
+                # A period before another blank (Dr. ____) is not a new clause.
+                sources.append(printed[clause_start:clause_end])
+            elif area.slot.kind == 'tc':
+                cell = area.slot
+                for source in self.question_cells(cell.parent, cell.info['row'], cell.info['col']):
+                    if source is not cell:
+                        sources.append(self.cell_text(source))
+            # Native controls retain their own printed alias/tag source; the
+            # engine label is derived from that original control, not a review.
+            elif area.slot.kind in ('sdt', 'ff'):
+                sources.append(area.label)
+            nominal = self.nominal_insertion_complement(area)
+            if nominal is not None:
+                sources = nominal
+            if any(relation.get('relation') == 'nested_cell_options' for relation in area.source_questions):
+                # A proved own caption can carry a printed list marker. Read
+                # its action/clinical grammar after that marker, while keeping
+                # the full original caption and fingerprints in the mapping.
+                sources = [LIST_MARKER.sub('', str(source or '').strip()) for source in sources]
+            # A printed reservation of an author's comments belongs to that
+            # author regardless of the destination's representation. Reading
+            # this relationship only for one-cell boxes released identical
+            # manager-owned statements in ordinary table answer cells.
+            if any(self.question_box_authorship(source) for source in sources):
+                area.source_action = True
+                area.protection = ('This answer area is reserved for another author\'s comments. '
+                                   'Ordinary clinician notes do not establish that author\'s statement; '
+                                   'complete it through the explicit human workflow.')
+                extent = ({'start': area.target['start'], 'end': area.target['end']}
+                          if area.target.get('type') == 'span' else {})
+                self.coverage_issue(area.slot, 'human_authored_destination',
+                                    area.protection + ' Location: ' + area.slot.id, **extent)
+                continue
+            roles = [self.checkbox_source_action(source, governing=True) for source in sources]
+            if not any(roles):
+                # A lexical kind is not a physical signing role. Only the
+                # printed argument of this destination can show an initial
+                # clinical reading or the receipt/status of a signed document.
+                # Native signature controls retain their structural kind.
+                if (not area.structural and area.kind in SIGNING_KINDS
+                        and self.ordinary_source_kind(sources, area.kind)):
+                    area.kind = 'text'
+                    area.ordinary_reading = True
+                continue
+            code = 'human_signing_action' if 'human_signing_action' in roles else 'ambiguous_source_action'
+            area.source_action = True
+            area.protection = ('This printed document action is human-owned. Complete it through the established signing workflow.'
+                               if code == 'human_signing_action' else
+                               'This printed action does not establish who performs it. Keep this precise destination unchanged; '
+                               'a review click does not authorize the act.')
+            extent = ({'start': area.target['start'], 'end': area.target['end']}
+                      if area.target.get('type') == 'span' else {})
+            self.coverage_issue(area.slot, code, area.protection + ' Location: ' + area.slot.id, **extent)
+
+    def rule_captioned_blank_rows(self):
+        """Same-grid captions below blank answers own them before box heuristics.
+
+        Multiple complete field captions appoint the corresponding wide blank
+        cells. Matching narrow empty columns in both rows are physical spacing,
+        not separate checkbox questions borrowed from a neighboring caption.
+        """
+        for table in (s for s in self.index.slots if s.kind == 'tbl'):
+            rows = self.grid(table)
+            caption_rows = set()
+            for row in sorted(rows):
+                answers = sorted(rows[row], key=lambda c: c.info['col'])
+                captions = sorted(rows.get(row + 1, []), key=lambda c: c.info['col'])
+                if (len(answers) < 2 or len(answers) != len(captions)
+                        or any((a.info['col'], a.info['span']) != (c.info['col'], c.info['span'])
+                               for a, c in zip(answers, captions))
+                        or any(c.info['vmerge'] or self.cell_has_claim(c.el) or wraps_structure(c.el)
+                               or self.region_hidden(c.el) for c in answers + captions)
+                        or any(not self.is_empty_cell(c) for c in answers)):
+                    continue
+                pairs, spacers = [], []
+                for answer, caption in zip(answers, captions):
+                    ink = self.cell_text(caption)
+                    paragraphs = self.own_paragraphs(caption)
+                    if (not paragraphs or any(not self.tab_source_visible(p) for p in
+                                              self.own_paragraphs(answer) + paragraphs)
+                            or any(n.tag == q('w:hyperlink') for c in (answer, caption) for n in c.el.iter())):
+                        break
+                    if not ink:
+                        if not self.is_empty_cell(caption) or not self.is_narrow(table, answer) or not self.is_narrow(table, caption):
+                            break
+                        spacers.extend((answer, caption)); continue
+                    if (len(paragraphs) != 1 or len(ink) > 80 or not FIELDISH.search(ink)
+                            or is_option_word(ink) or re.search(r'[.;?!\r\n]', ink)
+                            or self.blank_spans(*self.ptext(paragraphs[0].el))
+                            or self.is_narrow(table, answer)):
+                        break
+                    # A complete conflicting caption above prevents automatic
+                    # orientation; repeated identical captions are consistent.
+                    above = [c for c in rows.get(row - 1, []) if row - 1 not in caption_rows
+                             if c.info['col'] == answer.info['col'] and c.info['span'] == answer.info['span']]
+                    if any(self.cell_text(c) and FIELDISH.search(self.cell_text(c))
+                           and self.is_label_cell(c) and clean_label(self.cell_text(c)) != clean_label(ink)
+                           for c in above):
+                        break
+                    pairs.append((answer, caption, paragraphs[0], ink))
+                else:
+                    if len(pairs) < 2:
+                        continue
+                    signing_event = any(self.signing_event_source(ink) or self.temporal_source_action(ink)
+                                        for _, _, _, ink in pairs)
+                    for answer, caption, paragraph, ink in pairs:
+                        relation = {'relation': 'caption_below_cell', 'question': ink,
+                                    'source': {'part': paragraph.part, 'slot': paragraph.path,
+                                               'fingerprint': fingerprint(paragraph.el)}}
+                        area = Area(self.kind_for(ink), clean_label(ink), answer, {'type': 'cell'},
+                                    context=self.context_for(answer, complete=True), complete_source=True,
+                                    label_slot=paragraph, source_questions=[relation])
+                        if signing_event:
+                            area.source_action = True
+                            area.protection = ('This name, signature or date belongs to the same printed signing '
+                                               'event. Ordinary notes cannot establish its signer identity or '
+                                               'that event; complete the block through the human signing workflow.')
+                            self.coverage_issue(answer, 'human_signing_event', area.protection)
+                        self.add(area)
+                    for source in answers + captions:
+                        self.claimed.update(id(n) for n in source.el.iter())
+                    for source in captions + spacers:
+                        self.protected_regions.add(source.id)
+                    caption_rows.add(row + 1)
+
+    def captioned_signing_band(self, slot):
+        """A divided writing band cannot borrow the preceding question's role.
+
+        Its own signature captions can follow it in the same paragraph or the
+        immediate sibling. Without measured column alignment they establish a
+        human-owned band, not which individual run is a name/date/signature.
+        """
+        if slot.kind != 'p' or not self.tab_source_visible(slot) or wraps_structure(slot.el):
+            return None
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        if len(spans) < 2 or any(kind not in ('utab', 'blank') for _, _, kind in spans):
+            return None
+        stop = spans[-1][1]
+        prefix = ''.join(ch for n, ch in enumerate(text[:stop])
+                         if not any(start <= n < end for start, end, _ in spans))
+        if prefix.strip():
+            return None
+        tail = text[stop:]
+        caption = slot
+        if not tail.strip():
+            node = slot.el.getnext()
+            caption = self.index.by_el.get(id(node)) if node is not None else None
+            if (caption is None or caption.kind != 'p' or caption.parent is not slot.parent
+                    or caption.part != slot.part or not self.tab_source_visible(caption)
+                    or wraps_structure(caption.el)):
+                return None
+            tail = self.ptext(caption.el)[0]
+        if any(n.tag == q('w:hyperlink') for source in (slot, caption) for n in source.el.iter()):
+            return None
+        labels = [label.strip() for label in re.split(r'\t+', tail) if label.strip()]
+        if not 1 <= len(labels) <= 4 or any(len(label) > 160 or re.search(r'[.;?!\r\n]', label) for label in labels):
+            return None
+        # A signature caption's head names the act. Incidental mentions in a
+        # printed name, receipt/status question or a past narrative do not.
+        signing = any(self.signing_event_source(label) for label in labels)
+        if not signing:
+            return None
+        return {'captions': labels, 'source': {'part': caption.part, 'slot': caption.path,
+                                             'fingerprint': fingerprint(caption.el)},
+                'start': spans[0][0], 'end': stop}
+
+    def guard_captioned_signing_bands(self):
+        for area in self.areas:
+            if area.slot.kind != 'p' or area.target.get('type') != 'span':
+                continue
+            relation = self.captioned_signing_band(area.slot)
+            if relation is None:
+                continue
+            if area.protection and not area.source_action:
+                self.protected_area_sources[area.slot.id] = area.protection
+            area.source_action = True
+            area.protection = ('Protected signing block: this writing band has its own printed signature captions, but its divided runs have '
+                               'no verified one-to-one column ownership. Keep this band unchanged and review its '
+                               'physical name, signature, date and time locations.')
+            if area.slot.id not in self.protected_area_sources:
+                self.coverage_issue(area.slot, 'ambiguous_signing_band', area.protection,
+                                    start=relation['start'], end=relation['end'])
+
+    def previous_continuous_paragraph(self, host):
+        """Nearest substantive source across plain spacers or adjacent one-column rows only."""
+        node = host.el.getprevious()
+        while node is not None and node.tag == q('w:p'):
+            candidate = self.index.by_el.get(id(node))
+            if candidate is None or candidate.parent is not host.parent or candidate.part != host.part:
+                return None
+            if self.ptext(node)[0].strip():
+                return candidate
+            if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                    or any(self.question_box_paragraph(node)[::2])):
+                return None
+            node = node.getprevious()
+        # One-column, unmerged adjacent rows are a continuous printed
+        # document-act block. A different column, nested table, heading,
+        # intervening row or unresolved merge cannot appoint a witness.
+        cell = self.host_cell(host)
+        if (cell is None or host.parent is not cell or self.grid_cols(cell.parent) != 1
+                or node is not None and node is not cell.el.find(q('w:tcPr'))):
+            return None
+        rows = self.grid(cell.parent); number = cell.info['row']
+        current, previous = rows.get(number, []), rows.get(number - 1, [])
+        if (number < 1 or len(current) != 1 or current[0] is not cell or len(previous) != 1
+                or any(c.info['col'] != 0 or c.info['span'] != 1
+                       or c.el.find('./' + q('w:tcPr') + '/' + q('w:vMerge')) is not None
+                       or any(child.kind != 'p' for child in c.children)
+                       for c in current + previous)):
+            return None
+        paragraphs = [child for child in previous[0].children if child.kind == 'p']
+        for candidate in reversed(paragraphs):
+            if self.ptext(candidate.el)[0].strip():
+                return candidate
+            if (not self.plain_spacing_paragraph(candidate) or not self.tab_source_visible(candidate)
+                    or any(self.question_box_paragraph(candidate.el)[::2])):
+                return None
+        return None
+
+    def guard_numeric_bands(self):
+        """A separate empty band inherits its continuous source act, never a reviewed label.
+
+        Claiming an after-label caption cannot release the writing band below
+        it. A substantive clinical caption, marked spacer or container boundary
+        ends that physical relationship. No caption-to-number label is guessed.
+        """
+        for slot in self.index.slots:
+            if not self.manual_numeric_parts(slot):
+                continue
+            before = self.previous_continuous_paragraph(slot)
+            if before is None:
+                continue
+            caption = self.ptext(before.el)[0].strip()
+            action = self.checkbox_source_action(caption, governing=True)
+            inherited = any(a.protection and a.source_action and self.host_paragraph(a.slot) is before
+                            for a in self.areas)
+            if not (signing_place(caption) or action or inherited or self.question_box_authorship(caption)):
+                continue
+            reason = ('This empty numeric band belongs to the preceding signing or document act. '
+                      'It remains unchanged and is completed through the explicit human workflow.')
+            self.protected_regions.add(slot.id)
+            for area in self.areas:
+                if self.host_paragraph(area.slot) is slot:
+                    area.protection = reason; area.source_action = True
+            self.coverage_issue(slot, 'human_signing_action', reason + ' Location: ' + slot.id)
+
+    def guard_action_participants(self):
+        """A witness identity belongs to its physically continuous source act.
+
+        The complete source caption appoints a witness, and the immediately
+        preceding paragraph owns a protected document act. Plain spacers and
+        adjacent single-column table rows preserve that continuity. Both physical
+        relations are required; a witness recorded in clinical history or a
+        receipt has no such signing authority. Reviewed labels supply neither.
+        """
+        acts = [a for a in self.areas if a.source_action]
+        for area in self.areas:
+            if area.slot.kind not in ('sdt', 'ff', 'p') or area.source_action:
+                continue
+            if not re.fullmatch(r'(?:name of (?:the )?witness|(?:the )?witness(?: name)?)',
+                                clean_label(area.label), re.I):
+                continue
+            host = self.host_paragraph(area.slot)
+            before = self.previous_continuous_paragraph(host) if host is not None else None
+            ambiguous = False
+            if before is None and host is not None:
+                cell = self.host_cell(host)
+                # A nearby act in a complex table is evidence of an unresolved
+                # witness area, not permission to guess which column owns it.
+                if cell is not None:
+                    ambiguous = any((prior := self.host_cell(a.slot)) is not None
+                                    and prior.parent is cell.parent and prior.info['row'] == cell.info['row'] - 1
+                                    for a in acts)
+            # An explicit printed act is source even when it has no mapped
+            # answer of its own. A plain identity caption has the same human
+            # ownership as its native-control representation.
+            direct_act = bool(before is not None and self.checkbox_source_action(
+                self.ptext(before.el)[0], governing=True))
+            if not ambiguous and (before is None or not direct_act
+                                  and not any(self.host_paragraph(a.slot) is before for a in acts)):
+                continue
+            area.source_action = True
+            area.protection = (('This witness area is beside a human document act in a table whose ownership cannot be resolved. '
+                                if ambiguous else 'This witness identity belongs to the preceding human document act. ')
+                               + "Ordinary notes and the finalizer cannot supply this person's identity or act; "
+                               'complete it through the explicit human workflow.')
+            self.coverage_issue(area.slot, 'human_document_participant',
+                                area.protection + ' Location: ' + area.slot.id)
+
+    def guard_fixed_containers(self):
+        """Unqualified fixed geometry remains visible, source-held and unwritable.
+
+        Positioned tables and header/footer parts containing fixed text boxes
+        cannot safely grow with generated answers. Their placement has not been
+        qualified; a character-count estimate cannot authorize overprinting.
+        Plain flowing header/footer fields and ordinary inline images keep their
+        existing behavior. This never moves a container or shortens an answer.
+        """
+        fixed_parts={part for part in self.package.content_parts()
+                     if part!='word/document.xml' and
+                     self.package.tree(part).find('.//'+q('w:txbxContent')) is not None}
+        positioned_parts={part for part in self.package.content_parts()
+                          if self.package.tree(part).find('.//'+q('w:tblpPr')) is not None}
+        failed=known_layout_failure(self.package.data)
+        if failed:
+            self.layout_quarantine=failed
+        for part in fixed_parts|positioned_parts|(
+                set(self.package.content_parts()) if failed else set()):
+            region=part+('#b' if part=='word/document.xml' else '#hf')
+            if failed:
+                reason=('This exact original has retained rendered answer truncation or overlap failures. '
+                        'Its whole-document answer growth remains unsupported; no generation or charge is allowed. '
+                        'Review cannot qualify it by leaving an area unchanged.')
+            elif part in positioned_parts:
+                reason=('This source part contains positioned tables. Growth in neighboring flowing areas can '
+                        'overlap those fixed placements; answer growth in this whole part remains unqualified.')
+            else:
+                reason=('This header/footer contains fixed text boxes. Answer growth has not been qualified '
+                        'and can overwrite nearby printed content; these source areas remain unchanged.')
+            self.protected_regions.add(region)
+            self.geometry_regions[region]=reason
+        for area in self.areas:
+            sources=[area.slot,*area.extra_slots]
+            for ref in area.target.get('copies',[]):
+                slot=self.index.by_id.get(ref.get('part','')+'#'+ref.get('slot',''))
+                if slot is not None:sources.append(slot)
+            for slot in sources:
+                fixed=None;reason=''
+                root=slot.part+('#b' if slot.part=='word/document.xml' else '#hf')
+                if root in self.geometry_regions:
+                    fixed=root;reason=self.geometry_regions[root]
+                else:
+                    parent=slot
+                    while parent is not None:
+                        if (parent.kind=='tbl' and parent.el.find('./'+q('w:tblPr')+'/'+q('w:tblpPr')) is not None):
+                            fixed=parent.id
+                            reason=('This positioned table has fixed placement. Answer growth has not been qualified '
+                                    'and can overlap another area; these source areas remain unchanged.')
+                            break
+                        parent=parent.parent
+                if fixed is None:continue
+                if not area.protection:area.protection=reason
+                self.protected_regions.add(fixed)
+                self.geometry_regions[fixed]=reason
+                detail=reason+' Location: '+slot.id
+                self.coverage_issue(slot,'unqualified_fixed_container',detail)
+                if detail not in self.notes:self.notes.append(detail)
+
+    def shared_merged_answers(self) -> list:
+        """EC3's decision, as ONE pass over every rule's areas, with NO exemption: every answer area with a place anywhere
+        inside a vertically merged cell beside two or more rows (shared_rows) is to be withdrawn - mapped for none of
+        them. Signing, initials and protected areas are kept (they never take an answer, and their destination roles
+        depend on them; declared cost: such a role also refuses a field added there by hand) and are never
+        side-qualified from one row (self.shared_kept, read by qualify_sides). Returns [(area, the merge's first cell,
+        its row descriptions, kept)]; withdraw_shared_merged_answers acts on it once every labelling pass has run.
+
+        An area's places are its anchor, its extra slots, its boxes, its header/footer COPIES, and - for a log
+        (table_rows) - every cell of its rows and columns. A place inside the merge's continuation is inside the merged
+        cell (WEC3-m-3); a merge with no explicit restart is one merge (merge_head, WEC3-m-2/m-4); a copy in another
+        header part withdraws its area whichever part comes first (R3P-2); a log that writes into a merged cell shared
+        with another answer row is withdrawn whole (WEC3-m-1; declared cost: its rows clear of the merge too). A table
+        with no vertical merge at all is never read for merges (WE3-m-3).
+
+        ⚠️ ROUND 3 (refutation of c1cae13d, WEC2-m-1/R2F-01 HIGH): the 'question printed inside the merged cell'
+        exemption was a substring test that kept the first question for any guidance mentioning it ('List current
+        medications and allergies.', 'Record separately.'), silently dropping the second. Removed. Declared cost: a
+        question printed inside a shared merged cell ('Primary Event (diagnosis): ____', a dev form) is withdrawn too."""
+        places, held = {}, {}
+        for area in self.areas:
+            slots = [area.slot] + list(area.extra_slots)
+            for ref in list(area.target.get("boxes", [])) + list(area.target.get("copies", [])):
+                slot = self.index.by_id.get("%s#%s" % (ref.get("part"), ref.get("slot")))
+                if slot is not None:
+                    slots.append(slot)
+            if area.target.get("type") == "table_rows" and area.slot.kind == "tc":
+                columns = set(area.target.get("columns", []))
+                for r in area.target.get("rows", []):
+                    slots.extend(c for c in self.grid(area.slot.parent).get(r, []) if c.info["col"] in columns)
+            places[id(area)] = slots
+            for slot in slots:
+                node = slot
+                while node is not None:
+                    if node.kind == "tc":
+                        held.setdefault(id(node.parent), {}).setdefault(node.info["row"], set()).add(node.id)
+                    node = node.parent
+        verdicts, answer_rows = {}, {}
+
+        def shared_cell(slots):
+            for slot in slots:
+                node = slot
+                while node is not None:
+                    if node.kind == "tc" and self.merge_index(node.parent)[0]:
+                        head = self.merge_head(node.parent, node)
+                        if head.id not in verdicts:
+                            verdicts[head.id] = []
+                            if len(self.merge_rows(node.parent, head)) >= 2:
+                                if id(node.parent) not in answer_rows:
+                                    answer_rows[id(node.parent)] = set(held.get(id(node.parent), {}))
+                                verdicts[head.id] = self.shared_rows(node.parent, head, answer_rows[id(node.parent)])
+                        if verdicts[head.id]:
+                            return head
+                    node = node.parent
+            return None
+        decided = []
+        for area in self.areas:
+            cell = shared_cell(places[id(area)])
+            if cell is None:
+                continue
+            kept = bool(area.protection or area.kind in SIGNING_KINDS)
+            if kept:
+                self.shared_kept.add(id(area))
+            decided.append((area, cell, verdicts[cell.id], kept))
+        return decided
+
+    def withdraw_shared_merged_answers(self, decided):
+        """EC3's withdrawal, run LAST in detect(): the areas shared_merged_answers decided to withdraw leave the mapping
+        (each still owned its cell and counted as a duplicate while every labelling pass ran), and the inspection says
+        so once per cell. A withdrawn area keeps its extent in the role reading (Detector.withdrawn_areas,
+        _role_reading), so no neighbouring signing or protected role grows over it.
+
+        ⚠️ WEC3P-1 / WE3-m-1 (refutation of d9afcf2f, HIGH): withdrawing BEFORE qualify_sides freed the cell, and its
+        printed 'Left knee: ____' became the side of the right knee's answer beside it ('Left knee — Effusion'); and a
+        surviving duplicate lost its occurrence. A withdrawal changes no other area's label, context, kind or locator."""
+        present = {id(area) for area in self.areas}
+        decided = [entry for entry in decided if id(entry[0]) in present]  # an area a later check removed has its note
+        gone = {id(area) for area, _, _, kept in decided if not kept}
+        self.withdrawn_areas.extend(area for area, _, _, kept in decided if not kept)
+        self.areas[:] = [area for area in self.areas if id(area) not in gone]
+        self.layout_candidates[:] = [c for c in self.layout_candidates if id(c[2]) not in gone]
+        noted = []
+        for _, cell, shared, _ in decided:
+            if cell.id in noted:
+                continue
+            noted.append(cell.id)
+            rows = "; ".join(shared[:6])
+            here = [(area, kept) for area, c, _, kept in decided if c.id == cell.id]
+            withdrawn = [area for area, kept in here if not kept]
+            if withdrawn:
+                note = ("The answer cell at %s is one vertically merged cell beside %d rows (%s), so it was NOT mapped: "
+                        "the merge hides which answer belongs to which row. Unmerge the answer cell, or add a field for "
+                        "it by hand on this page." % (cell.id, len(shared), rows))
+                logs = ["%d-%d" % (min(a.target["rows"]) + 1, max(a.target["rows"]) + 1) for a in withdrawn
+                        if a.target.get("type") == "table_rows" and a.target.get("rows")]
+                if logs:
+                    note += " The log rows that write into it (table rows %s) were not mapped either." % ", ".join(logs)
+                if any(kept for _, kept in here):
+                    note += " Its signing or protected area is kept as printed and completed by hand."
+            else:
+                note = ("The cell at %s is one vertically merged cell beside %d rows (%s). Its signing or protected area "
+                        "is kept as printed and completed by hand; no answer is mapped there." % (cell.id, len(shared), rows))
+            self.notes.append(note)
+            if withdrawn:
+                self.coverage_issue(cell, 'shared_merged_answer', note)
 
     def qualify_sides(self):
         """A side printed in another row cell or its heading belongs to the question used for source matching.
@@ -2124,7 +3250,7 @@ class Detector:
             for identity in cells:
                 cell_owners.setdefault(identity, set()).add(number)
         for number, area in enumerate(self.areas):
-            if side_phrase(area.label):
+            if side_phrase(area.label) or id(area) in self.shared_kept:
                 continue
             scope = []
             cell = self.host_cell(area.slot)
@@ -2263,8 +3389,19 @@ class Detector:
                               options=[o for o in slot.info.get("options", []) if o]))
             else:
                 kind = "date" if slot.info.get("input_type") == "date" else self.kind_for(label)
-                self.add(Area(kind, clean_label(label), slot, {"type": "ff_text"}, context=self.context_for(slot),
-                              protection=ff_text_protection(slot.el)))
+                area = Area(kind, clean_label(label), slot, {"type": "ff_text"}, context=self.context_for(slot),
+                            protection=ff_text_protection(slot.el))
+                if ff_source_guidance(slot.el):
+                    # These exact source controls already refuse every write.
+                    # Keep their physical roles and complete help, separately
+                    # from the answers a doctor is asked to complete. Stored
+                    # mappings still resolve their original protected controls.
+                    area.capacity = self.capacity_for(area)
+                    self.source_guidance_areas.append(area)
+                    self.withdrawn_areas.append(area)
+                    self.claimed.add(id(slot.el))
+                else:
+                    self.add(area)
 
     # 3. checkboxes: content-control, legacy and glyph boxes, grouped into questions -------------------------------
     def box_units(self, pslot):
@@ -2288,7 +3425,513 @@ class Detector:
             units.append([ref, option, text[:pos] if n == 0 else ""])
         return units
 
-    def tab_column_properties(self, slot, *, scope_only=False):
+    def adjacent_blank_plan(self, slot):
+        """One physically separate answer span beside qualified box controls.
+
+        Two blanks, hidden/linked ink, drawings and ambiguous option text stay
+        with the existing coverage hold. A printed condition never selects its
+        controlling box; a separate labelled unit never inherits that box.
+        """
+        text, pieces = self.ptext(slot.el)
+        positions = [i for i, ch in enumerate(text) if ch in (BOX, CHECKED)]
+        if not positions:
+            return None
+        # A checkbox can perform a first-person document act. Its physical
+        # option text is read before the supported write-in shape: extra/no
+        # blanks do not grant authority to acknowledge, approve or attest.
+        options = [text[pos + 1:(positions[n + 1] if n + 1 < len(positions) else len(text))]
+                   for n, pos in enumerate(positions)]
+        roles = [self.checkbox_source_action(option) for option in options]
+        roles.extend(branch['protection'] for unit in self.box_units(slot)
+                     for branch in [self.option_branch_source(unit)] if branch and branch['protection'])
+        head = text[:positions[0]].strip()
+        if head:
+            roles.append(self.checkbox_source_action(head, governing=True))
+        elif not any(re.search(r'\?', option) or self.first_person_source(option)
+                     and not self.checkbox_source_action(option) for option in options):
+            # Only a physically adjacent statement governs a leading response.
+            # Never cross a table/cell, another answer, an independent question,
+            # or a substantive first-person clinical statement printed by a box.
+            previous = slot.el.getprevious()
+            before = self.index.by_el.get(id(previous)) if previous is not None else None
+            if (before is not None and before.kind == 'p' and before.parent is slot.parent
+                    and before.part == slot.part):
+                prior, prior_pieces = self.ptext(before.el)
+                if (prior.strip() and BOX not in prior and CHECKED not in prior
+                        and not self.blank_spans(prior, prior_pieces)
+                        and not any(area.slot is before or before in area.extra_slots for area in self.areas)
+                        and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                                    for n in before.el.iter())):
+                    roles.append(self.checkbox_source_action(LIST_MARKER.sub('', prior.strip()), governing=True))
+        if any(roles):
+            definite = 'human_signing_action' in roles
+            code = 'human_signing_action' if definite else 'ambiguous_source_action'
+            reason = ('This printed document action is human-owned. Complete it through the established signing workflow.'
+                      if definite else 'This printed action does not establish who performs it. '
+                      'Keep it unchanged and review its precise source role; a review click does not authorize that act.')
+            self.protected_regions.add(slot.id);self.box_action_reasons[slot.id] = reason
+            self.coverage_issue(slot, code, reason + ' Location: ' + slot.id)
+            return None
+        spans = self.blank_spans(text, pieces)
+        if not spans and slot.part == 'word/document.xml' and self.tab_source_visible(slot):
+            # A terminal colon appoints an answer after this option's complete
+            # printed label. Keep this finite Other frame separate from a
+            # sentence, another question or an arbitrary qualifier/predicate.
+            tail = text[positions[-1] + 1:]
+            terminal = re.fullmatch(r"\s*(Other(?:\s+[\w'-]+|,\s*(?:please\s+)?specify|"
+                                   r'\s+\((?:please\s+)?specify\))?)\s*:\s*', tail, re.I)
+            if (terminal and len(tail.strip()) <= MAX_MAPPING_LABEL
+                    and not hyperlink_write(pieces, len(text), len(text))
+                    and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                                for n in slot.el.iter())):
+                return {'start': len(text), 'end': len(text), 'shape': 'after_label',
+                        'label': tail.strip(), 'option': option_text(terminal[1]),
+                        'condition': 'printed_option', 'box': len(positions) - 1, 'terminal_label': True}
+        if (slot.part != 'word/document.xml' or len(spans) != 1 or not self.tab_source_visible(slot)
+                or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in slot.el.iter())):
+            return None
+        if self.question_box_signing(head):
+            self.protected_regions.add(slot.id)
+            self.coverage_issue(slot, 'human_signing_action',
+                'The printed signing or attestation action remains human-owned at ' + slot.id)
+            return None
+        start, end, shape = spans[0]
+        if (shape not in ('blank', 'utab') or start <= positions[-1]
+                or hyperlink_write(pieces, start, end)):
+            return None
+        if shape == 'blank':
+            # A recognised ellipsis/underscore rule can end with one or two
+            # contiguous dots that are too short to be a second blank. They
+            # belong to this drawn rule, not to the option or a neighbour.
+            while end < len(text) and text[end] in '_.…': end += 1
+            while start > positions[-1] + 1 and text[start - 1] in '_.…': start -= 1
+            if hyperlink_write(pieces, start, end): return None
+        prefix, suffix = text[positions[-1] + 1:start], text[end:]
+        # Explicit Yes/No condition printed after its own labelled option.
+        condition = re.fullmatch(r'\s*(Yes|No)\s*(?:[→⇒]\s*)?(if\s+(yes|no)\s*,\s*\S.+[?:])\s*', prefix, re.I)
+        if condition and not suffix.strip() and condition[1].casefold() == condition[3].casefold():
+            return {'start': start, 'end': end, 'shape': shape, 'label': condition[2].strip(),
+                    'option': condition[1], 'condition': 'printed_option', 'box': len(positions) - 1}
+        # A wide printed gap separates a different labelled/unit answer from
+        # the last option (Gender ... Female<TAB><TAB>Age ____ years).
+        gap = re.search(r'\t{2,}| {4,}', prefix)
+        if gap and suffix.strip() and self.ANSWER_UNIT.fullmatch(suffix.strip()):
+            option, label = prefix[:gap.start()].strip(), clean_label(prefix[gap.end():], limit=None)
+            if option and label and not re.search(r'[:?!\x00' + BOX + CHECKED + r']', label):
+                return {'start': start, 'end': end, 'shape': shape, 'label': label,
+                        'option': option, 'condition': 'independent_unit', 'box': len(positions) - 1}
+        # One box and one trailing write-in are distinct destinations. Do not
+        # generalise multiple-box descriptions or a sentence after the blank.
+        if len(positions) == 1 and not text[:positions[0]].strip() and not suffix.strip():
+            label = clean_label(prefix, limit=None)
+            if label and not re.search(r'\bif\b|[?!\x00]', label, re.I):
+                return {'start': start, 'end': end, 'shape': shape, 'label': label,
+                        'option': label, 'condition': 'printed_option', 'box': 0}
+        return None
+
+    @staticmethod
+    def first_person_source(text):
+        source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        contractions = {'m':'am','re':'are','ve':'have','d':'would','ll':'will'}
+        source = re.sub(r"\b(I|we)[’'](m|re|ve|d|ll)\b",
+                        lambda m:m[1]+' '+contractions[m[2].casefold()],source,flags=re.I)
+        # An explicit subject remains explicit after a bounded introductory
+        # capacity phrase. The printed capacity supplies no signer identity.
+        introductory = re.match(r'^(?:as|acting\s+as|in\s+(?:my|our|the)\s+(?:capacity|role)\s+as)\s+'
+                                r'[^,;:?!\r\n]{1,120}?(?:,\s*|\s+)(?=(?:I|we)(?=\W|$))',source,re.I)
+        if introductory:source=source[introductory.end():]
+        person = re.match(r'^(?:I|we)(?=\W|$)',source,re.I)
+        if not person:return ''
+        predicate=source[person.end():].strip()
+        # A printed apposition qualifies the speaker; it never proves their
+        # identity or signing authority. Keep malformed qualifiers as unknown
+        # predicates, so a consent/signing argument still requires exact review.
+        qualifier = re.match(r'^(?:,\s*[^,;:?!\r\n]{1,120}\s*,|'
+                             r'\([^()\r\n]{1,120}\)|\[[^\[\]\r\n]{1,120}\]|'
+                             r'([—–-])\s*[^—–\r\n]{1,120}?\s*\1)\s*',predicate)
+        if qualifier:predicate=predicate[qualifier.end():]
+        # A capacity phrase without a comma is grammatically ambiguous. Only
+        # isolate a finite permission predicate with its explicit determined
+        # object; a noun such as "permit holder" is not that predicate. Other
+        # unknown predicates retain their original arguments for role review.
+        capacity = re.match(r'^as\s+[^,;:?!\r\n]{1,120}?\s+'
+                            r'(?=(?:allow|permit)(?:s|ted|ting|ed|ing)?\s+'
+                            r'(?:this|that|these|the|a|an|my|our|their|his|her)\b)',predicate,re.I)
+        if capacity:predicate=predicate[capacity.end():]
+        aspect=re.match(r'^(?:(?:hereby|am|are|was|were|have|had|been|being|personally|do|did|not|yet|cannot|will|would)\s+)*',
+                        predicate,re.I)
+        return predicate[aspect.end():]
+
+    @staticmethod
+    def complete_signing_action(text):
+        """A complete actor/auxiliary/signing predicate, without an identity guess.
+
+        A temporal caption still qualifies that act. Clinical signs, initial
+        observations and received signed documents have no such predicate.
+        Dotted names and negation do not turn another person's act into data.
+        """
+        return re.fullmatch(r'\s*[^:;?!\r\n]+?\s+'
+            r'(?:' + SOURCE_ACTION_AUXILIARY + r'\s+)+'
+            r'(?:(?:required\s+)?to\s+)?(?:sign|initial)'
+            r'(?:\s+(?!of\b)[^:;?!\r\n]+)?\s*[:.]?', text, re.I)
+
+    @classmethod
+    def checkbox_source_action(cls, text, *, governing=False):
+        """_checkbox_source_action, read once per text in this process: a pure reading of the printed words (its
+        helpers read only their arguments and the module's constants), shared by every detection - a band's band-free
+        reading repeats the main detection's texts."""
+        key = (str(text or ''), bool(governing))
+        found = _ACTION_MEMO.get(key)
+        if found is None:
+            if len(_ACTION_MEMO) >= 200000:
+                _ACTION_MEMO.clear()
+            found = _ACTION_MEMO[key] = cls._checkbox_source_action(text, governing=governing)
+        return found
+
+    @classmethod
+    def _checkbox_source_action(cls,text,*,governing=False):
+        """Printed performative ownership, not a signer-name guess.
+
+        Ordinary clinical states and recorded-status labels are not this frame.
+        First-person, documentary nominal, imperative, third-person and explicit
+        checkbox-action conditions share one reading. A third-person subject
+        supplies no signer identity. Documentary objects distinguish those
+        requests from ordinary clinical questions and nonhuman observations.
+        """
+        source = _INVISIBLE.sub('', unicodedata.normalize('NFKC', str(text or ''))).strip()
+        if cls.complete_signing_action(source) or cls.question_box_authorship(source):
+            return 'human_signing_action'
+        # Quoting or qualifying a printed human act supplies no authority to
+        # perform it. Read only a complete paired quotation / explicit clause;
+        # ordinary quoted clinical statements retain their own arguments.
+        quote_pairs={'"':'"',"'":"'",'“':'”','‘':'’'}
+        if source[:1] in quote_pairs:
+            closer=source.rfind(quote_pairs[source[0]],1)
+            if closer>0 and re.fullmatch(r'[\s:._…]*',source[closer+1:]):
+                return cls.checkbox_source_action(source[1:closer],governing=governing)
+        conditional=re.match(r'^if\s+[^,;:?!\r\n]{1,200},\s*(.+)$',source,re.I)
+        if conditional:return cls.checkbox_source_action(conditional[1],governing=governing)
+        condition = re.match(r'^by\s+(?:checking|ticking|selecting|signing|initiall?ing)\b'
+                             r'[^,;:\r\n]{0,200}?(?:[,;:]\s*|\s+(?=(?:I|we|you|he|she|they)\b))(.+)$',source,re.I)
+        if condition:
+            return cls.checkbox_source_action(condition[1],governing=governing)
+        predicate = cls.first_person_source(source)
+        first_person = bool(predicate)
+        # A documentary action noun is a governing label, not a recorded-status
+        # label. This reads the action, irrespective of a named signer/role.
+        if governing:
+            # A question cell is a caption without requiring a literal colon.
+            # Read the complete noun phrase: a status/date/receipt suffix is
+            # not an action caption, and no signer name is inferred.
+            heading = re.fullmatch(r'(?:[^:?!\r\n]+?\s+)?'
+                                  r'(?P<action>approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
+                                  r'certification|attestation|declaration|authori[sz]ation|consent|sign[ -]?off)s?'
+                                  r'(?:\s+(?:of|for|to|by|from)\s+[^:?!]+)?\s*[:.]?',source,re.I)
+            if heading:
+                explicit = (re.search(r'\b(?:record|document|form|report|information)\b',source,re.I)
+                            or re.match(r'certification|attestation|declaration|authori[sz]ation|consent|sign',
+                                        heading['action'],re.I))
+                # A complete nominal "review/confirmation/... of <clinical
+                # object>" names an observation category. It has neither an
+                # appointed author nor a document/formal act argument. Keep
+                # bare/assigned reviews ambiguous and formal objects held;
+                # a clinician's reviewed label cannot establish this reading.
+                descriptive = re.fullmatch(re.escape(heading['action']) + r's?\s+of\s+[^:?!]+\s*[:.]?', source, re.I)
+                formal_object = re.search(r'\b(?:consent|permission|authori[sz]ation|attestation|certification|declaration)s?\b', source, re.I)
+                # The nominal act's complete agentive complement appoints its
+                # author, regardless of that person's name or job title. It is
+                # not an ordinary observation category even for clinical objects.
+                if descriptive and re.search(r'\s+by\s+\S[^:?!]*\s*[:.]?$', source, re.I):
+                    return 'human_signing_action'
+                if descriptive and not explicit and not formal_object:
+                    return ''
+                return 'human_signing_action' if explicit else 'ambiguous_source_action'
+            if ':' in source:
+                caption, statement = source.split(':',1)
+                tail = cls.checkbox_source_action(statement)
+                if tail:
+                    return tail
+                # A printed declaration/statement of witnessing a signing act
+                # governs its response. It supplies no identity or authority.
+                if (re.search(r'\b(?:statement|declaration|attestation)\s*$',caption,re.I)
+                        and cls.first_person_source(statement)
+                        and re.search(r'\bsign(?:ed|ing)?\b',statement,re.I)):
+                    return 'human_signing_action'
+        document_pattern = (r'\b(?:this|the|these|above|foregoing)\s+'
+                            r'(?:(?:clinical|medical|written|recorded|provided|above)\s+)*'
+                            r'(?:records?|documents?|forms?|reports?|information|statements?|details?)(?=\W|_|$)')
+        # A finite auxiliary belongs to the subject/predicate relation, not
+        # the actor's name. Read its complement with the same action reader;
+        # neither tense, negation nor an unfamiliar actor creates authority.
+        # This also protects an actor blank before the predicate. Clinical
+        # complements keep their ordinary meaning ("will review the dose").
+        auxiliary = SOURCE_ACTION_AUXILIARY
+        finite = re.match(r'^(?:(?P<subject>[^.;:?!\r\n]+?)\s+)?'
+                          r'(?P<aspect>(?:'+auxiliary+r'\s+)+)(?P<complement>\S.+)$', source, re.I)
+        if finite and not first_person:
+            complement = finite['complement']
+            action = cls.checkbox_source_action(complement, governing=governing)
+            if action:
+                return 'ambiguous_source_action'
+        # Permission and witnessing are acts even when their object is a
+        # procedure/person rather than the document. Their subject/predicate
+        # relationship supplies the role; merely mentioning consent, signing
+        # or a past document receipt does not.
+        permission = (r'(?:permit(?:s|ted|ting)?|allow(?:s|ed|ing)?)(?=\W|_|$)|'
+                      r'(?:grant(?:s|ed|ing)?|giv(?:e|es|en|ing)|gave)\s+'
+                      r'(?:(?:my|our|their|the|explicit|informed)\s+)*(?:permission|consent|authori[sz]ation)\b')
+        witness = (r'\b(?:observ(?:e|es|ed|ing)|see|sees|seen|saw|witness(?:es|ed|ing)?)\b'
+                   r'[^.;:?!\r\n]*\b(?:signing|signed|signatures?|sign(?=\s*(?:[.:;_]|$)))\b')
+        witnessed_presence = (r'\b(?:sign(?:ed|ing)|signatures?)\b[^.;:?!\r\n]*'
+                              r'\bin\s+(?:my|our)\s+presence\b')
+        # A signing event does not require a particular document noun: its
+        # verb may take a pronoun, a printed place, or an unfamiliar object.
+        # "Signs" and "sign of ..." are clinical noun readings. An otherwise
+        # ambiguous singular sign remains a precise source-role decision.
+        signing_event = (r'\b(?:signed|signing|signatures?)\b|'
+                         r'\bsign(?=\W|_|$)(?!\s+of\b)')
+        if (governing and re.search(r'\b(?:observation|witnessing)\s+of\b',source,re.I)
+                and re.search(signing_event,source,re.I)):
+            return 'ambiguous_source_action'
+        # Witnessing is a subject + perception predicate + signing event. Its
+        # subject need not name a known role, and cannot authorize generation
+        # to perform that person's observation. Clinical observations without
+        # a signing event and recorded noun/status labels remain independent.
+        observed = re.match(r'^([^.;:?!\r\n]+?)\s+'
+                            r'(?:observ(?:es|ed)|sees|saw|witness(?:es|ed)|watch(?:es|ed))\b'
+                            r'(?P<argument>[^.;:?!\r\n]+)',source,re.I)
+        if (observed and re.search(signing_event,observed['argument'],re.I)):
+            return 'human_signing_action' if first_person else 'ambiguous_source_action'
+        if (first_person and (re.match(permission,predicate,re.I) or re.search(witness,predicate,re.I))
+                or re.search(witnessed_presence,source,re.I)):
+            return 'human_signing_action'
+        if first_person:
+            # The argument supplies a legal/signing role even when its verb
+            # is unfamiliar, negated, withdrawing consent, or describes a
+            # witness's presence. Do not grow a verb/signer-name whitelist.
+            # Clinical signs/observations have no such signing-event argument.
+            signing_argument = re.search(signing_event,predicate,re.I)
+            formal_argument = re.search(r'\b(?:consent|permission|authori[sz]ation|attestation|certification|declaration)s?\b',
+                                        predicate,re.I)
+            if signing_argument or formal_argument:
+                return 'ambiguous_source_action'
+        if not predicate:
+            # A documentary nominal printed as an option is still the act,
+            # even without a named signer or a colon-bearing parent label.
+            nominal = re.match(r'^(approval|verification|confirmation|acknowledg(?:e)?ment|acceptance|review|'
+                               r'certification|attestation|declaration|authori[sz]ation|consent)s?'
+                               r'\s+(?:that|of|for|to)\b',source,re.I)
+            if (nominal and (re.search(document_pattern,source,re.I)
+                             or re.match(r'certification|attestation|declaration|authori[sz]ation|consent',nominal[1],re.I))):
+                return 'human_signing_action'
+            action = (r'certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|'
+                      r'affirm(?:s|ed|ing)?|consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing)|'
+                      r'confirm(?:s|ed|ing)?|verif(?:y|ies|ied|ying)|acknowledg(?:e|es|ed|ing)|'
+                      r'agree(?:s|d|ing)?|accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?|'
+                      r'permit(?:s|ted|ting)?|allow(?:s|ed|ing)?|grant(?:s|ed|ing)?|giv(?:e|es|en|ing)|gave')
+            base_action = (r'certify|attest|declare|affirm|consent|authori[sz]e|confirm|verify|acknowledge|'
+                           r'agree|accept|approve|review|read|permit|allow|grant|give')
+            imperative = re.match(r'^(?:please\s+)?('+base_action+r')(?=\W|_|$)',source,re.I)
+            if imperative and re.match(r'\s+(?:is|are|was|were|has|have|had)\b',source[imperative.end():],re.I):
+                imperative = None  # "Consent was obtained" reports a noun's status; it is not an order.
+            third_person = re.match(r'^([^.;:?!\r\n]+?)\s+('+action+r')(?=\W|_|$)',source,re.I)
+            if third_person:
+                subject,verb = third_person[1].strip(),third_person[2]
+                # A terminal passive restriction counts printed answers, not
+                # a human actor granting permission. Reuse the selection
+                # grammar and require that its counted noun is the subject's
+                # complete tail; an actor + permission complement stays held.
+                counted = ONE_ANSWER.search(subject) or COUNTED_ANSWERS.search(subject)
+                if (governing and counted and not subject[counted.end():].strip()
+                        and limit_language(subject, local=True) and verb.lower().endswith('ed')
+                        and re.match(permission, verb, re.I)
+                        and not source[third_person.end():].strip(' \t\r\n:.;')):
+                    third_person = None
+                if (third_person and re.fullmatch(base_action,verb,re.I)
+                        and not re.fullmatch(r'you|they|he|she|it',subject,re.I)
+                        and not re.search(r's\s*$',subject,re.I)):
+                    third_person = None  # "Signed consent" is a noun phrase, not subject + finite verb.
+            frame = imperative or third_person
+            if not frame:
+                return ''
+            predicate = source[frame.start(1 if imperative else 2):]
+            if re.match(permission,predicate,re.I):
+                return 'human_signing_action' if imperative else 'ambiguous_source_action'
+            # A request about a clinical observation is not a documentary
+            # attestation merely because it says confirm/verify/review.
+            if not re.search(document_pattern,predicate,re.I):
+                formal = re.match(r'(?:certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|'
+                                  r'affirm(?:s|ed|ing)?|consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing))'
+                                  r'(?=\W|_|$)',predicate,re.I)
+                # Authorizing treatment or giving consent performs an act
+                # without saying "document". An unqualified third-person
+                # subject supplies no identity/authority to perform it either.
+                if formal:
+                    return 'human_signing_action' if imperative else 'ambiguous_source_action'
+                return ''
+        if re.match(r'(?:so|this|that)(?=\W|_|$)',predicate,re.I):
+            return 'ambiguous_source_action'
+        document = re.search(document_pattern,predicate,re.I)
+        if re.match(r'(?:certif(?:y|ies|ied|ying)|attest(?:s|ed|ing)?|declar(?:e|es|ed|ing)|affirm(?:s|ed|ing)?|'
+                    r'consent(?:s|ed|ing)?|authori[sz](?:e|es|ed|ing)|(?:give|given|gave)\s+(?:(?:my|our)\s+)?consent)'
+                    r'(?=\W|_|$)', predicate, re.I):
+            return 'human_signing_action'
+        if not re.match(r'(?:confirm(?:s|ed|ing)?|verif(?:y|ies|ied|ying)|acknowledg(?:e|es|ed|ing)|agree(?:s|d|ing)?|'
+                        r'accept(?:s|ed|ing)?|approv(?:e|es|ed|ing)|review(?:s|ed|ing)?|read(?:s)?)(?=\W|_|$)',
+                        predicate, re.I):
+            # An unfamiliar predicate about the document cannot silently become
+            # authority to make the printed first-person assertion either.
+            return 'ambiguous_source_action' if document else ''
+        return 'human_signing_action' if document else 'ambiguous_source_action' if first_person else ''
+
+    @staticmethod
+    def ordinary_source_kind(sources, kind):
+        """An incidental signing word with an ordinary physical argument.
+
+        This does not release a signature/initials instruction or an attestation.
+        The caller has already excluded action captions and native controls.
+        It uses the original caption/span prefix, never a reviewed field label.
+        """
+        printed = [_plain(source) for source in sources if _plain(source)]
+        if not printed or any(signing_place(source) for source in printed):
+            return False
+        if kind == 'initials':
+            return any(ADJECTIVE_INITIAL.search(source) for source in printed)
+        # A signed noun being received/recorded is a document's history, not
+        # the act of signing it. Terminal explicit status asks for that history
+        # too; a bare "consent form signed" remains a review decision.
+        receipt = (r'\bsigned\s+[^:?!\r\n]+?\s+'
+                   r'(?:(?:was|were|is|are|has\s+been|had\s+been)\s+)?'
+                   r'(?:received|recorded|filed|stored)\b')
+        received_signed_object = (r'\b(?:received|recorded|filed|stored)\s+'
+                                  r'(?:the|a|an|this|that|these|those)\s+signed\s+[^:?!\r\n]+')
+        # A terminal receipt object records delivery of a signed document;
+        # the action-caption guard already excluded any act of certification.
+        nominal_receipt = r'\bsigned\s+[^:?!\r\n]+?\s+receipt\s*[:.]?$'
+        return any(re.search(receipt,source,re.I) or re.search(received_signed_object,source,re.I) or
+                   re.search(nominal_receipt,source,re.I) or
+                   re.search(r'\b(?:recorded|documented)\b[^:?!]*\bsigned\b[^:?!]*\bstatus$',source,re.I)
+                   for source in printed)
+
+    def option_branch_source(self, unit):
+        """A repeated Yes/No condition or exact numbered skip separates guidance.
+
+        The complete source remains part of the mapping. Only this physically
+        adjacent, matching frame has a shorter option value; there is no
+        global alias for Yes or any arbitrary option prefix.
+        """
+        frame = re.fullmatch(r'\s*(Yes|No)\s*→\s*(if\s+(yes|no),)\s*(.+?)\s*', unit[1], re.I | re.S)
+        skip = re.fullmatch(r'\s*(Yes|No|Refused)\s+(\[GO\s+TO\s+[1-9][0-9]{0,3}\.?\])\s*',
+                            unit[1], re.I)
+        if not frame and not skip:
+            return None
+        ref = unit[0]
+        slot = self.index.by_id.get(ref['part'] + '#' + ref['slot'])
+        paragraph = self.host_paragraph(slot) if slot is not None else None
+        if paragraph is None:
+            return None
+        caption = frame[1] if frame else skip[1]
+        condition = frame[2] if frame else skip[2]
+        instruction = frame[4] if frame else skip[2]
+        acts = [self.checkbox_source_action(clause, governing=True)
+                for clause in [instruction, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', instruction)]]
+        protection = next((act for act in acts if act), '')
+        text, pieces = self.ptext(paragraph.el)
+        spans = self.blank_spans(text, pieces)
+        # A single option's literal numbered skip is source guidance. Keep its
+        # exact text and control in the existing branch relation; only the local
+        # Yes/No/Refused answer value is shorter. Other bracketed words, multiple
+        # boxes, write-ins and arbitrary prefixes cannot establish this frame.
+        source_blank_safe = (not spans if frame else
+                             len(self.box_units(paragraph)) == 1
+                             and all(kind == 'bracket' and text[start:end] == instruction
+                                     for start, end, kind in spans))
+        qualified = ((frame is None or frame[1].casefold() == frame[3].casefold()) and '→' not in instruction
+                     and not re.search(r'[?\r\n\x00]', instruction) and ':' not in instruction.rstrip(':')
+                     and source_blank_safe
+                     and self.tab_source_visible(paragraph)
+                     and not any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                                 for n in paragraph.el.iter()) and not protection)
+        return {'caption': caption, 'condition': condition, 'instruction': instruction,
+                'printed': option_text(unit[1]), 'control': dict(ref), 'qualified': qualified,
+                'protection': protection,
+                'source': {'part': paragraph.part, 'slot': paragraph.path,
+                           'fingerprint': fingerprint(paragraph.el)}, 'source_text': text}
+
+    def adjacent_option_text(self, unit):
+        """Separate only a proven explicit trailing condition from its option."""
+        branch = self.option_branch_source(unit)
+        if branch and branch['qualified']:
+            return branch['caption']
+        ref = unit[0]
+        slot = self.index.by_id.get(ref['part'] + '#' + ref['slot'])
+        paragraph = self.host_paragraph(slot) if slot is not None else None
+        if paragraph is None:
+            return unit[1]
+        plan = self.adjacent_blank_plan(paragraph)
+        refs = [u[0] for u in self.box_units(paragraph)]
+        if (plan and plan['condition'] == 'printed_option' and refs[plan['box']] == ref
+                and (len(refs) == 1 or re.match(r'if\s+(?:yes|no)\s*,', plan['label'], re.I))):
+            return plan['option']
+        return unit[1]
+
+    def rule_adjacent_write_ins(self):
+        """An existing qualified checkbox owner permits a separate exact span.
+
+        The complete owner and condition travel with the mapping and are read
+        again by fill. Coverage holds are removed only by a genuine writer at
+        this exact span; no ambiguous option/cardinality group is promoted.
+        """
+        for slot in [s for s in self.index.slots if s.kind == 'p']:
+            plan = self.adjacent_blank_plan(slot)
+            if slot.id in self.protected_regions:
+                for area in self.areas:
+                    if any(ref.get('part') == slot.part and ref.get('slot', '').startswith(slot.path + '/')
+                           for ref in area.target.get('boxes', [])):
+                        area.protection = self.box_action_reasons.get(slot.id,
+                            'This printed signing or attestation action is human-owned. Complete it through the established signing workflow.')
+                continue
+            if not plan:
+                continue
+            target = {'type': 'span', 'start': plan['start'], 'end': plan['end'], 'shape': plan['shape']}
+            if any(a.slot is slot and a.target == target for a in self.areas):
+                continue
+            control = self.box_units(slot)[plan['box']][0]
+            owners = [a for a in self.areas if a.target.get('type') == 'checkboxes'
+                      and control in a.target.get('boxes', [])]
+            if len(owners) != 1:
+                continue
+            owner = owners[0]; position = owner.target['boxes'].index(control)
+            if (owner.protection or owner.kind not in ('choice', 'multi_choice', 'checkbox')
+                    or owner.label in ('Choose', 'Checkbox', '') or not owner.options
+                    or position >= len(owner.options)
+                    or option_text(owner.options[position]).casefold() != option_text(plan['option']).casefold()):
+                continue
+            label = plan['label']
+            context = ' > '.join(x for x in (owner.context, owner.label,
+                ('Only when the printed option ' + owner.options[position] + ' is selected')
+                    if plan['condition'] == 'printed_option' else 'Separate labelled answer: ' + label) if x)
+            if plan.get('terminal_label'):
+                printed = [label, owner.label, *owner.context.split(' > ')]
+                human_source = any(self.checkbox_source_action(LIST_MARKER.sub('', value.strip()), governing=True)
+                                   or signing_place(value) for value in printed)
+            else:
+                human_source = (self.question_box_signing(label) or self.question_box_signing(context)
+                                or self.question_box_signing(owner.label + ':'))
+            if len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT or human_source:
+                continue
+            source = {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+            owner_ref = {'part': owner.slot.part, 'slot': owner.slot.path, 'fingerprint': fingerprint(owner.slot.el)}
+            relation = {'relation': 'adjacent_checkbox_answer', 'question': label, 'context': context,
+                        'source': source, 'owner': owner_ref, 'owner_label': owner.label,
+                        'owner_context': owner.context, 'owner_kind': owner.kind,
+                        'owner_options': list(owner.options), 'owner_target': dict(owner.target),
+                        'condition': plan['condition'], 'control': dict(control), 'option_index': position,
+                        'printed_option': owner.options[position], 'source_text': self.ptext(slot.el)[0]}
+            self.add(Area(self.kind_for(label), label, slot, target, context=context,
+                          complete_source=True, source_questions=[relation]))
+
+    def tab_column_properties(self, slot, *, scope_only=False, checkbox_indent=False):
         """Resolve additive stops and per-attribute indentation; unknown layout refuses."""
         styles = self.package.tree("word/styles.xml") if "word/styles.xml" in self.package.names else None
         props = []
@@ -2301,8 +3944,7 @@ class Detector:
             if ref is not None:
                 name = ref.get(q("w:val"))
             else:
-                defaults = [s for s in styles.findall(q("w:style")) if s.get(q("w:type")) == kind
-                            and s.get(q("w:default")) in ("1", "true", "on")] if styles is not None else []
+                defaults = self.default_source_styles(kind)
                 if len(defaults) > 1:
                     return None
                 name = defaults[0].get(q("w:styleId")) if defaults else None
@@ -2349,6 +3991,14 @@ class Detector:
                     return None
         if scope_only:
             return (), ()  # Scope text/spacers need boundary validation, not option coordinates.
+        if checkbox_indent:
+            # A box at the exact start has one first-line coordinate. No tab
+            # precedes it, so stored stops cannot move it. Competing firstLine
+            # and hanging remain unresolved.
+            if self.ptext(slot.el)[0][:1] not in (BOX, CHECKED) or (
+                    indent.get('hanging', 0) and indent.get('firstLine', 0)):
+                return None
+            return indent.get('left', 0) + indent.get('firstLine', 0) - indent.get('hanging', 0)
         # A hanging indent creates another implicit stop; do not erase it by
         # pretending that the explicit center list is the entire layout.
         if indent.get("hanging", 0) or indent.get("firstLine", 0):
@@ -2362,7 +4012,17 @@ class Detector:
         Style toggle/conditional overrides are deliberately not guessed: an
         enabled hide marker anywhere in the applicable ancestry remains unresolved.
         This is separate from region_hidden, which checks checkbox containment.
+        Physical reads stay fresh between calls; within one detect() pass, which
+        changes no XML, each slot is read once.
         """
+        if self._visible is None:
+            return self._tab_source_visible(slot)
+        known = self._visible.get(id(slot))
+        if known is None:
+            known = self._visible[id(slot)] = (slot, self._tab_source_visible(slot))
+        return known[1]
+
+    def _tab_source_visible(self, slot):
         hide = {q("w:vanish"), q("w:webHidden"), q("w:specVanish")}
         def unhidden(node):
             return node is None or not any(n.tag in hide and n.get(q("w:val"), "1")
@@ -2378,8 +4038,7 @@ class Detector:
             if refs:
                 name = refs[0].get(q("w:val"))
             else:
-                defaults = [s for s in styles.findall(q("w:style")) if s.get(q("w:type")) == kind
-                            and s.get(q("w:default")) in ("1", "true", "on")] if styles is not None else []
+                defaults = self.default_source_styles(kind)
                 if len(defaults) > 1:
                     return False
                 if not defaults:
@@ -2665,6 +4324,7 @@ class Detector:
                         complete = False;problem = "A marked spacer or unresolved layout boundary separates the source."
             if not complete or len(pending) != len(candidates):
                 self.notes.append("Tab-column options at " + cell.id + ": " + problem + " Printed source: " + source)
+                self.coverage_issue(cell, 'tab_column_withdrawal', self.notes[-1])
                 # ⚠️ A REFUSED SOURCE'S TEXT LINES ARE HELD WITH ITS ROWS (CI 36479289351): claiming only the rows left
                 # the literal header to the text-option rule, which offered the header's words as options and would have
                 # ticked the header line while the row's own boxes stayed empty. A line with its own box or blank is
@@ -2954,6 +4614,28 @@ class Detector:
             if reason:
                 self.notes.append("Coded column sequence at " + cell.id + ": " + reason + " Printed source: "
                                   + " | ".join(self.ptext(p.el)[0] for p in cell.children if p.kind == "p"))
+                # A separately proved request before the header owns only its
+                # caption/plain blanks. The refused coded controls still need
+                # exclusions of their own; excluding the whole cell would also
+                # exclude that independent supported answer.
+                requests = [area for area in self.areas if self.host_cell(area.slot) is cell and any(
+                    ref.get('relation') == 'parenthetical_write_request' for ref in area.source_questions)]
+                header = next((p for p in cell.children if p.kind == 'p' and self.literal_column_header(p)), None)
+                owned = {id(p.el) for area in requests for p in [area.slot, *area.extra_slots, area.label_slot] if p is not None}
+                prefix = [p for p in cell.children if header is not None and p.seq < header.seq]
+                separate = (reason == 'A printed title requests its own answer.' and requests and header is not None
+                            and all(p.kind == 'p' and (id(p.el) in owned or self.plain_spacing_paragraph(p, unused_tab_stops=True))
+                                    for p in prefix))
+                if separate:
+                    earlier = [issue for issue in self.coverage_issues if issue['part'] == cell.part
+                               and issue['slot'] == cell.path and issue['code'] == 'tab_column_withdrawal']
+                    self.coverage_issues[:] = [issue for issue in self.coverage_issues if issue not in earlier]
+                    for prior in earlier:
+                        for row in rows:
+                            self.coverage_issue(row, prior['code'], prior['detail'] +
+                                ' The independent prefix request is mapped separately; this exact coded row remains unsupported.')
+                for unresolved in rows if separate else [cell]:
+                    self.coverage_issue(unresolved, 'unmapped_answer', self.notes[-1])
                 # Its text lines are held, as a refused tab-column source's are: no weaker rule re-reads its title or
                 # header as a question of their own words. Its rows go on to the checkbox rule, which notes each one.
                 for paragraph in (s for s in cell.children if s.kind == "p" and self.text_only_line(s)):
@@ -2973,6 +4655,417 @@ class Detector:
                     self.notes.append("Layout verification required for coded-column answer at " + row.id +
                                       ". Printed question: " + area.label + ". Section: " + area.context)
 
+    def rule_merged_checkbox_hierarchy(self):
+        """One column question and a two-row merged item own parent alternatives.
+
+        A colon parent's uniformly indented children are separate from the
+        unindented peer in the next row of that same printed item. Unknown
+        merge, header, indentation or scope remains held rather than flattened.
+        """
+        ref = lambda slot: {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+        for table in [s for s in self.index.slots if s.kind == 'tbl' and s.part == 'word/document.xml']:
+            rows = self.grid(table)
+            for row, cells in rows.items():
+                for cell in cells:
+                    paragraphs = self.own_paragraphs(cell)
+                    units = [self.box_units(p) for p in paragraphs]
+                    if (len(paragraphs) < 3 or any(len(u) != 1 for u in units)
+                            or any(u[0][2].strip() for u in units) or not units[0][0][1].strip().endswith(':')):
+                        continue
+                    # Ordinary unindented option lists keep their established
+                    # flat behavior; indentation is essential to this shape.
+                    positions = [self.tab_column_properties(p, checkbox_indent=True) for p in paragraphs]
+                    if all(position == positions[0] for position in positions) and positions[0] is not None:
+                        continue
+                    column = cell.info['col']
+                    heads = [c for c in cells if c.info['col'] + c.info['span'] == column
+                             and c.info['vmerge'] == 'restart']
+                    if len(heads) != 1:
+                        for p in paragraphs:
+                            self.coverage_issue(p, 'unmapped_answer',
+                                'These indented controls follow a colon parent, but their complete printed item scope is unresolved. Review the parent and child questions separately.')
+                            self.claimed.add(id(p.el))
+                        continue
+                    head = heads[0]
+                    spanned = self.merge_rows(table, head)
+                    peer = next((c for c in rows.get(row + 1, []) if c.info['col'] == column), None)
+                    tail = next((c for c in rows.get(row + 1, []) if c.info['col'] == head.info['col']), None)
+                    if peer is None or tail is None:
+                        for p in paragraphs:
+                            self.coverage_issue(p, 'unmapped_answer',
+                                'This indented parent/subtype question lacks its complete peer row; review the exact original scope.')
+                            self.claimed.add(id(p.el))
+                        continue
+                    peer_paragraphs = self.own_paragraphs(peer)
+                    peer_units = [self.box_units(p) for p in peer_paragraphs]
+                    headers = [c for r in self.header_rows(table) if r < row for c in rows[r]
+                               if c.info['col'] == column and c.info['span'] == cell.info['span']]
+                    header = headers[-1] if headers else None
+                    source_cells = [c for c in (header, head, tail, cell, peer) if c is not None]
+                    source_paragraphs = [p for c in source_cells for p in self.own_paragraphs(c)]
+                    eligible = (header is not None and spanned == [row, row + 1]
+                        and all(c.info['span'] == 1 for c in source_cells)
+                        and cell.info['vmerge'] is None and peer.info['vmerge'] is None
+                        and header.info['vmerge'] is None and tail.info['vmerge'] == 'continue'
+                        and len(self.own_paragraphs(header)) == 1 and len(self.own_paragraphs(head)) == 1
+                        and all(self.plain_spacing_paragraph(p, unused_tab_stops=True) for p in self.own_paragraphs(tail))
+                        and not self.cell_text(tail).strip()
+                        and len(peer_paragraphs) == 1 and len(peer_units[0]) == 1 and not peer_units[0][0][2].strip()
+                        and all(c.kind == 'p' for source_cell in source_cells for c in source_cell.children)
+                        and all(self.tab_source_visible(p) and not self.region_hidden(p.el) for p in source_paragraphs)
+                        and not any(node.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX, q('w:hyperlink'))
+                                    for p in source_paragraphs for node in p.el.iter()))
+                    label = self.cell_text(header).strip() if header is not None else ''
+                    item = self.cell_text(head).strip()
+                    parent_label = clean_label(units[0][0][1])
+                    peer_option = option_text(peer_units[0][0][1]) if len(peer_paragraphs) == 1 and peer_units[0] else ''
+                    child_options = [option_text(u[0][1]) for u in units[1:]]
+                    options = [parent_label, peer_option]
+                    peer_position = self.tab_column_properties(peer_paragraphs[0], checkbox_indent=True) if peer_paragraphs else None
+                    eligible = (eligible and positions[0] is not None and positions[0] == peer_position
+                        and positions[1] is not None and positions[1] > positions[0]
+                        and all(position == positions[1] for position in positions[1:])
+                        and item.endswith(':') and label and (':' in label or '?' in label)
+                        and len(label) <= MAX_MAPPING_LABEL and len(parent_label) <= MAX_MAPPING_LABEL
+                        and len(set(options)) == 2 and all(options) and len(set(child_options)) == len(child_options)
+                        and all(child_options) and not any(':' in option or '?' in option for option in [peer_option, *child_options])
+                        and not self.box_units(self.own_paragraphs(head)[0])
+                        and header is not None and not self.box_units(self.own_paragraphs(header)[0]))
+                    texts = [self.text(p.el).strip() for p in source_paragraphs]
+                    eligible = eligible and not any(self.blank_spans(*self.ptext(p.el)) for p in source_paragraphs
+                                                   if p not in self.own_paragraphs(tail))
+                    context = self.context_for(paragraphs[0], complete=True)
+                    preceding = self.previous_continuous_paragraph(table)
+                    context_sources = [preceding] if preceding is not None else []
+                    human = any(self.checkbox_source_action(LIST_MARKER.sub('', clause.strip()), governing=True)
+                        or signing_place(clause) for text in [*texts, *[u[0][1] for u in [*units, *peer_units] if u],
+                            *context.split(' > '),
+                            *(self.text(p.el).strip() for p in context_sources)]
+                        for clause in [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip())
+                    problem = 'The merged item, parent alternatives and indented child question need exact source review.'
+                    if human:
+                        self.protected_regions.update([cell.id, peer.id])
+                        eligible = False
+                        problem = 'This parent/subtype source contains a human-owned response or signing act; keep it unchanged.'
+                    if eligible:
+                        own = {id(p.el) for p in source_paragraphs}
+                        # An existing tick is a state, not an imperative such
+                        # as 'check one'. Read the complete printed label after
+                        # each proved control; retain all other source clauses.
+                        commands = [self.box_units(p)[0][1] if len(self.box_units(p)) == 1 else self.text(p.el)
+                                    for p in source_paragraphs]
+                        decisions = [self.cardinality(question, choices, local=commands, own=own, context=context)
+                                     for question, choices in ((label, options), (parent_label, child_options))]
+                        eligible = (len(context) <= MAX_MAPPING_CONTEXT
+                            and all(not decision.get('problem') and decision.get('kind') == 'choice'
+                                    for decision in decisions)
+                            and not self.scope_limit(own, subject_stems(label, context, *options)))
+                    if not eligible:
+                        for p in [*paragraphs, *peer_paragraphs]:
+                            self.coverage_issue(p, 'unmapped_answer', problem)
+                            self.claimed.add(id(p.el))
+                        continue
+                    root_boxes = [units[0][0][0], peer_units[0][0][0]]
+                    groups = [(label, options, root_boxes, None),
+                              (parent_label, child_options, [u[0][0] for u in units[1:]], root_boxes[0])]
+                    for question, choices, boxes, parent in groups:
+                        anchors = [self.index.by_id.get(box['part'] + '#' + box['slot'])
+                                   or next(p for p in [*paragraphs, *peer_paragraphs] if box in [u[0] for u in self.box_units(p)])
+                                   for box in boxes]
+                        relation = {'relation': 'merged_checkbox_hierarchy', 'sources': [ref(table), *[ref(c) for c in source_cells]],
+                            'bands': [ref(cell), ref(peer)], 'parent': parent, 'question': question,
+                            'context': context, 'options': choices, 'cardinality': 'choice'}
+                        self.add(Area('choice', question, anchors[0], {'type': 'checkboxes', 'boxes': boxes}, context=context,
+                            options=choices, complete_source=True, source_questions=[relation],
+                            extra_slots=list(dict.fromkeys(s for s in anchors[1:] if s is not anchors[0]))))
+                    # The column question, item label and merge tail are this
+                    # hierarchy's own printed source (its 'sources', which fill
+                    # binds): never a separate answer place for a later rule.
+                    self.claimed.update(id(p.el) for p in [*source_paragraphs, *paragraphs, *peer_paragraphs])
+
+    def checkbox_label_size(self, paragraph, position):
+        """Explicit printed label size, never the checkbox glyph's font.
+
+        Inherited/mixed sizes cannot establish a parent/child relationship.
+        Delimiter and blank-rule glyphs are not words in the option label.
+        """
+        text, pieces = self.ptext(paragraph.el)
+        boxes = [i for i, char in enumerate(text) if char in (BOX, CHECKED)]
+        start = boxes[position] + 1
+        stop = boxes[position + 1] if position + 1 < len(boxes) else len(text)
+        sizes = set()
+        for piece in pieces:
+            ink = text[max(start, piece.start):min(stop, piece.end)]
+            if not any(char.isalpha() for char in ink):
+                continue
+            if piece.run is None or hyperlink_run(piece.run):
+                return None
+            node = piece.run.find('./' + q('w:rPr') + '/' + q('w:sz'))
+            if node is None or not str(node.get(q('w:val'), '')).isdigit():
+                return None
+            sizes.add(int(node.get(q('w:val'))))
+        return next(iter(sizes)) if len(sizes) == 1 else None
+
+    def rule_bracketed_checkbox_hierarchy(self):
+        """A complete membership panel owns a finite two-line option tree.
+
+        One colon parent continues the root-size options; its smaller child
+        labels contain one explicitly bracketed sub-list. Every control and
+        delimiter is accounted for. Other shapes remain source-held, rather
+        than flattening parents and children into mutually exclusive peers.
+        """
+        for cell in [s for s in self.index.slots if s.kind == 'tc' and s.part == 'word/document.xml']:
+            paragraphs = self.own_paragraphs(cell)
+            for n, first in enumerate(paragraphs[:-1]):
+                first_units = self.box_units(first)
+                second = paragraphs[n + 1]
+                units = self.box_units(second)
+                if (len(first_units) < 2 or len(units) != 5 or not first_units[0][2].strip().endswith(':')
+                        or units[0][2].strip() or not units[0][1].strip().endswith(':')
+                        or '[' not in units[1][1] or ']' not in units[3][1]):
+                    continue
+                source = [p for p in paragraphs[:n] if self.text(p.el).strip()]
+                problem = 'The printed parent, child options and selection permission need exact source review.'
+                eligible = (len(source) == 2 and all(not self.box_units(p)
+                    and not self.blank_spans(*self.ptext(p.el)) for p in source)
+                    and all(p.kind == 'p' for p in cell.children)
+                    and all(self.tab_source_visible(p) and not self.region_hidden(p.el) for p in [*source, first, second])
+                    and not any(node.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX, q('w:hyperlink'))
+                                for p in [*source, first, second] for node in p.el.iter()))
+                title = self.text(source[0].el).strip() if source else ''
+                instruction = self.text(source[-1].el).strip() if source else ''
+                membership = re.fullmatch(r'(?:[^;?!\r\n]+\.\s+)?(?:Please\s+)?indicate\s+if\s+any\s+of\s+the\s+'
+                    r'[^.;:?!\r\n]+\s+below\s+are\s+[^.;:?!\r\n]+\.?', instruction, re.I)
+                explicit_many = many_evidence([instruction], [option_text(u[1]) for u in first_units])[0]
+                eligible = eligible and bool(membership or explicit_many)
+                texts = [self.text(p.el).strip() for p in [*source, first, second]]
+                human_texts = [*texts, first_units[0][2], *[unit[1] for unit in [*first_units, *units]]]
+                human = any(self.checkbox_source_action(LIST_MARKER.sub('', clause.strip()), governing=True)
+                    or signing_place(clause) for text in human_texts
+                    for clause in [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip())
+                if human:
+                    self.protected_regions.update([first.id, second.id])
+                    eligible = False
+                    problem = 'The printed hierarchy contains a human-owned signing or response act; keep it unchanged.'
+                parent = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+):\s*', units[0][1])
+                branch = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+)\s*\[\s*', units[1][1])
+                inside = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+?)\s*', units[2][1])
+                close = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+?)\s*\]\s*,?\s*', units[3][1])
+                tail = re.fullmatch(r'\s*([^:;?!\[\]\r\n]+?)\s*:\s*_+\s*', units[4][1])
+                eligible = eligible and all((parent, branch, inside, close, tail))
+                second_text = self.ptext(second.el)[0]
+                eligible = eligible and second_text.count('[') == 1 and second_text.count(']') == 1
+                # The proven bracket contains its two child controls, not a
+                # separate scalar blank. Other bracket/blank extents stay held.
+                bracket = (second_text.find('['), second_text.find(']') + 1)
+                spans = [span for span in self.blank_spans(*self.ptext(second.el))
+                         if not (span[:2] == bracket and span[2] == 'bracket')]
+                eligible = (eligible and len(spans) == 1 and spans[0][2] == 'blank'
+                            and set(self.ptext(second.el)[0][spans[0][0]:spans[0][1]]) == {'_'})
+                root_sizes = [self.checkbox_label_size(first, i) for i in range(len(first_units))]
+                sizes = [self.checkbox_label_size(second, i) for i in range(5)]
+                eligible = (eligible and root_sizes[0] is not None and all(s == root_sizes[0] for s in root_sizes)
+                            and sizes[0] == root_sizes[0] and sizes[1] is not None and sizes[1] < sizes[0]
+                            and all(s == sizes[1] for s in sizes[1:]))
+                root_label = clean_label(first_units[0][2])
+                context = ' > '.join(x for x in (title, instruction) if x)
+                own = {id(p.el) for p in [*source, first, second]}
+                group_options = [[option_text(u[1]) for u in first_units] + ([parent[1].strip()] if parent else []),
+                                 [branch[1].strip(), tail[1].strip()] if branch and tail else [],
+                                 [inside[1].strip(), close[1].strip()] if inside and close else []]
+                if eligible:
+                    # A binary question and every complete one/count command
+                    # retain the established cardinality guard. Membership is
+                    # local to this exact panel, never a global option alias.
+                    eligible = not any(all(YESNO.match(o) for o in opts) for opts in group_options)
+                    eligible = eligible and not one_only(texts, texts) and not any(
+                        limit_language(clause, local=True) for text in texts for clause in _clauses(text))
+                    eligible = eligible and not self.scope_limit(own, subject_stems(root_label, context, *group_options[0]))
+                    eligible = eligible and len(context) <= MAX_MAPPING_CONTEXT
+                if not eligible:
+                    for p in (first, second):
+                        self.coverage_issue(p, 'unmapped_answer', problem)
+                        self.claimed.add(id(p.el))
+                    continue
+                ref = lambda p: {'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+                grouping = [(root_label, [*first_units, units[0]], None),
+                            (parent[1].strip(), [units[1], units[4]], units[0][0]),
+                            (branch[1].strip(), [units[2], units[3]], units[1][0])]
+                child_owner = None
+                for position, (label, controls, required_parent) in enumerate(grouping):
+                    boxes = [unit[0] for unit in controls]
+                    anchors = [self.index.by_id.get(box['part'] + '#' + box['slot'])
+                               or (first if box in [u[0] for u in first_units] else second) for box in boxes]
+                    anchor = anchors[0]
+                    relation = {'relation': 'bracketed_checkbox_hierarchy', 'sources': [ref(p) for p in [cell, *source, first, second]],
+                        'bands': [ref(first), ref(second)], 'parent': required_parent,
+                        'question': label, 'context': context, 'options': group_options[position], 'cardinality': 'multi_choice'}
+                    area = Area('multi_choice', label, anchor, {'type': 'checkboxes', 'boxes': boxes},
+                        context=context, options=group_options[position], complete_source=True,
+                        source_questions=[relation], extra_slots=list(dict.fromkeys(s for s in anchors[1:] if s is not anchor)))
+                    self.add(area)
+                    if position == 1:
+                        child_owner = area
+                label = tail[1].strip()
+                write_context = ' > '.join((context, child_owner.label,
+                    'Only when the printed option ' + label + ' is selected'))
+                start, end, shape = spans[0]
+                relation = {'relation': 'adjacent_checkbox_answer', 'question': label, 'context': write_context,
+                    'source': ref(second), 'owner': ref(child_owner.slot), 'owner_label': child_owner.label,
+                    'owner_context': child_owner.context, 'owner_kind': child_owner.kind,
+                    'owner_options': list(child_owner.options), 'owner_target': dict(child_owner.target),
+                    'condition': 'printed_option', 'control': dict(units[4][0]), 'option_index': 1,
+                    'printed_option': label, 'source_text': self.ptext(second.el)[0]}
+                self.add(Area('text', label, second, {'type': 'span', 'start': start, 'end': end, 'shape': shape},
+                    context=write_context, complete_source=True, source_questions=[relation]))
+                self.claimed.update(id(p.el) for p in [*source, first, second])
+
+    def table_selection_source(self, table):
+        """One visible caption owns its immediately following original table.
+
+        A plain title may intervene only when it repeats the first printed
+        column header plus 'Table'. Other questions, tables, wrappers and
+        foreign/hidden source terminate this relationship; it never continues
+        a selection command into another table or section.
+        """
+        if not self._table_instructions:
+            return None  # exact former source representation, used only for legacy binding below
+        key = ('table-selection-source', id(table))
+        if key in self._grid:
+            return self._grid[key]
+        self._grid[key] = None
+        unsafe = {SDT, q('w:hyperlink'), TXBX, q('w:drawing'), q('w:pict'), q('w:object'),
+                  q('w:customXml'), q('w:ins'), q('w:del'), q('w:moveFrom'), q('w:moveTo')}
+        def plain(slot, controls=False):
+            paragraphs = ([slot] if slot.kind == 'p' else
+                          [p for cells in self.grid(slot).values() for cell in cells
+                           for p in self.own_paragraphs(cell)] if slot.kind == 'tbl' else [])
+            return (not any(not isinstance(n.tag, str) or n.tag in unsafe
+                            or not n.tag.startswith('{' + W + '}')
+                            or not controls and n.tag in (FLDCHAR, q('w:instrText')) for n in slot.el.iter())
+                    and all(self.tab_source_visible(p) for p in paragraphs))
+        if (table.parent is not None or table.el.getparent().tag != q('w:body')
+                or not plain(table, controls=True)
+                or len(list(table.el.iter(q('w:tbl')))) != 1
+                or any((n.text or '').strip().upper() != 'FORMCHECKBOX'
+                       for n in table.el.iter(q('w:instrText')))
+                or any(n.get(q('w:fldCharType')) == 'begin'
+                       and n.find('./' + q('w:ffData') + '/' + q('w:checkBox')) is None
+                       or n.get(q('w:fldCharType')) not in ('begin', 'separate', 'end')
+                       for n in table.el.iter(FLDCHAR))):
+            return None
+        sources = []
+        node = table.el.getprevious()
+        while node is not None and len(sources) < 6:
+            slot = self.index.by_el.get(id(node))
+            if slot is None or slot.kind != 'p' or slot.parent is not None or not plain(slot):
+                return None
+            sources.append(slot)
+            if self.text(node).strip():
+                break
+            node = node.getprevious()
+        if not sources or not self.text(sources[-1].el).strip():
+            return None
+        last = sources[-1]
+        if re.fullmatch(r'.+\s+Table', self.text(last.el).strip(), re.I):
+            first = self.grid(table).get(0, [])
+            if not first or not first[0].children or not all(plain(p) for p in self.own_paragraphs(first[0])):
+                return None
+            header = self.cell_text(first[0])
+            if self.text(last.el).strip().casefold() != (header + ' Table').casefold():
+                return None
+            node = last.el.getprevious()
+            while node is not None and len(sources) < 6:
+                slot = self.index.by_el.get(id(node))
+                if slot is None or slot.kind != 'p' or slot.parent is not None or not plain(slot):
+                    return None
+                sources.append(slot)
+                if self.text(node).strip():
+                    break
+                node = node.getprevious()
+        caption = sources[-1]
+        printed = self.text(caption.el).strip()
+        match = re.fullmatch(r'(.+)\(([^()]*)\)\s*[:*]*\s*', printed)
+        command = (re.fullmatch(r'(?:please\s+)?(?:select|check|tick|choose|mark|circle)\s+'
+                    r'(?:all(?:\s+(?:that\s+apply|applicable(?:\s+(?:boxes|options|answers))?))?|'
+                    r'(?:only\s+)?one(?:\s+(?:box|option|answer))?(?:\s+only)?)', match[2].strip(), re.I)
+                   if match else None)
+        if (not command or WIDER_REACH.search(printed) or len(printed) > MAX_MAPPING_LABEL
+                or self.blank_spans(*self.ptext(caption.el)) or self.box_units(caption)):
+            return None
+        single = bool(CHECK_ONE.search(match[2]))
+        if not single and not positive_command(match[2]) or single and not self.parallel_table_options(table):
+            # A bare one-only command over several row questions cannot decide
+            # whether one applies to the table or each row. Only the complete
+            # flat option list can own that single selection without guessing.
+            return None
+        result = {'caption': caption, 'table': table, 'printed': printed,
+                  'sources': [*reversed(sources), table]}
+        result['references'] = [{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)}
+                                for s in result['sources']]
+        self._grid[key] = result
+        return result
+
+    def table_selection_owners(self):
+        key = 'table-selection-owners'
+        if key not in self._grid:
+            self._grid[key] = {id(source['caption'].el): table.el
+                for table in self.index.slots if table.kind == 'tbl'
+                for source in [self.table_selection_source(table)] if source}
+        return self._grid[key]
+
+    def parallel_table_options(self, table):
+        rows = self.grid(table)
+        if len(rows) != 1 or not 2 <= len(rows.get(0, [])) <= 8:
+            return False
+        cells = rows[0]
+        if any(c.info['span'] != 1 or c.info['vmerge'] or c.el.getparent().tag != q('w:tr') for c in cells):
+            return False
+        units = []
+        for cell in cells:
+            for paragraph in self.own_paragraphs(cell):
+                printed = self.text(paragraph.el).strip()
+                options = self.box_units(paragraph)
+                if printed and not options or any(clean_label(u[2]) or not option_text(self.adjacent_option_text(u))
+                                                  for u in options):
+                    return False
+                units.extend(options)
+        options = [option_text(self.adjacent_option_text(u)) for u in units]
+        return len(options) >= 2 and len(set(o.casefold() for o in options)) == len(options)
+
+    def merge_table_option_groups(self, groups):
+        """Join a complete one-row option list laid out in parallel cells."""
+        replacements, consumed = {}, set()
+        for table in (s for s in self.index.slots if s.kind == 'tbl'):
+            source = self.table_selection_source(table)
+            rows = self.grid(table)
+            if not source or len(rows) != 1 or not 2 <= len(rows.get(0, [])) <= 8:
+                continue
+            cells = rows[0]
+            if any(c.info['span'] != 1 or c.info['vmerge'] or c.el.getparent().tag != q('w:tr') for c in cells):
+                continue
+            selected = [(i, g) for i, g in enumerate(groups)
+                        if self.host_cell(g['paras'][0]) in cells]
+            if (len(selected) < 2 or any(self.host_cell(p) not in cells for _, g in selected for p in g['paras'])
+                    or any(clean_label(u[2]) or not option_text(self.adjacent_option_text(u))
+                           for _, g in selected for u in g['units'])):
+                continue
+            paragraphs = [p for c in cells for p in self.own_paragraphs(c)]
+            covered = {id(p.el) for _, g in selected for p in g['paras']}
+            if any(self.text(p.el).strip() and (id(p.el) not in covered or not self.box_units(p)) for p in paragraphs):
+                continue
+            all_boxes = [u[0] for p in paragraphs for u in self.box_units(p)]
+            units = [u for _, g in selected for u in g['units']]
+            options = [option_text(self.adjacent_option_text(u)) for u in units]
+            if (all_boxes != [u[0] for u in units] or len(options) < 2
+                    or len(set(o.casefold() for o in options)) != len(options)):
+                continue
+            first = selected[0][0]
+            replacements[first] = {'paras': [p for _, g in selected for p in g['paras']], 'units': units,
+                                   'question_from_cell': False, 'whole_table_options': source}
+            consumed.update(i for i, _ in selected[1:])
+        return [replacements.get(i, g) for i, g in enumerate(groups) if i not in consumed]
+
     def rule_checkboxes(self, leftovers=False):
         # paragraph-level units, then grouping. A cell holding ONLY a box under a column header is left for the
         # option-grid rule; whatever that rule does not take comes back here (leftovers=True) - never dropped.
@@ -2987,17 +5080,20 @@ class Detector:
                 self.notes.append("Coded checkbox options at " + s.id +
                                   " need their complete printed header and layout; response codes are not option labels. "
                                   "Printed source: " + txt)
+                self.coverage_issue(s, 'coded_checkbox_withdrawal', self.notes[-1])
                 self.claimed.add(id(s.el))
                 continue
             if (any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(s.el))
                     or any(hyperlink_control(node) for node in checkbox_nodes(s.el))):
                 self.notes.append("A checkbox inside a fixed hyperlink was kept unchanged. Location: " + s.id)
+                self.coverage_issue(s, 'unmapped_answer', self.notes[-1])
                 self.claimed.add(id(s.el))
                 continue
             if self.region_hidden(box_region(s.el)):
                 # ⚠️ Its boxes cannot all be seen: no question is read from it (round 3 F1).
                 self.notes.append("A line holds a checkbox QuillMD cannot read in place, so it was left for manual "
                                   "mapping: %s" % clean_label(txt)[:60])
+                self.coverage_issue(s, 'unmapped_answer', self.notes[-1])
                 self.claimed.add(id(s.el))
                 continue
             units = self.box_units(s)
@@ -3048,7 +5144,7 @@ class Detector:
                 continue
             current = {"paras": [pslot], "units": list(units), "question_from_cell": False}
             groups.append(current)
-        for g in groups:
+        for g in self.merge_table_option_groups(groups):
             self.emit_checkbox_group(g)
 
     def pure_option_cell(self, cell, pslot, unit) -> bool:
@@ -3082,6 +5178,203 @@ class Detector:
             out.append(cur)
         return out
 
+    def nested_cell_partition(self, table):
+        """Prove independent question cells, never a shared row/column option grid.
+
+        Each physical cell must begin with its own complete printed caption.
+        A header-only cell, a nested grid, hidden source or competing first
+        paragraph prevents this proof; no neighbouring caption is borrowed.
+        """
+        questions = {}
+        cells = [slot for slot in self.index.slots if slot.kind == 'tc' and slot.parent is table]
+        if not cells:
+            return None
+        for cell in cells:
+            if any(slot.kind == 'tbl' for slot in cell.children) or self.region_hidden(cell.el):
+                return None
+            paragraphs = self.own_paragraphs(cell)
+            first = next((slot for slot in paragraphs if self.text(slot.el).strip()), None)
+            if first is None:
+                return None
+            caption = self.text(first.el).strip()
+            _, _, source_problem = self.question_box_paragraph(first.el)
+            if (source_problem or not self.tab_source_visible(first)
+                    or not caption.endswith((':', '?')) or self.box_units(first)
+                    or self.blank_spans(*self.ptext(first.el))
+                    or len(caption) > MAX_MAPPING_LABEL
+                    or any(not self.plain_spacing_paragraph(slot) for slot in paragraphs[:paragraphs.index(first)])):
+                return None
+            questions[cell.id] = first
+        return questions
+
+    def nested_cell_checkbox_source(self, group, table, cell, questions, outer):
+        """One independently captioned cell owns exactly its complete option group."""
+        if len(group['units']) < 2:
+            # A lone alternative beside a scalar question may accompany an
+            # independent date/text destination. Do not claim that caption as
+            # the checkbox's whole question; leave its box explicitly held.
+            return None
+        question = questions[cell.id]
+        paragraphs = self.own_paragraphs(cell)
+        boxes = [slot for slot in paragraphs if self.box_units(slot)]
+        if ({slot.id for slot in boxes} != {slot.id for slot in group['paras']}
+                or any(self.owning_cell(slot) is not cell for slot in group['paras'])
+                or any(len(self.box_units(slot)) != 1 for slot in boxes)):
+            return None
+        if any(slot is not question and slot not in boxes and (
+                self.text(slot.el).strip() or not self.plain_spacing_paragraph(slot)) for slot in paragraphs):
+            return None
+        if any(self.blank_spans(*self.ptext(slot.el)) or not self.tab_source_visible(slot) for slot in boxes):
+            return None
+        before = [slot for slot in outer.children if slot.seq < table.seq]
+        if any(slot.kind != 'p' for slot in before):
+            return None
+        sources = [slot for slot in before if self.text(slot.el).strip()]
+        if any(not self.plain_spacing_paragraph(slot) for slot in before if slot not in sources):
+            return None
+        inherited, problem = self.question_box_context(outer.parent, require_visible=True)
+        label = self.text(question.el).strip()
+        context = ' > '.join(x for x in (inherited, *(self.text(slot.el).strip() for slot in sources)) if x)
+        if (problem or len(context) > MAX_MAPPING_CONTEXT
+                or any(not self.tab_source_visible(slot) for slot in sources)):
+            return None
+        # The exact caption and inherited source appoint an author or an act;
+        # incidental words in an ordinary clinical caption do not do so.
+        def action(value):
+            caption = LIST_MARKER.sub('', str(value or '').strip())
+            return bool(self.checkbox_source_action(caption, governing=True) or signing_place(caption))
+        if action(label) or any(action(value) for value in [context, *(self.text(slot.el).strip() for slot in sources)]):
+            self.protected_regions.add(cell.id if action(label) else table.id)
+            return None
+        relation = {'relation': 'nested_cell_options', 'sources': [
+            {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+            for slot in [outer, table, question, *sources]]}
+        return {'label': label, 'context': context, 'cardinality': label,
+                'question_slot': question, 'relation': relation,
+                'write_context': ' > '.join(x for x in (context, label) if x),
+                'source_slots': sources + [question] + [slot for slot in paragraphs if not self.text(slot.el).strip()],
+                'option_paras': boxes, 'local_cell_owner': True}
+
+    def rule_scalar_alternatives(self):
+        """A printed Or control is an alternative to one proven empty scalar.
+
+        This deferred proof uses the immutable original's already detected
+        scalar, never a reviewed label. Independent nested captions and one
+        complete control must occupy the same cell. Other questions, blanks,
+        hidden source and unknown native states retain the original hold.
+        """
+        for cell in [slot for slot in self.index.slots if slot.kind == 'tc']:
+            paragraphs = self.own_paragraphs(cell)
+            options = [(p, units[0]) for p in paragraphs for units in [self.box_units(p)]
+                       if len(units) == 1 and not units[0][2].strip()
+                       and re.fullmatch(r'Or\s+[^:;?!\n\t]{1,80}', option_text(units[0][1]), re.I)]
+            if not options:
+                continue
+            table, outer = cell.parent, cell.parent.parent
+            if (outer is None or outer.kind != 'tc' or outer.parent.parent is not None
+                    or outer.part != 'word/document.xml'
+                    or len(self.grid(outer.parent).get(outer.info['row'], [])) != 1):
+                continue
+            partition = self.nested_cell_partition(table)
+            question = partition.get(cell.id) if partition else None
+            scalars = [area for area in self.areas if self.host_cell(area.slot) is cell]
+            option_p, unit = options[0]
+            problem = 'The printed Or control does not have one proven empty scalar in its own captioned cell.'
+            scalar = scalars[0] if len(scalars) == 1 else None
+            eligible = (question is not None and scalar is not None and len(options) == 1
+                        and scalar.slot is question and scalar.kind in ('text', 'date', 'time')
+                        and not scalar.protection and not scalar.extra_slots
+                        and scalar.target == {'type': 'span', 'start': len(self.ptext(question.el)[0]),
+                            'end': len(self.ptext(question.el)[0]), 'shape': 'after_label'}
+                        and sum(len(self.box_units(p)) for p in paragraphs) == 1
+                        and not any(area.slot is option_p or option_p in area.extra_slots for area in self.areas))
+            guidance = [p for p in paragraphs if p not in (question, option_p) and self.text(p.el).strip()]
+            if eligible:
+                eligible = all(re.match(r'^Instructions?\s*:', self.text(p.el).strip(), re.I)
+                               and len(self.LABEL_COLON.findall(self.text(p.el))) == 1
+                               for p in guidance)
+                eligible = (eligible and all(self.tab_source_visible(p) and not self.blank_spans(*self.ptext(p.el))
+                            and not any(node.tag in (q('w:drawing'), q('w:pict'), q('w:hyperlink'), q('w:sectPr'))
+                                        for node in p.el.iter())
+                            for p in paragraphs)
+                            and all(self.plain_spacing_paragraph(p) for p in paragraphs
+                                    if not self.text(p.el).strip() and not self.box_units(p)))
+            before = [p for p in outer.children if p.seq < table.seq]
+            sources = [p for p in before if p.kind == 'p' and self.text(p.el).strip()]
+            inherited, inherited_problem = self.question_box_context(outer.parent, require_visible=True)
+            context = ' > '.join(x for x in (inherited, *(self.text(p.el).strip() for p in sources),
+                                 self.text(question.el).strip() if question else '',
+                                 *(self.text(p.el).strip() for p in guidance)) if x)
+            eligible = (eligible and not inherited_problem and len(context) <= MAX_MAPPING_CONTEXT
+                        and all(p.kind == 'p' and self.tab_source_visible(p) and (
+                            self.text(p.el).strip() or self.plain_spacing_paragraph(p)) for p in before))
+            # Structural context separators are not part of a caption's noun
+            # phrase. Read each complete original component and every clause;
+            # appending a section title must not turn Review of systems into
+            # an assigned review. A temporal caption still qualifies its own
+            # governing act (Manager review date), rather than erasing it.
+            source_texts = [*inherited.split(' > '), *(self.text(p.el).strip() for p in sources),
+                            *(self.text(p.el).strip() for p in paragraphs)]
+            clauses = [LIST_MARKER.sub('', clause.strip()) for text in source_texts
+                       for clause in [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip()]
+            human = any(self.checkbox_source_action(text, governing=True) or signing_place(text)
+                        for text in clauses)
+            if scalar is not None and scalar.kind == 'date' and question is not None:
+                temporal = DATE_LABEL.sub(' ', LIST_MARKER.sub('', self.text(question.el).strip()))
+                human = human or bool(self.checkbox_source_action(temporal, governing=True)
+                    or signing_place(temporal) or BOX_SIGNING_VERB.search(temporal)
+                    and not self.ordinary_source_kind([temporal], 'signature'))
+            if human:
+                self.protected_regions.add(cell.id)
+                eligible = False
+            if eligible:
+                decision = self.cardinality(self.text(question.el), ['Scalar answer', option_text(unit[1])],
+                    local=[self.text(p.el) for p in guidance], own={id(p.el) for p in paragraphs},
+                    context=context)
+                eligible = not decision.get('problem') and decision.get('kind') == 'choice'
+            if eligible:
+                box = unit[0]
+                state = box_state(self.index, box)
+                if box['kind'] == 'ff':
+                    native = self.index.by_id.get(box['part'] + '#' + box['slot'])
+                    fc = native.el.find(FLDCHAR) if native else None
+                    data = fc.find(q('w:ffData')) if fc is not None else None
+                    controls = data.findall(q('w:checkBox')) if data is not None else []
+                    valid = len(controls) == 1 and all(len(controls[0].findall(q(tag))) <= 1
+                        and all(n.get(q('w:val')) in (None, '1', 'true', 'on', '0', 'false', 'off')
+                                for n in controls[0].findall(q(tag))) for tag in ('w:checked', 'w:default'))
+                    eligible = valid and (state is True or state is False)
+                elif box['kind'] == 'sdt':
+                    native = self.index.by_id.get(box['part'] + '#' + box['slot'])
+                    controls = native.el.findall('./' + q('w:sdtPr') + '/' + q('w14:checkbox')) if native else []
+                    eligible = (len(controls) == 1 and len(controls[0].findall(q('w14:checked'))) <= 1
+                        and all(n.get(q('w14:val')) in (None, '1', 'true', '0', 'false')
+                                for n in controls[0].findall(q('w14:checked')))
+                        and (state is True or state is False))
+                else:
+                    eligible = state is True or state is False
+            if not eligible:
+                for p in dict.fromkeys([*( [question] if question else []), *[p for p, _ in options]]):
+                    self.coverage_issue(p, 'scalar_alternative_source', problem)
+                continue
+            ref = lambda p: {'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+            anchor = self.index.by_id[unit[0]['part'] + '#' + unit[0]['slot']]
+            relation = {'relation': 'scalar_checkbox_alternative', 'scalar': ref(scalar.slot),
+                'scalar_target': dict(scalar.target), 'scalar_kind': scalar.kind, 'scalar_label': scalar.label,
+                'scalar_context': scalar.context, 'cell': ref(cell), 'sources': [ref(p) for p in dict.fromkeys(
+                    [outer, table, cell, question, option_p, *sources, *guidance])], 'original_checked': state}
+            self.add(Area('checkbox', option_text(unit[1]), anchor,
+                {'type': 'checkboxes', 'boxes': [unit[0]]}, context=context, options=[option_text(unit[1])],
+                complete_source=True, source_questions=[relation], label_slot=question))
+            removed = {issue['detail'] for issue in self.coverage_issues
+                       if issue['part'] == option_p.part and issue['slot'] == option_p.path
+                       and issue['code'] == 'nested_options'}
+            self.coverage_issues[:] = [issue for issue in self.coverage_issues
+                if not (issue['part'] == option_p.part and issue['slot'] == option_p.path
+                        and issue['code'] == 'nested_options')]
+            self.notes[:] = [note for note in self.notes if note not in removed
+                            or any(issue['detail'] == note for issue in self.coverage_issues)]
+
     def nested_checkbox_source(self, group):
         """One complete nested option grid belongs to its printed source question.
 
@@ -3097,6 +5390,11 @@ class Detector:
             return None
         if outer.part != "word/document.xml" or len(self.grid(outer.parent).get(outer.info["row"], [])) != 1:
             return None
+        partition = self.nested_cell_partition(table)
+        if partition:
+            local = self.nested_cell_checkbox_source(group, table, cell, partition, outer)
+            if local:
+                return local
         before = [slot for slot in outer.children if slot.seq < table.seq]
         paragraphs = [slot for slot in before if slot.kind == "p" and self.text(slot.el).strip()]
         if not paragraphs:
@@ -3106,6 +5404,8 @@ class Detector:
         problem = ""
         explicit = [slot for slot in paragraphs if "?" in self.text(slot.el)
                     or CHECK_ALL.search(self.text(slot.el)) or CHECK_ONE.search(self.text(slot.el))]
+        if not explicit and len(paragraphs) == 1 and sources[0].endswith(':'):
+            explicit = paragraphs  # one complete printed label; all structural/source guards below still apply
         if len(explicit) != 1:
             problem = "There is not one complete printed parent question."
         question = explicit[0] if len(explicit) == 1 else paragraphs[-1]
@@ -3158,9 +5458,16 @@ class Detector:
             problem = "The complete question or context exceeds limits."
         if any(self.question_box_signing(value) for value in sources + [context]):
             problem = "The complete source contains signing/consent instructions. Governing context: " + context
+            self.protected_regions.add(table.id)
         if problem:
             return {"problem": "Nested option grid at " + table.id + ": " + problem
-                    + " Printed source: " + source + " Options: " + self.text(table.el, own=False)}
+                    + " Printed source: " + source + " Options: " + self.text(table.el, own=False),
+                    "coverage_slot": table.id,
+                    # Only a proven independent-cell partition permits a
+                    # precise option-paragraph exclusion. The unsupported
+                    # group's own physical boxes remain untouched; ordinary
+                    # answers in other paragraphs/cells are not excluded.
+                    "coverage_slots": [slot.id for slot in group['paras']] if partition else [table.id]}
         return {"label": label, "context": context, "cardinality": raw_question,
                 "write_context": write_context,
                 "source_slots": paragraphs + [slot for slot in before if slot.kind == "p"
@@ -3193,6 +5500,8 @@ class Detector:
                     problem = "The complete label or context exceeds limits; nothing was shortened."
         self.notes.append("Unassigned write-in beside a nested option at " + slot.id + ". " + problem
                           + " Printed text: " + text + " Governing context: " + context)
+        for start, end, _ in spans:
+            self.coverage_issue(slot, 'unmapped_answer', self.notes[-1], start=start, end=end)
 
     def selection_guidance(self):
         """Every one-only or limited-count sentence printed in the form (limit_language: body, table cells, text
@@ -3231,7 +5540,8 @@ class Detector:
                                     else "") for i, x in enumerate(sentences)]
                     flagged = []
                     for sentence, role in entries:
-                        limit = limit_language(sentence)
+                        counted_sentence = self.count_guidance_sentence(sentence)
+                        limit = limit_language(counted_sentence)
                         if limit or floating and floating_selection(sentence):
                             flagged.append((sentence, role, limit))
                     if not flagged:
@@ -3248,9 +5558,348 @@ class Detector:
                             owner = self.label_owner(p, sentence)
                         elif role == "lead" and not WIDER_REACH.search(text_of(p, own=True)):
                             owner = self.boxes_below(p)
+                        document = self.document_count_owner(p, sentence)
+                        if document is not None:
+                            owner = document
+                        bounded = self.cell_instruction_owner(p)
+                        if bounded is not None:
+                            owner = bounded.el
+                        named = self.named_guidance_owner(p)
+                        if named is not None:
+                            owner = named.el
+                        if owner is None:
+                            owner = self.table_selection_owners().get(id(p))
                         found.append((id(p), owner, sentence, where, limit_targets(sentence) if limit else "*"))
             self._form_wide = found
         return self._form_wide
+
+    @staticmethod
+    def count_guidance_sentence(sentence):
+        """Distinguish printed predicate numbers and coordinated amounts.
+
+        Only the analysis text changes. The complete original sentence remains
+        in the mapping and source evidence; a real selection/count command
+        still reaches the established cardinality guard.
+        """
+        markers = list(re.finditer(r'\(([1-9][0-9]?)\)', sentence))
+        if (len(markers) >= 2 and [int(m[1]) for m in markers] == list(range(1, len(markers) + 1))
+                and re.search(r'\bwhen\s*$', sentence[:markers[0].start()], re.I)):
+            pieces = [sentence[m.end():markers[n + 1].start() if n + 1 < len(markers) else len(sentence)]
+                      for n, m in enumerate(markers)]
+            if all(re.match(r'\s*(?:it\s+)?(?:is|are|was|were)\b', piece, re.I) for piece in pieces):
+                sentence = re.sub(r'\(([1-9][0-9]?)\)', '', sentence)
+        # An amount inherits the unit after its last coordinate: "6 and 12
+        # months". Reuse exactly the existing measured-unit grammar.
+        for match in reversed(list(re.finditer(r'\b([0-9]{1,2})\s+(?:and|or)\s+([0-9]{1,2})(?=\s+\S)', sentence))):
+            if re.match(_NOT_A_MEASURE, sentence[match.end(2):], re.I) is None:
+                sentence = sentence[:match.start(1)] + ' ' + sentence[match.end(1):]
+        return sentence
+
+    def document_count_owner(self, paragraph, sentence):
+        """A declared current template's count concerns whole copies.
+
+        Require its complete declared name to occur in a visible original
+        header title and the entire copies-per-item command. An answer/box
+        count or an extra command never gains this source relationship.
+        """
+        text = paragraph_text(paragraph)[0].strip()
+        declared = re.match(r'^Instructions:\s*(?:The\s+)?([^.;:!?\r\n]+?)\s+is\s+a\s+template\.', text, re.I)
+        if not declared:
+            return None
+        slot = next((s for s in self.index.slots if s.el is paragraph and s.kind == 'p'), None)
+        if (slot is None or slot.part != 'word/document.xml' or slot.parent is not None
+                or not self.tab_source_visible(slot) or self.blank_spans(*self.ptext(paragraph))
+                or any(n.tag in (FLDCHAR, q('w:sdt'), q('w:drawing'), q('w:pict'), q('w:object'), TXBX) for n in paragraph.iter())):
+            return None
+        name = re.sub(r'\s+', ' ', declared[1]).strip()
+        headers = [s for s in self.index.slots if s.kind == 'p' and s.part.startswith('word/header')
+                   and self.is_heading(s.el) and self.tab_source_visible(s)]
+        if not any(re.match(re.escape(name) + r'(?:\s|$)', self.ptext(s.el)[0].strip(), re.I) for s in headers):
+            return None
+        frame = re.fullmatch(r'After\s+[^,;.!?\r\n]+,\s*fill\s+out\s+all\s+' + re.escape(name)
+                             + r's\s+for\s+[^;.!?\r\n]+?\s+[–—-]\s+one\s+for\s+each\s+[^;.!?\r\n]+\.?', sentence, re.I)
+        if frame and not re.search(r'\b' + _TICK_VERB + r'\b|\b(?:only|max|minimum|maximum|limit)\b', sentence, re.I):
+            return self.package.tree('word/document.xml')
+        return None
+
+    def cell_instruction_owner(self, paragraph):
+        """An explicit instruction in one visible captioned cell stays local.
+
+        A second caption, nested table, hidden source or stated wider reach
+        leaves its scope unresolved. The actual question still reads this
+        instruction through its own cell; no count wording is discarded.
+        """
+        slot = next((s for s in self.index.slots if s.el is paragraph and s.kind == 'p'), None)
+        if slot is None or not re.match(r'^instruction\s*:', self.ptext(paragraph)[0].strip(), re.I):
+            return None
+        cell = self.host_cell(slot)
+        if (cell is None or cell.part != 'word/document.xml'
+                or cell.el.find('.//' + q('w:tbl')) is not None
+                or any(n.tag in (q('w:drawing'), q('w:pict'), q('w:object'), TXBX, q('w:framePr')) for n in cell.el.iter())):
+            return None
+        paragraphs = [s for s in cell.children if s.kind == 'p']
+        if len(paragraphs) != len(cell.children) or any(not self.tab_source_visible(s) for s in paragraphs):
+            return None
+        texts = [self.ptext(s.el)[0].strip() for s in paragraphs]
+        captions = [s for s, text in zip(paragraphs, texts) if text.endswith((':', '?'))
+                    and not re.match(r'^instruction\s*:', text, re.I) and BOX not in text and CHECKED not in text
+                    and not self.blank_spans(*self.ptext(s.el))]
+        if (len(captions) != 1 or paragraphs.index(captions[0]) >= paragraphs.index(slot)
+                or any(WIDER_REACH.search(text) for text in texts)):
+            return None
+        return cell
+
+    @staticmethod
+    def named_caption(text):
+        # The whole printed caption, with only numbering, terminal colon,
+        # case and whitespace normalized. No subject/noun-stem association.
+        text = unicodedata.normalize('NFKC', text)
+        return re.sub(r'\s+', ' ', LIST_MARKER.sub('', text.strip())).rstrip(':').strip().casefold()
+
+    def named_guidance_index(self):
+        if self._named_guidance is None:
+            owners, instructions = {}, {}
+            for slot in [s for s in self.index.slots if s.kind == 'p']:
+                text = self.ptext(slot.el)[0]
+                frame = re.fullmatch(r'([^\r\n]+?)\s+[–—-]\s+(.+)', text.strip(), re.S)
+                if frame and BOX not in text and CHECKED not in text:
+                    instructions.setdefault(self.named_caption(frame[1]), []).append((slot, frame[2]))
+                    continue
+                prefix = re.split('[' + BOX + CHECKED + ']', text, maxsplit=1)[0].strip()
+                boxed = ((BOX in text or CHECKED in text) and self.question_boxes(slot.el, text)
+                         and self.box_run(slot.el) >= 2)
+                below = (not boxed and prefix.endswith((':', '?')) and
+                         (self.boxes_below(slot.el) is not None or
+                          (following := self.next_printed(slot.el)) is not None and self.starts_with_box(following)))
+                if prefix and (boxed or below):
+                    owners.setdefault(self.named_caption(prefix), []).append(slot)
+            self._named_guidance = owners, instructions
+        return self._named_guidance
+
+    def named_instruction_visible(self, slot):
+        return (slot.part == 'word/document.xml' and slot.parent is None and self.tab_source_visible(slot)
+                and not self.blank_spans(*self.ptext(slot.el))
+                and not any(n.tag in (FLDCHAR, q('w:sdt'), q('w:drawing'), q('w:pict'),
+                                     q('w:object'), TXBX, q('w:framePr')) for n in slot.el.iter()))
+
+    def named_guidance_owner(self, paragraph):
+        owners, instructions = self.named_guidance_index()
+        for caption, entries in instructions.items():
+            if not any(slot.el is paragraph for slot, _ in entries):
+                continue
+            candidates = owners.get(caption, [])
+            if (len(candidates) == 1 and all(self.named_instruction_visible(slot) and not WIDER_REACH.search(text)
+                    for slot, text in entries)
+                    and self.tab_source_visible(candidates[0])):
+                return candidates[0]
+        return None
+
+    @staticmethod
+    def named_instruction_clauses(text, *, qualified=False):
+        """Complete balanced source clauses and, when requested, qualifiers.
+
+        A sentence's terminal period can be inside its closing quote. Apostrophes
+        within a word are not quotation boundaries. Parentheses, brackets and
+        quotation marks bind complete qualifier clauses, not a source-act escape.
+        Malformed framing remains unproved; original text is never changed.
+        """
+        clauses, qualifiers, start, stack, quote = [], [], 0, [], None
+        pairs = {'‘': '’', '“': '”', "'": "'", '"': '"'}
+        delimiters = {'(': ')', '[': ']', '{': '}'}
+        for at, char in enumerate(text):
+            boundary = False
+            if quote:
+                if char == quote[0]:
+                    qualifiers.append(text[quote[1] + 1:at])
+                    quote = None
+                    boundary = not stack and at > 0 and text[at - 1] in '.!?'
+            elif char in pairs and (char in '‘“' or at == 0 or not text[at - 1].isalnum()):
+                quote = (pairs[char], at)
+            elif char in delimiters:
+                stack.append((delimiters[char], at))
+            elif char in delimiters.values():
+                if not stack or char != stack[-1][0]:
+                    return None
+                qualifiers.append(text[stack.pop()[1] + 1:at])
+            elif not stack and char in '.;!?\r\n':
+                boundary = True
+            if boundary:
+                value = text[start:at + 1].strip(' .;!?\r\n')
+                if value:
+                    clauses.append(value)
+                start = at + 1
+        if quote or stack:
+            return None
+        rest = text[start:].strip(' .;!?\r\n')
+        if rest:
+            clauses.append(rest)
+        return clauses + qualifiers if qualified else clauses
+
+    @classmethod
+    def named_instruction_source_action(cls, text):
+        """Read complete nested clauses before proving local selection scope.
+
+        Parenthetical appointments and coordinated response clauses remain part
+        of the physical named instruction. A complete prospective determined
+        response with an unresolved verb is held rather than appointed to the
+        ordinary clinical writer. The original text and its binding stay intact.
+        """
+        # Quoted qualifiers can themselves contain balanced subordinate
+        # clauses. Every proper qualifier is shorter than its enclosing source;
+        # this finite invocation-local reading never derives authority from output.
+        readings, pending, seen = [], [text], set()
+        while pending:
+            reading = pending.pop()
+            if reading in seen:
+                continue
+            seen.add(reading); readings.append(reading)
+            frames = cls.named_instruction_clauses(reading, qualified=True)
+            if frames is not None:
+                pending.extend(frame for frame in frames if frame not in seen)
+        readings.extend(re.split(r'(?<=[.;!?])\s*|[\r\n]+', text))
+        for reading in tuple(readings):
+            readings.extend(re.split(r'(?:\s+|,\s*)(?:and|or|but)\s+|,\s*', reading, flags=re.I))
+            readings.extend(re.split(r'\b(?:if|when)\s+', reading, flags=re.I)[1:])
+        for reading in readings:
+            source = re.sub(r'^(?:if|when|and|or|but)\s+', '', reading.strip(), flags=re.I)
+            action = cls.checkbox_source_action(source, governing=True)
+            # A possessive has/have/had takes an ordinary adjectival "initial"
+            # noun phrase. A modal "must initial this response" still appoints
+            # the signing act. Other complete source clauses keep their own
+            # role readings; no clinical noun list supplies this distinction.
+            initial_state = (cls.complete_signing_action(source)
+                and cls.ordinary_source_kind([source], 'initials')
+                and re.search(r'\b(?:has|have|had)\s+(?:(?:an?|the|my|our|your|his|her|their)\s+)?initial\b', source, re.I))
+            if (action and not initial_state or cls.prospective_response(source, located=True)):
+                return True
+            # A present-tense signing predicate has an explicit subject and
+            # determined object. "Clinical signs" / "initial observations"
+            # lack this actor + finite predicate + object relationship.
+            if re.fullmatch(r'[^.;:?!\r\n]+?\s+(?:sign|initial)s\s+'
+                            r'(?:this|the|these|those)\s+[^.;:?!\r\n]+[.:]?', source, re.I):
+                return True
+        return False
+
+    def named_local_object_scope(self, entries, options):
+        """Prove selection objects stay on this uniquely captioned local group.
+
+        Every selection command must name one unique printed option. A condition
+        may refer to a datum defined above/below, but that direction must belong
+        to its complete definition-reference frame, not the selected object.
+        This proves scope only; it never supplies multiple or single cardinality
+        and never changes the accepted answer names.
+        """
+        names = []
+        for option in options:
+            printed = option_text(option)
+            names.append((printed, printed))
+            # The instruction can cite the option before its printed skip
+            # qualifier. Its answer value still includes that exact qualifier.
+            skip = re.fullmatch(r'(.+?)\s+\(skip\s+to\s+[^()]+\)', printed, re.I)
+            if skip:
+                names.append((skip[1], printed))
+        def condition_scope(condition):
+            refs = list(re.finditer(r'as\s+defined\s+in\s+(?:[‘“\'"][^‘’“”\'"\r\n]+[’”\'"]|'
+                                   r'[\w -]+?)\s+(?P<direction>above|below)\b', condition, re.I))
+            return all(any(match.span() == ref.span('direction') for ref in refs)
+                       for match in WIDER_REACH.finditer(condition))
+        selected = []
+        for _, text in entries:
+            clauses = self.named_instruction_clauses(text)
+            if clauses is None:
+                return None
+            for clause in clauses:
+                verbs = list(re.finditer(r'\b' + _TICK_VERB + r'\b', clause, re.I))
+                if not verbs:
+                    if WIDER_REACH.search(clause) or limit_language(clause):
+                        return None
+                    continue
+                if len(verbs) != 1:
+                    return None
+                verb = verbs[0]; prefix = clause[:verb.start()].strip()
+                if prefix.casefold() not in ('', 'please'):
+                    leading = re.fullmatch(r'(?:if|when)\s+(.+),\s*(?:please\s*)?', prefix, re.I)
+                    if not leading or not condition_scope(leading[1]):
+                        return None
+                argument = clause[verb.end():].strip()
+                quoted = re.match(r'([‘“\'\"])(.+?)([’”\'\"])(?=\s|$)', argument)
+                if quoted:
+                    matching_quote = {'‘': '’', '“': '”', "'": "'", '"': '"'}[quoted[1]]
+                    if quoted[3] != matching_quote:
+                        return None
+                    cited = quoted[2].removesuffix('.')
+                    matches = [(name, printed) for name, printed in names if name.casefold() == cited.casefold()]
+                    tail = argument[quoted.end():].strip()
+                else:
+                    matches = [(name, printed) for name, printed in names
+                               if re.match(re.escape(name) + r'(?=\s|$)', argument, re.I)]
+                    longest = max((len(name) for name, _ in matches), default=0)
+                    matches = [(name, printed) for name, printed in matches if len(name) == longest]
+                    tail = argument[longest:].strip()
+                if len(matches) != 1:
+                    return None
+                if tail:
+                    trailing = re.fullmatch(r'(?:if|when)\s+(.+)', tail, re.I)
+                    if not trailing or not condition_scope(trailing[1]):
+                        return None
+                selected.append(matches[0][1])
+        return selected if selected and set(selected) == set(options) else None
+
+    def named_selection_source(self, question, own, options):
+        owners, instructions = self.named_guidance_index()
+        caption = self.named_caption(question);entries = instructions.get(caption, [])
+        if not entries:
+            return None
+        candidates = owners.get(caption, [])
+        problem = 'The named selection instruction does not have one complete visible original question owner; review its exact caption and instructions.'
+        if (len(candidates) != 1 or id(candidates[0].el) not in own
+                or not self.tab_source_visible(candidates[0])
+                or any(not self.named_instruction_visible(slot) for slot, _ in entries)):
+            return {'problem': problem, 'source_slots': candidates + [slot for slot, _ in entries]}
+        if any(self.named_instruction_clauses(text) is None for _, text in entries):
+            return {'problem': problem, 'source_slots': candidates + [slot for slot, _ in entries]}
+        if any(self.named_instruction_source_action(text) for _, text in entries):
+            return {'problem': 'This exact named instruction appoints a human signing or author action; ordinary clinical answers cannot perform it.', 'human': True, 'source_slots': candidates + [slot for slot, _ in entries]}
+        if any(WIDER_REACH.search(text) for _, text in entries):
+            local_objects = self.named_local_object_scope(entries, options)
+            if local_objects:
+                return {'commands': [], 'owner': candidates[0], 'entries': entries,
+                        'selected_objects': local_objects}
+            return {'problem': 'The named instruction states a wider or referenced scope; its reach remains unresolved.',
+                    'source_slots': candidates + [slot for slot, _ in entries]}
+        many, unresolved, commands = False, False, []
+        for _, text in entries:
+            for sentence in [x.strip(' .;!?:\r\n') for x in re.split(r'(?<=[.;!?])\s*|[\r\n]+', text) if x.strip()]:
+                conditional = re.fullmatch(r'(?:if|when)\s+[^;!?\r\n]+,\s*(.+)', sentence, re.I)
+                command = conditional[1] if conditional else sentence
+                command = re.sub(r'^please\s+', '', command, flags=re.I)
+                select = re.fullmatch(r'(?:' + _TICK_VERB + r')\s+(.+)', command, re.I)
+                permission = bool(HISTORY_MANY.fullmatch(command))
+                if select:
+                    argument = select[1]
+                    permission |= bool(re.fullmatch(r'all\s+(?:relevant|applicable|appropriate)\s+[\w-]+', argument, re.I)
+                                       or re.fullmatch(r'more\s+than\s+one\s+[\w-]+\s+if\s+relevant', argument, re.I)
+                                       or conditional and re.fullmatch(r'both(?:\s+[\w-]+)?', argument, re.I))
+                    alternative = re.fullmatch(r'a\s+([\w-]+)\s+or\s+([\w-]+)(?:\s+[^;:!?\r\n]+)?', argument, re.I)
+                    permission |= bool(alternative and alternative[2].casefold() == alternative[1].casefold() + 's')
+                    if permission and (COUNT_BOUND.search(command) or limit_language(command, local=True)
+                                       or re.search(r'\b' + _TICK_VERB + r'\b', argument, re.I)):
+                        unresolved = True
+                    conditional_single = bool(conditional and (re.fullmatch(r'that\s+one\s+[^;:!?\r\n]+', argument, re.I)
+                                               or option_text(argument).strip('‘’"').casefold() in [o.casefold() for o in options]))
+                    if not permission and not conditional_single and not HISTORY_ONE.fullmatch(command):
+                        unresolved = True
+                elif limit_language(sentence):
+                    unresolved = True
+                if permission:
+                    many = True;commands.append('Select all that apply')
+                elif HISTORY_ONE.fullmatch(command):
+                    commands.append('Select one')
+        if not many:
+            return None
+        if unresolved:
+            return {'problem': 'The complete named selection instruction includes an unsupported or competing selection command; review every original clause.', 'source_slots': candidates + [slot for slot, _ in entries]}
+        return {'commands': commands, 'owner': candidates[0], 'entries': entries}
 
     def boxed_guidance(self, p, printed):
         """(sentence, owned by the paragraph's own question) for every sentence of a paragraph that prints boxes
@@ -3736,9 +6385,11 @@ class Detector:
 
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
+        cell = self.host_cell(pslot)
+        table_source = self.table_selection_source(cell.parent) if cell is not None else None
         for units in self.split_inline_groups(g):
             options = [option_text(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else option_text(o)
-                       for _, o, _ in units]
+                       for o in (self.adjacent_option_text(unit) for unit in units)]
             question = clean_label(units[0][2])
             before_boxes = self.words_before_boxes(units, options) if len(units) > 1 else ""
             if before_boxes:
@@ -3748,15 +6399,22 @@ class Detector:
                 self.notes.append("Boxes at %s have their words printed before each box %s, so which printed word "
                                   "names which box was left for manual mapping. Printed source: %s"
                                   % (pslot.id, before_boxes, " | ".join(self.ptext(p.el)[0] for p in g["paras"])))
+                for affected in g['paras']:
+                    self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                 for p in g["paras"]:
                     self.claimed.add(id(p.el))
                 continue
             host = pslot
             used_para = None
             row_question = False
+            if g.get('whole_table_options'):
+                question = clean_label(table_source['printed'])
+                used_para = table_source['caption']
             nested = self.nested_checkbox_source(g) if not question else None
             if nested and nested.get("problem"):
                 self.notes.append(nested["problem"])
+                for identity in nested.get('coverage_slots', [nested['coverage_slot']]):
+                    self.coverage_issue(self.index.by_id[identity], 'nested_options', nested['problem'])
                 for paragraph in g["paras"]:
                     self.claimed.add(id(paragraph.el))
                 continue
@@ -3779,6 +6437,8 @@ class Detector:
                         # (round 3 P2). Refused, with a note, rather than guessed.
                         self.notes.append("Boxes in the '%s' row were left for manual mapping: the row prints another box "
                                           "beside them, so which of the row's options they are is not known." % question[:60])
+                        for affected in g['paras']:
+                            self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                         for p in g["paras"]:
                             self.claimed.add(id(p.el))
                         continue
@@ -3804,6 +6464,7 @@ class Detector:
                 if s is not None and s is not anchor and s not in extra:
                     extra.append(s)
             decision = {"kind": "checkbox", "note": ""}
+            named = None
             if len(units) > 1:
                 # The question's own source: its label, the lines of its boxes and what is printed after them, the
                 # other paragraphs of its own cells, the header of its column, a nested grid's parent question and its
@@ -3813,7 +6474,8 @@ class Detector:
                 cell = self.host_cell(pslot)
                 cells = []
                 if cell is not None and self.owning_cell(pslot) is cell:
-                    cells = [cell, *self.question_cells(cell.parent, cell.info["row"], cell.info["col"])]
+                    cells = ([cell] if nested and nested.get('local_cell_owner') else
+                             [cell, *self.question_cells(cell.parent, cell.info["row"], cell.info["col"])])
                 # (its column header is one of its question cells, read with the rest of its own source)
                 source, shared = self.own_source_texts(g["paras"] + ([used_para] if used_para is not None else []), cells)
                 local = ([nested["cardinality"]] if nested else []) + local + source
@@ -3821,14 +6483,32 @@ class Detector:
                 own = {id(x.el) for x in [*g["paras"], *local_slots, *([used_para] if used_para is not None else []),
                                           *(nested["source_slots"] if nested else [])]}
                 if cell is not None:
-                    own.update(self.own_paragraph_ids([cell, *self.question_cells(cell.parent, cell.info["row"],
-                                                                                    cell.info["col"])]))
-                decision = self.cardinality(question, options, local=local, between=between, own=own,
+                    own.update(self.own_paragraph_ids(cells))
+                if table_source:
+                    local.append(table_source['printed'])
+                    own.update(id(s.el) for s in table_source['sources'])
+                named = self.named_selection_source(question, own, options)
+                if named and not named.get('problem'):
+                    local += named['commands']
+                    own.update(id(slot.el) for slot, _ in named['entries'])
+                decision = named if named and named.get('problem') else self.cardinality(question, options, local=local, between=between, own=own,
                                             hint=self.text(g["paras"][0].el), where=" at " + pslot.id,
                                             context=self.context_for(anchor))
             if decision.get("problem"):
                 # Never narrowed to one choice, never widened past a limit: the source is left for manual mapping.
                 self.notes.append(decision["problem"])
+                scoped_sources = []
+                if named:
+                    scoped_sources = (named['source_slots'] if 'source_slots' in named else
+                                      [named['owner'], *[slot for slot, _ in named['entries']]])
+                for affected in dict.fromkeys([*g['paras'], *scoped_sources,
+                                              *([table_source['caption']] if table_source else [])]):
+                    code = ('named_selection_source' if named else 'table_selection_source'
+                            if table_source else 'unmapped_answer')
+                    self.coverage_issue(affected, code, self.notes[-1])
+                    if named and named.get('human'):
+                        self.protected_regions.add(affected.id)
+                        self.box_action_reasons[affected.id] = self.notes[-1]
                 for p in g["paras"]:
                     self.claimed.add(id(p.el))
                 if used_para is not None:
@@ -3862,6 +6542,8 @@ class Detector:
                 if history:
                     if history.get("problem"):
                         self.notes.append(history["problem"] + " Location: " + pslot.id)
+                        for affected in g['paras']:
+                            self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                         for paragraph in g["paras"]:
                             self.claimed.add(id(paragraph.el))
                         continue
@@ -3876,10 +6558,51 @@ class Detector:
                     self.notes.append(decision["note"])
             if nested:
                 area.context, area.complete_source = nested["context"], True
+                if nested.get('local_cell_owner'):
+                    area.label_slot = nested['question_slot']
+                    area.source_questions = [nested['relation']]
                 for source_slot in nested["source_slots"]:
                     self.claimed.add(id(source_slot.el))
                 for option_para in nested["option_paras"]:
                     self.nested_write_in(option_para, nested["write_context"])
+            if named:
+                area.context = ' > '.join([area.context, *[text for _, text in named['entries']]]).strip(' >')
+                if len(area.context) > MAX_MAPPING_CONTEXT:
+                    for affected in g['paras']:
+                        self.coverage_issue(affected, 'named_selection_source', 'The complete named instruction context exceeds mapping limits; nothing was shortened.')
+                    continue
+                area.complete_source = True
+                area.source_questions.append({'relation': 'named_selection_instruction', 'question': area.label,
+                    'context': area.context, 'options': list(area.options), 'cardinality': area.kind,
+                    'instructions': [text for _, text in named['entries']],
+                    'sources': [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+                                for p in dict.fromkeys([named['owner'], *g['paras'], *[slot for slot, _ in named['entries']]])]})
+                if named.get('selected_objects'):
+                    area.source_questions[-1]['selected_objects'] = named['selected_objects']
+            if table_source:
+                area.label_slot = table_source['caption']
+                area.complete_source = True
+                area.context = ' > '.join(x for x in [area.context, table_source['printed']] if x)
+                area.source_questions.append({'relation': 'table_selection_instruction',
+                    'instruction': table_source['printed'], 'cardinality': area.kind,
+                    'sources': table_source['references']})
+            branches = [branch for unit in units for branch in [self.option_branch_source(unit)]
+                        if branch and branch['qualified']]
+            if branches:
+                printed = [option_text(unit[1]) for unit in units]
+                original_target, original_context = dict(area.target), area.context
+                original_relations = list(area.source_questions)
+                area.target['printed'] = printed
+                area.context = ' > '.join(x for x in [area.context, *[
+                    'Printed instruction for ' + branch['caption'] + ': ' + branch['instruction']
+                    for branch in branches]] if x)
+                area.complete_source = True
+                area.source_questions.append({'relation': 'option_branch_instruction',
+                    'question': area.label, 'context': area.context, 'options': list(area.options),
+                    'printed': printed, 'branches': branches, 'original_target': original_target,
+                    'original_context': original_context, 'original_relations': original_relations,
+                    'sources': [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)}
+                                for p in g['paras']]})
             self.add(area)
             for p in g["paras"]:
                 self.claimed.add(id(p.el))
@@ -3905,6 +6628,54 @@ class Detector:
                         fmt[num.get(q("w:numId"))] = abstract.get(a.get(q("w:val")), {})
             self._numbering = fmt
         return self._numbering
+
+    def rule_unclassified_response_lists(self):
+        """Unclaimed printed list structure is reviewable, never a guessed question.
+
+        A decimal parent followed by a separate lettered list can be an answer
+        menu or an instruction list. Likewise literal a)/b) items under a colon
+        heading have no physical write control. Neither structure proves role,
+        cardinality or where an answer should be inserted. Preserve every item
+        and require an exact source-area review before generation.
+        """
+        for question in [s for s in self.index.slots if s.kind == 'p']:
+            if id(question.el) in self.claimed:
+                continue
+            label=self.text(question.el).strip()
+            info=self.list_info(question.el)
+            numbered=bool(info and info[2]=='decimal' and self.list_marker_is_plain(info)
+                          and label and not label.endswith(('?',':')))
+            literal=bool(label and len(label)<=MAX_MAPPING_LABEL and not BOX in label
+                         and not CHECKED in label and not UNDERSCORES.search(label))
+            if not (numbered or literal):
+                continue
+            items=[];node=question.el.getnext();identity=None
+            while node is not None and node.tag==q('w:p'):
+                slot=self.index.by_el.get(id(node))
+                if slot is None or slot.parent is not question.parent or id(node) in self.claimed:
+                    break
+                text=self.text(node).strip();option=self.list_info(node)
+                if not text or len(text)>120 or BOX in text or CHECKED in text or UNDERSCORES.search(text):
+                    break
+                if numbered:
+                    if (not option or option[2] not in ('lowerLetter','upperLetter','lowerRoman','upperRoman')
+                            or option[:2]==info[:2] or not self.list_marker_is_plain(option)):
+                        break
+                    if identity is not None and option!=identity:
+                        break
+                    identity=option
+                elif not re.fullmatch(r'(?:[a-z]|[ivxlcdm]+)[).]\s+\S.{0,117}',text,re.I):
+                    break
+                items.append(slot);node=node.getnext()
+            if len(items)<2:
+                continue
+            detail=('This printed list has no qualified answer ownership or cardinality. It may be an answer '
+                    'menu or fixed instructions; no answer place was invented. Review these exact original '
+                    'areas before generation. Parent: '+label+'. Items: '+' | '.join(self.text(s.el).strip() for s in items))
+            self.notes.append(detail)
+            for affected in [question,*items]:
+                self.coverage_issue(affected,'unclassified_response_list',detail)
+                self.claimed.add(id(affected.el))
 
     def list_info(self, p):
         ppr = p.find(q("w:pPr"))
@@ -3998,6 +6769,7 @@ class Detector:
                                                         own={id(x.el) for x in [q_slot, opt_slot, *local_slots]})
                             if decision.get("problem"):
                                 self.notes.append(decision["problem"])
+                                self.coverage_issue(opt_slot, 'unmapped_answer', self.notes[-1])
                             else:
                                 if decision["note"]:
                                     self.notes.append(decision["note"])
@@ -4046,6 +6818,8 @@ class Detector:
                                                     own={id(x.el) for x in [q_slot, *opts, *local_slots]})
                         if decision.get("problem"):
                             self.notes.append(decision["problem"])
+                            for affected in opts:
+                                self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                         else:
                             if decision["note"]:
                                 self.notes.append(decision["note"])
@@ -4060,6 +6834,14 @@ class Detector:
                     i += 1
 
     # 5. tables ----------------------------------------------------------------------------------------------------
+    def is_box_cell(self, c) -> bool:
+        """The existing printed-box reading, plus one unprinted native field."""
+        return (self.cell_text(c) in (BOX, CHECKED) and not self.region_hidden(c.el)) or (
+                len(c.children) == 1 and c.children[0].kind == "p"
+                and self.tab_source_visible(c.children[0])
+                and self.ptext(c.children[0].el)[0].strip() in (BOX, CHECKED)
+                and len(self.box_units(c.children[0])) == 1)
+
     def is_option_cell(self, c) -> bool:
         """An empty cell, or one holding only a checkbox (to be ticked), under an option column."""
         if self.cell_has_claim(c.el):
@@ -4067,7 +6849,89 @@ class Detector:
         txt = self.cell_text(c)
         if self.region_hidden(c.el):
             return False                # a checkbox its reading does not show (round 3 F1)
-        return is_blank_text(txt) and self.is_empty_cell(c) or txt in (BOX, CHECKED)
+        return is_blank_text(txt) and self.is_empty_cell(c) or self.is_box_cell(c)
+
+    def guided_other_response_row(self, table, row):
+        """One OTHER row on a proved YES/NO/REFUSED axis, with fixed trailing guidance.
+
+        The guidance is not an option or a writable span. This narrow source
+        contract keeps three distinct visible glyphs and binds the complete
+        headers, row caption and appended instruction before grouping them.
+        """
+        rows = self.grid(table)
+        first = min(rows)
+        if row <= first or self.response_matrix_corner(table, first) is None:
+            return None
+        header = sorted(rows[first], key=lambda c: c.info['col'])
+        cells = sorted(rows[row], key=lambda c: c.info['col'])
+        if (len(header) != 4 or len(cells) != 4
+                or [self.cell_text(c) for c in header[1:]] != ['YES', 'NO', 'REFUSED']
+                or self.cell_text(cells[0]) != 'OTHER'
+                or any(c.info['col'] != n or c.info['span'] != 1 or c.info['vmerge']
+                       for n, c in enumerate(cells))):
+            return None
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:hyperlink'), q('w:tbl'), q('w:br')}
+        if any(node.tag in unsafe for cell in header for node in cell.el.iter()):
+            return None
+        # The original axis must continue without an intervening header,
+        # divider, merge, hidden control or independent answer band.
+        for previous in range(first + 1, row):
+            band = sorted(rows.get(previous, []), key=lambda c: c.info['col'])
+            if (len(band) != 4 or any(c.info['col'] != n or c.info['span'] != 1 or c.info['vmerge']
+                                     for n, c in enumerate(band))
+                    or not self.is_label_cell(band[0], complete=True)
+                    or any(node.tag in unsafe for cell in band for node in cell.el.iter())
+                    or any(p.kind != 'p' or not self.tab_source_visible(p) or self.box_units(p)
+                           or self.blank_spans(*self.ptext(p.el)) for p in band[0].children)):
+                return None
+            for cell in band[1:]:
+                if (len(cell.children) != 1 or cell.children[0].kind != 'p'
+                        or not self.tab_source_visible(cell.children[0])
+                        or self.ptext(cell.children[0].el)[0].strip() not in (BOX, CHECKED)
+                        or len(self.box_units(cell.children[0])) != 1
+                        or self.box_units(cell.children[0])[0][0]['kind'] != 'glyph'):
+                    return None
+        boxes = []
+        for n, cell in enumerate(cells):
+            if (len(cell.children) != 1 or cell.children[0].kind != 'p'
+                    or not self.tab_source_visible(cell.children[0])
+                    or any(node.tag in unsafe for node in cell.el.iter())
+                    or self.cell_has_claim(cell.el)):
+                return None
+            para = cell.children[0]
+            text = self.ptext(para.el)[0].strip()
+            units = self.box_units(para)
+            if n == 0:
+                if units or self.blank_spans(*self.ptext(para.el)):
+                    return None
+                continue
+            if len(units) != 1 or units[0][0]['kind'] != 'glyph':
+                return None
+            if n < 3 and text not in (BOX, CHECKED):
+                return None
+            if n == 3 and not re.fullmatch(r'[☐☒][\s\uf020]*\[IF YES, SPECIFY BELOW\.\]', text):
+                return None
+            boxes.append(units[0][0])
+        sources = [{'part': c.part, 'slot': c.path, 'fingerprint': fingerprint(c.el)}
+                   for c in [*header, *cells]]
+        return {'boxes': boxes, 'relation': {'relation': 'guided_response_row', 'sources': sources,
+                                           'guidance': self.ptext(cells[3].children[0].el)[0]}}
+
+    def rule_guided_other_response_rows(self):
+        # Bind the complete row before its appended guidance can look like the
+        # caption of a standalone checkbox. Other table readings are unchanged.
+        for table in (s for s in self.index.slots if s.kind == 'tbl'):
+            for row in self.grid(table):
+                guided = self.guided_other_response_row(table, row)
+                if guided is None:
+                    continue
+                cells = sorted(self.grid(table)[row], key=lambda c: c.info['col'])
+                self.add(Area('choice', 'OTHER', cells[1], {'type': 'checkboxes', 'boxes': guided['boxes']},
+                              context=self.context_for(cells[1]), options=['YES', 'NO', 'REFUSED'],
+                              extra_slots=cells[2:], source_questions=[guided['relation']]))
+                for cell in cells[1:]:
+                    self.claimed.update(id(node) for node in cell.el.iter())
 
     def plain_layout_properties(self, table, cell):
         """Resolve the bounded direct/default style set, without assuming a background."""
@@ -4081,9 +6945,7 @@ class Detector:
         if refs:
             name = refs[0].get(q("w:val"))
         else:
-            defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
-                        if s.get(q("w:type")) == "table" and s.get(q("w:default")) in ("1", "true", "on")] \
-                if "word/styles.xml" in self.package.names else []
+            defaults = self.default_source_styles("table")
             if len(defaults) > 1:
                 return None
             name = defaults[0].get(q("w:styleId")) if defaults else None
@@ -4234,6 +7096,21 @@ class Detector:
     def rule_tables(self):
         for tslot in [s for s in self.index.slots if s.kind == "tbl"]:
             rows = self.grid(tslot)
+            for r in rows:
+                corner = self.response_matrix_header_corner(tslot, r)
+                if corner is not None:
+                    self.claimed.update(id(node) for node in corner.el.iter())
+                    self.protected_regions.add(corner.id)
+                    self.response_header_corners.add(corner.id)
+                    self.notes.append("The empty corner at " + corner.id +
+                                      " is fixed spacing above this table's response columns, not an answer. "
+                                      "Use each row's checkbox choices; reinspect an older mapping that writes here.")
+                    if self.response_matrix_corner(tslot, r) is None:
+                        detail = ("The response matrix at " + tslot.id +
+                                  " has a fixed header but its complete one-box-per-response layout is unresolved. "
+                                  "Review the original controls, visibility and merges; no answer belongs in the empty header corner.")
+                        self.notes.append(detail)
+                        self.coverage_issue(tslot, 'unmapped_response_matrix', detail)
             if self.presentation_heading_table(tslot):
                 self.claimed.update(id(node) for node in tslot.el.iter())
                 continue
@@ -4245,7 +7122,7 @@ class Detector:
             box_cols = {}
             for r in ordered:
                 for c in rows[r]:
-                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.cell_text(c) in (BOX, CHECKED) \
+                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.is_box_cell(c) \
                             and not self.region_hidden(c.el):
                         box_cols.setdefault(c.info["col"], []).append((r, c))
             # empty cells in a column whose answers are boxes are filler (a sub-heading row), not answers
@@ -4276,7 +7153,7 @@ class Detector:
                     header = option_text(self.column_header(tslot, c.info["col"], r).strip("√✓✔*† "))
                     if id(c) in filler:
                         continue
-                    boxed = self.cell_text(c) in (BOX, CHECKED)
+                    boxed = self.is_box_cell(c)
                     short = len(header.split()) <= 3 and len(header) <= 24 and \
                         (is_option_word(header) or not FIELDISH.search(header))
                     response = boxed and len(header) <= 60 and not question_header(header)
@@ -4307,7 +7184,7 @@ class Detector:
                 # prints them as answers: a spanning response header over them, or answer words among them ('Yes' /
                 # 'No' / 'UNKNOWN' / 'SERVICE NOT AVAILABLE', 'Agree' .. 'REFUSED'). 'Diagnosed | Medicated' over
                 # boxes are two facts about each row, never one answer (R4-F6): left to the column rules, which hold.
-                boxed_run = all(self.cell_text(c) in (BOX, CHECKED) for c, _ in run)
+                boxed_run = all(self.is_box_cell(c) for c, _ in run)
                 optionish = all(is_option_word(h) for h in headers) or shared[tuple(headers)] >= 3 and (
                     not boxed_run or any(response_word(h) for h in headers)
                     or self.spanned_response_columns(tslot, r, run))
@@ -4350,6 +7227,8 @@ class Detector:
                     self.notes.append("Rating grid row '%s' at %s was left for manual mapping: its printed boxes are not "
                                       "one run of headed response columns, so which answers the row offers is not "
                                       "established." % (label[:60], run[0][0].id))
+                    for affected, _ in run:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                 elif any(positive_command(text) for text in [label, *grid_own] + [
                         self.cell_text(x) for c, _ in run for x in self.question_cells(tslot, r, c.info["col"])]):
                     # A grid row reads one answer per row; a several-answers command in the row, over its columns or
@@ -4357,6 +7236,8 @@ class Detector:
                     self.notes.append("Rating grid row '%s' at %s was left for manual mapping: its printed all-that-apply "
                                       "instruction conflicts with the grid's one answer per row; nothing was guessed."
                                       % (label[:60], run[0][0].id))
+                    for affected, _ in run:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                 else:
                     boxes = [{"kind": "cell", "part": c.part, "slot": c.path} for c, _ in run]
                     self.add(Area("choice", label, run[0][0], {"type": "checkboxes", "boxes": boxes},
@@ -4389,6 +7270,8 @@ class Detector:
                                                         where=" at " + opts[0].id, context=self.context_for(opts[0]))
                             if decision.get("problem"):
                                 self.notes.append(decision["problem"])
+                                for affected in opts:
+                                    self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                             else:
                                 if decision["note"]:
                                     self.notes.append(decision["note"])
@@ -4433,6 +7316,8 @@ class Detector:
                     self.notes.append("Checkbox grid at %s was left for manual mapping: boxes in several columns share its "
                                       "rows, and which of them answer one row's question is not established. Column: %s"
                                       % (tslot.id, clean_label(header)[:80]))
+                    for _, affected, _ in labelled:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                     for _, c, _ in labelled:
                         for x in c.el.iter():
                             self.claimed.add(id(x))
@@ -4446,6 +7331,8 @@ class Detector:
                     # The list this table continues was held: its continuation is held with it.
                     self.notes.append("Checkbox list continued at %s was left for manual mapping with the list it "
                                       "continues. Column: %s" % (tslot.id, clean_label(header)[:80]))
+                    for _, affected, _ in labelled:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                     continue
                 if existing is not None:
                     # Its reading was taken over the whole form: every limit printed in this continuation was in its
@@ -4462,6 +7349,8 @@ class Detector:
                                             where=" at " + first.id, context=self.context_for(first))
                 if decision.get("problem"):
                     self.notes.append(decision["problem"])
+                    for _, affected, _ in labelled:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                     self._col_lists[(id(tslot), col)] = False
                     continue
                 if decision["kind"] != "multi_choice" and not decision["single"]:
@@ -4469,6 +7358,7 @@ class Detector:
                                       "independent items, and nothing printed says whether one row or several may be "
                                       "marked; one choice would assert an exclusivity the form does not print. Column: %s"
                                       % (first.id, clean_label(header)[:80]))
+                    self.coverage_issue(first, 'unmapped_answer', self.notes[-1])
                     self._col_lists[(id(tslot), col)] = False
                     continue
                 if decision["note"]:
@@ -4517,6 +7407,8 @@ class Detector:
                                                         + [x for r, c, _ in g for x in self.question_cells(tslot, r, c.info["col"])]))
                         if decision.get("problem"):
                             self.notes.append(decision["problem"])
+                            for _, affected, _ in g:
+                                self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                             for _, c, _ in g:
                                 for x in c.el.iter():
                                     self.claimed.add(id(x))
@@ -4624,6 +7516,43 @@ class Detector:
     INSTRUCTED_REQUEST = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)"
                                     r"\s+(?:if|whether|any|all)\b", re.I)
     INSTRUCTED_PLACE = re.compile(r"\b(?:here|below|in this (?:box|space|cell|column|section))\b", re.I)
+
+    @classmethod
+    def parenthetical_write_request(cls, text):
+        """A complete named caption with a terminal imperative, not a status qualifier."""
+        frame = re.fullmatch(r'([^()\r\n?!]{1,160}?)\s*\(([^()\r\n]{1,80})\)\s*[:.]?', text.strip())
+        return bool(frame and clean_label(frame[1]) and cls.INSTRUCTED.fullmatch(frame[2].strip()))
+
+    def write_request_source(self, caption):
+        return {'relation': 'parenthetical_write_request', 'question': self.ptext(caption.el)[0].strip(),
+                'source': {'part': caption.part, 'slot': caption.path, 'fingerprint': fingerprint(caption.el)}}
+
+    def rule_parenthetical_write_cells(self):
+        """A sole printed request owns its flowing cell; append below and preserve its ink."""
+        for cell in (slot for slot in self.index.slots if slot.kind == 'tc'):
+            if self.cell_has_claim(cell.el) or not self.cell_is_plain(cell) or wraps_structure(cell.el):
+                continue
+            named = [p for p in cell.children if p.kind == 'p' and self.ptext(p.el)[0].strip()]
+            if len(named) != 1:
+                continue
+            caption = named[0]; printed, pieces = self.ptext(caption.el)
+            head = clean_label(printed.partition('(')[0])
+            role = signing_place(head); action = self.checkbox_source_action(head, governing=True)
+            if (not self.parenthetical_write_request(printed) or self.blank_spans(printed, pieces)
+                    or not self.tab_source_visible(caption) or self.question_box_paragraph(caption.el)[2]
+                    or not role and self.row_label(cell.parent, cell.info['row'], cell.info['col'])
+                    or any(p.kind != 'p' or p is not caption and not self.plain_spacing_paragraph(p, unused_tab_stops=True)
+                           for p in cell.children)):
+                continue
+            area = Area(role or 'long_text', clean_label(printed), cell, {'type': 'cell_append'},
+                        context=self.context_for(caption, complete=True), complete_source=True,
+                        source_questions=[self.write_request_source(caption)], label_slot=caption)
+            if role or action:
+                area.source_action = True
+                area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
+                                   if role or action == 'human_signing_action' else
+                                   'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
+            self.add(area)
     # Printed advice to the patient, never a request for the clinician's answer: it speaks to its reader as 'you'
     # ('... at your next appointment', '... when you phone us'), sends its reader to a clinician ('... to the nurse'), or
     # adds an instruction to act ('Note any dizziness and stop the tablets'). A clinician's request names the patient
@@ -4692,25 +7621,54 @@ class Detector:
         own = [x for x in items if not grouped(x.info["col"])]
         return clean_label(self.cell_text((own or items)[0])) if items else ""
 
+    def source_style_index(self):
+        """Read this immutable source's catalogue once, retaining every duplicate."""
+        if self._style_index is None:
+            index, defaults = {}, {}
+            if "word/styles.xml" in self.package.names:
+                styles = self.package.tree("word/styles.xml").findall(q("w:style"))
+                identity, category, implicit = q("w:styleId"), q("w:type"), q("w:default")
+                for style in styles:
+                    kind = style.get(category)
+                    index.setdefault((style.get(identity), kind), []).append(style)
+                    if style.get(implicit) in ("1", "true", "on"):
+                        defaults.setdefault(kind, []).append(style)
+            self._style_index = {key: tuple(nodes) for key, nodes in index.items()}
+            self._style_defaults = {key: tuple(nodes) for key, nodes in defaults.items()}
+        return self._style_index
+
+    def default_source_styles(self, kind):
+        self.source_style_index()
+        return self._style_defaults.get(kind, ())
+
     def question_box_style_chain(self, name, kind):
+        key = (name, kind)
+        if key in self._style_chains:
+            chain, problem = self._style_chains[key]
+            return list(chain), problem
+
+        def finish(chain, problem):
+            self._style_chains[key] = (tuple(chain), problem)
+            # A caller cannot change another reading's cached ancestry list.
+            return list(chain), problem
+
         chain, seen = [], set()
         if not name:
-            return [], "The style ancestry is not uniquely defined."
+            return finish([], "The style ancestry is not uniquely defined.")
         while name:
             if name in seen or len(chain) >= 32 or "word/styles.xml" not in self.package.names:
-                return [], "The style ancestry is cyclic or unavailable."
+                return finish([], "The style ancestry is cyclic or unavailable.")
             seen.add(name)
-            matches = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
-                       if s.get(q("w:styleId")) == name and s.get(q("w:type")) == kind]
+            matches = self.source_style_index().get((name, kind), ())
             if len(matches) != 1:
-                return [], "The style ancestry is not uniquely defined."
+                return finish([], "The style ancestry is not uniquely defined.")
             style = matches[0]
             chain.append(style)
             base = style.find(q("w:basedOn"))
             name = base.get(q("w:val")) if base is not None else ""
             if base is not None and not name:
-                return [], "The style ancestry is not uniquely defined."
-        return chain, ""
+                return finish([], "The style ancestry is not uniquely defined.")
+        return finish(chain, "")
 
     def question_box_paragraph(self, node):
         """Resolve only this rule's physical break and heading scope, including style ancestry."""
@@ -4805,7 +7763,14 @@ class Detector:
         if reading != text and re.search(
                 r"\b(?:(?:counter|under|co|re)[ -]?)?sign(?:s|ed|ing|off|offs)?\b", reading, re.I):
             return True
-        return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
+        return (SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
+                # A complete printed place label ending in the action noun is
+                # human-owned regardless of who is named before it. Enumerating
+                # signer roles would release every role omitted from that list.
+                # A question about recorded status is a different structure and
+                # does not end in this action label.
+                or re.fullmatch(r'(?:[^:?!\r\n]+\s+)?(?:attestation|declaration|sign[ -]?off)\s*:',
+                                reading.strip(), re.I))
 
     def question_box_role_source(self, table):
         """(printed question, section) over a one-cell box, read for the box's DESTINATION ROLE only (destination_roles).
@@ -4971,9 +7936,276 @@ class Detector:
         return question, prompt, context, protection, relation, sources
 
     @staticmethod
-    def question_box_authorship(text):
-        return re.match(r"^this section is for (?:the )?(?:patient|parent|guardian|line manager|employer|witness)\b"
-                        r".*\bto (?:add|provide|record)\b.*\b(?:comments|concerns|statement)\b", text, re.I)
+    def prospective_response(text, *, located=False):
+        """Existing finite subject/auxiliary/determined-response relationship.
+
+        Its verb can be unresolved. The ordinary authorship reader still requires
+        the existing writing predicate; a named instruction can hold that exact
+        ambiguous current response without granting another person's authority.
+        """
+        response = r"(?:comments?|concerns?|statements?|answers?|responses?)"
+        location = (r"(?:\s+(?:here|in\s+this\s+(?:(?:answer|response)\s+)?"
+                    r"(?:section|area|space|box|field)))?" if located else '')
+        return re.fullmatch(
+            r"\s*[^;:?!\r\n]+?\s+(?:" + SOURCE_ACTION_AUXILIARY + r"\s+)+"
+            r"(?:(?:required\s+)?to\s+)?(?P<predicate>[^.;:?!\r\n]+?)\s+"
+            r"(?P<object>the\s+following|(?:this|the|these|my|our|your|his|her|their)\s+" + response + r")"
+            + location + r"\s*[:.]?\s*", text, re.I)
+
+    @classmethod
+    def question_box_authorship(cls, text):
+        # Complete prospective authorship frames appoint the author, without
+        # inferring a job title or enumerating ways they might write comments.
+        # An active section assignment has an author + infinitive predicate;
+        # its passive equivalent has a comment object + "to be" + "by" author.
+        # A receipt/status label lacks that relation. Read the whole caption:
+        # neither a later clinical question nor a neighboring answer belongs
+        # to this reservation. A period in an author's name stays permissible.
+        response = r"(?:comments?|concerns?|statements?|answers?|responses?)"
+        # A physical area assigned to an author + infinitive appoints that
+        # author whatever the particular writing verb or answer subject is.
+        # Medication/status captions have neither this area subject nor that
+        # complete agentive relationship.
+        active = re.fullmatch(r"\s*this (?:section|area|space|box|field) is (?P<reserved>reserved\s+)?for\s+"
+                  r"(?P<author>[^:;?!\r\n]+?)\s+to\s+(?P<predicate>[^.;:?!\r\n]+?)\s*[:.]?\s*", text, re.I)
+        # An explicit generic clinician recording an ordinary observation or
+        # a document's receipt is the form's data-entry operator, not another
+        # person's authored statement. Require the complete record argument
+        # to have the established ordinary initial/receipt reading and no act
+        # clause. Named/reserved authors and response/approval objects stay
+        # held; a reviewed label cannot supply this source relationship.
+        if active and not active['reserved'] and re.fullmatch(r'the\s+clinician', active['author'], re.I):
+            recorded = re.fullmatch(r'record\s+(.+)', active['predicate'], re.I)
+            if (recorded and (cls.ordinary_source_kind([recorded[1]], 'initials')
+                              or cls.ordinary_source_kind([recorded[1]], 'signature'))
+                    and not cls.temporal_source_action(recorded[1])):
+                active = None
+        passive = (r"^\s*" + response + r"\s+to\s+be\s+[^.;:?!\r\n]+?\s+by\s+"
+                   r"[^:;?!\r\n]+?\s*[:.]?\s*$")
+        # An explicit subject obligated to write this response is its author;
+        # clinical obligations about medication/signs are different arguments.
+        prospective = cls.prospective_response(text)
+        # Reuse the existing data-entry instruction grammar. A prospective
+        # clinical obligation to include/avoid something is not a writer.
+        writing = prospective and (re.match(r'write\b', prospective['predicate'], re.I)
+                                    or ENTER_HINT.match(prospective['predicate'] + ' ' + prospective['object']))
+        return active or re.fullmatch(passive, text, re.I) or writing
+
+    def manual_numeric_parts(self, chosen):
+        """Visible, empty, plain numeric parts available for explicit human mapping only."""
+        if chosen.kind != 'p' or not self.tab_source_visible(chosen):
+            return []
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'), q('w:object'),
+                  q('w:hyperlink'), q('w:sectPr'), q('w:br'), q('w:vanish'), q('w:numPr')}
+        if any(node.tag in unsafe for node in chosen.el.iter()):
+            return []
+        return numeric_part_ranges(self.ptext(chosen.el)[0])
+
+    def manual_numeric_part(self, chosen, number, kind):
+        parts = self.manual_numeric_parts(chosen)
+        if kind != 'text' or type(number) is not int or not 1 <= number <= len(parts):
+            return None
+        start, end = parts[number - 1]
+        relation = {'relation': 'manual_numeric_part', 'number': number, 'parts': len(parts),
+                    'source': {'part': chosen.part, 'slot': chosen.path, 'fingerprint': fingerprint(chosen.el)}}
+        return Area('text', 'Numeric part %d' % number, chosen,
+                    {'type': 'span', 'start': start, 'end': end, 'shape': 'numeric_part', 'number': number},
+                    context=self.context_for(chosen, complete=True), complete_source=True,
+                    source_questions=[relation], capacity=end - start)
+
+    def manual_paragraph_options(self, chosen, kind):
+        """A clinician explicitly appoints a complete printed list as options.
+
+        Plain bullets alone do not establish selection or cardinality. This
+        recovery is available only for an adjacent complete printed question
+        and a finite homogeneous list, with every physical paragraph bound.
+        Existing boxes, fields, selections and uncertain list boundaries stay
+        outside this contract. No automatic detection score changes here.
+        """
+        if chosen.kind != 'p' or kind not in ('choice', 'multi_choice'):
+            return None
+        question = chosen
+        if self.list_info(chosen.el):
+            previous = chosen.el.getprevious()
+            question = self.index.by_el.get(id(previous)) if previous is not None else None
+        if question is None or question.kind != 'p' or question.parent is not chosen.parent:
+            return None
+        prompt = self.text(question.el).strip()
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:sectPr'), q('w:br'), q('w:vanish')}
+        if (self.list_info(question.el) or not prompt.endswith(('?', ':'))
+                or not (self.question_box_request(prompt) or re.match(r'^(?:what|which|where|how|who|when)\b', prompt, re.I))
+                or self.question_box_reference(prompt) or self.question_box_authorship(prompt)
+                or self.checkbox_source_action(prompt, governing=True) or self.question_box_signing(prompt)
+                or len(prompt) > MAX_MAPPING_LABEL or not self.tab_source_visible(question)
+                or any(node.tag in unsafe for node in question.el.iter())
+                or self.blank_spans(*self.ptext(question.el))):
+            return None
+        options, descriptors, slots = [], [], []
+        node = question.el.getnext()
+        while node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); info = self.list_info(node)
+            if info is None:
+                break
+            text = self.text(node).strip()
+            # A malformed/hidden/different-level list item is an incomplete
+            # group, never a reason to silently keep only its easy prefix.
+            if (slot is None or slot.parent is not question.parent or slot.part != question.part
+                    or not text or len(text) > 200 or BOX in text or CHECKED in text
+                    or self.blank_spans(*self.ptext(node)) or self.question_box_request(text)
+                    or not self.tab_source_visible(slot) or any(child.tag in unsafe for child in node.iter())
+                    or len(node.findall('./' + q('w:pPr') + '/' + q('w:numPr'))) != 1
+                    or not self.list_marker_is_plain(info)
+                    or info[2] not in ('bullet', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'decimal')
+                    or descriptors and list(info[1:]) != descriptors[0]['numbering'][1:]
+                    or len(options) >= 100):
+                return None
+            options.append(option_text(text)); slots.append(slot)
+            descriptors.append({'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(node),
+                                'text': text, 'numbering': list(info)})
+            node = node.getnext()
+        if len(options) < 2 or chosen is not question and chosen is not slots[0]:
+            return None
+        if len({option.lower() for option in options}) != len(options):
+            return None
+        context = self.context_for(question, complete=True)
+        context = ' > '.join(value for value in (context, prompt) if value)
+        if len(context) > MAX_MAPPING_CONTEXT:
+            return None
+        relation = {'relation': 'manual_paragraph_options', 'question': prompt,
+                    'cardinality': 'one' if kind == 'choice' else 'many',
+                    'source': {'part': question.part, 'slot': question.path, 'fingerprint': fingerprint(question.el)},
+                    'descriptors': descriptors,
+                    'definitions': {name: hashlib.sha256(self.package.zip.read(name)).hexdigest()
+                                    for name in ('word/numbering.xml', 'word/_rels/document.xml.rels')
+                                    if name in self.package.names}}
+        return Area(kind, prompt, slots[0], {'type': 'paragraph_options', 'paragraphs': [slot.path for slot in slots]},
+                    options=options, extra_slots=slots[1:], context=context,
+                    complete_source=True, source_questions=[relation])
+
+    def ruled_paragraph_stop(self, slot):
+        """An explicit single flowing underscore leader, not a column or guessed line."""
+        if slot.kind != 'p' or slot.part != 'word/document.xml' or slot.parent is not None:
+            return None
+        tabs = slot.el.findall('./' + q('w:pPr') + '/' + q('w:tabs') + '/' + q('w:tab'))
+        if len(tabs) != 1 or tabs[0].get(q('w:leader')) != 'underscore' or tabs[0].get(q('w:val')) != 'right':
+            return None
+        geometry = self.tab_column_properties(slot)
+        if geometry is None or len(geometry[0]) != 1 or geometry[0][0][1] != 'right':
+            return None
+        return geometry
+
+    def rule_ruled_paragraphs(self):
+        """One complete printed narrative owns every matching line and spacer.
+
+        Reuse the historical source-bound recovery compiler. The relation's
+        legacy name stays stable; automatic fields have no manual origin.
+        Partial or unresolved ruled destinations remain visible exclusions.
+        """
+        for slot in self.index.slots:
+            if (id(slot.el) in self.claimed or self.ruled_paragraph_stop(slot) is None
+                    or self.ptext(slot.el)[0] != '\t'):
+                continue
+            area = self.manual_ruled_paragraphs(slot, 'long_text')
+            if area is None:
+                self.claimed.add(id(slot.el))
+                reason = ('The complete ruled answer group and its printed question could not be bound. '
+                          'Review the original and recover the complete group; no partial group was appointed.')
+                self.coverage_issue(slot, 'unmapped_answer', reason)
+                self.notes.append(reason + ' Location: ' + slot.id)
+                continue
+            relation = area.source_questions[0]
+            refs = [relation['source'], *relation['descriptors'], *relation['instructions']]
+            if any(id(self.index.by_id[_place_id(ref['part'], ref['slot'])].el) in self.claimed for ref in refs):
+                continue
+            self.add(area)
+            for ref in refs:
+                self.claimed.add(id(self.index.by_id[_place_id(ref['part'], ref['slot'])].el))
+
+    def manual_ruled_paragraphs(self, chosen, kind):
+        """Explicitly recover a complete body narrative made of printed ruled lines.
+
+        All answer lines, intervening ruled spacers, the adjacent caption and
+        optional fixed bracket guidance belong to one source-bound relation.
+        The line group must start here; a middle line never creates a suffix.
+        Tables, hidden/unknown formatting, filled lines and column tabs refuse.
+        """
+        geometry = self.ruled_paragraph_stop(chosen)
+        if kind != 'long_text' or geometry is None or self.ptext(chosen.el)[0] != '\t':
+            return None
+        unsafe = {q('w:sdt'), FLDCHAR, q('w:instrText'), q('w:drawing'), q('w:pict'),
+                  q('w:object'), q('w:sectPr'), q('w:br')}
+        def safe(slot):
+            return (slot is not None and slot.kind == 'p' and slot.part == chosen.part
+                    and slot.parent is chosen.parent and self.tab_source_visible(slot)
+                    and not self.question_box_paragraph(slot.el)[2]
+                    and not any(node.tag in unsafe for node in slot.el.iter()))
+        def ref(slot):
+            return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el),
+                    'text': self.ptext(slot.el)[0]}
+        def human(text):
+            lexical = self.question_box_signing(text)
+            if lexical and (self.ordinary_source_kind([text], 'initials')
+                            or self.ordinary_source_kind([text], 'signature')):
+                lexical = False
+            return (self.checkbox_source_action(text, governing=True) or self.question_box_authorship(text)
+                    or signing_place(text) or lexical)
+        node, preceding = chosen.el.getprevious(), []
+        while node is not None and node.tag == q('w:p') and len(preceding) < 3:
+            slot = self.index.by_el.get(id(node))
+            if not safe(slot) or self.ruled_paragraph_stop(slot) is not None:
+                return None
+            text = self.ptext(node)[0].strip()
+            if text:
+                break
+            preceding.append(slot); node = node.getprevious()
+        guidance = []
+        if node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); text = self.ptext(node)[0].strip()
+            if text.startswith('[') and text.endswith(']') and text.count('[') == text.count(']') == 1:
+                if not safe(slot): return None
+                guidance = [slot]; node = node.getprevious()
+        question = self.index.by_el.get(id(node)) if node is not None else None
+        if not safe(question): return None
+        prompt = self.ptext(question.el)[0].strip()
+        if (not prompt or ':' not in prompt and not self.question_box_request(prompt)
+                or len(prompt) > MAX_MAPPING_LABEL or self.blank_spans(*self.ptext(question.el))
+                or self.question_box_reference(prompt) or human(prompt)):
+            return None
+        lines, descriptors = [], []
+        node = chosen.el
+        while node is not None and node.tag == q('w:p'):
+            slot = self.index.by_el.get(id(node)); stop = self.ruled_paragraph_stop(slot) if slot else None
+            if stop is None:
+                if slot is not None and (self.ptext(node)[0] == '\t'
+                        or not self.ptext(node)[0].strip() and node.find('./' + q('w:pPr') + '/' + q('w:tabs')) is not None):
+                    return None  # an inconsistent empty line cannot shorten the complete group
+                break
+            text = self.ptext(node)[0]
+            if (not safe(slot) or stop != geometry or text not in ('', '\t') or len(descriptors) >= 100):
+                return None
+            if text == '\t': lines.append(slot)
+            descriptors.append(ref(slot)); node = node.getnext()
+        if len(lines) < 2:
+            return None
+        context = ' > '.join(value for value in (self.context_for(question, complete=True), prompt,
+                            *[self.ptext(slot.el)[0].strip() for slot in guidance]) if value)
+        governing_context, context_problem = self.question_box_context(question, require_visible=True)
+        previous = self.previous_continuous_paragraph(question)
+        source_readings = [prompt, governing_context, *[self.ptext(slot.el)[0].strip('[] \t\r\n') for slot in guidance]]
+        if previous is not None:
+            source_readings.append(self.ptext(previous.el)[0])
+        source_readings = [clause.strip() for text in source_readings for clause in
+                           [text, *re.split(r'(?<=[.;!?])\s*|[\r\n]+', text)] if clause.strip()]
+        if (context_problem or len(context) > MAX_MAPPING_CONTEXT
+                or any(human(value) for value in source_readings)):
+            return None
+        relation = {'relation': 'manual_ruled_paragraph_answer', 'question': prompt, 'source': ref(question),
+                    'descriptors': descriptors, 'instructions': [ref(slot) for slot in guidance + preceding],
+                    'definitions': {name: hashlib.sha256(self.package.zip.read(name)).hexdigest()
+                                    for name in ('word/styles.xml',) if name in self.package.names}}
+        return Area('long_text', prompt, lines[0], {'type': 'ruled_paragraphs'}, extra_slots=lines[1:],
+                    context=context, complete_source=True, source_questions=[relation])
 
     def rule_question_boxes(self, *, list_only=False):
         """A printed body question followed by its own empty one-cell bordered table.
@@ -5089,6 +8321,7 @@ class Detector:
                 continue
             self.notes.append("Unassigned answer box at " + cell.id + ". " + reason +
                               (" Printed text: " + raw if raw else ""))
+            self.coverage_issue(cell, 'unmapped_answer', self.notes[-1])
 
     def cell_twips(self, tslot, c) -> float:
         tcpr = c.el.find(q("w:tcPr"))
@@ -5172,9 +8405,7 @@ class Detector:
             if refs:
                 name = refs[0].get(q("w:val"))
             else:
-                defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
-                            if s.get(q("w:type")) == kind and s.get(q("w:default")) in ("1", "true", "on")] \
-                    if "word/styles.xml" in self.package.names else []
+                defaults = self.default_source_styles(kind)
                 if len(defaults) > 1:
                     return False
                 if not defaults:
@@ -5231,7 +8462,7 @@ class Detector:
             return False
         return any(a.slot is below and a.target.get("type") in ("cell", "cell_replace", "cell_append") for a in self.areas)
 
-    def rule_lines_below_label(self):
+    def rule_lines_below_label(self, *, write_requests_only=False):
         containers = [s for s in self.index.slots if s.kind in ("tc", "txbx")]
         seqs = [[c for c in s.children if c.kind == "p"] for s in containers]
         by_part = {}
@@ -5246,14 +8477,34 @@ class Detector:
                 txt = self.text(ps.el).strip()
                 if not txt or len(txt) > 200 or BOX in txt or "\x00" in self.ptext(ps.el)[0]:
                     continue
-                if UNDERSCORES.search(txt) or DOTS.search(txt):
+                if write_requests_only and not self.parenthetical_write_request(txt):
+                    continue
+                # A printed heading can contain its own digit, underline or
+                # placeholder answer. That precise source blank owns the
+                # response; following empty paragraphs are not its answer.
+                if self.blank_spans(*self.ptext(ps.el)):
                     continue
                 label = clean_label(txt)
+                requested = self.parenthetical_write_request(txt)
+                # A printed bullet ending in a colon can own a flowing answer
+                # band. Its complete caption, rather than a word-count cutoff,
+                # is the source; two plain empty paragraphs prove the band.
+                narrative = (not in_container and txt.rstrip().endswith(":")
+                             and (re.match(r"^[•●▪‣]\s+", txt) is not None
+                                  or self.list_info(ps.el) is not None))
+                props = ps.el.find(q('w:pPr'))
+                band_style = fingerprint(props) if props is not None else ''
+                if not requested and self.ptext(ps.el)[0].rstrip("\n").endswith("\t"):
+                    continue  # the actual inline tab is already its answer gap
+                cell = self.host_cell(ps)
+                if (requested and cell is not None and not signing_place(clean_label(txt.partition('(')[0]))
+                        and self.row_label(cell.parent, cell.info['row'], cell.info['col'])):
+                    continue  # A row's option/write-in cannot become a separate unconditional request.
                 signing = bool(SIGNATURE.search(label) or INITIALS.search(label) or re.match(r"^(?:date|printed name|name)\b", label, re.I))
                 if in_container:
-                    if not (txt.endswith(":") or signing or self.is_heading(ps.el) and len(paras) > i + 1):
+                    if not (requested or txt.endswith(":") or signing or self.is_heading(ps.el) and len(paras) > i + 1):
                         continue
-                elif not ((signing or LONG_LABEL.search(label) and self.text(ps.el).rstrip("\n").endswith(":"))
+                elif not (narrative or (signing or LONG_LABEL.search(label) and self.text(ps.el).rstrip("\n").endswith(":"))
                           and len(label.split()) <= 12):
                     continue                      # (trailing spaces after the colon mean: answer on this line)
                 blanks = []
@@ -5264,25 +8515,113 @@ class Detector:
                     t2, pcs = self.ptext(nxt.el)
                     if t2.strip() or id(nxt.el) in self.claimed or nxt.el.find(".//" + TXBX) is not None:
                         break
+                    props = nxt.el.find(q('w:pPr'))
+                    if narrative and (fingerprint(props) if props is not None else '') != band_style:
+                        break  # a style/spacing transition is a different layout band
                     blanks.append(nxt)
-                    if not in_container and len(blanks) >= 1:
+                    if not in_container and not narrative and len(blanks) >= 1:
                         break
                 if not blanks:
                     continue
-                if in_container and self.mapped_beside_label(ps) and all(self.plain_spacing_paragraph(b) for b in blanks):
+                if narrative and (len(blanks) < 2 or len(blanks) > 20
+                                  or not self.insertion_source_plain(ps)
+                                  or any(not self.plain_spacing_paragraph(b, unused_tab_stops=True)
+                                         or not self.tab_source_visible(b) for b in blanks)):
+                    if len(blanks) >= 2:
+                        for source in [ps, *blanks]:
+                            self.coverage_issue(source, 'unresolved_narrative_band',
+                                'This printed caption and blank band have unresolved structure or visibility; '
+                                'preserve them and review the exact source relationship.')
+                        self.narrative_bands.append(tuple(source.id for source in [ps, *blanks]))
                     continue
-                kind = "long_text" if len(blanks) >= 2 and not signing else self.kind_for(label)
-                self.add(Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),
-                              extra_slots=blanks[1:], label_slot=ps))
+                if requested and (not self.tab_source_visible(ps) or self.question_box_paragraph(ps.el)[2]
+                                  or any(not self.plain_spacing_paragraph(b, unused_tab_stops=True) or not self.tab_source_visible(b)
+                                         for b in blanks)):
+                    continue
+                if in_container and not requested and self.mapped_beside_label(ps) and all(self.plain_spacing_paragraph(b) for b in blanks):
+                    continue
+                head = clean_label(txt.partition('(')[0]) if requested else ''
+                role = signing_place(head) if requested else ''
+                action = self.checkbox_source_action(head, governing=True) if requested else ''
+                kind = (role or ('long_text' if len(blanks) >= 2 else 'text')) if requested else \
+                    ("long_text" if len(blanks) >= 2 and not signing else self.kind_for(label))
+                relation = ({'relation': 'narrative_empty_band', 'question': self.ptext(ps.el)[0],
+                             'source': {'part': ps.part, 'slot': ps.path, 'fingerprint': fingerprint(ps.el)}}
+                            if narrative else self.write_request_source(ps) if requested else None)
+                area = Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),
+                            extra_slots=blanks[1:], label_slot=ps, complete_source=requested or narrative,
+                            source_questions=[relation] if relation else [])
+                if role or action:
+                    area.source_action = True
+                    area.protection = ('This printed signing or document action is human-owned. Complete it through the explicit human signing workflow.'
+                                       if role or action == 'human_signing_action' else
+                                       'This printed action does not establish who performs it. Keep it unchanged and review its precise source role.')
+                self.add(area)
                 self.claimed.add(id(ps.el))
                 for b in blanks:
                     self.claimed.add(id(b.el))
 
     # 7. blanks and 'Label:' answers inside paragraphs ---------------------------------------------------------------
+    def literal_reference_link(self, text, pieces, start, end):
+        """A printed address equal to its hyperlink target is fixed reference ink."""
+        links = {ancestor for piece in pieces if piece.run is not None
+                 and piece.start < end and piece.end > start
+                 for ancestor in piece.run.iterancestors() if ancestor.tag == q('w:hyperlink')}
+        if len(links) != 1:return False
+        link = next(iter(links)); shown = ''.join(link.itertext()).strip()
+        if shown != text[start:end].strip():return False
+        paragraph = next((a for a in link.iterancestors() if a.tag == q('w:p')), None)
+        slot = self.index.by_el.get(id(paragraph)) if paragraph is not None else None
+        if slot is None:return False
+        parent, name = slot.part.rsplit('/', 1)
+        rels = parent + '/_rels/' + name + '.rels'
+        if rels not in self.package.names:return False
+        target = next((r.get('Target') for r in self.package.tree(rels)
+                       if r.get('Id') == link.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+                       and r.get('TargetMode') == 'External'
+                       and (r.get('Type') or '').endswith('/hyperlink')), None)
+        return ((target == 'mailto:' + shown and re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', shown) is not None)
+                or (target == shown and shown.startswith(('https://', 'http://'))))
+
     def blank_spans(self, text, pieces):
         spans = []
+        unresolved=[]
+        # Printed slash-separated parts are alternatives, irrespective of their
+        # punctuation, script, digits, empty parts or line breaks. A leading
+        # verb does not prove an authoring role: [type A/type B] is a menu.
+        # Only the existing explicit date-format hint is a slash placeholder.
+        for match in re.finditer(r'\[([^\[\]]+)\]',text):
+            inner=match.group(1).strip()
+            parts=inner.split('/')
+            if (len(parts)>1 and
+                    not re.fullmatch(r'(?:dd|mm|yy|yyyy)(?:[^\S\r\n]*/[^\S\r\n]*(?:dd|mm|yy|yyyy))+',inner,re.I)):
+                unresolved.append((match.start(),match.end(),'printed_bracket_alternatives',
+                    'Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact '
+                    'choice interpretation need review; this source range remains unchanged: '+match.group(0)))
+        # An unmatched opening ends at the next opening or paragraph end. A
+        # later closed placeholder cannot close or hide this earlier range.
+        for match in re.finditer(r'\[[^\[\]]*/[^\[\]]*(?=\[|$)',text):
+            unresolved.append((match.start(),match.end(),'unbalanced_bracketed_source',
+                'This slash-bearing source range has no closing bracket. Its answer or authoring role is unresolved; '
+                'preserve the exact text and review it before generation: '+match.group(0)))
+        # A long marked range is outside the qualified placeholder grammar. Its
+        # physical presence cannot be silently omitted because of the 120 limit.
+        for match in re.finditer(r'\[[^\[\]]+\]',text):
+            if len(match.group(0))<=122 and '\n' not in match.group(0):continue
+            if any(start==match.start() and end==match.end() for start,end,_,_ in unresolved):continue
+            unresolved.append((match.start(),match.end(),'unmapped_bracketed_source',
+                'This long bracketed source range exceeds the qualified placeholder grammar. Its authoring or '
+                'answer role is unresolved; preserve the exact text and review it before generation: '+match.group(0)))
+        slot=next((self.index.by_el.get(id(ancestor)) for pc in pieces if pc.run is not None
+                   for ancestor in pc.run.iterancestors() if ancestor.tag==q('w:p')),None)
+        for start,end,code,detail in unresolved:
+            if slot is not None:
+                self.coverage_issue(slot,code,detail,start=start,end=end)
+                if detail not in self.notes:self.notes.append(detail)
         for rx, kind in ((SEGMENTED, "segmented"), (DIGIT_RUN, "segmented"), (UNDERSCORES, "blank"), (DOTS, "blank"), (TOKEN, "token"), (BRACKET, "bracket"), (ANGLE, "angle")):
             for m in rx.finditer(text):
+                if kind=='bracket' and any(start<=m.start() and m.end()<=end for start,end,_,_ in unresolved):
+                    continue
                 spans.append((m.start(), m.end(), kind))
         # underlined tabs / spaces (a drawn line)
         run_start = None
@@ -5321,6 +8660,8 @@ class Detector:
                 hint_start = None
         kept = []
         for start, end, kind in merge_spans(spans):
+            if any(start < stop and end > begin for begin, stop, _, _ in unresolved):
+                continue
             if hyperlink_write(pieces, start, end):
                 owner = next((ancestor for pc in pieces if pc.run is not None
                               for ancestor in pc.run.iterancestors() if ancestor.tag == q("w:p")), None)
@@ -5330,9 +8671,281 @@ class Detector:
                     note += " Location: " + slot.id
                 if note not in self.notes:
                     self.notes.append(note)
+                if slot is not None and not (kind == 'hint' and self.literal_reference_link(text, pieces, start, end)):
+                    self.coverage_issue(slot, 'fixed_link_answer', note, start=start, end=end)
             else:
                 kept.append((start, end, kind))
         return kept
+
+    @staticmethod
+    def signing_event_source(printed):
+        """Complete event/owner captions, without choosing a signer's identity.
+
+        A temporal modifier can qualify the event; an actor can precede or
+        follow its signature noun. An incidental signature inside a different
+        field's complete argument is not that caption's head.
+        """
+        text = _plain(printed).strip(' :.')
+        temporal = re.match(r'^(?:date|time)(?:\s+(?:of|for))?\s+(.+)$', text, re.I)
+        if temporal:
+            text = temporal[1]
+            # In a complete receipt predicate, "signed" modifies its object;
+            # it is not the actor's signing predicate. Coordination remains
+            # subject to the separate complete-clause action reader.
+            receipt = re.fullmatch(r'(?:[^:;.!?\r\n]+\s+)?(?:received|recorded|filed|stored)\s+'
+                r'(?:(?:the|a|an|this|that|these|those)\s+)?signed\s+[^:;.!?\r\n]+', text, re.I)
+            if receipt and not re.search(r'\b(?:and|or|but)\b', text, re.I):
+                return False
+        if re.fullmatch(r'(?:signature|initials?|signing)(?:\s*\([^()]+\)|'
+                        r'\s+(?:of|by)\s+[^:;.!?\r\n]+|\s+(?:date|time))?', text, re.I):
+            return True
+        owned = re.fullmatch(r'([^:;.!?()\r\n]+)\s+(?:signature|initials?)', text, re.I)
+        if owned and not re.search(r'\b(?:of|to|for|by|from|with|and|or)\b', owned[1], re.I):
+            return True
+        if re.fullmatch(r'(?:signed|initiall?ed)\s+by\s+[^:;.!?\r\n]+|'
+                        r'(?:sign|initial)\s+(?:here|below)|(?:signatory|signer)\s+name|'
+                        r'name\s+of\s+(?:the\s+)?(?:signatory|signer)', text, re.I):
+            return True
+        return bool(temporal and re.fullmatch(r'[^:;.!?\r\n]+?\s+'
+                    r'(?:signs|signed|initials|initiall?ed)(?:\s+[^:;.!?\r\n]+)?', text, re.I))
+
+    @classmethod
+    def temporal_source_action(cls, argument):
+        # A temporal modifier can qualify coordinated events. Each complete
+        # clause keeps its own actor/predicate/argument reading: recording an
+        # observation does not release a subsequent approval or appointed
+        # response. Ordinary coordinated recorded states are still ordinary.
+        temporal = re.match(r'^\s*(?:date|time)(?:\s+(?:of|for))?\s+(.+?)\s*[:.]?\s*$', argument, re.I)
+        clauses = [argument, *([temporal[1]] if temporal else []),
+                   *re.split(r'(?:\s+|,\s*)(?:and|or|but)\s+', argument, flags=re.I)]
+        return any(cls.checkbox_source_action(clause, governing=True)
+                   or cls.question_box_authorship(clause) or cls.signing_event_source(clause)
+                   or signing_place(clause)
+                   or temporal and re.fullmatch(r'(?:consent|permission|authori[sz]ation)\s+'
+                       r'(?:(?:was|is|has\s+been)\s+)?(?:granted|given|approved|provided)\s*[:.]?', clause, re.I)
+                   for clause in clauses if clause.strip())
+
+    def temporal_band(self, slot):
+        """One caption, one divided blank and its own printed date-format guide.
+
+        The format's character positions appoint the blank runs, rather than
+        turning every run and separator into a separate question. All three
+        paragraphs must be immediate siblings in the same physical container.
+        """
+        siblings, at = self.para_neighbours(slot)
+        if at is None or at == 0 or at + 1 >= len(siblings):
+            return None
+        caption, guide = siblings[at - 1], siblings[at + 1]
+        if caption.el.getnext() is not slot.el or slot.el.getnext() is not guide.el:
+            return None
+        sources = (caption, slot, guide)
+        if (any(s.part != slot.part or s.parent is not slot.parent for s in sources)
+                or any(not self.tab_source_visible(s) or self.region_hidden(s.el) or wraps_structure(s.el)
+                       for s in sources)
+                or any(n.tag in (q('w:hyperlink'), q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                       for s in sources for n in s.el.iter())):
+            return None
+        label = self.ptext(caption.el)[0].strip()
+        pattern = re.sub(r'\s+', '', self.ptext(guide.el)[0]).lower()
+        if (pattern not in ('ddmmmyyyy', 'ddmmyyyy', 'mmddyyyy', 'yyyymmdd')
+                or not re.fullmatch(r'[^:;.!?\r\n]+:', label)
+                or not DATE_LABEL.search(label) or self.blank_spans(*self.ptext(caption.el))):
+            return None
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        if (len(spans) != len(pattern) or any(kind != 'utab' for _, _, kind in spans)
+                or any(text[start:end].strip() for start, end, _ in spans)):
+            return None
+        outside = ''.join(ch for n, ch in enumerate(text)
+                          if not any(start <= n < end for start, end, _ in spans))
+        # Only the date's two printed separators and optional fixed terminal
+        # punctuation surround these runs. Existing values are never blanks.
+        if re.sub(r'\s+', '', outside).rstrip('.') != '//':
+            return None
+        groups = re.findall(r'd+|m+|y+', pattern)
+        boundaries = {len(groups[0]), len(groups[0]) + len(groups[1])}
+        if any(text[spans[n - 1][1]:spans[n][0]].strip() != ('/' if n in boundaries else '')
+               for n in range(1, len(spans))):
+            return None
+        if self.box_units(slot) or len(label) > MAX_MAPPING_LABEL:
+            return None
+        context = self.context_for(caption, complete=True)
+        if len(context) > MAX_MAPPING_CONTEXT:
+            return None
+        refs = [{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)} for s in sources]
+        target = {'type': 'span', 'shape': 'temporal_band', 'start': spans[0][0], 'end': spans[-1][1],
+                  'parts': [[start, end] for start, end, _ in spans], 'format': pattern,
+                  'caption': refs[0], 'guide': refs[2]}
+        area = Area('date', clean_label(label), slot, target, context=context,
+                    complete_source=True, label_slot=caption)
+        if self.temporal_source_action(label) or self.kind_for(label) in SIGNING_KINDS:
+            area.source_action = True
+            area.protection = 'This date belongs to a printed human signing or authored act; keep it unchanged.'
+        return area
+
+    def rule_temporal_bands(self):
+        for slot in (s for s in self.index.slots if s.kind == 'p'):
+            area = self.temporal_band(slot)
+            if area is None:
+                continue
+            siblings, at = self.para_neighbours(slot)
+            sources = siblings[at - 1:at + 2]
+            if any(id(s.el) in self.claimed for s in sources):
+                continue
+            self.add(area)
+            self.claimed.update(id(s.el) for s in sources)
+            if area.protection:
+                self.coverage_issue(slot, 'human_signing_action', area.protection)
+
+    def rule_temporal_format_pairs(self):
+        """Two complete format paragraphs under their own aligned temporal caption.
+
+        Native clock controls can already own the surrounding cell, and their
+        preceding time hint can already be claimed as a label. Neither owns the
+        distinct date/time paragraph's ink. Do not change the existing clock
+        mapping or infer a field from a partial hint or neighboring caption.
+        """
+        date_format = re.compile(r'(?:MM/DD/YYYY|DD/MM/YYYY)', re.I)
+        time_format = re.compile(r':?\(HH:MM\)', re.I)
+        for cell in (s for s in self.index.slots if s.kind == 'tc' and s.part == 'word/document.xml'):
+            if cell.info['span'] != 1 or cell.info['vmerge']:
+                continue
+            paragraphs = self.own_paragraphs(cell)
+            if (len(paragraphs) not in (2, 3) or len(paragraphs) != len(cell.children)
+                    or not date_format.fullmatch(self.ptext(paragraphs[0].el)[0].strip())
+                    or not time_format.fullmatch(self.ptext(paragraphs[1].el)[0].strip())):
+                continue
+            if len(paragraphs) == 3:
+                units = self.box_units(paragraphs[2])
+                if (len(units) != 3 or units[0][2].strip()
+                        or [option_text(u[1]).casefold() for u in units] != ['am', 'pm', '24-hr clock']):
+                    continue
+            row, col = cell.info['row'], cell.info['col']
+            above = [c for c in self.grid(cell.parent).get(row - 1, [])
+                     if c.info['col'] <= col < c.info['col'] + c.info['span']]
+            if len(above) != 1:
+                continue
+            header = above[0]
+            captions = self.own_paragraphs(header)
+            if (header.info['col'] != col or header.info['span'] != 1 or header.info['vmerge']
+                    or len(captions) != 1 or len(header.children) != 1):
+                continue
+            caption = captions[0]; printed, pieces = self.ptext(caption.el)
+            if (not printed.strip().endswith(':') or not DATE_LABEL.search(printed)
+                    or not TIME_LABEL.search(printed) or self.blank_spans(printed, pieces)
+                    or self.box_units(caption) or wraps_structure(caption.el) or len(printed.strip()) > MAX_MAPPING_LABEL
+                    or self.column_header(cell.parent, col, row, complete=True) != self.cell_text(header)):
+                continue
+            if not re.fullmatch(r'[^:;.!?\r\n]+:', printed.strip()):
+                # Several clauses/captions in this one cell do not appoint one
+                # unambiguous temporal question. Keep the complete source and
+                # expose the omission rather than borrowing the first caption.
+                clauses = [printed, *re.split(r'(?<=[.;!?])\s*|[:\r\n]+', printed)]
+                human = any(self.checkbox_source_action(clause.strip(), governing=True)
+                            or signing_place(clause) for clause in clauses if clause.strip())
+                for paragraph in paragraphs[:2]:
+                    self.coverage_issue(paragraph, 'unmapped_answer',
+                        'The date/time format has competing printed captions or clauses. Review the complete '
+                        'source question and its exact answer area; no temporal ownership was inferred.')
+                    if human:
+                        self.protected_regions.add(paragraph.id)
+                continue
+            sources = [caption, *paragraphs]
+            if (not all(self.tab_source_visible(p) and not self.region_hidden(p.el) for p in sources)
+                    or any(n.tag in (q('w:hyperlink'), q('w:drawing'), q('w:pict'), q('w:object'), TXBX)
+                           for p in sources for n in p.el.iter())
+                    or any(wraps_structure(p.el) for p in paragraphs[:2])
+                    or any(area.slot is p or p in area.extra_slots for area in self.areas for p in paragraphs[:2])):
+                continue
+            context = self.context_for(caption, complete=True)
+            if len(context) > MAX_MAPPING_CONTEXT:
+                continue
+            nominal = re.fullmatch(r'date\s+and\s+time(?:\s+(.+))?', printed.strip()[:-1].strip(), re.I)
+            trailing = re.fullmatch(r'(.+?)\s+date\s+and\s+time', printed.strip()[:-1].strip(), re.I)
+            if nominal is None and trailing is None:
+                continue
+            argument = (nominal[1] or '') if nominal is not None else trailing[1]
+            # The temporal noun modifies a complete event/author argument; it
+            # does not convert that person's signing, approval or statement
+            # into an ordinary clinical field. Use the established source
+            # predicates on that argument and retain the complete original.
+            human = self.temporal_source_action(argument)
+            refs = [{'part': p.part, 'slot': p.path, 'fingerprint': fingerprint(p.el)} for p in sources]
+            for kind, paragraph in zip(('date', 'time'), paragraphs[:2]):
+                text, _ = self.ptext(paragraph.el)
+                relation = {'relation': 'temporal_format_hint', 'question': printed.strip(),
+                            'format': text, 'component': kind, 'argument': argument, 'sources': refs}
+                area = Area(kind, clean_label(printed) + ' — ' + kind.capitalize(), paragraph,
+                    {'type': 'span', 'start': 0, 'end': len(text), 'shape': 'format_hint'},
+                    context=context, complete_source=True, label_slot=caption, source_questions=[relation])
+                if human:
+                    area.source_action = True
+                    area.protection = ('The printed temporal question belongs to a human signing or authored act. '
+                                       'Keep it unchanged and use the explicit human workflow.')
+                    self.coverage_issue(paragraph, 'human_signing_action', area.protection)
+                self.add(area)
+
+    def insertion_source_plain(self, slot):
+        """An insertion's printed source has no control, wrapper or foreign ink."""
+        unsafe = {SDT, FLDCHAR, q('w:instrText'), q('w:hyperlink'), TXBX, q('w:drawing'),
+                  q('w:pict'), q('w:object'), q('w:customXml'), q('w:ins'), q('w:del'),
+                  q('w:moveFrom'), q('w:moveTo'), q('w:sectPr'), q('w:br')}
+        return (slot.parent is None and slot.el.getparent() is not None
+                and slot.el.getparent().tag == q('w:body')
+                and not any(not isinstance(node.tag, str) or node.tag in unsafe
+                            or not node.tag.startswith('{' + W + '}') for node in slot.el.iter())
+                and self.tab_source_visible(slot))
+
+    def explicit_insertion_spans(self, slot, text, pieces):
+        """Read explicit authoring slots, retaining their complete printed request.
+
+        Single braces require an insertion verb. They do not turn arbitrary
+        brace prose or printed choice menus into scalar answers. A whole-line
+        insertion also needs the explicit destination word 'here'.
+        """
+        candidates = [(m.start(), m.end(), m.group(1).strip(), False)
+                      for m in re.finditer(r'(?<!\{)\{([^{}\r\n]+)\}(?!\})', text)]
+        whole = re.fullmatch(r'\s*(?:insert|enter|type|add|specify)\s+(.{1,160}?)\s+here\s*[.]?\s*', text, re.I)
+        if whole:
+            candidates.append((len(text) - len(text.lstrip()), len(text.rstrip()),
+                               text.strip().rstrip('.'), True))
+        spans = []
+        for opening in re.finditer(r'(?<!\{)\{(?:insert|enter|type|add|specify)\b', text, re.I):
+            if not any(start == opening.start() for start, _, _, _ in candidates):
+                self.coverage_issue(slot, 'unresolved_insertion_source',
+                    'This explicit insertion has unmatched or nested delimiters; preserve its original source.',
+                    start=opening.start(), end=len(text))
+        for start, end, printed, full in candidates:
+            request = re.fullmatch(r'(?:insert|enter|type|add|specify)\s+([^{}\[\]<>;?!\r\n]{1,160})', printed, re.I)
+            if not request:
+                if re.match(r'^(?:insert|enter|type|add|specify)\b', printed, re.I):
+                    self.coverage_issue(slot, 'unresolved_insertion_source',
+                        'This explicit insertion exceeds the supported request grammar; preserve its exact source.',
+                        start=start, end=end)
+                continue
+            argument = request[1].strip()
+            if full:
+                argument = re.sub(r'\s+here$', '', argument, flags=re.I)
+            # A slash between author descriptors can qualify one scalar
+            # identifier ('provider/plan telephone number'). A slash-only
+            # menu, a selection instruction or competing alternatives cannot.
+            slash_scalar = re.fullmatch(r'[\w-]+/[\w-]+\s+(?:[\w-]+\s+){0,8}(?:number|address|identifier)', argument, re.I)
+            enclosed = any(m.start() < start and end < m.end()
+                           for m in re.finditer(r'\[[^\[\]\r\n]*\]', text))
+            alternatives = any(start in (m.start('left'), m.start('right'))
+                               for m in re.finditer(r'(?=(?P<left>\{[^{}\r\n]+\})\s+or\s+'
+                                                    r'(?P<right>\{[^{}\r\n]+\}))', text, re.I))
+            ambiguous = (OPTION_SELECTION.search(argument) or re.search(r'\b(?:or|either|neither)\b', argument, re.I)
+                         or '/' in argument and not slash_scalar or ':' in argument or ',' in argument
+                         or enclosed or alternatives)
+            if (ambiguous or not self.insertion_source_plain(slot)
+                    or hyperlink_write(pieces, start, end)):
+                self.coverage_issue(slot, 'unresolved_insertion_source',
+                    'This explicit insertion needs review of its exact source role or alternatives; preserve it unchanged: '
+                    + text[start:end], start=start, end=end)
+                continue
+            spans.append((start, end, 'insertion'))
+        return spans
 
     def rule_paragraph_fields(self):
         pending, pending_last = None, None     # a multi-line answer area and its last line
@@ -5345,13 +8958,19 @@ class Detector:
             if cell is not None and id(cell.el) in self.claimed:
                 continue
             text, pieces = self.ptext(p)
-            spans = self.blank_spans(text, pieces)
+            spans = merge_spans(self.explicit_insertion_spans(slot, text, pieces)
+                                + self.blank_spans(text, pieces))
             residue = "".join(ch for i, ch in enumerate(text) if not any(s <= i < e for s, e, _ in spans))
-            if len(spans) == 1 and not clean_label(residue.replace("_", "")):
+            named_placeholder = (len(spans) == 1 and (spans[0][2] in ('insertion', 'token', 'bracket', 'angle')
+                                 or spans[0][2] == 'hint' and not PLACEHOLDER_TEXT.fullmatch(text[spans[0][0]:spans[0][1]].strip())))
+            if len(spans) == 1 and spans[0][2] != 'insertion' and not clean_label(residue.replace("_", "")):
                 # a line that is ONLY a drawn blank: continues the previous line's area, or takes the label above
                 sibs, idx = self.para_neighbours(slot)
                 prev_sib = sibs[idx - 1] if idx else None
-                if pending is not None and prev_sib is pending_last:
+                prior_human = (pending is not None and (pending.kind in SIGNING_KINDS or pending.protection
+                               or self.question_box_authorship(pending.label)
+                               or self.checkbox_source_action(pending.label, governing=True)))
+                if pending is not None and prev_sib is pending_last and (not named_placeholder or prior_human):
                     pending.extra_slots.append(slot)
                     if pending.kind == "text":
                         pending.kind = "long_text"
@@ -5368,7 +8987,7 @@ class Detector:
                     # sibling answer, never this blank's question: the header names it (refutation 2026-09-28 B1).
                     header = clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
                     label = self.row_label(cell.parent, cell.info["row"], cell.info["col"], values=not header) or header
-                if not label and spans[0][2] in ("angle", "bracket", "token"):
+                if not label and spans[0][2] in ("angle", "bracket", "token", "insertion"):
                     label = clean_label(text[spans[0][0]:spans[0][1]].strip("{}[]<> "))
                 label = label or "Answer"
                 area = Area(self.kind_for(label), label, slot, {"type": "span", "start": spans[0][0], "end": spans[0][1],
@@ -5394,7 +9013,7 @@ class Detector:
         """'Label:' followed by a printed gap (a tab or three or more spaces) and then more of an answer line:
         another 'Label:' or a unit. The answer is written inside the printed line (segment_paragraph's reading)."""
         text = self.ptext(slot.el)[0]
-        for m in self.LABEL_COLON.finditer(text):
+        for m in (self.LABEL_COLON.finditer(text) if ":" in text else ()):   # (a match needs a colon)
             label_text = m.group(1)
             if len(label_text.split()) > MAX_LABEL_WORDS or not re.search(r"[A-Za-z]", label_text):
                 continue
@@ -5428,11 +9047,19 @@ class Detector:
         format_hint = False
         blanks = list(spans)
         # 'Label:' followed by a gap (>=1 tab or >=3 spaces) or the end of the paragraph, with nothing else drawn
-        for m in self.LABEL_COLON.finditer(text):
+        for m in (self.LABEL_COLON.finditer(text) if ":" in text else ()):   # (a match needs a colon)
             if self.fixed_link_introduction(slot):
                 continue
             end = m.end()
-            if any(s <= m.start() < e or s <= end - 1 < e for s, e, _ in blanks):
+            label_ink = m.start(1) + len(m.group(1)) - len(m.group(1).lstrip())
+            # The next caption's regex can include the preceding answer's
+            # plain-space gap. Only printed caption ink overlaps that answer;
+            # its leading whitespace is not part of the question. A unit
+            # after the previous gap still belongs to that previous answer,
+            # so do not newly reinterpret a unit-prefixed run as a caption.
+            if (any(s <= label_ink < e or s <= end - 1 < e for s, e, _ in blanks)
+                    or any(s <= m.start() < e for s, e, _ in blanks)
+                    and self.ANSWER_UNIT.match(text[label_ink:end - 1])):
                 continue
             rest = text[end:]
             gap = self.ANSWER_GAP.match(rest).group(0)
@@ -5478,11 +9105,29 @@ class Detector:
         for n, (s, e, kind) in enumerate(blanks):
             if hyperlink_write(pieces, s, s if kind == "after_label" else e):
                 self.notes.append("An answer insertion inside a fixed hyperlink was left unassigned at " + slot.id)
+                self.coverage_issue(slot, 'unmapped_answer', self.notes[-1])
                 continue
             seg = text[prev_end:s]
             seg = re.split(r"[\x00" + BOX + CHECKED + "]", seg)[-1]
             seg = re.split(r"(?<=[.;!?])\s+(?=[A-Z(])", seg.strip())[-1]
             label = clean_label(seg)
+            if kind == 'insertion':
+                argument = re.sub(r'^(?:insert|enter|type|add|specify)\s+', '',
+                                  text[s:e].strip('{} ').rstrip('.'), flags=re.I)
+                argument = re.sub(r'\s+here$', '', argument, flags=re.I)
+                label = clean_label(argument)
+                whole = not text[:s].strip() and not text[e:].strip()
+                relation = {'relation': 'explicit_insertion', 'question': text,
+                            'request': text[s:e], 'source': {'part': slot.part, 'slot': slot.path,
+                                                           'fingerprint': fingerprint(slot.el)}}
+                physical_kind = self.kind_for(clean_label(seg)) if SIGNATURE.search(seg) or INITIALS.search(seg) else ''
+                self.add(Area(physical_kind or ('long_text' if whole else self.kind_for(label)), label, slot,
+                              {'type': 'span', 'start': s, 'end': e, 'shape': kind},
+                              context=self.context_for(slot), complete_source=True,
+                              source_questions=[relation]))
+                made += 1
+                prev_end = e
+                continue
             if kind in ("token", "bracket", "angle", "hint") and not label:
                 label = clean_label(re.sub(r"^(?:enter|insert|type|add|specify)\s+", "", text[s:e].strip("{}[]<> "), flags=re.I))
             elif kind in ("token", "bracket", "angle"):
@@ -5548,8 +9193,232 @@ class Detector:
 
     # Protected signing structures: enumerate them without claiming a visual layout engine.
     def rule_protected_signing_areas(self):
+        self.rule_inline_signing_lines()
         self.rule_signing_captions()
         self.rule_initial_boxes()
+
+    def rule_inline_signing_lines(self):
+        """Inline horizontal lines and their immediate signing captions stay human-owned.
+
+        This is a protected-source inventory, never a new writable drawing
+        contract. Anchored shapes, text boxes and a partial caption do not
+        establish a correspondence. Modern/fallback drawings stay untouched.
+        """
+        if not self._inline_bands:
+            return
+        wp = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+        a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        for slot in (s for s in self.index.slots if s.kind == 'p' and s.parent is None):
+            if self.ptext(slot.el)[0].strip() or not self.tab_source_visible(slot):
+                continue
+            drawings = [n for n in slot.el.iter('{%s}inline' % wp)
+                        if not any(p.tag == FALLBACK for p in n.iterancestors())]
+            if len(drawings) < 1 or len(drawings) > 8 or slot.el.find('.//{%s}anchor' % wp) is not None:
+                continue
+            geometry = []
+            for drawing in drawings:
+                extent = drawing.find('{%s}extent' % wp)
+                transforms = list(drawing.iter('{%s}xfrm' % a))
+                shapes = list(drawing.iter('{%s}prstGeom' % a))
+                if (extent is None or len(transforms) != 1 or len(shapes) != 1
+                        or shapes[0].get('prst') != 'line'
+                        or drawing.find('.//' + TXBX) is not None):
+                    break
+                size = transforms[0].find('{%s}ext' % a)
+                try:
+                    width, height = int(extent.get('cx')), int(extent.get('cy'))
+                    if size is None or int(size.get('cy')) != 0 or int(size.get('cx')) != width:
+                        break
+                except (TypeError, ValueError):
+                    break
+                if width <= 0 or height < 0 or height > 12700:
+                    break
+                geometry.append({'width': width, 'height': height, 'fingerprint': fingerprint(drawing)})
+            if len(geometry) != len(drawings):
+                continue
+            # The lines alone: a text box, picture, object, control or field in
+            # the same paragraph is its own destination, never part of the band.
+            if any(node.tag in (TXBX, SDT, FLDCHAR, q('w:fldSimple'), q('w:object'))
+                   or node.tag == q('w:pict') and not any(a.tag == FALLBACK for a in node.iterancestors())
+                   for node in slot.el.iter()):
+                continue
+            following = band_next(slot.el)
+            caption = self.index.by_el.get(id(following)) if following is not None else None
+            if (caption is None or caption.kind != 'p' or caption.parent is not slot.parent
+                    or not self.tab_source_visible(caption) or wraps_structure(caption.el)):
+                continue
+            text, pieces = self.ptext(caption.el)
+            labels = [clean_label(x) for x in re.split(r'\t+', text) if x.strip()]
+            signs = [label for label in labels if band_signing_label(label)]
+            if (len(labels) != len(drawings) or not signs
+                    or any(not FIELDISH.search(label) for label in labels)
+                    or self.blank_spans(text, pieces) or self.box_units(caption)):
+                continue
+            reason = ('These printed inline lines belong to a human signing event. '
+                      'Keep the signature, signing date and captions unchanged.')
+            source = {'part': caption.part, 'slot': caption.path, 'fingerprint': fingerprint(caption.el)}
+            relation = {'relation': 'protected_inline_signing_lines', 'question': text,
+                        'source': source, 'drawings': geometry}
+            # The previous detector borrowed the combined caption to invent a
+            # date on the immediately following empty paragraph. That spacer
+            # is part of this preserved signing band, not an ordinary answer,
+            # when it shows nothing at all; it is then one of the band's places.
+            after = band_next(caption.el)
+            spacer = self.index.by_el.get(id(after)) if after is not None else None
+            if not (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
+                    and not self.ptext(spacer.el)[0].strip()
+                    and not any(node.tag in BAND_SPACER_CONTENT for node in spacer.el.iter())):
+                spacer = None
+            if spacer is not None:
+                relation['spacer'] = {'part': spacer.part, 'slot': spacer.path, 'fingerprint': fingerprint(spacer.el)}
+            # A part that is not itself the signing place is named within its
+            # signing event ('Signature of Patient Date'), as the old inferred
+            # date was: a bare 'Date' would compete with the form's own 'Date'.
+            signers = ' '.join(signs)
+            for number, label in enumerate(labels, 1):
+                named = label if label in signs else clean_label(signers + ' ' + label)
+                area = Area(self.kind_for(label), named, slot, {'type': 'none', 'drawing': number},
+                            context=self.context_for(caption), protection=reason,
+                            structural=True, label_slot=caption, source_questions=[relation])
+                area.source_action = True
+                self.add(area)
+            self.claimed.update((id(slot.el), id(caption.el)))
+            self.protected_regions.update((slot.id, caption.id))
+            self.signing_band_places += [slot.id, caption.id] + ([spacer.id] if spacer is not None else [])
+            if spacer is not None:
+                self.claimed.add(id(spacer.el))
+                self.protected_regions.add(spacer.id)
+                if self.band_spacer_draws_line(spacer):
+                    # A visible writing line here (underline, leader, border)
+                    # may be another field's line: keep it unwritten AND have
+                    # a clinician review it, as the previous reading did.
+                    self.coverage_issue(spacer, 'ambiguous_signing_band',
+                                        DRAWN_BAND_SPACER_REVIEW + 'Location: ' + spacer.id)
+            # The caption's own writing lines - the places the band-free reading labels from this caption (e0's
+            # signing area: a typed, prompted or multi-line signature line) - belong to the band too, unwritten and
+            # reviewed, never a neutral answer that lost the caption's label. A line with its own label (a field, a
+            # placeholder, a row captioned below it) is not the caption's and stays the form's; the first paragraph
+            # that is not the caption's ends them.
+            own = None   # read only for a writing line: a band with none after it never needs the band-free reading
+            further = band_next((spacer or caption).el)
+            while further is not None:
+                line = self.index.by_el.get(id(further))
+                if line is None or line.kind != 'p' or line.parent is not slot.parent:
+                    break
+                text, spans, read = self.band_line_spans(line)
+                # Once the band-free reading is known, a line it gives the caption is the caption's whether or not it
+                # shows a writing place (a narrative band's plain blank line); before, only a writing line asks it.
+                if not (own is not None and line.id in own) and not self.band_writing_line(line, caption, text, spans):
+                    break
+                if own is None:
+                    own = self.band_caption_places(caption)
+                if line.id not in own:
+                    break
+                self.keep_line_records(*read)
+                self.signing_band_places.append(line.id)
+                self.claimed.add(id(line.el))
+                self.protected_regions.add(line.id)
+                if self.band_token_line(text, spans):
+                    # A lone {{token}} is the legacy route's own placeholder. Whose field it names is not read from its
+                    # wording, so v3 holds it like the caption's other lines (refutation round 12: held but unprotected,
+                    # it was not mappable in the application and a stored field could write it); the legacy route
+                    # fills it by its own name, as e0's legacy route did (engine.inspect_auto).
+                    self.signing_band_tokens.append(line.id)
+                self.coverage_issue(line, 'ambiguous_signing_band', DRAWN_BAND_SPACER_REVIEW + 'Location: ' + line.id)
+                further = band_next(line.el)
+            self.notes.append(reason + ' Location: ' + slot.id)
+
+    def band_caption_places(self, caption):
+        """The places the band-free reading of this package labels with the band's caption - e0's reading of the
+        caption's own writing lines: the caption read as the label above or below a line, or its columns read onto
+        one, side-qualified ('<side heading> — <label>') or not, with every merged header/footer copy. The reading
+        is of the package's original bytes, as every detection here reads an unmodified original, and is shared by
+        every detection of those bytes in this process."""
+        if self._band_free_areas is None:
+            self._band_free_areas = band_free_reading(self.package.data)
+        areas, narrative = self._band_free_areas
+        label = clean_label(self.text(caption.el))
+        own = set()
+        for area_label, places in areas:
+            if area_label == label or area_label.endswith(' \u2014 ' + label):
+                own.update(places)
+        for band in narrative:
+            if caption.id in band or own.intersection(band):
+                # e0 read a printed narrative band it could not resolve, headed by the caption or by a line the caption
+                # labels: claiming its caption drops e0's exclusion of its blank lines, so the whole band is the
+                # caption's - unwritten and reviewed, never a neutral answer generation fills (refutation round 12).
+                own.update(band)
+        return own
+
+    def band_writing_line(self, line, caption, text, spans):
+        """Whether a paragraph below a band can be one of its caption's own writing lines: it holds an answer place the
+        engine's readers see (a blank, insertion or placeholder span, a drawn line, a box, control, field, text box or
+        object), or it is an empty line under a narrative caption (rule_lines_below_label's band of blank lines).
+        Printed prose, an empty spacing line or a picture alone is no signing area's writing line: the band ends
+        there, without the band-free reading. `text` and `spans` are the line's band_line_spans."""
+        if (spans or self.band_spacer_draws_line(line) or BOX in text or CHECKED in text or "\x00" in text
+                or any(node.tag in (TXBX, SDT, FLDCHAR, q("w:fldSimple"), q("w:object")) for node in line.el.iter())):
+            return True
+        if text.strip():
+            return False
+        label = self.text(caption.el).strip()
+        return label.endswith(":") and (re.match(r"^[•●▪‣]\s+", label) is not None
+                                        or self.list_info(caption.el) is not None)
+
+    @staticmethod
+    def band_token_line(text, spans):
+        """A line that is one {{token}} and nothing else that names it (the legacy route's own placeholder syntax):
+        whose field it names is not decided from its wording. `text` and `spans` are the line's band_line_spans."""
+        if len(spans) != 1 or spans[0][2] != 'token':
+            return False
+        start, end, _ = spans[0]
+        return not clean_label(''.join(ch for i, ch in enumerate(text) if not start <= i < end).replace('_', ''))
+
+    def band_line_spans(self, line):
+        """A line's answer spans as the paragraph readers see them, with the coverage issues and notes those readers
+        record as they read it, held apart from the detector's own: a line that ends the band records its own issues
+        and notes when the paragraph readers read it, in e0's order (refutation round 11, corpus:2), and a line the
+        band claims - which those readers then never read - keeps them through keep_line_records."""
+        text, pieces = self.ptext(line.el)
+        issues, notes = self.coverage_issues, self.notes
+        self.coverage_issues, self.notes = [], []
+        try:
+            spans = merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
+            return text, spans, (self.coverage_issues, self.notes)
+        finally:
+            self.coverage_issues, self.notes = issues, notes
+
+    def keep_line_records(self, issues, notes):
+        """A claimed band line keeps the issues and notes e0's paragraph readers record for it (band_line_spans): a
+        prompt e0 could not resolve there still needs its review and still holds a legacy import, as on e0, beside the
+        band's own review (refutation round 12: dropping them let the legacy engine fill a {{token}} in the band)."""
+        for issue in issues:
+            if not any(prior['id'] == issue['id'] for prior in self.coverage_issues):
+                self.coverage_issues.append(issue)
+        for note in notes:
+            if note not in self.notes:
+                self.notes.append(note)
+
+    def band_spacer_draws_line(self, spacer):
+        """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,
+        a leader tab stop it actually uses, or a positional tab with a leader. Breaks, plain tabs and paragraph-mark
+        formatting print nothing."""
+        ppr = spacer.el.find(q('w:pPr'))
+        bottom = ppr.find(q('w:pBdr') + '/' + q('w:bottom')) if ppr is not None else None
+        if bottom is not None and bottom.get(q('w:val')) not in (None, 'none', 'nil'):
+            return True
+        for run in spacer.el.iter(R):
+            props = run.find(q('w:rPr'))
+            line = props.find(q('w:u')) if props is not None else None
+            if (line is not None and line.get(q('w:val')) not in ('none',)
+                    and (run.find(q('w:tab')) is not None
+                         or any(t.text and not t.text.strip(' \u00a0') for t in run.iter(q('w:t'))))):
+                return True
+            if any(tab.get(q('w:leader')) not in (None, 'none') for tab in run.iter(q('w:ptab'))):
+                return True
+        stops = ppr.find(q('w:tabs')) if ppr is not None else None
+        return bool(stops is not None and spacer.el.find('.//' + q('w:r') + '/' + q('w:tab')) is not None
+                    and any(tab.get(q('w:leader')) not in (None, 'none') for tab in stops.iter(q('w:tab'))))
 
     def rule_signing_captions(self):
         for slot in [s for s in self.index.slots if s.kind == "p"]:
@@ -5600,6 +9469,7 @@ class Detector:
             instruction = self.text(before) if before is not None and before.tag == q("w:p") else ""
             if not INITIALS.search(" ".join((header, label, instruction, self.context_for(c)))):
                 self.notes.append("An unlabelled floating rectangle needs visual review at " + c.id)
+                self.coverage_issue(c, 'unmapped_answer', self.notes[-1])
                 continue
             affected.add(c.parent)
             reason = ("Protected floating initials box: its visual question is unresolved because an anchor can sit "
@@ -5618,6 +9488,7 @@ class Detector:
                     self.protected_regions.add(c.id)
             self.notes.append("Blank cells in the floating-initials table are not assigned text answers; "
                               "check the original for additional areas. Location: " + table.id)
+            self.coverage_issue(table, 'unmapped_answer', self.notes[-1])
         if affected:
             self.floating_initials = True
             self.notes.append(FLOATING_INITIALS_REFUSAL)
@@ -5712,6 +9583,7 @@ class Detector:
                 keep.protection = keep.protection or other.protection
                 keep.target.setdefault("copies", []).append({"part": other.slot.part, "slot": other.slot.path,
                                                              "fingerprint": fingerprint(other.slot.el)})
+                self.merged_copies.append((keep, other))
                 self.areas.remove(other)
 
 
@@ -5832,8 +9704,27 @@ def inspect(data: bytes) -> dict:
     package = open_package(data)
     detector = Detector(package)
     areas, notes = detector.detect()
+    if detector.source_guidance_areas:
+        notes.append("The original form's embedded instructions and navigation are preserved separately from clinical answers.")
     fields = mapped_fields(detector, areas)
+    # A checkbox group's claim must not hide separate writable blanks on its
+    # paragraph (for example two distinct write-ins after the last option).
+    # These are excluded extents, never two inferred fields or option decisions.
+    reader = _PlaceReader(detector.index)
+    writes = [place for field in fields for place in reader.of(field)]
+    for slot in detector.index.slots:
+        if slot.kind != 'p' or not detector.box_units(slot):
+            continue
+        for start, end, _ in detector.blank_spans(*detector.ptext(slot.el)):
+            region = {'place': slot.id, 'start': start, 'end': end}
+            if not any(reader.touches(place, region) for place in writes):
+                detail = 'A separate checkbox write-in has no mapped writer at ' + slot.id + ' offsets ' + str(start) + '-' + str(end) + '. It remains unchanged; review this exact exclusion.'
+                detector.coverage_issue(slot, 'unmapped_checkbox_write_in', detail, start=start, end=end)
+                if detail not in notes:notes.append(detail)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
+            "coverage_issues": detector.coverage_issues,
+            "preserved_source_guidance": preserved_source_guidance(detector),
+            "layout_quarantine": detector.layout_quarantine,
             "layout_pending": len(detector.layout_candidates)}
 
 
@@ -5975,7 +9866,7 @@ class _PlaceReader:
                 out.append((_place_id(part, target.get("table")), None, None))
         elif typ != "none":
             out.extend((_place_id(p, path), None, None) for p, path in anchors)
-        if typ == "paragraph":
+        if typ in ("paragraph", "ruled_paragraphs"):
             out.extend((_place_id(x.get("part"), x.get("slot")), None, None)
                        for x in loc.get("extra", []) or [] if isinstance(x, dict))
         if not out:
@@ -6039,10 +9930,14 @@ def _writing_line(text) -> bool:
     return len(visible) >= 3 and re.fullmatch(r"[_.\u2026\u2025\u00b7\-\u2013\u2014]+", visible) is not None
 
 
-def _role_reading(package):
+def _role_reading(package, *, retained_areas=None):
     """(roles, the engine's own option groups as box keys - the boxes one engine choice area answers together)."""
     detector = Detector(package)
-    areas, _ = detector.detect()
+    detected, _ = detector.detect()
+    # ⚠️ The areas EC3 withdrew from shared merged cells take part as before (refutation of c1cae13d, P-1): a signing
+    # segment is bounded by every engine area of its paragraph, and an attestation role comes from an engine field, so
+    # without them a withdrawal moved a neighbouring signing role over the withdrawn place.
+    areas = list(detected) + list(detector.withdrawn_areas)
     index = detector.index
     reader = _PlaceReader(index)
     engine = [area_to_field(n + 1, a) for n, a in enumerate(areas)]
@@ -6084,7 +9979,16 @@ def _role_reading(package):
     for area, field in zip(areas, engine):
         places = reader.of(field)
         anchor = _place_id(field["locator"]["part"], field["locator"]["slot"])
-        if area.protection:
+        if area.protection and area.source_action:
+            for pid, start, end in _extent(reader, field):
+                if start is not None:
+                    start, end = segment(pid, start, end, field['key'])
+                roles.append(_role(ROLE_PROTECTED, 'human_document_action', pid, start, end, area.protection))
+            if anchor in detector.protected_area_sources:
+                for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
+                    roles.append(_role(ROLE_PROTECTED, 'protected_area', pid, None, None,
+                                       detector.protected_area_sources[anchor]))
+        elif area.protection:
             for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
                 roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))
         elif area.kind in SIGNING_KINDS:
@@ -6159,6 +10063,11 @@ def _role_reading(package):
     choices = [sorted(box_key(box) for box in field["locator"]["target"].get("boxes", []))
                for field in engine if field["kind"] in ("choice", "multi_choice", "checkbox")
                and field["locator"]["target"].get("type") == "checkboxes"]
+    if retained_areas is not None:
+        # Only this fresh ordinary detector's retained areas, before any write.
+        # The shared-merged withdrawals above remain role boundaries, but were
+        # never eligible relation owners in the separate ordinary detection.
+        retained_areas.extend(detected)
     return roles, [group for group in choices if group]
 
 
@@ -6206,6 +10115,89 @@ def destination_roles(data: bytes, fields=None) -> dict:
             "violations": role_violations(reader, fields or [], roles), "choices": choices}
 
 
+def writing_places(data, fields):
+    """The stored v3 writer's exact destinations, read only from this original.
+
+    Consumers compare these sandbox-derived coordinates without parsing the
+    original themselves. An inline native control therefore carries its exact
+    containing-paragraph extent, as a glyph does. Unknown, block and empty
+    extents retain the conservative whole-slot representation.
+    """
+    reader = _PlaceReader(SlotIndex(open_package(data)))
+    places = {}
+    for field in fields:
+        resolved = []
+        for pid, start, end in reader.of(field):
+            slot = reader.index.by_id.get(pid)
+            if start is None and end is None and slot is not None and slot.kind in ('sdt', 'ff') \
+                    and slot.parent is not None:
+                extent = reader.inline(slot.parent.id, pid)
+                if extent is not None and extent[0] < extent[1]:
+                    resolved.append((slot.parent.id, *extent))
+                    continue
+            resolved.append((pid, start, end))
+        places[field['key']] = resolved
+    return places
+
+
+def reconcile_layout_coverage(data, fields, issues, qualified):
+    """Resolve only first-route tab withdrawals through measured coded sources.
+
+    The renderer supplies the exact receipt for each proof-backed candidate.
+    Other withdrawal causes never clear merely because a writer overlaps them.
+    Uncovered visible boxes/blanks retain exact extents and the full source note.
+    """
+    detector = Detector(open_package(data))
+    reader = _PlaceReader(detector.index)
+    proven = [field for field in fields
+              if field.get('layout_candidate') in qualified
+              and field.get('layout_verified') == qualified[field['layout_candidate']]
+              and field.get('locator', {}).get('target', {}).get('column_sequence')]
+    box_writes = {place for field in proven for place in reader.of(field)}
+    blank_writes = {place for field in fields
+                    if field.get('locator', {}).get('target', {}).get('type') == 'span'
+                    and not field.get('write_protected') and field.get('kind') not in SIGNING_KINDS
+                    for place in reader.of(field)}
+    remaining, resolved = [], []
+    for issue in issues:
+        root = _place_id(issue['part'], issue['slot'])
+        if issue['code'] not in ('tab_column_withdrawal', 'coded_checkbox_withdrawal') or not any(
+                field['locator']['part'] == issue['part']
+                and (field['locator']['slot'] == issue['slot']
+                     or field['locator']['slot'].startswith(issue['slot'] + '/')) for field in proven):
+            remaining.append(issue);continue
+        expected = []
+        for slot in detector.index.slots:
+            if slot.kind != 'p' or not (slot.id == root or slot.id.startswith(root + '/')):
+                continue
+            for ref, _, _ in detector.box_units(slot):
+                location = {'part': slot.part, 'slot': slot.path, 'target': {'type': 'checkboxes', 'boxes': [ref]}}
+                for place in reader.of({'locator': location}):
+                    expected.append((place, box_writes))
+            text, pieces = detector.ptext(slot.el)
+            for start, end, _ in detector.blank_spans(text, pieces):
+                own = [field['locator']['target']['column_sequence']['source'][-1] for field in proven
+                       if _place_id(field['locator']['part'],field['locator']['slot']) == slot.id]
+                if text[start:end] and not text[start:end].strip('.') and any(
+                        len(ref['starts']) > 1 and end <= ref['starts'][1] for ref in own):
+                    continue  # fixed dot leader in the measured complete question column
+                expected.append(((slot.id, start, end), blank_writes))
+        if not expected:
+            remaining.append(issue);continue
+        missing = [place for place, actual in expected if place not in actual]
+        if not missing:
+            resolved.append(issue);continue
+        for place, start, end in missing:
+            part, path = place.split('#', 1)
+            detail = 'An answer extent remains unresolved after measured coded-column mapping. ' + issue['detail']
+            item = {'part': part, 'slot': path, 'code': 'unmapped_tab_extent', 'detail': detail,
+                    'parent_issue': issue['id']}
+            if start is not None:item.update(start=start,end=end)
+            item['id'] = hashlib.sha256(repr((part,path,start,end,issue['id'])).encode()).hexdigest()
+            remaining.append(item)
+    return {'coverage_issues': remaining, 'resolved_tab_routes': resolved}
+
+
 #: ⚠️ THE ONE READER OF WHETHER A PRINTED LABEL NAMES A SIGNING PLACE (a signature or initials area): the legacy default
 #: path's role (never generated; generated or accepted text refused) and, on contract v3, whether an area the kind rule
 #: typed signature/initials is a destination role. It FAILS CLOSED: every label naming a signature, 'signed by',
@@ -6251,11 +10243,36 @@ def _plain(label) -> str:
     return clean_label(_INVISIBLE.sub("", text), limit=1000).casefold()
 
 
+def qualified_signing_role(label) -> str:
+    """A temporal qualifier cannot erase the person qualified by a signing caption.
+
+    A complete date-only parenthetical still asks for a date. A signature or
+    initials caption whose parenthetical also qualifies a signer remains that
+    person's human destination, without enumerating relationships or titles.
+    """
+    text = _plain(label)
+    head, separator, qualifier = text.partition('(')
+    if not separator or not DATE_LABEL.search(qualifier):
+        return ''
+    role = signing_place(head)
+    if not role:
+        return ''
+    match = re.fullmatch(r'([^()]*)\)\s*[:.]?', qualifier)
+    if match is None:
+        return role  # unresolved/nested qualification cannot become an ordinary date
+    remainder = DATE_LABEL.sub(' ', match[1])
+    remainder = re.sub(r'\b(?:of\s+birth|time|day|and|or)\b', ' ', remainder)
+    return role if re.sub(r'[\s.,;:/&+\-]+', '', remainder) else ''
+
+
 def signing_place(label) -> str:
     """'signature', 'initials' or '' for a PRINTED label (see the section comment above)."""
     text = _plain(label)
     if not text:
         return ""
+    qualified = qualified_signing_role(text)
+    if qualified:
+        return qualified
     if SIGNATURE_DATE_PAIR.search(text):
         return "signature"
     if INITIALS_DATE_PAIR.search(text):
@@ -6472,7 +10489,66 @@ def replace_range(p, start, end, answer, *, plain=True):
             else:
                 p.insert(0, new)
     _flowing(p)
+    # Inline spans inherit their table row's clipping just as whole-cell
+    # answers do. Expanding the paragraph alone leaves an exact-height row
+    # clipping long text and overprinting the following fixed content.
+    cell=next((a for a in p.iterancestors() if a.tag==q('w:tc')),None)
+    if cell is not None:
+        _unclip_row(cell)
     return True
+
+
+def temporal_band_characters(answer, pattern):
+    """An explicit date, rendered in the original's printed format positions."""
+    months = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+    orders = {'ddmmmyyyy': ('dd', 'mmm', 'yyyy'), 'ddmmyyyy': ('dd', 'mm', 'yyyy'),
+              'mmddyyyy': ('mm', 'dd', 'yyyy'), 'yyyymmdd': ('yyyy', 'mm', 'dd')}
+    value = str(answer).strip()
+    iso = re.fullmatch(r'(\d{4})-(\d{2})-(\d{2})', value)
+    try:
+        order = orders[pattern]
+        widths = {'dd': r'\d{2}', 'mm': r'\d{2}', 'mmm': r'[A-Za-z]{3}', 'yyyy': r'\d{4}'}
+        match = re.fullmatch(r'\s*/\s*'.join('(' + widths[part] + ')' for part in order), value)
+        calendar = None
+        if match:
+            parts = dict(zip(order, match.groups()))
+            month = (next(n for n, word in enumerate(months, 1) if word.lower() == parts['mmm'].lower())
+                     if 'mmm' in parts else int(parts['mm']))
+            try:
+                calendar = date(int(parts['yyyy']), month, int(parts['dd']))
+            except ValueError:
+                pass
+        if calendar is None and iso:
+            calendar = date(*(int(part) for part in iso.groups()))
+        if calendar is None:
+            numeric = re.fullmatch(r'(\d{2})\s*/\s*(\d{2})\s*/\s*(\d{4})', value)
+            candidates = set()
+            if numeric:
+                first, second, year = (int(part) for part in numeric.groups())
+                for month, day in ((first, second), (second, first)):
+                    try:
+                        candidates.add(date(year, month, day))
+                    except ValueError:
+                        pass
+            if len(candidates) != 1:
+                raise ValueError
+            calendar = candidates.pop()
+        year, month, day = calendar.year, calendar.month, calendar.day
+    except (ValueError, KeyError, StopIteration):
+        fail('This divided date needs a real YYYY-MM-DD value, its exact printed slash-separated format, '
+             'or a numeric slash date with only one possible calendar interpretation.',
+             'invalid_answer')
+    parts = {'dd': '%02d' % day, 'mm': '%02d' % month, 'mmm': months[month - 1], 'yyyy': '%04d' % year}
+    return ''.join(parts[part] for part in order)
+
+
+def temporal_band_printed_value(answer, pattern):
+    """The one calendar-valid date's literal source-appointed component order."""
+    characters = temporal_band_characters(answer, pattern)
+    values, start = [], 0
+    for part in re.findall(r'd+|m+|y+', pattern):
+        values.append(characters[start:start + len(part)]); start += len(part)
+    return '/'.join(values)
 
 
 def _rpr_from_mark(mark):
@@ -6711,11 +10787,24 @@ def tick_sdt_checkbox(sdt):
 
 def set_ff_checkbox(begin_run, ticked):
     """A legacy checkbox: an explicit checked state, which overrides the field's default."""
-    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
-    cb = data.find(q("w:checkBox")) if data is not None else None
-    if cb is None:
-        fail("A stored checkbox is no longer a legacy checkbox.", "mapping_mismatch")
-    for x in cb.findall(q("w:checked")):
+    fc = begin_run.find(FLDCHAR)
+    data = fc.find(q("w:ffData")) if fc is not None else None
+    boxes = data.findall(q("w:checkBox")) if data is not None else []
+    if len(boxes) != 1:
+        fail("A stored checkbox is no longer one legacy checkbox.", "mapping_mismatch")
+    cb = boxes[0]
+    checked_nodes, defaults = cb.findall(q("w:checked")), cb.findall(q("w:default"))
+    if (len(checked_nodes) > 1 or len(defaults) > 1
+            or any(node.get(q("w:val")) not in (None, "1", "true", "on", "0", "false", "off")
+                   for node in [*checked_nodes, *defaults])):
+        fail("The original legacy checkbox has an unreadable checked/default state. Keep it unchanged and review the form.",
+             "unsupported_layout")
+    # Word reads the explicit state before the default. Preserve the exact
+    # original representation when that effective state already agrees; a
+    # reviewed blank must not materialize a new zero in an unticked field.
+    if ff_checkbox_state(begin_run) is bool(ticked):
+        return False
+    for x in checked_nodes:
         cb.remove(x)
     checked = _el("w:checked")
     checked.set(q("w:val"), "1" if ticked else "0")
@@ -6800,24 +10889,128 @@ def ff_text_protection(begin_run):
     info = ff_info(data)
     if info["max_chars"] == -1:
         return "This legacy input has an unsupported native maximum length. Its original value remains unchanged."
+    if ff_source_guidance(begin_run):
+        return ("This tiny blank legacy control carries source guidance in its help text. "
+                "It remains protected, with its original value, help and navigation intact.")
+    return ""
+
+
+def ff_source_guidance(begin_run):
+    """The existing exact microtype guidance contract, independent of answer kind.
+
+    A normal one-character field, a named control, a printed question, a table
+    cell, existing content or even one ordinary-sized run is not guidance.
+    """
+    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
+    if data.find(q("w:textInput")) is None:
+        return False
+    info = ff_info(data)
     default = data.find(q("w:textInput") + "/" + q("w:default"))
     paragraph = next(begin_run.iterancestors(q("w:p")), None)
     if (info["max_chars"] != 1 or info.get("name") or info.get("input_type") != "regular" or
             default is None or (default.get(q("w:val")) or "").strip() or not ff_literal_help(begin_run).strip() or
             paragraph is None or text_of(paragraph).strip() or next(paragraph.iterancestors(q("w:tc")), None) is not None):
-        return ""
+        return False
     runs, end = _field_result_runs(begin_run)
     if not runs or any(text_of(r).strip() for r in runs):
-        return ""
+        return False
     for run in [begin_run] + _siblings_between(begin_run, end) + [end]:
         if run.tag != R:
-            return ""
+            return False
         for tag in ("w:sz", "w:szCs"):
             size = run.find(q("w:rPr") + "/" + q(tag))
             if size is None or size.get(q("w:val")) not in ("1", "2"):
-                return ""
-    return ("This tiny blank legacy control carries source guidance in its help text. "
-            "It remains protected, with its original value, help and navigation intact.")
+                return False
+    return True
+
+
+def band_next(element):
+    """The next sibling of a drawn band's paragraph, past body-level range markers that render nothing."""
+    node = element.getnext()
+    while node is not None and node.tag in BAND_INVISIBLE_MARKERS:
+        node = node.getnext()
+    return node
+
+
+def band_signing_label(label):
+    """A drawn band's signing part: the engine's signing place AND signature wording, so neither a clinical 'Name of
+    sign if positive' nor an identifier or adjective 'initial(s)' ('Patient initials', 'Troponin (initial)') is
+    read as a signing event."""
+    return bool(signing_place(label) and SIGNATURE.search(label))
+
+
+#: The band-free readings of the most recent originals in this process, by the sha256 of the original's bytes: one
+#: invocation reads the same original in several detections (inspection, roles, routing), and the reading is a whole
+#: second detection. Bounded, so a long-lived process keeps only a few.
+_BAND_FREE_READINGS = {}
+
+
+def band_free_reading(data):
+    """The band-free reading of these exact original bytes (the detector with the drawn band rule off) as (areas,
+    narrative). Areas are (label, places): each place the area reads, its merged header/footer copies' own places
+    included (a copy's further lines are its own; the merged area names only the copy's first). Narrative holds the
+    places of each printed narrative band e0 could not resolve (rule_lines_below_label's unresolved_narrative_band:
+    its caption and blank lines), one set per band. Read once per original in this process."""
+    key = hashlib.sha256(data).digest()
+    reading = _BAND_FREE_READINGS.get(key)
+    if reading is None:
+        reader = Detector(open_package(data), _inline_bands=False)
+        reader.detect()
+        copies = {}
+        for kept, copy in reader.merged_copies:
+            copies.setdefault(id(kept), []).append(copy)
+        areas = tuple((area.label, frozenset([place.id for source in [area, *copies.get(id(area), [])]
+                                              for place in [source.slot, *source.extra_slots] if place is not None]
+                                             + [copy['part'] + '#' + copy['slot'] for copy in area.target.get('copies', [])]))
+                      for area in reader.areas)
+        reading = (areas, tuple(frozenset(band) for band in reader.narrative_bands))
+        if len(_BAND_FREE_READINGS) >= 4:
+            _BAND_FREE_READINGS.clear()
+        _BAND_FREE_READINGS[key] = reading
+    return reading
+
+
+def signing_band_reading(data):
+    """(places, tokens): every drawn signing band's places (lines, caption, spacer) in every part, header and footer
+    copies included - the routing reader's account of what v3 holds - and those of them that are a lone {{token}} line.
+    Runs only the band rule on a fresh reading of the original."""
+    detector = Detector(open_package(data))
+    detector.rule_inline_signing_lines()
+    return list(detector.signing_band_places), list(detector.signing_band_tokens)
+
+
+def signing_band_places(data):
+    """Every drawn signing band's places (signing_band_reading)."""
+    return signing_band_reading(data)[0]
+
+
+def source_guidance_place(detector, slot):
+    """An exact preserved guidance control, or a paragraph holding only such controls and nothing else that prints.
+    A writing line the engine's own blank reader sees (an underlined tab, where the engine's automatic field sits)
+    keeps the paragraph a place; spaces and empty runs beside the controls do not. (Printed text keeps it a place
+    already: ff_source_guidance requires an otherwise empty paragraph and a complete field.)"""
+    if slot.kind == "ff":
+        return slot.info.get("field") == "FORMTEXT" and ff_source_guidance(slot.el)
+    if slot.kind != "p":
+        return False
+    controls = [c for c in slot.children if c.kind == "ff"]
+    if (not controls or len(controls) != len(slot.children)
+            or not all(c.info.get("field") == "FORMTEXT" and ff_source_guidance(c.el) for c in controls)):
+        return False
+    return not detector.blank_spans(*detector.ptext(slot.el))
+
+
+def preserved_source_guidance(detector):
+    """Version-bound evidence for controls preserved outside the answer mapping."""
+    records = []
+    for area in detector.source_guidance_areas:
+        text = ff_literal_help(area.slot.el)
+        if len(text) > MAX_SOURCE_INSTRUCTION_CHARS:
+            fail("The complete legacy field help exceeds the supported metadata bound.", "mapping_limit")
+        records.append({"role": "source_guidance", "part": area.slot.part,
+                        "slot": area.slot.path, "fingerprint": fingerprint(area.slot.el),
+                        "text": text, "write_protected": True})
+    return records
 
 
 def write_ff_text(begin_run, answer):
@@ -6979,6 +11172,50 @@ def option_position(options, value):
     return hits[0] if len(hits) == 1 else None
 
 
+def paired_colon_areas(detector, identity):
+    """Complete ordinary insertion spans sharing one original plain paragraph.
+
+    This is the existing paragraph compiler's exact result, not a second caption
+    grammar or authority derived from a stored field. Mixed controls, drawn
+    blanks and protected acts remain outside this finite reading.
+    """
+    slot = detector.index.by_id.get(identity)
+    if slot is None or slot.kind != 'p':
+        return []
+    areas = [area for area in detector.areas if area.slot.id == identity]
+    if len(areas) < 2 or any(area.target.get('type') != 'span'
+            or area.target.get('shape') != 'after_label' or area.protection
+            or area.extra_slots or area.source_questions or area.options for area in areas):
+        return []
+    source, pieces = paragraph_text(slot.el)
+    if ('\x00' in source or any(piece.kind not in ('t', 'tab', 'br') for piece in pieces)
+            or not detector.tab_source_visible(slot) or detector.region_hidden(slot.el)):
+        return []
+    areas = sorted(areas, key=lambda area: area.target['start'])
+    previous = -1
+    for area in areas:
+        start, end = area.target.get('start'), area.target.get('end')
+        if (type(start) is not int or type(end) is not int
+                or not 0 < start <= end <= len(source) or start <= previous
+                or source[start - 1] != ':' or source[start:end].strip()
+                or hyperlink_write(pieces, start, start)):
+            return []
+        previous = end
+    return areas
+
+
+def exact_paired_colon_field(field, area):
+    """Original physical and semantic binding; keys and manual origin grant nothing."""
+    loc = field.get('locator') or {}
+    return (loc.get('part') == area.slot.part and loc.get('slot') == area.slot.path
+            and loc.get('fingerprint') == fingerprint(area.slot.el)
+            and not loc.get('extra') and not loc.get('target', {}).get('copies')
+            and loc.get('target') == area.target and field.get('kind') == area.kind
+            and field.get('label') == area.label and field.get('context') == area.context
+            and field.get('options', []) == area.options
+            and field.get('source_questions', []) == area.source_questions)
+
+
 def _options_chosen(field, answer):
     """The option positions an answer selects, validated against the field's stored option labels."""
     options = field.get("options") or []
@@ -7022,17 +11259,209 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     legacy_protected = {identity: reason for identity, reason in legacy_protected.items() if reason}
     # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read before anything is written and never from the mapping: a stored or
     # forged field on a signing, protected or policy place is refused by its span, not by its paragraph.
-    original_roles = destination_roles_of(package)
-    role_refusals = role_violations(_PlaceReader(index), fields, original_roles)
+    relation_areas = []
+    original_roles = _role_reading(package, retained_areas=relation_areas)[0]
+    reader = _PlaceReader(index)
+    role_refusals = role_violations(reader, fields, original_roles)
+    fixed_response_headers = [{'place': place, 'start': None, 'end': None}
+                              for place in source_detector.response_header_corners]
+    fixed_subheadings = [{'place': place, 'start': None, 'end': None}
+                         for place in source_detector.fixed_subheading_slots]
+    unresolved_brackets = [{'place': _place_id(issue['part'], issue['slot']),
+                            'start': issue.get('start'), 'end': issue.get('end')}
+                           for issue in source_detector.coverage_issues
+                           if issue['code'] in ('printed_bracket_alternatives', 'unbalanced_bracketed_source',
+                                                'unmapped_bracketed_source', 'named_selection_source',
+                                                'scalar_alternative_source', 'unresolved_insertion_source',
+                                                'unresolved_narrative_band', 'table_selection_source')]
+    adjacent_answers = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'adjacent_checkbox_answer' for relation in area.source_questions)]
+    temporal_answers = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'temporal_format_hint' for relation in area.source_questions)]
+    requested_answers = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'parenthetical_write_request' for relation in area.source_questions)]
+    nested_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'nested_cell_options' for relation in area.source_questions)]
+    branch_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'option_branch_instruction' for relation in area.source_questions)]
+    named_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'named_selection_instruction' for relation in area.source_questions)]
+    scalar_alternatives = [area for area in source_detector.areas if any(
+        relation.get('relation') == 'scalar_checkbox_alternative' for relation in area.source_questions)]
+    hierarchy_choices = [area for area in source_detector.areas if any(
+        relation.get('relation') in ('bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy') for relation in area.source_questions)]
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
-    relation_areas = None
 
     def resolve(part, path, fp):
         slot = index.by_id.get("%s#%s" % (part, path))
         if slot is None or (fp is not None and fingerprint(slot.el) != fp):
             fail("The stored mapping no longer matches this form. Review the mapping again.", "mapping_mismatch")
         return slot
+
+    def original_branch_mapping(field, area):
+        """Match the complete former representation compiled from this original.
+
+        A nested question's existing source relationship is retained, never
+        dropped to obtain a shorter option. The former full option still has
+        only its former full answer value.
+        """
+        relation = next((r for r in area.source_questions
+                         if r.get('relation') == 'option_branch_instruction'), None)
+        if relation is None:
+            return False
+        loc = field.get('locator') or {}
+        extras = [{'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+                  for slot in area.extra_slots]
+        return (loc.get('part') == area.slot.part and loc.get('slot') == area.slot.path
+                and loc.get('fingerprint') == fingerprint(area.slot.el) and loc.get('extra', []) == extras
+                and loc.get('target') == relation['original_target']
+                and field.get('kind') == area.kind and field.get('label') == area.label
+                and field.get('options') == relation['printed']
+                and field.get('context') == relation['original_context']
+                and field.get('source_questions', []) == relation['original_relations'])
+
+    def exact_original_area(field, area):
+        loc = field.get('locator') or {}
+        extras = [{'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+                  for slot in area.extra_slots]
+        return (loc.get('part') == area.slot.part and loc.get('slot') == area.slot.path
+                and loc.get('fingerprint') == fingerprint(area.slot.el) and loc.get('extra', []) == extras
+                and loc.get('target') == area.target and field.get('kind') == area.kind
+                and field.get('label') == area.label and field.get('context') == area.context
+                and field.get('options', []) == area.options
+                and field.get('source_questions', []) == area.source_questions)
+
+    legacy_table_detector = None
+    for area in source_detector.areas:
+        if not any(r.get('relation') in ('explicit_insertion', 'narrative_empty_band', 'table_selection_instruction')
+                   for r in area.source_questions):
+            continue
+        regions = [{'place': place[0], 'start': place[1], 'end': place[2]}
+                   for place in reader.of(area_to_field(1, area))]
+        if area.label_slot is not None:
+            regions.append({'place': area.label_slot.id, 'start': None, 'end': None})
+        active = [f for f in fields if answers.get(f['key']) not in (None, '', [])
+                  and any(reader.touches(place, region) for place in reader.of(f) for region in regions)]
+        if active and (len(active) != 1 or not exact_original_area(active[0], area)):
+            if any(r.get('relation') == 'table_selection_instruction' for r in area.source_questions):
+                # Preserve exact former mappings compiled from this SAME source.
+                # Their one-answer groups can record a valid subset of an
+                # all-that-apply list; they never widen a one-only instruction.
+                if legacy_table_detector is None:
+                    legacy_table_detector = Detector(package, layout_proposal=True, _table_instructions=False)
+                    legacy_table_detector.detect()
+                boxes = area.target['boxes']
+                valid = all(any(exact_original_area(f, old) and old.target.get('type') == 'checkboxes'
+                                and all(b in boxes for b in old.target['boxes'])
+                                for old in legacy_table_detector.areas) for f in active)
+                if valid:
+                    if area.kind == 'choice':
+                        states = [box_state(index, b) for b in boxes]
+                        if any(s is None for s in states):
+                            fail('The original selection state is unreadable; review this exact group.', 'mapping_mismatch')
+                        for f in active:
+                            selected = _options_chosen(f, answers[f['key']])
+                            for i, b in enumerate(f['locator']['target']['boxes']):
+                                states[boxes.index(b)] = i in selected
+                        if sum(states) > 1:
+                            fail('Only one option can be chosen across this original table.', 'invalid_answer')
+                    continue
+            fail('This insertion requires its complete original request and exact answer band. '
+                 'Review the mapping again; its source and neighbors remain unchanged.', 'mapping_mismatch')
+
+    for area in source_detector.areas:
+        if not any(r.get('relation') == 'guided_response_row' for r in area.source_questions):
+            continue
+        regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None}
+                   for ref in area.target['boxes']]
+        active = [f for f in fields if answers.get(f['key']) not in (None, '', [])
+                  and any(reader.touches(place, region) for place in reader.of(f) for region in regions)]
+        if active and (len(active) != 1 or not exact_original_area(active[0], area)):
+            fail('This guided response row needs its complete original question, options and controls. '
+                 'Review the mapping again; its printed guidance remains unchanged.', 'mapping_mismatch')
+
+    for identity in {area.slot.id for area in source_detector.areas
+                     if area.target.get('shape') == 'after_label'}:
+        paired = paired_colon_areas(source_detector, identity)
+        if not paired:
+            continue
+        region = {'place': identity, 'start': None, 'end': None}
+        writers = [field for field in fields
+                   if (field.get('locator') or {}).get('target', {}).get('type') != 'none'
+                   and any(reader.touches(place, region) for place in reader.of(field))]
+        if not any(answers.get(field['key']) not in (None, '', []) for field in writers):
+            continue
+        if (any(not any(exact_paired_colon_field(field, area) for area in paired) for field in writers)
+                or any(sum(exact_paired_colon_field(field, area) for field in writers) > 1 for area in paired)):
+            fail('These printed captions require their distinct original answer spans. Remove the repeated '
+                 'or overlapping writer and review each physical destination once.', 'mapping_mismatch')
+
+    for area in hierarchy_choices:
+        relation = area.source_questions[0]
+        regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None}
+                   for ref in relation['sources'][1:]]
+        active = [f for f in fields if answers.get(f['key']) not in (None, '', [])
+                  and any(reader.touches(place, region) for place in reader.of(f) for region in regions)]
+        if not active:
+            continue
+        if any(not any(exact_original_area(f, candidate) for candidate in [*hierarchy_choices, *adjacent_answers])
+               for f in active):
+            fail('This printed parent/subgroup hierarchy requires its exact original question and controls. '
+                 'Review the separate groups; a former flat mapping cannot authorize these destinations.', 'mapping_mismatch')
+        matches = [f for f in fields if exact_original_area(f, area)]
+        if len(matches) > 1:
+            fail('This printed subgroup has more than one mapped writer. Review each destination once.', 'mapping_mismatch')
+        parent = relation['parent']
+        if parent is None:
+            continue
+        parent_areas = [a for a in hierarchy_choices if parent in a.target['boxes']]
+        if len(parent_areas) != 1:
+            fail('The printed subgroup no longer has one controlling parent.', 'mapping_mismatch')
+        parent_area = parent_areas[0]
+        parent_fields = [f for f in fields if exact_original_area(f, parent_area)]
+        if len(parent_fields) > 1:
+            fail('The controlling parent has more than one mapped writer.', 'mapping_mismatch')
+        parent_value = answers.get(parent_fields[0]['key']) if parent_fields else None
+        parent_position = parent_area.target['boxes'].index(parent)
+        parent_selected = (parent_position in _options_chosen(parent_fields[0], parent_value)
+                           if parent_value not in (None, '', []) else box_state(index, parent) is True)
+        value = answers.get(matches[0]['key']) if matches else None
+        selected = (bool(_options_chosen(matches[0], value)) if value not in (None, '', [])
+                    else any(box_state(index, box) is True for box in area.target['boxes']))
+        if selected and not parent_selected:
+            fail('This subgroup has a selected answer while its own printed parent is unselected. '
+                 'Review the parent and child answers; no selection was inferred.', 'conditional_answer_unselected')
+
+    # The printed Or is an exclusive alternative, not an invitation to silently
+    # clear an existing selection. Read the exact original pair before queuing
+    # any edits, including when a stored mapping omitted the alternative.
+    for alternative in scalar_alternatives:
+        relation = alternative.source_questions[0]
+        region = {'place': relation['cell']['part'] + '#' + relation['cell']['slot'],
+                  'start': None, 'end': None}
+        writers = [field for field in fields if any(reader.touches(place, region) for place in reader.of(field))]
+        active = [field for field in writers if answers.get(field['key']) not in (None, '', [])]
+        if not active:
+            continue
+        scalar = next(area for area in source_detector.areas
+                      if area.slot.id == relation['scalar']['part'] + '#' + relation['scalar']['slot']
+                      and area.target == relation['scalar_target'])
+        scalar_fields = [field for field in writers if exact_original_area(field, scalar)]
+        alternative_fields = [field for field in writers if exact_original_area(field, alternative)]
+        if (len(scalar_fields) > 1 or len(alternative_fields) > 1
+                or any(not exact_original_area(field, scalar) and not exact_original_area(field, alternative)
+                       for field in active)):
+            fail('This printed Or alternative requires its exact original scalar and checkbox mappings. '
+                 'Review the complete caption and control again.', 'mapping_mismatch')
+        scalar_value = answers.get(scalar_fields[0]['key']) if scalar_fields else None
+        checked_value = answers.get(alternative_fields[0]['key']) if alternative_fields else None
+        checked = (bool(_options_chosen(alternative_fields[0], checked_value))
+                   if checked_value not in (None, '', []) else relation['original_checked'])
+        if checked and scalar_value not in (None, '', []):
+            fail('The printed Or control and its scalar answer cannot both be filled. '
+                 'Review the answer and explicitly untick the alternative before entering a value.',
+                 'conflicting_alternative_answers')
 
     for field in fields:
         loc = field.get("locator") or {}
@@ -7041,7 +11470,145 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         answer = answers.get(field["key"])
         if answer is None or answer == "" or answer == []:
             continue
+        if any(reader.touches(place, region) for place in reader.of(field) for region in fixed_response_headers):
+            fail("This mapping writes into fixed response-column header spacing, not an answer. "
+                 "Reinspect the original and review the row's checkbox choices before exporting.", "mapping_mismatch")
+        if any(reader.touches(place, region) for place in reader.of(field) for region in fixed_subheadings):
+            fail("This mapping writes into a fixed underlined group heading, not an answer. "
+                 "Reinspect the original and review its separate answer lines before exporting.", "mapping_mismatch")
+        if any(reader.touches(place, region) for place in reader.of(field) for region in unresolved_brackets):
+            fail("This answer touches an unresolved printed source range. Keep that exact range unchanged and "
+                 "review its mapping before generation or export.", "unresolved_source_range")
         target = loc.get("target") or {}
+        if target.get('shape') == 'insertion' and not any(
+                exact_original_area(field, area) for area in source_detector.areas
+                if any(r.get('relation') == 'explicit_insertion' for r in area.source_questions)):
+            fail('This insertion no longer matches its complete original request and span. '
+                 'Review the mapping again.', 'mapping_mismatch')
+        for area in named_choices:
+            relation = next(r for r in area.source_questions if r.get('relation') == 'named_selection_instruction')
+            regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None} for ref in relation['sources']]
+            if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
+                continue
+            if any(loc.get('part') == adjacent.slot.part and loc.get('slot') == adjacent.slot.path
+                   and target == adjacent.target and field.get('kind') == adjacent.kind
+                   and field.get('label') == adjacent.label and field.get('context') == adjacent.context
+                   and field.get('source_questions') == adjacent.source_questions for adjacent in adjacent_answers):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path or target != area.target
+                    or field.get('kind') != area.kind or field.get('label') != area.label
+                    or field.get('context') != area.context or field.get('options') != area.options
+                    or field.get('source_questions') != area.source_questions):
+                fail('This named instruction no longer owns the complete original question and options. Review its exact mapping again.', 'mapping_mismatch')
+        for area in branch_choices:
+            branch_relation = next(r for r in area.source_questions if r.get('relation') == 'option_branch_instruction')
+            regions = [{'place': ref['part'] + '#' + ref['slot'], 'start': None, 'end': None}
+                       for ref in branch_relation['sources']]
+            if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
+                continue
+            legacy = original_branch_mapping(field, area)
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or field.get('kind') != area.kind or field.get('label') != area.label
+                    or not legacy and (target != area.target or field.get('context') != area.context
+                                       or field.get('options') != area.options
+                                       or field.get('source_questions') != area.source_questions)):
+                fail('This option and its conditional instruction no longer match the original question. '
+                     'Review the exact caption and instruction again.', 'mapping_mismatch')
+        for area in nested_choices:
+            # This proven cell contains one caption, its complete options and
+            # plain spacers. Its caption is source, never a second scalar answer.
+            region = {'place': area.label_slot.parent.id, 'start': None, 'end': None}
+            if not any(reader.touches(place, region) for place in reader.of(field)):
+                continue
+            # The same original-source compiler can qualify one separate
+            # conditional write-in beside these options. Its exact relationship
+            # is checked below; it never grants a generic writer inside the cell.
+            if any(loc.get('part') == adjacent.slot.part and loc.get('slot') == adjacent.slot.path
+                   and target == adjacent.target and field.get('kind') == adjacent.kind
+                   and field.get('label') == adjacent.label and field.get('context') == adjacent.context
+                   and field.get('source_questions') == adjacent.source_questions for adjacent in adjacent_answers):
+                continue
+            if original_branch_mapping(field, area):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or field.get('kind') != area.kind
+                    or field.get('label') != area.label or field.get('context') != area.context
+                    or field.get('options') != area.options
+                    or field.get('source_questions') != area.source_questions):
+                fail('This nested choice no longer matches its complete original question cell. '
+                     'Review the exact question and options again.', 'mapping_mismatch')
+        for area in requested_answers:
+            regions = [{'place': slot.id, 'start': None, 'end': None} for slot in [area.slot, *area.extra_slots]]
+            if not any(reader.touches(place, region) for place in reader.of(field) for region in regions):
+                continue
+            extras = [{'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el)}
+                      for slot in area.extra_slots]
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or loc.get('extra', []) != extras
+                    or field.get('source_questions') != area.source_questions):
+                fail('The complete printed write request and answer area changed. Review its exact mapping again.',
+                     'mapping_mismatch')
+        for area in temporal_answers:
+            # Each paragraph contains one complete format, so an insertion at
+            # either boundary is also this destination, not another question.
+            region = {'place': area.slot.id, 'start': None, 'end': None}
+            if not any(reader.touches(place, region) for place in reader.of(field)):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or field.get('kind') != area.kind
+                    or field.get('label') != area.label or field.get('context') != area.context
+                    or field.get('source_questions') != area.source_questions):
+                fail('The date/time answer does not match its complete original format and aligned caption. '
+                     'Review this exact mapping again.', 'mapping_mismatch')
+            writers = [other for other in fields
+                       if (other.get('locator') or {}).get('target', {}).get('type') != 'none'
+                       and any(reader.touches(place, region) for place in reader.of(other))]
+            if len(writers) != 1:
+                fail('This complete date/time paragraph has more than one mapped writer. Remove the repeated '
+                     'or overlapping field and review each physical destination once.', 'mapping_mismatch')
+        for area in adjacent_answers:
+            region = {'place': area.slot.id, 'start': area.target['start'],
+                      'end': area.target['start'] + 1 if area.target.get('shape') == 'after_label' else area.target['end']}
+            if not any(reader.touches(place, region) for place in reader.of(field)):
+                continue
+            if (loc.get('part') != area.slot.part or loc.get('slot') != area.slot.path
+                    or target != area.target or field.get('kind') != area.kind
+                    or field.get('label') != area.label or field.get('context') != area.context
+                    or field.get('source_questions') != area.source_questions):
+                fail('This answer changes a source-bound checkbox write-in or its complete ownership. '
+                     'Review its exact mapping again.', 'mapping_mismatch')
+            relation = area.source_questions[0]
+            if relation['condition'] != 'printed_option':
+                continue
+            owner = relation['owner']
+            controls = [f for f in fields if f.get('kind') == relation['owner_kind']
+                        and f.get('label') == relation['owner_label']
+                        and f.get('context') == relation['owner_context']
+                        and f.get('options') == relation['owner_options']
+                        and (f.get('locator') or {}).get('part') == owner['part']
+                        and (f.get('locator') or {}).get('slot') == owner['slot']
+                        and (f.get('locator') or {}).get('fingerprint') == owner['fingerprint']
+                        and (f.get('locator') or {}).get('target') == relation['owner_target']]
+            if len(controls) != 1:
+                fail('The conditional write-in has no unique original controlling choice. Review the mapping.',
+                     'mapping_mismatch')
+            control = controls[0]; value = answers.get(control['key'])
+            position = relation['option_index']
+            if value not in (None, '', []):
+                selected = position in _options_chosen(control, value)
+            else:
+                states = constrained_option_states(index, control)
+                selected = position < len(states) and states[position] is True
+                if control['kind'] == 'choice':
+                    # The original's tick is usable only when this single-choice
+                    # control has one unambiguous, readable selection. A pair of
+                    # printed ticks is not the clinician resolving that conflict.
+                    selected = (selected and len(states) == len(control['options'])
+                                and all(state is True or state is False for state in states)
+                                and sum(state is True for state in states) == 1)
+            if not selected:
+                fail('This write-in is conditional on its own printed option being selected. '
+                     'Review the controlling choice; no tick was inferred.', 'conditional_answer_unselected')
         if target.get("type") == "cell_append":
             if field.get("source_instructions") != cell_instruction_source(index, field):
                 fail("The complete printed answer-cell instructions changed. Review the mapping again.", "mapping_mismatch")
@@ -7059,6 +11626,10 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if target.get("type") == "table_rows":
             destinations.append({"part": loc.get("part"), "slot": target.get("table")})
         locations = ["%s#%s" % (x.get("part"), x.get("slot")) for x in destinations]
+        for region,reason in source_detector.geometry_regions.items():
+            if any(location==region or location.startswith(region+'/') or region.startswith(location+'/')
+                   for location in locations):
+                fail(reason,'unqualified_layout')
         for identity, reason in legacy_protected.items():
             if any(location == identity or location.startswith(identity + "/") or identity.startswith(location + "/")
                    for location in locations):
@@ -7080,18 +11651,51 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         relations = field.get("source_questions", [])
         if not isinstance(relations, list):
             fail("The related question mapping is invalid.", "invalid_mapping")
+        numeric = [relation for relation in relations if isinstance(relation, dict)
+                   and relation.get('relation') == 'manual_numeric_part']
+        parts = source_detector.manual_numeric_parts(anchors[0])
+        if parts and any(reader.touches(place, {'place': anchors[0].id, 'start': start, 'end': stop})
+                         for place in reader.of(field) for start, stop in parts):
+            automatic = any(area.slot.id == anchors[0].id and area.target == target
+                            for area in source_detector.areas)
+            if not automatic and not numeric:
+                fail('A divided numeric band needs its exact source-bound part review. Review its numbered part '
+                     'again; the separator and other parts remain unchanged.', 'mapping_mismatch')
+        if numeric or target.get('shape') == 'numeric_part':
+            current = (source_detector.manual_numeric_part(anchors[0], numeric[0].get('number'), field.get('kind'))
+                       if len(numeric) == 1 and len(relations) == 1 else None)
+            if (current is None or current.target != target or current.source_questions != relations
+                    or loc.get('extra') or field.get('max_chars') != current.capacity):
+                fail('This numeric part no longer matches its complete original band. Remove the field and review '
+                     'the exact part again.', 'mapping_mismatch')
+            if not isinstance(answer, str) or not re.fullmatch(r'[0-9]{1,%d}' % current.capacity, answer):
+                fail('Numeric part %d takes at most %d digits, with no separator or other text. Nothing was shortened.'
+                     % (numeric[0]['number'], current.capacity), 'invalid_answer')
+            region = {'place': anchors[0].id, 'start': target['start'], 'end': target['end']}
+            if any(reader.touches(place, region) or place[0] == anchors[0].id
+                   and (other.get('locator', {}).get('target', {}).get('shape') != 'numeric_part'
+                        or other.get('source_questions') == relations)
+                   for other in fields if other is not field for place in reader.of(other)):
+                fail('This numeric part overlaps another mapped writer. Remove the whole-band or repeated field '
+                     'and review each part once.', 'mapping_mismatch')
         for relation in relations:
             if not isinstance(relation, dict):
                 fail("The related question mapping is invalid.", "invalid_mapping")
             if relation.get("relation") == "immediate_previous_question":
                 refs = [relation.get("source"), relation.get("reference")]
-            elif relation.get("relation") == "paragraph_list_answer" and isinstance(relation.get("descriptors"), list):
+            elif relation.get("relation") in ('paragraph_list_answer', 'manual_paragraph_options', 'manual_ruled_paragraph_answer') and isinstance(relation.get("descriptors"), list):
                 instructions = relation.get("instructions", [])
                 if not isinstance(instructions, list):
                     fail("The related question instructions are invalid.", "invalid_mapping")
                 refs = [relation.get("source")] + relation["descriptors"] + instructions
-            elif relation.get("relation") == "native_checkbox_history" and isinstance(relation.get("sources"), list):
+            elif relation.get("relation") in ("native_checkbox_history", "nested_cell_options", "option_branch_instruction", "named_selection_instruction", "table_selection_instruction", "scalar_checkbox_alternative", "bracketed_checkbox_hierarchy", "merged_checkbox_hierarchy", "temporal_format_hint", "guided_response_row") and isinstance(relation.get("sources"), list):
                 refs = relation["sources"]
+            elif relation.get('relation') == 'adjacent_checkbox_answer':
+                refs = [relation.get('source'), relation.get('owner')]
+            elif relation.get('relation') in ('parenthetical_write_request', 'explicit_insertion', 'narrative_empty_band', 'caption_below_cell'):
+                refs = [relation.get('source')]
+            elif relation.get('relation') == 'manual_numeric_part':
+                refs = [relation.get('source')]
             else:
                 fail("The related question mapping is invalid.", "invalid_mapping")
             for ref in refs:
@@ -7099,15 +11703,42 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     fail("The related question source is missing.", "invalid_mapping")
                 resolve(ref.get("part"), ref.get("slot"), ref["fingerprint"])
         if relations:
-            if relation_areas is None:
-                relation_areas = Detector(package).detect()[0]
-            if not any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
-                       and (not any(r.get("relation") == "native_checkbox_history" for r in relations)
-                            or area.kind == field.get("kind") and area.options == field.get("options")
-                            and area.label == field.get("label") and area.context == field.get("context"))
-                       for area in relation_areas):
+            manual_ruled = any(relation.get('relation') == 'manual_ruled_paragraph_answer' for relation in relations)
+            manual_list = any(relation.get('relation') == 'manual_paragraph_options' for relation in relations)
+            if numeric:
+                owns = True  # the complete band, exact part and capacity were recompiled above
+            elif manual_ruled:
+                current = source_detector.manual_ruled_paragraphs(source_detector.index.by_id[anchors[0].id], field.get('kind'))
+                expected_extra = ([{'part': s.part, 'slot': s.path, 'fingerprint': fingerprint(s.el)}
+                                   for s in current.extra_slots] if current else [])
+                owns = bool(current and current.target == target and current.source_questions == relations
+                            and loc.get('extra', []) == expected_extra)
+            elif manual_list:
+                current = source_detector.manual_paragraph_options(source_detector.index.by_id[anchors[0].id],
+                                                                   field.get('kind'))
+                owns = bool(current and current.target == target and current.source_questions == relations
+                            and current.options == field.get('options'))
+            else:
+                owns = (any(original_branch_mapping(field, area) for area in relation_areas)
+                        or any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
+                           and (not any(r.get("relation") in ('native_checkbox_history', 'adjacent_checkbox_answer', 'nested_cell_options', 'option_branch_instruction', 'named_selection_instruction', 'table_selection_instruction', 'scalar_checkbox_alternative', 'bracketed_checkbox_hierarchy', 'merged_checkbox_hierarchy', 'temporal_format_hint', 'guided_response_row') for r in relations)
+                                or area.kind == field.get("kind") and area.options == (field.get("options") or [])
+                                and area.label == field.get("label") and area.context == field.get("context"))
+                           for area in relation_areas))
+            if not owns:
                 fail("The related question no longer owns this answer destination. Review the mapping again.",
                      "mapping_mismatch")
+        elif target.get('type') == 'paragraph_options':
+            # Removing the manual origin/ownership metadata cannot appoint
+            # arbitrary paragraphs as options. Existing automatically detected
+            # groups retain their original exact target and printed options.
+            if not any(area.slot.id == anchors[0].id and area.target == target
+                       and area.options == field.get('options') for area in source_detector.areas):
+                fail('The printed option group has no source-bound review. Review the complete list mapping again.',
+                     'mapping_mismatch')
+        elif target.get('type') == 'ruled_paragraphs':
+            fail('The ruled answer area has no complete source-bound review. Choose its first line and review the mapping.',
+                 'mapping_mismatch')
         for extra in loc.get("extra", []):
             resolve(extra["part"], extra["slot"], extra["fingerprint"])
         for copy in target.get("copies", []):
@@ -7121,6 +11752,19 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         for anchor in anchors:
             part = anchor.part
             if kind == "span":
+                if target.get('shape') == 'temporal_band':
+                    current = next((area for area in source_detector.areas
+                                    if area.slot.id == anchor.id and area.target == target), None)
+                    if current is None or current.kind != field.get('kind') or loc.get('extra'):
+                        fail('This divided date no longer owns its original caption, blank runs and format guide.',
+                             'mapping_mismatch')
+                    for ref in (target['caption'], target['guide']):
+                        resolve(ref['part'], ref['slot'], ref['fingerprint'])
+                    characters = temporal_band_characters(answer, target['format'])
+                    for (start, end), character in zip(target['parts'], characters):
+                        ops.append((anchor.el, start, lambda el=anchor.el, s=start, e=end, a=character:
+                                    replace_range(el, s, e, a), part))
+                    continue
                 s0, e0 = target["start"], target["end"]
                 if target.get("shape") == "after_label":
                     e0 = s0
@@ -7131,7 +11775,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     value = printed_options(field)[_options_chosen(field, answer)[0]]
                 ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"), whole=bool(target.get("all")), append=(kind == "cell_append"):
                             write_cell(el, v, rep, whole, append), part))
-            elif kind == "paragraph":
+            elif kind in ("paragraph", "ruled_paragraphs"):
                 paras = [anchor] + [resolve(x["part"], x["slot"], x["fingerprint"]) for x in loc.get("extra", [])]
                 lines = str(answer).replace("\r\n", "\n").split("\n")
                 chunks = lines[:len(paras) - 1] + ["\n".join(lines[len(paras) - 1:])] if len(paras) > 1 else [str(answer)]
@@ -7195,6 +11839,13 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 fail("This answer area cannot be filled automatically.", "unsupported_layout")
     if protected.floating_initials and (ops or glyph_writes):
         fail(FLOATING_INITIALS_REFUSAL, "unqualified_floating_initials")
+    # Read this invocation's immutable original trees before any checkbox,
+    # pinning or text edit. An already-correct box may schedule a write that
+    # changes no XML; serializing that part would still change its original
+    # declaration/BOM/empty-element syntax. Compare the complete tree, rather
+    # than inferring a no-op from a Boolean flag or from the field's metadata.
+    original_part_hashes = {part: fingerprint(package.tree(part))
+                            for part in {op[3] for op in ops} | {row[3] for row in glyph_writes.values()}}
     # Checkbox state edits preserve source offsets. Resolve them before text can
     # insert new checkbox-looking characters, then retain the actual leaf nodes.
     changed = set()
@@ -7214,7 +11865,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 or next(node.iterancestors(q("w:p")), None) is not p):
             fail("An answer changed or removed an original printed checkbox.", "mapping_mismatch")
         glyph_readback[key] = {"part": part, "path": element_identity_path(package.tree(part), node)}
-    out = package.write({part: package.tree(part) for part in changed}) if changed else data
+    updates = {part: package.tree(part) for part in changed
+               if fingerprint(package.tree(part)) != original_part_hashes[part]}
+    out = package.write(updates) if updates else data
     verify_options(out, fields, answers, glyph_readback=glyph_readback)
     if retained_layout is not None:
         for header, row, area in source_detector.layout_candidates:
@@ -7487,7 +12140,110 @@ def constrained_option_states(index, field):
     return option_states(index, field)
 
 
-def constrained_scalar_value(original, final, field, written):
+def _adjacent_glyph_prefix(original, before, field, source, current, start):
+    """Read only source-owned checkbox state changes before a conditional value.
+
+    A freshly compiled relationship from this immutable original must match the
+    complete scalar mapping. Other printed characters and unrelated boxes still
+    identify the span exactly. This is invocation-local readback, never authority
+    for a writer or a cache shared between documents.
+    """
+    loc = field.get('locator') or {}
+    relations = field.get('source_questions') or []
+    shape = loc.get('target', {}).get('shape')
+    if (shape not in ('after_label', 'blank') or len(relations) != 1
+            or relations[0].get('relation') != 'adjacent_checkbox_answer'
+            or fingerprint(before.el) != loc.get('fingerprint') or len(current) < start):
+        return False
+    detector = Detector(original.package, layout_proposal=True)
+    detector.detect()
+    matches = [area for area in detector.areas
+               if area.slot.id == before.id and not area.protection
+               and area.target == loc.get('target') and area.kind == field.get('kind')
+               and area.label == field.get('label') and area.context == field.get('context')
+               and area.source_questions == relations]
+    if len(matches) != 1:
+        return False
+    relation = matches[0].source_questions[0]
+    owners = [area for area in detector.areas if area.slot.id == relation['owner']['part'] + '#' + relation['owner']['slot']
+              and not area.protection and area.target == relation['owner_target']
+              and area.kind == relation['owner_kind'] and area.label == relation['owner_label']
+              and area.context == relation['owner_context'] and area.options == relation['owner_options']]
+    hierarchies = [r for owner in owners for r in owner.source_questions
+                   if r.get('relation') == 'bracketed_checkbox_hierarchy']
+    if shape == 'blank' and (len(owners) != 1 or len(hierarchies) != 1):
+        return False
+    refs = relation['owner_target'].get('boxes', [])
+    if len(hierarchies) == 1:
+        # A fresh hierarchy proves all parents/children on this same original
+        # band. Its other owned glyphs can change while the conditional scalar
+        # remains in place; unrelated controls and every other character cannot.
+        refs = [ref for area in detector.areas for r in area.source_questions
+                if r.get('relation') == 'bracketed_checkbox_hierarchy'
+                and r['sources'] == hierarchies[0]['sources'] and r['bands'] == hierarchies[0]['bands']
+                for ref in area.target.get('boxes', [])]
+    glyphs = glyph_boxes(before.el)
+    normalized = list(current[:start]); owned = False
+    for ref in refs:
+        if ref.get('part') != before.part or ref.get('slot') != before.path + '/glyphs':
+            continue
+        ordinal = ref.get('glyph')
+        if type(ordinal) is not int or not 0 <= ordinal < len(glyphs):
+            return False
+        piece, offset, char = glyphs[ordinal]
+        position = piece.start + offset
+        if not 0 <= position < start or current[position] not in (BOX, CHECKED):
+            return False
+        normalized[position] = char
+        owned = True
+    return owned and ''.join(normalized) == source[:start]
+
+
+def _paired_colon_value(original, final, before, after, field, source_detector):
+    """Read simultaneous insertions only between uniquely retained original ink.
+
+    Each complete caption, gap and unit remains literal. A repeated boundary
+    inside an answer is ambiguous and is held, rather than selecting the first
+    occurrence. The detector is compiled from this exact immutable input and is
+    reused only by the current effective_values invocation.
+    """
+    detector = source_detector() if callable(source_detector) else source_detector
+    if detector is None:
+        detector = Detector(original.package, layout_proposal=True)
+        detector.detect()
+    if detector.package is not original.package:
+        return None
+    paired = paired_colon_areas(detector, before.id)
+    matches = [i for i, area in enumerate(paired) if exact_paired_colon_field(field, area)]
+    if len(matches) != 1:
+        return None
+    visibility = Detector(final.package)
+    current, pieces = paragraph_text(after.el)
+    if ('\x00' in current or any(piece.kind not in ('t', 'tab', 'br') for piece in pieces)
+            or not visibility.tab_source_visible(after) or visibility.region_hidden(after.el)):
+        return None
+    source = paragraph_text(before.el)[0]
+    points = [area.target['start'] for area in paired]
+    fixed = [source[:points[0]], *[source[a:b] for a, b in zip(points, points[1:])], source[points[-1]:]]
+    if not current.startswith(fixed[0]) or not current.endswith(fixed[-1]):
+        return None
+    cursor = len(fixed[0]); values = []
+    for ink in fixed[1:-1]:
+        # The entire original inter-answer ink identifies this boundary. Do
+        # not accept a removed caption, duplicate caption inside an answer or
+        # an earlier occurrence outside its physical order.
+        position = current.find(ink)
+        if not ink or position < cursor or current.find(ink, position + 1) != -1:
+            return None
+        values.append(current[cursor:position]); cursor = position + len(ink)
+    last = len(current) - len(fixed[-1])
+    if last < cursor:
+        return None
+    values.append(current[cursor:last])
+    return values[matches[0]]
+
+
+def constrained_scalar_value(original, final, field, written, *, _source_detector=None):
     """Visible value in a bounded scalar destination, or None when it is ambiguous.
 
     Read native controls and whole plain cells/paragraphs directly. A span is
@@ -7537,6 +12293,20 @@ def constrained_scalar_value(original, final, field, written):
         # The old cell remains visible and may contain an existing answer.
         # Colour and a successful append cannot prove a unique scalar value.
         return None
+    elif kind == 'ruled_paragraphs':
+        refs = [loc] + list(loc.get('extra', []))
+        chunks = []
+        for ref in refs:
+            old = original.by_id.get('%s#%s' % (ref.get('part'), ref.get('slot')))
+            new = final.by_id.get('%s#%s' % (ref.get('part'), ref.get('slot')))
+            if old is None or new is None:
+                return None
+            source, current = paragraph_text(old.el)[0], paragraph_text(new.el)[0]
+            if source != '\t' or not current.endswith(source):
+                return None
+            chunks.append(current[:-len(source)])
+        while chunks and not chunks[-1]: chunks.pop()
+        value = '\n'.join(chunks)
     elif kind in ("cell", "cell_replace", "paragraph"):
         anchors = [after]
         if kind == "paragraph":
@@ -7548,16 +12318,60 @@ def constrained_scalar_value(original, final, field, written):
         value = "\n".join(text_of(p) for p in paragraphs)
     elif kind == "span":
         source, current = paragraph_text(before.el)[0], paragraph_text(after.el)[0]
+        if target.get('shape') == 'numeric_part':
+            return numeric_part_value(source, current, target.get('number'))
+        if target.get('shape') == 'temporal_band':
+            detector = _source_detector() if callable(_source_detector) else _source_detector
+            if detector is None:
+                detector = Detector(original.package)
+            if detector.package is not original.package:
+                return None
+            own = detector.index.by_id.get(identity)
+            area = detector.temporal_band(own) if own is not None else None
+            if area is None or area.target != target or field.get('kind') != 'date':
+                return None
+            for ref in (target['caption'], target['guide']):
+                neighbour = final.by_id.get('%s#%s' % (ref['part'], ref['slot']))
+                if neighbour is None or fingerprint(neighbour.el) != ref['fingerprint']:
+                    return None
+            visibility = Detector(final.package)
+            if (not visibility.tab_source_visible(after) or visibility.region_hidden(after.el)
+                    or wraps_structure(after.el)):
+                return None
+            expression, end = '', 0
+            for start, stop in target['parts']:
+                expression += re.escape(source[end:start]) + r'([A-Za-z0-9])'
+                end = stop
+            match = re.fullmatch(expression + re.escape(source[end:]), current)
+            if match is None:
+                return '' if not written and current == source else None
+            characters = ''.join(match.groups())
+            lengths = [len(part) for part in re.findall(r'd+|m+|y+', target['format'])]
+            pieces, at = [], 0
+            for length in lengths:
+                pieces.append(characters[at:at + length]); at += length
+            try:
+                if temporal_band_characters('/'.join(pieces), target['format']) != characters:
+                    return None
+            except V3Failure:
+                return None
+            return '/'.join(pieces)
         start, end = target.get("start"), target.get("end")
         if type(start) is not int or type(end) is not int or not 0 <= start <= end <= len(source):
             return None
         if target.get("shape") == "after_label":
             end = start
         prefix, suffix = source[:start], source[end:]
-        if ("\x00" in source or "\x00" in current or not current.startswith(prefix) or
+        prefix_matches = current.startswith(prefix) or _adjacent_glyph_prefix(
+            original, before, field, source, current, start)
+        if ("\x00" in source or "\x00" in current or not prefix_matches or
                 not current.endswith(suffix) or len(current) < len(prefix) + len(suffix)):
-            return None
-        value = current[len(prefix):len(current) - len(suffix) if suffix else len(current)]
+            value = (_paired_colon_value(original, final, before, after, field, _source_detector)
+                     if target.get('shape') == 'after_label' else None)
+            if value is None:
+                return None
+        else:
+            value = current[len(prefix):len(current) - len(suffix) if suffix else len(current)]
     else:
         return None
     return "" if not written and is_blank_text(value) else value.strip()
@@ -7577,6 +12391,7 @@ def effective_values(data, fields, answers, *, _written=None):
     if any(not isinstance(k, str) or not k for k in keys) or len(keys) != len(set(keys)) or not set(answers) <= set(keys):
         fail("Constrained option identities are invalid.", "invalid_mapping")
     index = SlotIndex(open_package(data))
+    detector = None
     if _written is None:
         detector = Detector(index.package, layout_proposal=True)
         detector.detect()
@@ -7594,11 +12409,20 @@ def effective_values(data, fields, answers, *, _written=None):
     # never a request parameter; callers still reach fill's renderer guard.
     output = fill(data, fields, answers) if _written is None else _written
     final = SlotIndex(open_package(output))
+    def source_detector():
+        # Lazy and invocation-local. Recompile only if simultaneous insertion
+        # readback requires it; never derive authority from the mutable output.
+        nonlocal detector
+        if detector is None:
+            detector = Detector(index.package, layout_proposal=True)
+            detector.detect()
+        return detector
     result = {}
     for field in fields:
         loc = field["locator"]; target = loc["target"]
         option = field["kind"] in ("choice", "multi_choice", "checkbox")
-        state = constrained_option_states(final, field) if option else constrained_scalar_value(index, final, field, field["key"] in answers)
+        state = constrained_option_states(final, field) if option else constrained_scalar_value(
+            index, final, field, field["key"] in answers, _source_detector=source_detector)
         for copy in target.get("copies", []):
             # These readers resolve their own copied anchor. Absolute checkbox
             # destinations do not establish an independent copy relationship.
@@ -7606,7 +12430,8 @@ def effective_values(data, fields, answers, *, _written=None):
                 state = [None] * max(1, len(field.get("options") or []))
                 break
             variant = {**field, "locator": {**loc, **copy}}
-            copied = constrained_option_states(final, variant) if option else constrained_scalar_value(index, final, variant, field["key"] in answers)
+            copied = constrained_option_states(final, variant) if option else constrained_scalar_value(
+                index, final, variant, field["key"] in answers, _source_detector=source_detector)
             if copied != state:
                 state = [None] * max(1, len(field.get("options") or [])) if option else None
                 break
@@ -7716,7 +12541,7 @@ def write_table_rows(index, field, answer):
 
 # ─── manual mapping: outline and locate ────────────────────────────────────────────────────────────────────────────
 
-MANUAL_KINDS = {"text", "long_text", "date", "time", "checkbox", "choice", "signature", "initials"}
+MANUAL_KINDS = {"text", "long_text", "date", "time", "checkbox", "choice", "multi_choice", "signature", "initials"}
 
 
 def box_key(box) -> str:
@@ -7807,6 +12632,8 @@ def outline(data: bytes) -> dict:
     for s in detector.index.slots:
         if s.kind not in ("p", "tc", "sdt", "ff", "glyphs"):
             continue
+        if source_guidance_place(detector, s):
+            continue  # preserved source guidance, never a clinician answer place (inspect lists it separately)
         if s.kind == "p":
             preview = detector.ptext(s.el)[0]
         elif s.kind == "tc":
@@ -7830,6 +12657,10 @@ def outline(data: bytes) -> dict:
             row["box_keys"] = [box_key(ref) if ref is not None else None for ref in refs]
         if refs is None:
             row["unnumbered_boxes"] = True
+        parts = detector.manual_numeric_parts(s)
+        if parts:
+            row['numeric_parts'] = [{'number': n, 'digits': stop - start}
+                                    for n, (start, stop) in enumerate(parts, 1)]
         rows.append(row)
     return {"contract": CONTRACT, "slots": rows}
 
@@ -7856,7 +12687,14 @@ def locate(data: bytes, targets: list) -> list:
             fail("The chosen place is not in this form.", "invalid_mapping")
         options = [option_text(str(o))[:200] for o in (t.get("options") or []) if option_text(str(o))]
         target = None
-        if slot.kind == "glyphs" or slot.kind == "p" and kind == "checkbox":
+        numeric_part = t.get('numeric_part')
+        if numeric_part is not None:
+            group = detector.manual_numeric_part(slot, numeric_part, kind)
+            if group is None:
+                fail('Choose Text and a numbered part of a complete empty numeric band. Filled, hidden, linked or '
+                     'mixed content cannot be divided this way.', 'invalid_mapping')
+            target = group.target
+        elif slot.kind == "glyphs" or slot.kind == "p" and kind == "checkbox":
             # ⚠️ THE CLINICIAN'S BOX, NOT THE FIRST ONE ('Smoker? ☐ Yes ☐ No' mapped as box 2 ticked Yes), counted among
             # EVERY box the preview shows - a checkbox control included - and written as whatever kind of box it is.
             refs = place_box_refs(detector.index, slot)
@@ -7870,12 +12708,25 @@ def locate(data: bytes, targets: list) -> list:
             if slot.kind == "glyphs":
                 slot = slot.parent
         elif slot.kind == "p":
-            text = detector.ptext(slot.el)[0]
-            if not text.strip(" \t\x00"):
-                target = {"type": "paragraph"}
+            group = detector.manual_paragraph_options(slot, kind) or detector.manual_ruled_paragraphs(slot, kind)
+            if group is not None:
+                slot, target, options = group.slot, group.target, group.options
+            elif kind == 'long_text' and (detector.ruled_paragraph_stop(slot) is not None
+                                         or detector.ptext(slot.el)[0] == '\t'):
+                fail('Choose the first line of the complete empty ruled answer area, immediately after its printed '
+                     'question and optional guidance. Filled, hidden or inconsistent lines need another mapping.',
+                     'invalid_mapping')
+            elif kind == 'multi_choice':
+                fail('For several printed options, choose the question or first item of its complete adjacent '
+                     'plain list. Existing selections, hidden fields and incomplete lists need another mapping.',
+                     'invalid_mapping')
             else:
-                end = len(text.rstrip())
-                target = {"type": "span", "start": end, "end": end, "shape": "after_label"}
+                text = detector.ptext(slot.el)[0]
+                if not text.strip(" \t\x00"):
+                    target = {"type": "paragraph"}
+                else:
+                    end = len(text.rstrip())
+                    target = {"type": "span", "start": end, "end": end, "shape": "after_label"}
         elif slot.kind == "tc":
             refs = place_box_refs(detector.index, slot) if kind == "checkbox" else []
             if refs is None:
@@ -7926,17 +12777,31 @@ def locate(data: bytes, targets: list) -> list:
         context = supplied_context or detector.context_for(slot, complete=True)
         if len(context) > MAX_MAPPING_CONTEXT:
             fail("The complete source section exceeds %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
-        area = Area(kind, label, slot, target, context=clean_label(context, limit=MAX_MAPPING_CONTEXT),
-                    options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
+        if target['type'] in ('paragraph_options', 'ruled_paragraphs') or target.get('shape') == 'numeric_part':
+            area = group
+            area.label = label
+            if supplied_context:
+                area.context = clean_label(supplied_context, limit=MAX_MAPPING_CONTEXT)
+        else:
+            area = Area(kind, label, slot, target, context=clean_label(context, limit=MAX_MAPPING_CONTEXT),
+                        options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
         if slot.kind == "ff" and target["type"] == "ff_text":
             area.protection = ff_text_protection(slot.el)
-        area.capacity = detector.capacity_for(area)
+        if target.get('shape') != 'numeric_part':
+            area.capacity = detector.capacity_for(area)
         field = area_to_field(n, area)
         field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]
         field["origin"] = "manual"
         annotate_printed(detector.index, field)
         # The place's printed authorship/review requirement, read exactly as for the engine's own fields.
         source_policy.annotate(detector, [field])
+        fixed_subheadings = [{'place': place, 'start': None, 'end': None}
+                             for place in detector.fixed_subheading_slots]
+        reader = _PlaceReader(detector.index)
+        if any(reader.touches(place, region) for place in reader.of(field) for region in fixed_subheadings):
+            fail("This place is a fixed underlined group heading, not an answer. "
+                 "Reinspect the original and choose one of its separate answer lines. Nothing was added.",
+                 "invalid_mapping")
         # ⚠️ A ROLE PLACE TAKES ONLY WHAT IT ALLOWS, whoever chooses it: a clinician's add or a model's proposal on a
         # signing, initials, consent or protected place is refused unless it is a Signature or Initials field.
         roles = destination_roles_of(package) if roles is None else roles

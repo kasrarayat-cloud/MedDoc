@@ -1,0 +1,143 @@
+{
+  "candidate": "7907ae5aa38c2a6c9e27eab1b09a758df315125b",
+  "runtime_attempt": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-native-application-7907ae5aa38c-1791091912307208692",
+  "child_exit": 1,
+  "child_methods": 2,
+  "child_errors": 1,
+  "child_elapsed_seconds": 52.021,
+  "outer_exit": 1,
+  "outer_elapsed_seconds_reported_in_actual_terminal": 93.614,
+  "timed_out": false,
+  "fixed_protocol_success": {
+    "D01": false,
+    "D02": false
+  },
+  "D01_automatic_mapping": {
+    "n": 92,
+    "ok": 88,
+    "missed": 2,
+    "wrong": 2,
+    "extras": 0,
+    "strict": false
+  },
+  "D02_automatic_mapping": {
+    "n": 24,
+    "ok": 19,
+    "missed": 0,
+    "wrong": 5,
+    "extras": 0,
+    "strict": false
+  },
+  "D01_native_ordinary": {
+    "source_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+    "export_sha256": "cbfda73f7e968b7133d0e260b8acb5f1c7f8d99f4864cb7a0bc6acdfe570a603",
+    "original_top_tables": 1,
+    "export_top_tables": 2,
+    "original_rows": [
+      28
+    ],
+    "export_rows": [
+      14,
+      14
+    ],
+    "original_cells": 84,
+    "export_cells": 84,
+    "all84cells_complete_expected": true,
+    "controls_original": 28,
+    "controls_export": 28,
+    "same_control_ids": true,
+    "all28controls_complete_and_options_preserved": true,
+    "fixed_structure_criterion": "FAIL: single original table serialized as two tables; cell continuity does not change that result"
+  },
+  "D01_native_long": "not reached after native-ordinary reader IndexError; incomplete remains failure",
+  "D01_split_cause": "Explicit Python documents/service.py repair_export -> documents/layout.py splits exact WM28-row table into two14-row limb tables for established repeated-header safeguards. Earlier SDK hypothesis WITHDRAWN; no raw processor output retained to claim an SDK defect.",
+  "D02_profiles": {
+    "empty": {
+      "passed": true,
+      "failures": [],
+      "export_sha256": "8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a",
+      "fixed_mechanical_passed": true,
+      "native_reviewed_contract_passed": null
+    },
+    "ordinary": {
+      "passed": false,
+      "failures": [
+        "Actual native reviewed finalization refused"
+      ],
+      "export_sha256": null,
+      "fixed_mechanical_passed": null,
+      "native_reviewed_contract_passed": null
+    },
+    "long": {
+      "passed": false,
+      "failures": [
+        "Actual native reviewed finalization refused"
+      ],
+      "export_sha256": null,
+      "fixed_mechanical_passed": null,
+      "native_reviewed_contract_passed": null
+    },
+    "native-ordinary": {
+      "passed": true,
+      "failures": [],
+      "export_sha256": "d69dbd77606e95e9d02424aaf48dda258f3fa4bb170ea54d20ca358e934f93bf",
+      "fixed_mechanical_passed": true,
+      "native_reviewed_contract_passed": true
+    },
+    "native-long": {
+      "passed": false,
+      "failures": [
+        "printed text lost in word/document.xml#b/p[2]",
+        "printed text lost in word/document.xml#b/p[3]",
+        "printed text lost in word/document.xml#b/p[6]",
+        "printed text lost in word/document.xml#b/p[23]",
+        "printed text lost in word/document.xml#b/p[30]",
+        "Full text answer is not visible in the render: tab_v1_8ae1e2b0ebeec317_0_18_0",
+        "Full text answer is not visible in the render: tab_v1_8ae1e2b0ebeec317_0_30_1"
+      ],
+      "export_sha256": "99e8e268c78d38a82ac4b86a0693e3f589f1271cb4fdb2745077268bb97ec643",
+      "fixed_mechanical_passed": false,
+      "native_reviewed_contract_passed": false
+    }
+  },
+  "provider_calls": 0,
+  "model_jobs": 0,
+  "real_patient_processing": false,
+  "source_hashes_unchanged": true,
+  "harness_hashes_unchanged": true,
+  "database_after": {
+    "verified": true,
+    "requested_database": "quillmd_qa_sol_word_dev1180267",
+    "checked_names": [
+      "quillmd_qa_sol_word_dev1180267",
+      "test_quillmd_qa_sol_word_dev1180267"
+    ],
+    "present": [],
+    "all_absent": true,
+    "provider_calls": 0
+  },
+  "process_teardown": {
+    "worker_exit": 1,
+    "renderer_exit": -2,
+    "socket_removed": true,
+    "timed_out": false
+  },
+  "full_gate": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75,
+    "automatic_pass_credit_from_this_attempt": 0,
+    "manual_native_recovery_automatic_credit": 0,
+    "holdout_evaluated": false,
+    "original_cases_replaced": false
+  },
+  "limitations": [
+    "Synthetic manual value corrections are supplemental; fixed answer profiles unchanged and their refusal/failure preserved.",
+    "D01 v1 reader assumes original table ordinal; actual postprocessed split raised IndexError after export archive. Complete84cells/28controls verified separately; no fixed structure regrade.",
+    "D02 long DOCX answers read back complete, but two full-text PDF probes absent and five original separator tabs changed to breaks; cause of PDF absence needs independent diagnosis.",
+    "Native Microsoft Word inspection remains external and unverified.",
+    "Ordinary processor-ownership production acceptance is not established by protectedQA qualification."
+  ]
+}

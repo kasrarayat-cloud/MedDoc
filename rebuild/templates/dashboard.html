@@ -20,7 +20,7 @@
 </section>
 <div class="split">
   <section class="section" id="templates">
-    <div class="section-heading"><h2>Form library</h2><a href="{% url 'template_upload' %}">Upload form <span aria-hidden="true">＋</span></a></div>
+    <div class="section-heading"><h2>Form library</h2><div class="actions"><a href="{% url 'soap_start' %}">Use SOAP note</a><a href="{% url 'template_upload' %}">Upload form <span aria-hidden="true">＋</span></a></div></div>
     {% for template in templates %}
     <div class="template-row"><span class="file-kind">{{ template.format|upper }}</span><div><a href="{% url 'template_detail' template.pk %}">{{ template.name }}</a><p>Original retained · Added {{ template.created_at|date:'M j, Y' }}</p></div><a href="{% url 'encounter_new' %}?template={{ template.pk }}" aria-label="Use form: {{ template.name }}">Use form <span aria-hidden="true">→</span></a></div>
     {% empty %}<div class="empty-state compact"><p>No forms yet. <a href="{% url 'template_upload' %}">Upload a supported blank form</a>; it and its mapping versions will appear here.</p></div>{% endfor %}

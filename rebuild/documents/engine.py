@@ -22,11 +22,13 @@ if __package__:
     from . import word_v3
     from .assistance import outline as assistance_outline
     from .layout_source import prepare as prepare_layout
+    from . import import_selection
 else:  # Isolated worker imports this module directly (before the sandbox closes the filesystem).
     from tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
     import word_v3
     from assistance import outline as assistance_outline
     from layout_source import prepare as prepare_layout
+    import import_selection
 
 V3_WARNINGS = [
     "QuillMD found these answer areas automatically. Check every field against the form before using it: add any "
@@ -50,6 +52,9 @@ def process_v3(workspace, request):
         if operation == "inspect":
             found = word_v3.inspect(data)
             return {"format": "docx", "fields": found["fields"], "warnings": found["notes"] + V3_WARNINGS,
+                    "coverage_issues": found.get('coverage_issues', []),
+                    "preserved_source_guidance": found.get('preserved_source_guidance', []),
+                    "layout_quarantine": found.get('layout_quarantine'),
                     "layout_pending": found["layout_pending"],
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "layout_prepare":
@@ -77,6 +82,12 @@ def process_v3(workspace, request):
                 fail("Invalid mapping.", "invalid_mapping")
             return {"format": "docx", **word_v3.destination_roles(data, mapping),
                     "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == 'places':
+            return {'format': 'docx', 'contract': word_v3.CONTRACT,
+                    'places': word_v3.writing_places(data, request.get('mapping') or [])}
+        if operation == 'layout_coverage':
+            return {'format': 'docx', **word_v3.reconcile_layout_coverage(data, request['mapping'],
+                       request['coverage_issues'], request['qualified'])}
         if operation == "fill":
             mapping, answers = request["mapping"], request["answers"]
             if not is_v3_mapping(mapping):
@@ -126,6 +137,8 @@ def validate_docx(path):
                         or ":" in name or stat.S_ISLNK(mode) or item.flag_bits & 1):
                     fail("DOCX contains an unsafe package entry.", "unsafe_upload")
                 lower = name.lower()
+                if lower.startswith('_xmlsignatures/'):
+                    fail('Digitally signed Word files are not editable templates. Upload an unsigned blank original.', 'signed_document')
                 if any(part in lower for part in ("vbaproject", "macros", "activex", "embeddings/", "afchunk")):
                     fail("Macros, active content, and embedded documents are not supported.", "unsafe_upload")
                 if item.file_size > 20 * 1024 * 1024 or item.file_size > max(1, item.compress_size) * 250:
@@ -154,6 +167,8 @@ def validate_docx(path):
                                 fail("Macros, active content, and embedded documents are not supported.", "unsafe_upload")
                     for node in tree.iter():
                         local = etree.QName(node).localname
+                        if local == 'documentProtection' and node.get(qn('w:enforcement'), '0') not in {'0', 'false', 'off'}:
+                            fail('Protected Word files are not editable templates. Upload an unprotected blank original.', 'protected_document')
                         if local in {"vanish", "webHidden", "specVanish", "noWrap", "fitText"} and node.get(qn("w:val"), "1") not in {"0", "false", "off"}:
                             fail("Hidden text and compressed or non-wrapping text need the advanced document adapter.", "overflow_risk")
                         if local in {"object", "altChunk", "fldSimple", "fldChar", "instrText", "sdt", "txbxContent", "del", "ins"}:
@@ -676,21 +691,52 @@ def fill_docx(path, output, document, paragraphs, cells, fields, answers):
         document.save(output)
 
 
-def legacy_roles(fields, mapping):
+def legacy_roles(fields, mapping, *, source=None):
     """The legacy default path's destination roles for a STORED mapping, read from a fresh inspection of the original:
     each field's PRINTED label (the inspected one, never the mapping's edited label) and the role the engine's kind rule
     gives it there (word_v3.legacy_role_kind: 'signature', 'initials' or ''). The mapping must be this original's."""
     if not isinstance(mapping, list) or structure(fields) != structure(mapping):
         fail("The field mapping does not match this original. Reinspect and create a new mapping version.", "mapping_mismatch")
-    return {"legacy_roles": {field["key"]: {"printed_label": field["label"],
+    result = {"legacy_roles": {field["key"]: {"printed_label": field["label"],
                                             "role": word_v3.legacy_role_kind(field["label"])} for field in fields}}
+    if source is not None:
+        data, document, paragraphs, cells = source
+        package = word_v3.open_package(data)
+        detector = word_v3.Detector(package)
+        reader = word_v3._PlaceReader(detector.index)
+        places = import_selection.legacy_places(document, paragraphs, cells, fields, detector)
+        roles = word_v3.destination_roles_of(package)
+        # A drawn signing band is v3-only knowledge (it selects the v3 route
+        # whenever v3 keeps every legacy place). A form that stays on legacy
+        # for another reason keeps legacy's previous reading of those places,
+        # rather than a new whole-export refusal.
+        band = set(word_v3.signing_band_places(data))
+        roles = [role for role in roles if not (role.get('source') == 'protected_region' and role['place'] in band)]
+        # Historical legacy metadata does not establish permission for a
+        # document action or another author's statement. Read the original
+        # role and its actual writing extent; known human signature/initials
+        # fields keep their existing explicit workflow.
+        unresolved = []
+        for field, place in zip(fields, places):
+            if result['legacy_roles'][field['key']]['role']:
+                continue
+            for role in roles:
+                if role['class'] in (word_v3.ROLE_PROTECTED, word_v3.ROLE_POLICY) and reader.touches(place, role):
+                    unresolved.append({'key': field['key'], 'printed_label': field['label'],
+                                       'place': list(place), 'source': role['source'],
+                                       'original_role_place': role['place'], 'reason': role['reason']})
+        result['legacy_unresolved_actions'] = unresolved
+    return result
 
 
 def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles")
+    if fmt == 'docx' and request.get('operation') == 'inspect':
+        return inspect_auto(workspace, preferred=request.get('engine', 'legacy'),
+                            prefer_v3_parity=request.get('prefer_v3_parity') is True)
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles", "places", "layout_coverage")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):
@@ -744,7 +790,12 @@ def process(workspace, request):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields
     if request["operation"] == "roles":
-        return legacy_roles(fields, request.get("mapping"))
+        return legacy_roles(fields, request.get("mapping"),
+                            source=(path.read_bytes(), document, paragraphs, cells) if fmt == 'docx' else None)
+    if fmt == 'docx' and legacy_roles(fields, request.get('mapping'),
+                                    source=(path.read_bytes(), document, paragraphs, cells)).get('legacy_unresolved_actions'):
+        fail('This legacy form has a human-owned or unresolved answer area. Review a new source-bound mapping; '
+             'the original and any stored document remain unchanged.', 'unresolved_legacy_roles')
     validate_mapping(fields, request["mapping"], answers)
     if fmt == "docx":
         fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)
@@ -762,3 +813,140 @@ def process(workspace, request):
                 writer.update_page_form_field_values(page, values, auto_regenerate=False)
         writer.write(workspace / "output.pdf")
     return {**result, "filled": sum(bool(answers.get(field["key"])) for field in fields), "missing": [field["key"] for field in fields if not answers.get(field["key"])]}
+
+
+def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
+    """Select once at import, under the sandbox, against one immutable byte snapshot."""
+    path = workspace / 'input.docx'
+    quarantine=word_v3.known_layout_failure(path.read_bytes())
+    legacy, advanced, places = None, None, None
+    old_error, new_error = '', ''
+    try:
+        document, paragraphs, cells, fields, notes = docx_inspect(path)
+        legacy = {'format': 'docx', 'fields': fields,
+                  'warnings': notes + ['DOCX answers expand and can change pagination. Review the exported document\'s layout.'],
+                  'adapter': 'python-docx', 'sandbox': 'landlock+seccomp'}
+        if fields and 'tab_form' in fields[0]['locator']:
+            legacy['warnings'].extend(TAB_WARNINGS)
+    except DocumentFailure as exc:
+        old_error = exc.code
+        if preferred == 'legacy':
+            raise
+    try:
+        advanced = process_v3(workspace, {'operation': 'inspect'})
+        if not advanced['fields'] and not advanced.get('coverage_issues') and not advanced.get('layout_pending'):
+            fail('No editable answer areas were found. Scanned/image-only forms are unsupported.', 'no_fields')
+    except DocumentFailure as exc:
+        if legacy is None or preferred == 'v3':
+            raise
+        new_error = exc.code
+    if legacy is None:
+        selected, coverage = 'v3', {'legacy_omissions': [], 'legacy_unmapped': [],
+                                    'automatic_complete': False, 'review_required': True}
+    elif advanced is None or new_error:
+        unmapped = [note for note in legacy['warnings'] if 'not mapped' in note.casefold()
+                    or 'not be placed' in note.casefold()]
+        selected, coverage = 'legacy', {'legacy_omissions': [], 'legacy_unmapped': unmapped,
+                                       'block_generation': bool(unmapped),
+                                       'automatic_complete': False, 'review_required': True}
+    else:
+        detector = word_v3.Detector(word_v3.open_package(path.read_bytes()))
+        try:
+            places = import_selection.legacy_places(document, paragraphs, cells, fields, detector)
+            # Ordinary adjective/checklist fields can have broad signing KIND
+            # metadata. Only the original's physical role reading permits those
+            # destinations to participate in coverage and explicit mapping review.
+            candidates = {field['key'] for field in advanced['fields']
+                          if field.get('kind') in ('signature', 'initials') and not field.get('write_protected')
+                          and field.get('locator', {}).get('target', {}).get('type') not in (None, 'none')}
+            ordinary = set()
+            if candidates:
+                reviewed = [{**field, 'kind': 'text'} if field['key'] in candidates else field
+                            for field in advanced['fields']]
+                roles = word_v3.destination_roles(path.read_bytes(), reviewed)
+                ordinary = candidates - set(roles.get('violations', {}))
+            selected, coverage = import_selection.choose(legacy, advanced, places,
+                                                         word_v3._PlaceReader(detector.index), ordinary_roles=ordinary,
+                                                         band_places=word_v3.signing_band_places(path.read_bytes()))
+            if preferred == 'auto' and prefer_v3_parity:
+                roles=word_v3.destination_roles(path.read_bytes(),advanced['fields'])
+                # The broad checkbox-word veto is not a destination-role
+                # reading. Exempt only exact old places freshly classified
+                # from their physical ordinary arguments by this processor.
+                # No reviewed label or stored kind can provide this proof.
+                detected,_=detector.detect();reader=word_v3._PlaceReader(detector.index)
+                ordinary_places={place for n,area in enumerate(detected,1) if area.ordinary_reading
+                                 for place in reader.of(word_v3.area_to_field(n,area))}
+                lexical_hold=any(word_v3.Detector.question_box_signing(field['label'])
+                                 and place not in ordinary_places for field,place in zip(legacy['fields'],places))
+                parity=(advanced.get('warnings') == V3_WARNINGS and not roles.get('violations') and not lexical_hold
+                    and import_selection.ordinary_parity(legacy,advanced,places,
+                        word_v3._PlaceReader(detector.index),source_roles=roles.get('roles',[])))
+                coverage['new_import_v3_preference']={'enabled':True,'exact_ordinary_parity':bool(parity)}
+                if selected == 'legacy' and parity:
+                    selected='v3'
+        except (ValueError, KeyError, IndexError, StopIteration):
+            selected, coverage = 'legacy', {'legacy_omissions': [], 'legacy_unmapped': [],
+                                            'comparison_unresolved': True,
+                                            'block_generation': True,
+                                            'automatic_complete': False, 'review_required': True}
+    if preferred in ('legacy', 'v3'):
+        selected = preferred
+        coverage['requested_engine'] = preferred
+        coverage['block_generation'] = bool(preferred == 'legacy' and (
+            coverage.get('legacy_omissions') or coverage.get('legacy_unmapped') or coverage.get('comparison_unresolved')))
+    result = advanced if selected == 'v3' else legacy
+    if advanced and advanced.get('preserved_source_guidance'):
+        coverage['preserved_source_guidance'] = advanced['preserved_source_guidance']
+    if selected == 'v3' and advanced.get('coverage_issues'):
+        coverage['selected_engine_issues'] = advanced['coverage_issues']
+        coverage['block_generation'] = True
+    if quarantine:
+        # Exact measured source failures remain unsupported on every NEW-import
+        # engine route. Choosing legacy or excluding locations cannot qualify
+        # the original's unproven whole-document growth contract.
+        coverage['layout_quarantine'] = quarantine
+        coverage['block_generation'] = True
+    issues = advanced.get('coverage_issues', []) if advanced else []
+    band, tokens = ((set(found) for found in word_v3.signing_band_reading(path.read_bytes()))
+                    if selected == 'legacy' and places is not None
+                    and any(issue.get('code') == 'ambiguous_signing_band' for issue in issues) else (set(), set()))
+    try:
+        owned = import_selection.legacy_field_places(legacy['fields'], places) if band else None
+    except ValueError:
+        owned = None  # the legacy places are not known per field: the review keeps holding
+    if owned is not None and not any(not word_v3.legacy_role_kind(field['label'])
+                                     and not ('token' in field['locator'] and own
+                                              and all(place[0] in tokens for place in own))
+                                     and any(import_selection.covered(place, [(item, None, None) for item in band])
+                                             for place in own)
+                                     for field, own in zip(legacy['fields'], owned)):
+        # A drawn signing band's spacer review belongs to the v3 route that
+        # protects the band; a legacy import cannot review or clear it. It
+        # stops holding a legacy import only when legacy cannot write into the
+        # band: no legacy field there, or only signing-role fields that core
+        # holds per field (never generated). A role-less legacy field in the
+        # band - which would take, say, a signing date - keeps the hold, as
+        # on e0; so does every other advanced issue. A legacy {{token}} that is
+        # the whole of a band line is the field its own name gives it, which
+        # e0's legacy route filled by that name: it does not hold the import
+        # either. A token on a band line that also prints a mark or a writing
+        # line (a signing date's line) keeps the hold, as on e0 (refutation
+        # round 12).
+        issues = [issue for issue in issues if not (
+            issue.get('code') == 'ambiguous_signing_band' and issue['part'] + '#' + issue['slot'] in band
+            and issue.get('detail') == word_v3.DRAWN_BAND_SPACER_REVIEW + 'Location: ' + issue['part'] + '#' + issue['slot'])]
+    if selected == 'legacy' and advanced and (issues or advanced.get('layout_pending')):
+        # A legacy destination in another cell cannot establish coverage of a
+        # withheld advanced answer area or a still-unverified layout proposal.
+        coverage['advanced_unresolved_areas'] = issues
+        coverage['advanced_layout_pending'] = advanced.get('layout_pending', 0)
+        coverage['block_generation'] = True
+        result['warnings'].append('Other answer areas need precise advanced mapping or layout review. '
+                                  'This legacy import is incomplete; generation and charging are held.')
+    if coverage.get('legacy_omissions') and selected == 'legacy':
+        result['warnings'].append('Additional answer destinations need mapping review; this import is incomplete. '
+                                  'Use a separately reviewed advanced mapping; no existing document will switch engines.')
+    result['import_manifest'] = import_selection.manifest(selected, result['fields'], coverage,
+                                                        legacy_error=old_error, v3_error=new_error)
+    return result

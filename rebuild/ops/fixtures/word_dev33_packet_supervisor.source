@@ -1,0 +1,422 @@
+"""Default-prepared single bounded DEV packet; unchanged normal Word drivers.
+
+Only --execute after root's exact source/resource seal can launch. No provider,
+installed database, service or source mutation. Evidence is never overwritten.
+"""
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+import traceback
+import types
+
+OWNED = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations')
+PY = '/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python'
+WRAPPER = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/integration/qa_test_with_artifacts.py')
+WRAPPER_SHA = '1b82afabddd679b6acb3e69076a7812b245f859b9d82364c949e19e1f5412378'
+ADAPTER_NAME = 'rebuild/ops/fixtures/word_dev33_mixed_consolidation.source'
+SELF_NAME = 'rebuild/ops/fixtures/word_dev33_packet_supervisor.source'
+INNER_DRIVERS = {
+    'run_dev_application_gate_v2.py': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7',
+    'run_dev_application_gate_native_v1.py': 'fe47f9d20b2a2820b21621486d02744dd4ca55d38825ab224a84408fd9b74da5',
+}
+ACTIVE_OUTPUT = None
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def digest(path):
+    require(path.is_file() and not path.is_symlink(), 'Missing/symlinked evidence or helper.')
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def retain(path, value):
+    with path.open('x') as stream:
+        stream.write(json.dumps(value, indent=2) + '\n')
+    path.chmod(0o600)
+
+
+def load_literal(path):
+    module = types.ModuleType('sealed_dev33_' + path.stem)
+    module.__file__ = str(path)
+    exec(compile(path.read_bytes(), str(path), 'exec'), module.__dict__)
+    return module
+
+
+def pid_record(pid):
+    try:
+        fields = Path('/proc', str(pid), 'stat').read_text().rsplit(')', 1)[1].split()
+        return {'pid': pid, 'ppid': int(fields[1]), 'pgid': int(fields[2]),
+                'state': fields[0], 'start_ticks': int(fields[19])}
+    except FileNotFoundError:
+        return None
+
+
+def same_process(record):
+    current = pid_record(record['pid'])
+    return current is not None and current['start_ticks'] == record['start_ticks']
+
+
+def record_descendants(root_pid, known):
+    # Numeric ancestry only; no other process environment or command line read.
+    rows = {}
+    for path in Path('/proc').iterdir():
+        if path.name.isdigit():
+            try:
+                record = pid_record(int(path.name))
+            except (PermissionError, ProcessLookupError):
+                continue
+            if record:
+                rows[record['pid']] = record
+    owned = {root_pid} | {pid for pid, r in known.items() if same_process(r)}
+    changed = True
+    while changed:
+        children = {pid for pid, r in rows.items() if r['ppid'] in owned}
+        changed = not children <= owned
+        owned |= children
+    for pid in owned:
+        if pid in rows:
+            prior = known.get(pid)
+            require(prior is None or prior['start_ticks'] == rows[pid]['start_ticks'], 'Owned PID was recycled during run.')
+            known[pid] = rows[pid]
+
+
+def stop_owned(child, known, deadline_seconds=20):
+    """Bounded signals only to recorded, still-identical task processes."""
+    deadline = time.monotonic() + deadline_seconds
+    actions = []
+    for sig, allowance in ((signal.SIGINT, 10), (signal.SIGTERM, 5), (signal.SIGKILL, 5)):
+        alive = [r for r in known.values() if same_process(r)]
+        if not alive:
+            break
+        groups = {r['pgid'] for r in alive if r['pgid'] == r['pid']}
+        for group in groups:
+            leader = known[group]
+            if same_process(leader):
+                try:
+                    os.killpg(group, sig)
+                    actions.append({'group': group, 'signal': int(sig), 'start_ticks': leader['start_ticks']})
+                except ProcessLookupError:
+                    pass
+        for record in alive:
+            if record['pgid'] not in groups and same_process(record):
+                try:
+                    os.kill(record['pid'], sig)
+                    actions.append({'pid': record['pid'], 'signal': int(sig), 'start_ticks': record['start_ticks']})
+                except ProcessLookupError:
+                    pass
+        remaining = max(0, min(allowance, deadline - time.monotonic()))
+        until = time.monotonic() + remaining
+        try:
+            child.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            pass
+        # The driver may already have exited while a recorded renderer remains.
+        # Give those still-identical children the same bounded signal grace.
+        while any(same_process(r) for r in known.values()) and time.monotonic() < until:
+            time.sleep(min(0.1, max(0, until - time.monotonic())))
+        if time.monotonic() >= deadline:
+            break
+    require(child.poll() is not None, 'Owned driver did not reap within the technical bound.')
+    return actions
+
+
+def layout_containers():
+    result = subprocess.run(['docker', 'ps', '--filter', 'name=quillmd-layout-', '--format', '{{.ID}}\t{{.Names}}'],
+                            capture_output=True, text=True, timeout=10,
+                            env={'PATH': '/usr/bin:/bin'})
+    require(result.returncode == 0, 'Cannot verify the serialized layout namespace.')
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def capture_raw(batch, source_commit):
+    files = {}
+    for path in sorted(batch.rglob('*')):
+        require(not path.is_symlink(), 'Raw evidence contains a symlink; nothing is removed.')
+        if path.is_file():
+            name = str(path.relative_to(batch))
+            require(name not in ('raw-evidence-manifest.json', 'outer-result.json'), 'Prior envelope already exists.')
+            files[name] = digest(path)
+    require(bool(files), 'No raw packet evidence to seal.')
+    manifest = batch / 'raw-evidence-manifest.json'
+    retain(manifest, {'source_commit': source_commit, 'captured_after_child_exit': True, 'files': files})
+    return digest(manifest)
+
+
+def dependency_inventory(path):
+    files = {}
+    for item in sorted(path.rglob('*')):
+        require(not item.is_symlink(), 'Checker dependency contains a symlink.')
+        if item.is_file() and '__pycache__' not in item.relative_to(path).parts and item.suffix != '.pyc':
+            files[str(item.relative_to(path))] = digest(item)
+    require(bool(files), 'Empty checker dependency inventory.')
+    return files
+
+
+def configuration(args):
+    require(sys.executable == PY, 'Use the qualified task interpreter.')
+    require(args.source and args.seal and args.seal_sha256 and args.prepared_plan and args.packet and args.output,
+            'Execution needs exact source/seal/packet and new owned output.')
+    require(not args.source.is_symlink() and args.source.parent == Path('/opt/meddoc-pro/.worktrees'),
+            'Use a direct frozen read-only worktree.')
+    source = args.source.resolve(strict=True)
+    require(not args.output.exists() and not args.output.is_symlink()
+            and args.output.parent.resolve(strict=True).is_relative_to(OWNED), 'Use a new owned output.')
+    require(digest(WRAPPER) == WRAPPER_SHA, 'Normal protected QA wrapper changed.')
+    adapter = load_literal(source / ADAPTER_NAME)
+    prepared = json.loads(adapter.read_raw(args.prepared_plan, adapter.PREPARED_SHA))
+    original = json.loads(adapter.read_raw(source / prepared['original_prepared_plan']['path'], adapter.ORIGINAL_PREPARED_SHA))
+    adapter.validate_derivative(prepared, original)
+    require(digest(source / 'rebuild/ops/fixtures/word_dev33_layout_peer.source') == adapter.PEER_SHA,
+            'Reviewed layout peer helper changed.')
+    require(re.fullmatch('[0-9a-f]{64}', args.seal_sha256) is not None, 'Invalid independent seal hash.')
+    seal = json.loads(adapter.read_raw(args.seal, args.seal_sha256))
+    validate_supervisor_seal(seal)
+    # This metadata-only supervisor may be committed after runtime source S.
+    # The independent prospective seal binds its reviewed bytes separately;
+    # every application/source file must still equal the frozen S Git blob.
+    source_hashes = adapter.verified_source(source, seal['source_commit'])
+    adapter.validate_seal(prepared, seal, source_hashes)
+    packets = {p['packet']: p for p in prepared['packets']}
+    require(args.packet in packets, 'Foreign packet.')
+    packet = packets[args.packet]
+    engine = 'native' if packet['identities'] == ['D01', 'D02'] else 'v3'
+    driver_name = packet['adapter']
+    paths = seal.get('driver_sources', {})
+    helper_hashes = {}
+    for name, expected in adapter.DRIVERS[engine].items():
+        require(name in paths, 'Missing exact driver source path.')
+        path = Path(paths[name])
+        require(path.is_absolute() and not path.is_symlink() and path.parent.resolve().is_relative_to(OWNED)
+                and path.name == name and digest(path) == expected, 'Driver source identity changed.')
+        helper_hashes[str(path)] = expected
+    driver = Path(paths[driver_name])
+    require(all(Path(paths[name]).parent == driver.parent for name in adapter.DRIVERS[engine]),
+            'Prepared driver/harness/checker locations differ.')
+    for name, expected in prepared['unchanged_helpers'].items():
+        require(digest(source / 'docs/rebuild/v1/word-eval' / name) == expected, 'Unchanged scorer/profile bytes changed.')
+    # This is the existing retained checker installation, never a new package install.
+    dependencies = seal.get('checker_dependencies', {})
+    require(dependencies.get('path') and dependencies.get('files') and dependencies.get('pypdfium2') == '4.30.0',
+            'No prospectively bound PDFium dependency installation.')
+    dependency_path = Path(dependencies['path'])
+    require(str(dependency_path) == '/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/render-checker-python',
+            'Foreign checker dependency path.')
+    for name, expected in dependencies['files'].items():
+        relative = Path(name)
+        require(not relative.is_absolute() and '..' not in relative.parts, 'Foreign dependency file.')
+        require(digest(dependency_path / relative) == expected, 'Checker dependency bytes changed.')
+    require(dependency_inventory(dependency_path) == dependencies['files'], 'Checker dependency inventory incomplete or changed.')
+    return source, adapter, prepared, seal, packet, driver, helper_hashes, source_hashes
+
+
+def validate_supervisor_seal(seal):
+    require(seal.get('root_exclusive_db_renderer_grant') is True, 'No root resource handoff recorded.')
+    require(seal.get('supervisor_sha256') == digest(Path(__file__)), 'Reviewed supervisor bytes changed.')
+
+
+def execute(args):
+    global ACTIVE_OUTPUT
+    source, adapter, prepared, seal, packet, driver, helpers, source_before = configuration(args)
+    os.umask(0o077)
+    args.output.mkdir(mode=0o700)
+    out = args.output
+    ACTIVE_OUTPUT = out
+    with (OWNED / 'dev33-serialized-supervisor.lock').open('a+') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return execute_packet(args, source, adapter, seal, packet, driver, helpers, source_before)
+
+
+def execute_packet(args, source, adapter, seal, packet, driver, helpers, source_before):
+    out = args.output
+    driver_module = load_literal(driver)
+    containers_before = layout_containers()
+    require(not containers_before, 'Another layout renderer is active; no child starts.')
+    retain(out / 'source-before.json', source_before)
+    command_args = [str(source), seal['source_commit'], '--freeze', str(args.seal), '--ids', ','.join(packet['identities'])]
+    output_prefix = ('dev-native-application-' if packet['packet'] == 'P01' else 'dev-application-') + seal['source_commit'][:12] + '-'
+    existing_outputs = {p.name for p in driver.parent.iterdir() if p.name.startswith(output_prefix)}
+    retain(out / 'prospective-envelope.json', {'source_commit': seal['source_commit'], 'packet': packet,
+        'seal_sha256': args.seal_sha256, 'helpers': helpers, 'normal_qa_wrapper_sha256': WRAPPER_SHA,
+        'supervisor_sha256': digest(Path(__file__)), 'normal_driver_arguments': command_args,
+        'outer_deadline_seconds': 1260, 'reap_bound_seconds': 20, 'provider_calls': 0,
+        'containers_before': containers_before, 'prior_outputs': sorted(existing_outputs)})
+    for directory in ('outer-home', 'outer-tmp'):
+        (out / directory).mkdir(mode=0o700)
+    env = {'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'TZ': 'UTC', 'HOME': str(out / 'outer-home'),
+           'TMPDIR': str(out / 'outer-tmp'), 'PYTHONDONTWRITEBYTECODE': '1'}
+    read_fd, write_fd = os.pipe()
+    launch = [PY, '-I', '-B', str(Path(__file__)), '--inner-launch', str(read_fd), '--driver', str(driver), *command_args]
+    child = None
+    known = {}
+    timed_out = False
+    original_failure = None
+    batch = None
+    database = None
+    started = time.monotonic()
+    try:
+        with (out / 'driver.log').open('xb') as log:
+            child = subprocess.Popen(launch, cwd=source, env=env, stdout=log, stderr=subprocess.STDOUT,
+                                     pass_fds=(read_fd,), start_new_session=True)
+            os.close(read_fd); read_fd = None
+            record = pid_record(child.pid)
+            require(record is not None, 'Driver process identity unavailable.')
+            known[child.pid] = record
+            database = 'quillmd_qa_sol_ops_dev33' + str(child.pid)
+            socket = Path('/tmp') / ('quillmd-dev-gate-' + str(child.pid)) / 'layout.sock'
+            before_db = driver_module.database_presence(source, database)
+            retain(out / 'independent-before.json', {'source_commit': seal['source_commit'],
+                'pid': record, 'database': before_db, 'socket': str(socket), 'socket_absent': not socket.exists(),
+                'containers': containers_before, 'provider_calls': 0})
+            require(before_db['all_absent'] and not socket.exists(), 'Task database/socket already exists; child not released.')
+            require({p: digest(Path(p)) for p in helpers} == helpers, 'Sealed helper changed before launch.')
+            os.write(write_fd, b'G'); os.close(write_fd); write_fd = None
+            retain(out / 'outer-start.json', {'pid': child.pid, 'started_at_utc': datetime.now(timezone.utc).isoformat(),
+                                             'deadline_seconds': 1260, 'provider_calls': 0})
+            next_progress = started + 30
+            while child.poll() is None:
+                record_descendants(child.pid, known)
+                remaining = 1260 - (time.monotonic() - started)
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                try:
+                    child.wait(timeout=min(1, remaining))
+                except subprocess.TimeoutExpired:
+                    pass
+                if time.monotonic() >= next_progress:
+                    print(json.dumps({'packet': args.packet, 'driver_pid': child.pid,
+                                      'elapsed_seconds': round(time.monotonic() - started, 1), 'active': child.poll() is None}), flush=True)
+                    next_progress = time.monotonic() + 30
+    except BaseException:
+        original_failure = traceback.format_exc()
+    finally:
+        for descriptor in (read_fd, write_fd):
+            if descriptor is not None:
+                os.close(descriptor)
+        actions = []
+        if child is not None:
+            try:
+                record_descendants(child.pid, known)
+                if child.poll() is None or any(same_process(r) for r in known.values()):
+                    actions = stop_owned(child, known)
+            except BaseException:
+                original_failure = (original_failure or '') + traceback.format_exc()
+        if original_failure:
+            failure = out / 'original-supervisor-failure.txt'
+            with failure.open('x') as stream:
+                stream.write(original_failure)
+            failure.chmod(0o600)
+        new_outputs = [p for p in driver.parent.iterdir() if p.name.startswith(output_prefix) and p.name not in existing_outputs]
+        if len(new_outputs) == 1:
+            batch = new_outputs[0]
+        try:
+            after_db = driver_module.database_presence(source, database) if database else {'all_absent': False, 'verified': False}
+            after_containers = layout_containers()
+            after_source = adapter.verified_source(source, seal['source_commit'])
+            absence = {str(pid): not same_process(record) for pid, record in known.items()}
+            socket_removed = not (Path('/tmp') / ('quillmd-dev-gate-' + str(child.pid)) / 'layout.sock').exists() if child else False
+            teardown = {'source_commit': seal['source_commit'], 'recorded_processes': known, 'process_absence': absence,
+                        'all_recorded_pids_absent': bool(known) and all(absence.values()), 'database_after': after_db,
+                        'active_layout_containers': after_containers, 'socket_removed': socket_removed,
+                        'source_unchanged': after_source == source_before, 'stop_actions': actions,
+                        'provider_calls': 0, 'cleanup_bytes': 0}
+            retain(out / 'independent-teardown.json', teardown)
+            retain(out / 'source-after.json', after_source)
+            healthy = (teardown['all_recorded_pids_absent'] and after_db['all_absent'] and not after_containers
+                       and socket_removed and after_source == source_before and not timed_out and not original_failure)
+            receipt = {'actual_outer_child_exit': child.returncode if child else None, 'timed_out': timed_out,
+                       'elapsed_seconds': round(time.monotonic() - started, 6), 'source_commit': seal['source_commit'],
+                       'packet': args.packet, 'provider_calls': 0, 'gate_pass': False,
+                       'original_failure_sha256': digest(out / 'original-supervisor-failure.txt') if original_failure else None,
+                       'driver_log_sha256': digest(out / 'driver.log') if child else None,
+                       'source_unchanged': after_source == source_before, 'teardown_verified': healthy,
+                       'batch': str(batch) if batch else None,
+                       'new_output_candidates': [str(p) for p in new_outputs]}
+            if batch:
+                require(batch.is_dir() and not batch.is_symlink() and batch.resolve().parent == driver.parent.resolve(),
+                        'New output is not the owned normal driver directory; nothing is overwritten.')
+                plan = json.loads((batch / 'plan.json').read_text())
+                require(plan['database_name'] == database and [r['development_id'] for r in plan['records']] == packet['identities'],
+                        'Driver output identity differs from launched packet.')
+                retain(batch / 'independent-teardown.json', teardown)
+                retain(batch / 'outer-start.json', json.loads((out / 'outer-start.json').read_text()) if (out / 'outer-start.json').exists() else {'pid': child.pid})
+                receipt['raw_evidence_manifest_sha256'] = capture_raw(batch, seal['source_commit'])
+                retain(batch / 'outer-result.json', receipt)
+                receipt['retained_outer_receipt_sha256'] = digest(batch / 'outer-result.json')
+            retain(out / 'outer-result.json', receipt)
+            outcome = 2 if not healthy or batch is None or child.returncode is None else child.returncode
+            print(json.dumps({'packet': args.packet, 'actual_driver_exit': child.returncode if child else None,
+                              'supervisor_exit': outcome, 'batch': str(batch) if batch else None,
+                              'teardown_verified': healthy, 'gate_pass': False}), flush=True)
+            return outcome if outcome >= 0 else 2
+        except BaseException:
+            failure = out / 'original-finalization-failure.txt'
+            with failure.open('x') as stream:
+                stream.write(traceback.format_exc())
+            failure.chmod(0o600)
+            retain(out / 'supervisor-incomplete.json', {'source_commit': seal['source_commit'], 'packet': args.packet,
+                'actual_driver_exit': child.returncode if child else None, 'original_failure_sha256': digest(failure),
+                'batch': str(batch) if batch else None, 'gate_pass': False, 'provider_calls': 0})
+            return 2
+
+
+def main(argv=None):
+    # Internal same-PID launch barrier: EOF if parent fails, never an indefinite watcher.
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ['--inner-launch']:
+        require(len(arguments) >= 8 and arguments[2] == '--driver', 'Invalid internal launch arguments.')
+        fd = int(arguments[1]); driver = Path(arguments[3])
+        require(fd > 2, 'Internal barrier must be the inherited private pipe.')
+        require(driver.parent.resolve().is_relative_to(OWNED) and driver.name in (
+            'run_dev_application_gate_v2.py', 'run_dev_application_gate_native_v1.py'), 'Foreign internal driver.')
+        require(digest(driver) == INNER_DRIVERS[driver.name], 'Internal driver differs from reviewed normal bytes.')
+        grant = os.read(fd, 1); os.close(fd)
+        require(grant == b'G', 'Parent refused before actual driver launch.')
+        os.execv(PY, [PY, '-I', '-B', str(driver), *arguments[4:]])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--source', type=Path)
+    parser.add_argument('--seal', type=Path)
+    parser.add_argument('--seal-sha256')
+    parser.add_argument('--prepared-plan', type=Path)
+    parser.add_argument('--packet')
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args(arguments)
+    if not args.execute:
+        print(json.dumps({'state': 'PREPARED_NOT_EXECUTED', 'children_started': 0,
+                          'database_connections': 0, 'provider_calls': 0, 'gate_pass': False}))
+        return 0
+    return execute(args)
+
+
+if __name__ == '__main__':
+    try:
+        raise SystemExit(main())
+    except Exception as error:
+        failure_hash = None
+        if ACTIVE_OUTPUT is not None:
+            failure = ACTIVE_OUTPUT / 'original-early-or-outer-refusal.txt'
+            with failure.open('x') as stream:
+                stream.write(traceback.format_exc())
+            failure.chmod(0o600)
+            failure_hash = digest(failure)
+        else:
+            # Pre-launch source/seal refusal has no task output yet. The normal
+            # outer invocation captures this exact stderr in its protected log.
+            # This arm cannot have opened the protected QA credential.
+            sys.stderr.write(traceback.format_exc())
+        print(json.dumps({'status': 'refused_before_or_during_packet', 'error_kind': type(error).__name__,
+                          'original_failure_sha256': failure_hash, 'gate_pass': False}), flush=True)
+        raise SystemExit(3)

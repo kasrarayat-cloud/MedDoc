@@ -1,0 +1,141 @@
+{
+  "format": "quillmd-elicited-proof-finished-v1",
+  "base": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "diagnosis_commit": "bbcac9d5d3a331acc94e6714873ea29d8f3c3919",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-proof-63460193",
+  "source_files": {
+    "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+    "rebuild/core/v3_field_relations.py": "60e25bd9afdfc2d335bb09a4cf53279a26f8d0b711d3cd7982883691c890db8b",
+    "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0"
+  },
+  "verification": {
+    "selectors": [
+      "core.tests.test_elicited_proof_transport.ElicitedProofTransport",
+      "core.tests.test_v3_literal_facts.OrdinaryLiteralFacts",
+      "core.tests.test_v3_notes_floors.EveryArm.test_every_exemption_keeps_its_control_useful"
+    ],
+    "tests_run": 14,
+    "failures": 0,
+    "errors": 0,
+    "successful": true,
+    "network_attempts": [],
+    "provider_calls": 0,
+    "DB_calls": 0,
+    "elapsed_seconds": 15.346253818002879
+  },
+  "supervisor": {
+    "base": "6346019377ed1a2e65763da7040c6f85da13f72c",
+    "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-proof-63460193",
+    "child_pid": 2925800,
+    "exit_code": 0,
+    "timed_out": false,
+    "reaped": true,
+    "source_before": {
+      "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+      "rebuild/core/v3_field_relations.py": "60e25bd9afdfc2d335bb09a4cf53279a26f8d0b711d3cd7982883691c890db8b",
+      "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0"
+    },
+    "source_after": {
+      "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+      "rebuild/core/v3_field_relations.py": "60e25bd9afdfc2d335bb09a4cf53279a26f8d0b711d3cd7982883691c890db8b",
+      "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0"
+    },
+    "source_unchanged": true,
+    "elapsed_seconds": 15.978907416996663
+  },
+  "evidence_files": [
+    {
+      "file": "result-r1.json",
+      "sha256": "e5fa0e65febb569f7a59a844ba9ea1cb5fd6dcfda7ba197fed19e0fb244c81b8",
+      "bytes": 1004
+    },
+    {
+      "file": "child-result-r1.json",
+      "sha256": "ce41ce1c5c77edb7b7c6bcc1f90a22f93b642aec00a81eb3946ea46d3bca3097",
+      "bytes": 430
+    },
+    {
+      "file": "stderr-r1.log",
+      "sha256": "78d4698234ef58b2564590edd6dc4e047c6dd48e775d840cd46eed13e0feb43c",
+      "bytes": 2939
+    },
+    {
+      "file": "capture-result.json",
+      "sha256": "3772c6015a072d811d0ad993a985af4f645b2f695bb75233af9900c11030a66e",
+      "bytes": 466
+    },
+    {
+      "file": "baseline_C-capture.json",
+      "sha256": "d47dda160e97a3c0a89244d48a5ce1af61a926d4576386356283f3c6dd667876",
+      "bytes": 68674
+    },
+    {
+      "file": "finished_repair-capture.json",
+      "sha256": "f844729c4416454a6151a7a83a80e94439f646821e9d06d0038b6ec0ab3d89ca",
+      "bytes": 64483
+    },
+    {
+      "file": "priced-source-inventory.json",
+      "sha256": "b4f8e140c360924e921c287d73cc3cc8a2ed9f3a338d7bcdfb6e613a51a2730d",
+      "bytes": 10385
+    },
+    {
+      "file": "archive-command-instrument-error.json",
+      "sha256": "f7eeecbaf653d96ce3bdd32cf517377fce8e6a8bbab8cf5d2cfaf12a39832d46",
+      "bytes": 297
+    }
+  ],
+  "changed_priced_ASTs": [
+    {
+      "path": "core/v3_field_relations.py",
+      "base_bytes": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "new_bytes": "60e25bd9afdfc2d335bb09a4cf53279a26f8d0b711d3cd7982883691c890db8b",
+      "base_ast": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+      "new_ast": "9420bc6b9d5a1006f21f324d02541cd7bf67bdd5144b260a4e2a31f76d516027",
+      "changed_definitions": [
+        {
+          "name": "read",
+          "base_line": 571,
+          "new_line": 571,
+          "base_ast": "6c6a034e8d4f378f56861a90535e11da77b24698e645711a058fb3b4785285a9",
+          "new_ast": "3f484409a53172a39a462930297043345557cac9cec9997f65280d5b843e5e6b"
+        }
+      ],
+      "module_ast_equal": false
+    },
+    {
+      "path": "core/generation.py",
+      "base_bytes": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "new_bytes": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+      "base_ast": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "new_ast": "840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227",
+      "changed_definitions": [
+        {
+          "name": "v3_added_causes",
+          "base_line": 3437,
+          "new_line": 3438,
+          "base_ast": "c9f119db0fde46fcbaf0a6d1caf9480774a5294b7da427df90d46cc08cc6bde2",
+          "new_ast": "8abf74c49e8fdfa10cdfebdb56863ed5c88bb37bab856cb70bbc4c3d909d04a8"
+        },
+        {
+          "name": "v3_preceding_warnings",
+          "base_line": 3331,
+          "new_line": 3331,
+          "base_ast": "1dd37a32cbfa9a4a8668a0c32acc3ae8e5c2cda79dcb826e0d8d888a39ce710b",
+          "new_ast": "ddef1f46fdedfabcc52d9c635045d6bd34811a562f239186a79feea83c42d900"
+        },
+        {
+          "name": "v3_relation_causes",
+          "base_line": 3795,
+          "new_line": 3797,
+          "base_ast": "f520dc5a8687b7a6b4794add11d286d0b0a23aa01385a0f76c58c1eadcc79ecd",
+          "new_ast": "d07a857fc2c8a73417a58b95c0abd46e7e71813a4811dfb7fa3d1ac1038d5484"
+        }
+      ],
+      "module_ast_equal": false
+    }
+  ],
+  "accepted_pins_unchanged": true,
+  "paid_requests": 0,
+  "scope": "Existing closed elicited-report proof transport only. Fixture generation/page/finalization and offline request/quote equality; no mounted/provider/Word-release qualification."
+}

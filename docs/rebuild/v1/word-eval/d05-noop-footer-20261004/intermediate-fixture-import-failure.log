@@ -1,0 +1,22 @@
+test_a_body_answer_does_not_reserialize_an_unchanged_footer (documents.test_destination_roles.ByteStableNoOpBoxes.test_a_body_answer_does_not_reserialize_an_unchanged_footer) ... ok
+test_an_already_correct_footer_box_keeps_every_original_package_entry (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_already_correct_footer_box_keeps_every_original_package_entry) ... ok
+test_an_intentional_tick_and_untick_still_change_and_read_back_the_actual_box (documents.test_destination_roles.ByteStableNoOpBoxes.test_an_intentional_tick_and_untick_still_change_and_read_back_the_actual_box) ... ok
+test_later_text_containing_boxes_does_not_redirect_the_original_box_readback (documents.test_destination_roles.ByteStableNoOpBoxes.test_later_text_containing_boxes_does_not_redirect_the_original_box_readback) ... ERROR
+test_deleted_original_box_and_stale_source_reference_are_refused (documents.test_word_v3.SourceBoundGlyphWrites.test_deleted_original_box_and_stale_source_reference_are_refused) ... ok
+test_final_readback_reads_original_leaf_not_inserted_mark (documents.test_word_v3.SourceBoundGlyphWrites.test_final_readback_reads_original_leaf_not_inserted_mark) ... ok
+test_inserted_box_character_never_becomes_the_printed_after_box (documents.test_word_v3.SourceBoundGlyphWrites.test_inserted_box_character_never_becomes_the_printed_after_box) ... ok
+test_native_controls_and_missing_states_remain_independent_of_inserted_boxes (documents.test_word_v3.SourceBoundGlyphWrites.test_native_controls_and_missing_states_remain_independent_of_inserted_boxes) ... ok
+test_readback_accepts_local_namespace_aliases_for_original_runs (documents.test_word_v3.SourceBoundGlyphWrites.test_readback_accepts_local_namespace_aliases_for_original_runs) ... ok
+
+======================================================================
+ERROR: test_later_text_containing_boxes_does_not_redirect_the_original_box_readback (documents.test_destination_roles.ByteStableNoOpBoxes.test_later_text_containing_boxes_does_not_redirect_the_original_box_readback)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/test_destination_roles.py", line 1022, in test_later_text_containing_boxes_does_not_redirect_the_original_box_readback
+    from .test_word_v3 import OriginalGlyphReadback
+ImportError: cannot import name 'OriginalGlyphReadback' from 'documents.test_word_v3' (/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/test_word_v3.py)
+
+----------------------------------------------------------------------
+Ran 9 tests in 5.064s
+
+FAILED (errors=1)

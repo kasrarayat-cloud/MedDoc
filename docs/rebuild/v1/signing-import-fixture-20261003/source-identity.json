@@ -1,0 +1,30 @@
+[
+  {
+    "path": "rebuild/core/tests/test_signing_areas.py",
+    "sha256": "77bf5a60223cb59c962c7322045af8344bbfbde9a5d63f6ffc71a099ce7c4194"
+  },
+  {
+    "path": "rebuild/core/tests/test_word_v3_workflow.py",
+    "sha256": "b8c3a6039218465b214470c21281dbb9d409713d44ca9d7c83c78f50f73b4000"
+  },
+  {
+    "path": "rebuild/core/views.py",
+    "sha256": "409e2ab5a634208a6a8eabf2306514b0c073d106228de873020fba97f5e3d7c8"
+  },
+  {
+    "path": "rebuild/core/import_binding.py",
+    "sha256": "1fb50ff996071f8125f701c7675a3e0bd211d0110ee17405b3d379ba7716b6bb"
+  },
+  {
+    "path": "rebuild/core/destination_roles.py",
+    "sha256": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418"
+  },
+  {
+    "path": "rebuild/documents/test_signing_areas.py",
+    "sha256": "bb626d587ec7afdc12b4f7e8684e0565bb3e232f1b959f3d1d7001271498ef53"
+  },
+  {
+    "path": "rebuild/documents/word_v3.py",
+    "sha256": "2c25e2b2b6571189ff74236ca212a5afef86df714757d77e81592af279526db3"
+  }
+]

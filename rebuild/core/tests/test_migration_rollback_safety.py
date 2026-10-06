@@ -93,7 +93,11 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
         super().tearDown()
 
     def version(self, template, fields, **extra):
-        return TemplateVersion.objects.create(template=template, number=1, fields=fields, created_by=self.user, **extra)
+        # The four tests at 0030 deliberately reversed later columns. Write with that actual historical model,
+        # rather than asking today's ORM to INSERT a column the test just proved does not exist there.
+        node = max(applied())
+        version = MigrationLoader(connection).project_state(node).apps.get_model('core', 'TemplateVersion')
+        return version.objects.create(template_id=template.pk, number=1, fields=fields, created_by_id=self.user.pk, **extra)
 
     @staticmethod
     def at_0030():
@@ -123,8 +127,9 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
         a = self.version(self.templates[0], v3_fields('pain', 'side'), contract='v3')
         b = self.version(self.templates[1], v3_fields('pain', 'side'), contract='v3')
         self.version(self.templates[2], LEGACY_FIELDS)
-        MappingConfirmation.objects.create(version=a, confirmed_by=self.user)
-        self.assertTrue(b.needs_confirmation)
+        MappingConfirmation.objects.create(version_id=a.pk, confirmed_by=self.user)
+        self.assertEqual(b.contract, 'v3')
+        self.assertFalse(MappingConfirmation.objects.filter(version_id=b.pk).exists())
         with self.assertRaisesRegex(IrreversibleError, r'1 mapping confirmation\(s\) and 2 mapping version\(s\)') as refused:
             MigrationExecutor(connection).migrate(BEFORE_0021)
         # Counts only: no identifier, name or account reaches the operator's terminal or log.
@@ -161,7 +166,7 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
 
     def test_a_confirmation_alone_refuses(self):
         self.at_0030()
-        MappingConfirmation.objects.create(version=self.version(self.templates[2], LEGACY_FIELDS), confirmed_by=self.user)
+        MappingConfirmation.objects.create(version_id=self.version(self.templates[2], LEGACY_FIELDS).pk, confirmed_by=self.user)
         self.refused(r'1 mapping confirmation\(s\) and 0 mapping version\(s\)')
 
     def test_a_database_without_v3_evidence_still_reverses_and_reapplies(self):
@@ -304,8 +309,10 @@ class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
         super().tearDown()
 
     def v3(self, number=1):
-        return TemplateVersion.objects.create(template=self.template, number=number, fields=v3_fields('pain'),
-                                              contract='v3', created_by=self.user)
+        # This class also deliberately writes at 0030 after reversing newer columns. Use that schema's actual model.
+        version=MigrationLoader(connection).project_state(max(applied())).apps.get_model('core','TemplateVersion')
+        return version.objects.create(template_id=self.template.pk, number=number, fields=v3_fields('pain'),
+                                      contract='v3', created_by_id=self.user.pk)
 
     def assert_refused_with_nothing_reversed(self, migrate, counts):
         before = applied()
@@ -352,7 +359,7 @@ class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
     def test_reproduce_R1_confirmed_v3_evidence_alone_refuses_before_anything_is_reversed(self):
         """A rollback that 0021 will refuse is refused before anything is dropped, even when every v3 mapping is
         confirmed. RED on cb240141: 0022-0031 were reversed and committed first."""
-        MappingConfirmation.objects.create(version=self.v3(), confirmed_by=self.user)
+        MappingConfirmation.objects.create(version_id=self.v3().pk, confirmed_by=self.user)
         self.assert_refused_with_nothing_reversed(
             lambda: call_command('migrate', 'core', PREVIOUS_RELEASE[1], verbosity=0, interactive=False),
             r'1 mapping confirmation\(s\) and 1 mapping version\(s\)')
@@ -390,7 +397,7 @@ class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
                                                          finalized_by=self.user)
         self.assertEqual(Encounter.objects.get(pk=draft.pk).status, 'review')
         # Positive control: once a clinician confirms the mapping, the same document finalizes.
-        MappingConfirmation.objects.create(version=unconfirmed, confirmed_by=self.user)
+        MappingConfirmation.objects.create(version_id=unconfirmed.pk, confirmed_by=self.user)
         Encounter.objects.filter(pk=draft.pk).update(status='finalized', finalized_at=timezone.now(), finalized_by=self.user)
         self.assertEqual(Encounter.objects.get(pk=draft.pk).status, 'finalized')
 

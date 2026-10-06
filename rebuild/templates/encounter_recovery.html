@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Recover saved notes{% endblock %}
+{% block breadcrumb %}Documents <span>/</span> Recover saved notes{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Saved document recovery</div><h1>Continue with a rechecked form</h1><p>{{ source.patient.display_name }} · {{ source.service_date|date:'j F Y' }}</p></div><a class="button secondary" href="{% url 'encounter_detail' source.pk %}">Back to saved document</a></div>
+{% if recovery_error %}<div class="notice warning" role="alert">{{ recovery_error }}</div>{% endif %}
+<div class="notice">This creates a new draft with this patient's service date and the exact saved source notes below. The earlier document, its answers, review decisions, requests and downloads stay unchanged. No generation request or charge starts here.</div>
+<section class="source-panel"><h2>Saved source notes to review</h2><div class="source-notes" tabindex="0" role="region" aria-label="Saved source notes for recovery">{{ source.notes }}</div><p class="helptext">Check who each statement describes and when it applies. Previous answers, accepted codes and signed transcript context are not copied. Voice text needs a fresh source review; copying it does not establish a reviewed current-patient transcript.</p></section>
+{% if mapping_versions %}
+<form method="post" data-submit-once>{% csrf_token %}<input type="hidden" name="revision" value="{{ source.revision }}">
+<label for="recovery-mapping">Current confirmed mapping of the rechecked original</label>
+<select id="recovery-mapping" name="mapping_version" required>{% for version in mapping_versions %}<option value="{{ version.pk }}">{{ version.template.name }} · version {{ version.number }}</option>{% endfor %}</select>
+<p class="helptext">Only linked copies of this unchanged original are offered. Current source and answer destinations are checked again before a draft is created.</p>
+<label class="check-label" for="review-recovery"><input id="review-recovery" type="checkbox" name="review_recovery" required><span>I reviewed these saved notes for this patient and service date. I understand the new draft starts with no answers or previous review decisions, and will check its notes and generated answers before finalization.</span></label>
+<div class="form-footer"><button type="submit" data-pending-label="Preparing draft…">Create or reopen recovered draft</button></div>
+</form>
+{% else %}
+<div class="empty-state compact"><h2>A reviewed rechecked form is needed</h2><p>Open the original form, choose Recheck answer locations, then review and confirm the fresh copy's current mapping. Return here to recover these saved notes.</p><a class="button" href="{% url 'template_detail' source.template_version.template.pk %}">Review original form and recheck</a></div>
+{% endif %}
+{% endblock %}

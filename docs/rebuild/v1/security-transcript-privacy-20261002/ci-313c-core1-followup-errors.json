@@ -1,0 +1,208 @@
+{
+  "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/ci-313c-core1.log",
+  "source_sha256": "944e854a5a4f73009f5872cbde8539593b9af206928b84be7a18f6998b17e08d",
+  "original_tests": 1644,
+  "seconds": 1352.213,
+  "failures": 7,
+  "errors": 34,
+  "selected_unchanged_controls": [
+    {
+      "first_ci_outcome": "test_a_replacement_needs_an_automatic_ordinary_field_with_no_role (core.tests.test_destination_roles.ModelProposals.test_a_replacement_needs_an_automatic_ordinary_field_with_no_role) (case='signature kind')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_a_replacement_needs_an_automatic_ordinary_field_with_no_role (core.tests.test_destination_roles.ModelProposals.test_a_replacement_needs_an_automatic_ordinary_field_with_no_role) (case='manual field')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_a_replacement_needs_an_automatic_ordinary_field_with_no_role (core.tests.test_destination_roles.ModelProposals.test_a_replacement_needs_an_automatic_ordinary_field_with_no_role) (case='kind to checkbox')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_a_replacement_needs_an_automatic_ordinary_field_with_no_role (core.tests.test_destination_roles.ModelProposals.test_a_replacement_needs_an_automatic_ordinary_field_with_no_role) (case='an automatic-looking field on a role place')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 520, in test_a_replacement_needs_an_automatic_ordinary_field_with_no_role"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item (core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item) (rid='RF07')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 338, in version_of",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item (core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item) (rid='RF08-None')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 338, in version_of",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 334, in version_of",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 145, in uploaded",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 141, in upload"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item (core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item) (rid='RF08-pict')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 338, in version_of",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 334, in version_of",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 145, in uploaded",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 141, in upload"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item (core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item) (rid='RF08-Use black ink')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 338, in version_of",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 334, in version_of",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 145, in uploaded",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 141, in upload"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item (core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item) (rid='RF09')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 338, in version_of",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 372, in test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 334, in version_of",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 145, in uploaded",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 141, in upload"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rf12_the_outcome_is_the_same_for_every_order_of_the_changes (core.tests.test_destination_roles.ModelProposals.test_rf12_the_outcome_is_the_same_for_every_order_of_the_changes)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 420, in test_rf12_the_outcome_is_the_same_for_every_order_of_the_changes",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 338, in version_of",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rf15_resolve_applies_removals_first_and_revalidates (core.tests.test_destination_roles.ModelProposals.test_rf15_resolve_applies_removals_first_and_revalidates)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 537, in test_rf15_resolve_applies_removals_first_and_revalidates",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_a_new_overlap_of_a_model_field_is_still_refused_at_resolve (core.tests.test_destination_roles.SalvageResolveOverlap.test_a_new_overlap_of_a_model_field_is_still_refused_at_resolve)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 1051, in test_a_new_overlap_of_a_model_field_is_still_refused_at_resolve",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_rr3_03_a_relabel_beside_an_inline_control_resolves_and_confirms (core.tests.test_destination_roles.SalvageResolveOverlap.test_rr3_03_a_relabel_beside_an_inline_control_resolves_and_confirms)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 1034, in test_rr3_03_a_relabel_beside_an_inline_control_resolves_and_confirms",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_destination_roles.py\", line 1015, in assisted",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_a_glyph_box_the_line_lacks_is_never_confirmed_though_the_line_shows_more_boxes (core.tests.test_word_v3_workflow.V3MixedBoxNumbers.test_a_glyph_box_the_line_lacks_is_never_confirmed_though_the_line_shows_more_boxes)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_word_v3_workflow.py\", line 978, in test_a_glyph_box_the_line_lacks_is_never_confirmed_though_the_line_shows_more_boxes",
+        "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_reproduce_R1_a_draft_started_while_the_gate_was_missing_cannot_be_finalized (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_reproduce_R1_a_draft_started_while_the_gate_was_missing_cannot_be_finalized)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 380, in test_reproduce_R1_a_draft_started_while_the_gate_was_missing_cannot_be_finalized",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 307, in v3",
+        "django.db.utils.ProgrammingError: column \"import_manifest\" of relation \"core_templateversion\" does not exist"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_a_confirmation_alone_refuses_at_the_leaf (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_a_confirmation_alone_refuses_at_the_leaf)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 370, in test_a_confirmation_alone_refuses_at_the_leaf",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 316, in assert_refused_with_nothing_reversed",
+        "AssertionError: Items in the second set but not the first:",
+        "('core', '0035_import_manifest')"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_recorded_corrections_alone_refuse_at_the_leaf (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_recorded_corrections_alone_refuse_at_the_leaf)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 364, in test_recorded_corrections_alone_refuse_at_the_leaf",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 316, in assert_refused_with_nothing_reversed",
+        "AssertionError: Items in the second set but not the first:",
+        "('core', '0035_import_manifest')"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_reproduce_R1_a_rollback_toward_the_previous_release_refuses_before_dropping_the_gate (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_reproduce_R1_a_rollback_toward_the_previous_release_refuses_before_dropping_the_gate)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 325, in test_reproduce_R1_a_rollback_toward_the_previous_release_refuses_before_dropping_the_gate",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 316, in assert_refused_with_nothing_reversed",
+        "AssertionError: Items in the second set but not the first:",
+        "('core', '0035_import_manifest')"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_reproduce_R1_confirmed_v3_evidence_alone_refuses_before_anything_is_reversed (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_reproduce_R1_confirmed_v3_evidence_alone_refuses_before_anything_is_reversed)",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 356, in test_reproduce_R1_confirmed_v3_evidence_alone_refuses_before_anything_is_reversed",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 316, in assert_refused_with_nothing_reversed",
+        "AssertionError: Items in the second set but not the first:",
+        "('core', '0035_import_manifest')"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way) (target='0018_servicehealth')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 348, in test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 316, in assert_refused_with_nothing_reversed",
+        "AssertionError: Items in the second set but not the first:",
+        "('core', '0035_import_manifest')"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way) (target='0020_payment_livemode')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 348, in test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 316, in assert_refused_with_nothing_reversed",
+        "AssertionError: Items in the second set but not the first:",
+        "('core', '0035_import_manifest')"
+      ]
+    },
+    {
+      "first_ci_outcome": "test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way (core.tests.test_migration_rollback_safety.ARefusedRollbackKeepsTheConfirmationGate.test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way) (target='0030_empty_draft_disposition')",
+      "frames_and_error": [
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 348, in test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way",
+        "  File \"/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_migration_rollback_safety.py\", line 316, in assert_refused_with_nothing_reversed",
+        "AssertionError: Items in the second set but not the first:",
+        "('core', '0035_import_manifest')"
+      ]
+    }
+  ]
+}

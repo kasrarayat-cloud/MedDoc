@@ -1,0 +1,310 @@
+"""Literal future fixture identity runner; copy hash-exact OUTSIDE src/rebuild.
+
+Default is prepared-only. A granted execution uses actual invite/recovery HTTP
+routes and persisted readbacks in a new synthetic demo. No provider, payment,
+external mail, installed state, existing-account password edit or source write.
+Raw invitation/recovery routes, passwords, CSRF and session cookies stay in
+memory. Existing record-level selection/binding is reused, never a file regex.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import socket
+import stat
+import sys
+import time
+import traceback
+
+TASK = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002')
+MAX_REQUESTS = 100
+DEADLINE_SECONDS = 180
+
+
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def safe_route(route):
+    route = re.sub(r'/invite/[^/]+/', '/invite/[redacted]/', route or '')
+    return re.sub(r'/recovery/confirm/[^/]+/[^/]+/', '/recovery/confirm/[redacted]/[redacted]/', route)
+
+
+def scrub(raw, confidential):
+    text = raw.decode(errors='replace')
+    for value in sorted(set(confidential), key=len, reverse=True):
+        if value:
+            text = text.replace(value, '[redacted]')
+    return text.encode()
+
+
+def selected_route(storage, mail, binding, kind, email, before, root, read, require):
+    after = mail_snapshot(root, read, require)
+    changed = sorted(name for name in after if before.get(name) != after[name])
+    require(0 < len(changed) <= storage.MAX_SELECT_NAMES, 'own_changed_mail_not_unique_or_bounded')
+    expectations, final = binding(kind, email)
+    result = storage._selected([read(root / name) for name in changed], {
+        'address': email.lower(), 'purpose': kind, 'pattern': mail.KINDS[kind], **expectations})
+    require(result['found'], 'own_record_mail_binding_refused:' + result['reason'])
+    route = result.pop('route')
+    token = route[len('/' + kind + '/'):].rstrip('/')
+    require(final is None or final(token), 'own_recovery_verifier_refused')
+    return route, {**{key: value for key, value in result.items() if key != 'reason'}, 'token_bound': True}
+
+
+def mail_snapshot(root, read, require):
+    require(root == root.resolve() and root.parent.is_dir() and not root.parent.is_symlink(), 'qa_mail_root_changed')
+    if not root.exists():
+        # A fresh file-mode QA outbox is created by the first actual delivery.
+        return {}
+    info = root.lstat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700,
+            'qa_mail_metadata_changed')
+    files = sorted(root.iterdir()); require(len(files) <= 64, 'qa_mail_inventory_bound')
+    require(all(path.is_file() and path.suffix == '.log' and not path.is_symlink() for path in files), 'unexpected_qa_mail_entry')
+    return {path.name: sha(read(path)) for path in files}
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--demo-dir', type=Path); parser.add_argument('--expected-commit')
+    parser.add_argument('--expected-script-sha'); parser.add_argument('--run-id')
+    for name in ('doctor-pid', 'admin-pid', 'worker-pid'):
+        parser.add_argument('--' + name, type=int)
+    parser.add_argument('--execute', action='store_true'); args = parser.parse_args()
+    if not args.execute:
+        print(json.dumps({'prepared_only': True, 'max_requests': MAX_REQUESTS,
+            'deadline_seconds': DEADLINE_SECONDS, 'provider_requests': 0, 'external_messages': 0})); return
+    if not all((args.demo_dir, args.expected_commit, args.expected_script_sha, args.run_id,
+                args.doctor_pid, args.admin_pid, args.worker_pid)):
+        raise RuntimeError('Complete prospective execution identity required.')
+    demo = args.demo_dir; source = demo / 'src/rebuild'
+    if not (demo == demo.resolve() and demo.parent == TASK and Path.cwd() == source
+            and re.fullmatch('[a-f0-9]{40}', args.expected_commit)
+            and demo.name == 'demo-' + args.expected_commit[:8] and args.expected_commit[:8] != '789c0372'
+            and re.fullmatch('[a-f0-9]{64}', args.expected_script_sha)
+            and re.fullmatch('[a-z0-9][a-z0-9-]{1,55}', args.run_id)
+            and not os.path.lexists(source / '.env')):
+        raise RuntimeError('New immutable fixture archive required.')
+    sys.path.insert(0, str(source))
+    from ops import verify_qa_authorization as auth
+    from ops import verify_fixture_persisted as persisted
+    auth.MAX_REQUESTS = MAX_REQUESTS
+    script = demo / 'evidence' / ('identity-' + args.expected_script_sha + '.py')
+    auth.require(Path(__file__) == script and sha(auth.protected_file(script)) == args.expected_script_sha
+        and (source / 'ops/fixtures/private_demo_identity.source').read_bytes() == script.read_bytes(), 'literal_script_manifest_differs')
+    prepared = persisted.archive_identity(demo, args.expected_commit); db = prepared['database']
+    processes = [auth.process_identity(args.doctor_pid, source, args.expected_commit, db, 'doctor', 9160),
+        auth.process_identity(args.admin_pid, source, args.expected_commit, db, 'admin', 9161),
+        auth.process_identity(args.worker_pid, source, args.expected_commit, db, 'doctor')]
+    connect = socket.socket.connect
+    def local(sock, address):
+        auth.require(isinstance(address, tuple) and address[0] == '127.0.0.1'
+            and address[1] in (55731, 9160, 9161), 'out_of_scope_network')
+        return connect(sock, address)
+    socket.socket.connect = local
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'quillmd.settings')
+    import django
+    django.setup()
+    from django.conf import settings
+    from django.contrib.sessions.models import Session
+    from django.db import connection, transaction
+    from django.utils import timezone
+    from core import models as m
+    from core.billing import welcome_credit_amount
+    from core.security import audit
+    from ops import account_mail, private_mail, private_storage
+    auth.require(settings.SYNTHETIC_ONLY and settings.AI_MODE == 'fixture' and settings.RELEASE_SHA == args.expected_commit
+        and settings.QUILLMD_REGISTRATION == 'invite' and settings.QUILLMD_EMAIL_MODE == 'file'
+        and not settings.QUILLMD_MFA_REQUIRED_ALL and settings.STATE_DIR == demo / 'state'
+        and settings.EMAIL_FILE_PATH == demo / 'state/mail'
+        and settings.DATABASES['default']['NAME'] == db
+        and settings.DATABASES['default']['HOST'] == '127.0.0.1'
+        and str(settings.DATABASES['default']['PORT']) == '55731', 'synthetic_identity_profile_differs')
+    with connection.cursor() as cursor:
+        cursor.execute("SET lock_timeout = '3s'"); cursor.execute("SET statement_timeout = '8s'")
+    out = demo / 'evidence' / ('identity-' + args.run_id)
+    auth.require(not out.exists(), 'retained_run_identity_not_reusable'); out.mkdir(mode=0o700)
+    confidential = []; created = None; failure = None; started = time.monotonic()
+    result = {'commit': args.expected_commit, 'script_sha256': args.expected_script_sha, 'database': db,
+        'processes': processes, 'complete': False, 'checks': [], 'provider_requests': 0, 'external_messages': 0}
+    class Served(auth.Served):
+        def request(self, *args, **kwargs):
+            response = super().request(*args, **kwargs)
+            self.records[-1]['path'] = safe_route(self.records[-1]['path'])
+            self.records[-1]['location'] = safe_route(self.records[-1]['location'])
+            return response
+    served = Served()
+    def check(name):
+        auth.require(time.monotonic() - started < DEADLINE_SECONDS, 'identity_deadline')
+        result['checks'].append({'name': name, 'passed': True})
+    def csrf(client, path):
+        body = served.expect(client, 9160, path, 200, label='csrf_form')
+        found = re.search(rb'name="csrfmiddlewaretoken" value="([^"]+)"', body)
+        auth.require(found is not None, 'csrf_missing'); confidential.append(found[1].decode()); return found[1].decode()
+    def post(client, path, data, status=302):
+        return served.expect(client, 9160, path, status, method='POST', data=data, label='mounted_form_post')
+    def read(path):
+        raw = auth.protected_file(path); auth.require(len(raw) <= 2 * 1024 * 1024, 'mail_byte_bound'); return raw
+    baseline = {}
+    def existing_finance():
+        return {name: sha(json.dumps(list(getattr(m, name).objects.filter(pk__in=ids).order_by('pk').values()),
+            sort_keys=True, default=str).encode()) for name, ids in baseline.items()}
+    try:
+        accounts = json.loads(auth.protected_file(source / '.runtime/private-access.json'))
+        owner_account = accounts['doctor']; foreign_account = accounts['ultrasound']
+        auth.require(all(account['email'].endswith('@synthetic.quillmd.invalid') for account in (owner_account, foreign_account)), 'seed_account_scope')
+        confidential.extend([owner_account['password'], foreign_account['password']])
+        owner = m.User.objects.get(email=owner_account['email'])
+        organization = m.Organization.objects.get(department__membership__user=owner,
+            department__membership__role='owner', department__membership__active=True,
+            department__name='X-ray')
+        for name in ('Wallet', 'LedgerEntry', 'Job', 'Usage', 'Reservation', 'ProviderReceipt', 'Payment'):
+            baseline[name] = list(getattr(m, name).objects.values_list('pk', flat=True))
+        initial_finance = existing_finance()
+        owner_client = served.login(owner_account, 9160); foreign = served.login(foreign_account, 9160)
+        served.expect(served.client(), 9160, '/register/', 404, label='invite_only_registration_closed')
+        for surface, port in (('doctor', 9160), ('admin', 9161)):
+            health = json.loads(served.expect(served.client(), port, '/health/', 200, label='surface_identity'))
+            auth.require(health == {'status': 'ok', 'data_mode': 'synthetic-only', 'surface': surface,
+                'release': args.expected_commit}, 'surface_health_differs')
+        check('Invite-only exact doctor/admin fixture identity')
+        unique = sha((args.run_id + secrets.token_hex(16)).encode())[:16]
+        email = 'identity-' + unique + '@synthetic.quillmd.invalid'
+        password = secrets.token_urlsafe(32); replacement = secrets.token_urlsafe(32)
+        confidential += [password, replacement]
+        department_name = 'Synthetic identity ' + unique
+        # Recover this run's own account/department even if the outer deadline
+        # stops the process between HTTP mutation and row readback. No password,
+        # token, session key or clinical text belongs in this declaration.
+        auth.write_new(out / 'identity-declaration.json', {'format': 'quillmd-fixture-identity-v1',
+            'commit': args.expected_commit, 'script_sha256': args.expected_script_sha,
+            'run_id': args.run_id, 'email': email, 'department_name': department_name,
+            'organization': str(organization.pk), 'issuer': str(owner.pk), 'role': 'clinician',
+            'existing_financial_fingerprints': initial_finance, 'provider_requests': 0, 'external_messages': 0})
+        post(owner_client, '/team/departments/', {'csrfmiddlewaretoken': csrf(owner_client, '/team/'),
+            'organization': organization.pk, 'name': department_name})
+        department = m.Department.objects.get(name=department_name, organization=organization)
+        auth.require(m.Membership.objects.filter(user=owner, department=department, active=True, role='owner').exists(), 'persisted_owner_department_missing')
+        result['department'] = str(department.pk)
+        before = mail_snapshot(settings.EMAIL_FILE_PATH, read, auth.require)
+        post(owner_client, '/team/', {'csrfmiddlewaretoken': csrf(owner_client, '/team/'),
+            'department': department.pk, 'email': email, 'role': 'clinician'})
+        invitation = m.Invitation.objects.get(email=email, department=department)
+        auth.require(invitation.invited_by_id == owner.pk and invitation.accepted_at is None, 'persisted_invitation_missing')
+        route, notes = selected_route(private_storage, private_mail, account_mail.binding, 'invite', email,
+            before, settings.EMAIL_FILE_PATH, read, auth.require)
+        confidential += [route, route.rstrip('/').split('/')[-1]]
+        served.expect(served.client(), 9161, route, 404, label='admin_invite_surface_denied')
+        invited_client = served.client()
+        post(invited_client, route, {'csrfmiddlewaretoken': csrf(invited_client, route), 'email': email,
+            'first_name': 'Synthetic', 'last_name': 'Identity ' + unique, 'password1': password,
+            'password2': password, 'synthetic_only': 'on'})
+        created = m.User.objects.get(email=email); invitation.refresh_from_db()
+        membership = m.Membership.objects.get(user=created, department=department)
+        credit = welcome_credit_amount(); wallet = m.Wallet.objects.get(user=created, kind='promo')
+        auth.require(created.is_active and created.verified_at and created.check_password(password)
+            and invitation.accepted_at and membership.active and membership.role == 'clinician'
+            and wallet.balance == credit and wallet.reserved == 0
+            and m.LedgerEntry.objects.filter(wallet=wallet, kind='welcome').count() == (1 if credit else 0), 'acceptance_or_credit_readback_failed')
+        served.expect(served.client(), 9160, route, 404, label='invitation_replay_denied')
+        replay_client = served.client()
+        post(replay_client, route, {'csrfmiddlewaretoken': csrf(replay_client, '/login/')}, 404)
+        auth.require(m.User.objects.filter(email=email).count() == 1
+            and m.Membership.objects.filter(user=created, department=department).count() == 1, 'invitation_replay_created_duplicate')
+        result.update(user=str(created.pk), invitation=str(invitation.pk), invite_mail=notes,
+            welcome_amount=str(credit), welcome_entries=1 if credit else 0)
+        check('Actual invitation acceptance, replay refusal and one persisted welcome grant')
+        own_account = {'email': email, 'password': password}; old = served.login(own_account, 9160)
+        served.expect(old, 9160, '/patients/', 200, label='accepted_clinician_positive')
+        post(old, '/patients/', {'csrfmiddlewaretoken': csrf(old, '/patients/'), 'department': department.pk,
+            'display_name': 'SYNTHETIC IDENTITY ' + unique, 'reference': 'IDENTITY-' + unique, 'synthetic_only': 'on'})
+        patient = m.Patient.objects.get(reference='IDENTITY-' + unique, department=department)
+        auth.require(patient.created_by_id == created.pk, 'accepted_clinician_patient_not_persisted')
+        own_list = json.loads(served.expect(old, 9160, '/api/patients/', 200, label='own_patient_api_positive'))
+        foreign_list = json.loads(served.expect(foreign, 9160, '/api/patients/', 200, label='foreign_patient_api_positive'))
+        auth.require(str(patient.pk) in json.dumps(own_list) and str(patient.pk) not in json.dumps(foreign_list), 'patient_scope_readback_failed')
+        post(foreign, '/patients/', {'csrfmiddlewaretoken': csrf(foreign, '/patients/'), 'department': department.pk,
+            'display_name': 'SYNTHETIC FOREIGN DENIED ' + unique, 'reference': 'DENIED-' + unique, 'synthetic_only': 'on'}, 200)
+        auth.require(not m.Patient.objects.filter(reference='DENIED-' + unique).exists(), 'foreign_department_write_persisted')
+        check('Accepted account persisted positive and actual denied foreign-department write')
+        jar = next(handler.cookiejar for handler in old.handlers if hasattr(handler, 'cookiejar'))
+        session_key = next(cookie.value for cookie in jar if cookie.name == 'quillmd_doctor_session')
+        confidential.append(session_key)
+        session = Session.objects.get(session_key=session_key)
+        auth.require(session.get_decoded().get('_auth_user_id') == str(created.pk), 'old_authenticated_session_not_persisted')
+        recovery_client = served.client(); before = mail_snapshot(settings.EMAIL_FILE_PATH, read, auth.require)
+        page = post(recovery_client, '/recovery/', {'csrfmiddlewaretoken': csrf(recovery_client, '/recovery/'), 'email': email}, 200)
+        auth.require(b'If this address is eligible' in page, 'recovery_neutral_response_missing')
+        route, notes = selected_route(private_storage, private_mail, account_mail.binding, 'recovery/confirm',
+            email, before, settings.EMAIL_FILE_PATH, read, auth.require)
+        confidential += [route, *route.rstrip('/').split('/')[-2:]]
+        code, headers, _ = served.request(recovery_client, 9160, route, label='bound_recovery_open')
+        clean = headers.get('Location', '')
+        auth.require(code == 302 and clean.endswith('/set-password/'), 'recovery_clean_route_missing')
+        confidential.append(clean)
+        post(recovery_client, clean, {'csrfmiddlewaretoken': csrf(recovery_client, clean),
+            'new_password1': replacement, 'new_password2': replacement})
+        created.refresh_from_db(); password_hash = created.password
+        auth.require(created.check_password(replacement) and not created.check_password(password), 'password_recovery_not_persisted')
+        event = m.AuditEvent.objects.get(actor=created, action='auth.password_recovered')
+        auth.require(event.details.get('sessions_invalidated') is True and event.details.get('mfa_required') is False, 'recovery_audit_missing')
+        code, headers, _ = served.request(old, 9160, '/patients/', label='old_session_revoked')
+        auth.require(code == 302 and headers.get('Location') == '/login/?next=/patients/'
+            and not Session.objects.filter(session_key=session_key).exists(), 'old_session_revocation_not_persisted')
+        served.login(own_account, 9160, expect=False)
+        fresh = served.login({'email': email, 'password': replacement}, 9160)
+        served.expect(fresh, 9160, '/patients/', 200, label='recovered_account_positive')
+        replay = served.expect(served.client(), 9160, route, 200, label='recovery_replay_refused')
+        auth.require(b'Recovery link unavailable' in replay, 'recovery_replay_message_missing')
+        created.refresh_from_db(); wallet.refresh_from_db()
+        auth.require(created.password == password_hash and wallet.balance == credit and wallet.reserved == 0
+            and m.AuditEvent.objects.filter(actor=created, action='auth.password_recovered').count() == 1
+            and m.LedgerEntry.objects.filter(wallet=wallet, kind='welcome').count() == (1 if credit else 0), 'recovery_replay_changed_account_or_credit')
+        result.update(recovery_mail=notes, revoked_session_key_sha256=sha(session_key.encode()),
+            recovery_audit=str(event.pk), patient=str(patient.pk))
+        check('Actual recovery, persisted old-session revocation, new sign-in and token replay refusal')
+        auth.require(existing_finance() == initial_finance and all(getattr(m, name).objects.count() == len(baseline[name])
+            for name in ('Job', 'Usage', 'Reservation', 'ProviderReceipt', 'Payment')), 'identity_changed_existing_finance_or_provider_work')
+        result['existing_financial_fingerprints'] = initial_finance
+        check('Existing financial/provider rows exact and zero new provider/payment work')
+        auth.require(persisted.archive_identity(demo, args.expected_commit) == prepared, 'archive_changed_during_identity')
+        auth.require(processes == [auth.process_identity(args.doctor_pid, source, args.expected_commit, db, 'doctor', 9160),
+            auth.process_identity(args.admin_pid, source, args.expected_commit, db, 'admin', 9161),
+            auth.process_identity(args.worker_pid, source, args.expected_commit, db, 'doctor')], 'process_changed_during_identity')
+        result.update(complete=True, requests=served.requests, elapsed_seconds=time.monotonic() - started)
+    except BaseException as error:
+        failure = error
+        raw = traceback.format_exc().encode()
+        auth.write_new(out / 'original-failure-redacted.txt', scrub(raw, confidential))
+        result.update(complete=False, failure_kind=type(error).__name__, original_failure_sha256=sha(raw),
+            requests=served.requests, elapsed_seconds=time.monotonic() - started)
+    finally:
+        if created is not None:
+            try:
+                with transaction.atomic():
+                    own = m.User.objects.select_for_update().get(pk=created.pk)
+                    auth.require(own.email == email, 'own_identity_retirement_scope')
+                    own.is_active = False; own.session_version += 1
+                    own.save(update_fields=['is_active', 'session_version'])
+                    audit(None, 'synthetic.identity_retired', own.pk, run_id=args.run_id)
+                result['new_account_retired'] = True
+            except BaseException as error:
+                raw = traceback.format_exc().encode()
+                auth.write_new(out / 'retirement-failure-redacted.txt', scrub(raw, confidential))
+                result.update(complete=False, new_account_retired=False, retirement_failure_kind=type(error).__name__,
+                    retirement_original_sha256=sha(raw))
+                failure = failure or error
+        auth.write_new(out / 'http-records.json', served.records)
+        auth.write_new(out / 'result.json', result); connection.close()
+    if failure is not None:
+        raise RuntimeError('Fixture identity verification failed; inspect retained redacted evidence.') from None
+    print(json.dumps(result, sort_keys=True, default=str))
+
+
+if __name__ == '__main__':
+    main()

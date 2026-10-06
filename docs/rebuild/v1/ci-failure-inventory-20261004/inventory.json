@@ -1,0 +1,1923 @@
+{
+  "original_run": 37158506012,
+  "original_head": "15f87bb2e7a487225711fa52c8092e279767ad01",
+  "original_merge_tree_equivalent": "1f04d51a493aedb9cea2ebe386ff6f830739893e",
+  "inventory_source": "c8578742bba91e87b4edcc52d9eb810afc1af3e7",
+  "new_switch_repair_commit": "7268ff02be5d50ffd88e67e04cb0aa78659aaf9b",
+  "original_failure_blocks": 95,
+  "unique_original_methods": 69,
+  "original_manifest_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/ci-run-37158506012/failure-blocks.json",
+  "original_manifest_sha256": "5b7e083ec0ee4c244144175dcfc0a8a3bad2e3f27c396763635537d01b13704a",
+  "original_core_shards": [
+    {
+      "methods": 1712,
+      "failures": 47,
+      "errors": 10
+    },
+    {
+      "methods": 1711,
+      "failures": 35,
+      "errors": 3
+    }
+  ],
+  "full_gate_rerun_claimed": false,
+  "provider_requests_from_inventory": 0,
+  "database_actions_from_inventory": 0,
+  "counts": {
+    "scoped_success": {
+      "unique_methods": 38,
+      "original_blocks": 60
+    },
+    "pending_word_affected_regression": {
+      "unique_methods": 2,
+      "original_blocks": 5
+    },
+    "pending_coherent_regression": {
+      "unique_methods": 27,
+      "original_blocks": 27
+    },
+    "pending_clinical_plan_repair": {
+      "unique_methods": 1,
+      "original_blocks": 1
+    },
+    "pending_stale_policy_diagnosis": {
+      "unique_methods": 1,
+      "original_blocks": 2
+    }
+  },
+  "evidence": {
+    "http": {
+      "path": "docs/rebuild/v1/http-ci-fixtures-20261003/VERIFICATION.json",
+      "present": true,
+      "sha256": "47b531c67ac787dcceb32922970498b9ad778d304357a10408c76cabf83642fd"
+    },
+    "batch": {
+      "path": "docs/rebuild/v1/batch-ci-manifest-20261003/VERIFICATION.json",
+      "present": true,
+      "sha256": "04ab82dde4b35820cd6868b5fddb86f26dbdaefde7c70c6c748031476d009214"
+    },
+    "profile": {
+      "path": "docs/rebuild/v1/ordinary-model-activation-20261003/VERIFICATION.json",
+      "present": true,
+      "sha256": "a078c5534f1c292e10fa5bb54aeed9ffdb23ecada6ba3ba3e6055b1007c4e73c"
+    },
+    "import": {
+      "path": "docs/rebuild/v1/import-consent-ci-20261004/recovery-verification.json",
+      "present": true,
+      "sha256": "79e71d86744dd0b8a8cf40d206a3485d9a004740087d0c3a11f5ecfff2c4dffb"
+    },
+    "signing": {
+      "path": "docs/rebuild/v1/signing-import-fixture-20261003/REPORT.md",
+      "present": true,
+      "sha256": "7ef6a17128040a21cce840f62348237f35084a249252e0b868a0fe94467124cd"
+    },
+    "patient": {
+      "path": "docs/rebuild/v1/patient-topic-coverage-ci-20261004/verification.json",
+      "present": true,
+      "sha256": "9282528f34391c2ddfe1754f5630b49dd6a9a45b274d7538c38b8be5dafd71a4"
+    },
+    "switch": {
+      "path": "docs/rebuild/v1/import-switch-ci-20261004/verification.json",
+      "present": true,
+      "sha256": "0ded3d33133fb3c63f0e68e8a0a7bf3b1dbab3e77d434075c9dff65557bc44f7"
+    },
+    "clinical_cost": {
+      "path": "docs/rebuild/v1/clinical-cost-20261003.md",
+      "present": true,
+      "sha256": "8d646dad7931bac94cca828942b0c2929b9bfb5a3d7d4fb6a1cafd6d5ac1ea5c"
+    },
+    "word49": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/core-word-9c15c45952f9-1791076014635128282/tests.log",
+      "present": true,
+      "sha256": "74c76304463d69834b13eef1d5e112dbc22627078c26b8172248f5b7a19d393a"
+    },
+    "word5": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/ticks-word-0a657e4297e7-1791076946595585450/tests.log",
+      "present": true,
+      "sha256": "ced8e58f937ee502fcdf0767cdc6ee871be93baa76d9cec6d5bccb294be39993"
+    },
+    "husband_original": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/ci-run-37158506012/clinical-cost/husband-assertions-d3ce-first.log",
+      "present": true,
+      "sha256": "e02e1f45d36b17fa13b5d85ab42841056716d38926af6e2df04e63b39e373e03"
+    },
+    "husband_repaired": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/ci-run-37158506012/clinical-cost/husband-assertions-corrected-first.log",
+      "present": true,
+      "sha256": "110afd011db3d7565fcd4dd4be559d9495850c5c9a0486841fa72d72d2ceaec1"
+    }
+  },
+  "captured_test_source_sha256": {
+    "rebuild/core/tests/test_batch_effective_constraints.py": "ab2a0fab42817e7ce3b6f260bb29f4a12b3b552c94e9d61efb88ff1d4a0706a9",
+    "rebuild/core/tests/test_denial_heading_governance.py": "57d95369ee236b1d342b971ef0843fb7a51736d64c5aa7eaf56736a80ffb665a",
+    "rebuild/core/tests/test_destination_roles.py": "e3a7ce7f1f3e8954cb72d41ff5c77f2f5cf9868249e3dc2b5964701dffa0077e",
+    "rebuild/core/tests/test_generation_batch.py": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207",
+    "rebuild/core/tests/test_import_workflow.py": "826684f23f37e5b3816e8c2f1c3eb7becab9c751072429719a0fdfd91c61ed51",
+    "rebuild/core/tests/test_isolation_matrix.py": "4019533641282a4d7231cf72d2e8681082de6944fc6d87b09a95d4c0fef5da3f",
+    "rebuild/core/tests/test_signing_areas.py": "09b193d9dfa05de5bb1e51efc8568443d496b75339190131097b5589bd931355",
+    "rebuild/core/tests/test_sonnet55_profile.py": "8046042c35eaf33b15dd8f565e59a3a7dd1b90d83b36139437315045c034f901",
+    "rebuild/core/tests/test_stripe_credentials.py": "af08b1664326e303c6597070aacac0fc117d0070b6e5ec4dc55cdf1d735e5574",
+    "rebuild/core/tests/test_tab_form_policy.py": "1edbc615c2f3f82fe911b5a1301332dec894473311df3bd2a25b4a72502d7c27",
+    "rebuild/core/tests/test_unlabelled_source_scope.py": "0f8a973af7385a3d12ae2dee45000ecc6b282cc73486dc37a032bcfee629fb02",
+    "rebuild/core/tests/test_v3_history_context.py": "b21315a40f92340d86b56b2450ece66a961ebcd13a10517c02e263044d2fb9ae",
+    "rebuild/core/tests/test_v3_notes_floors.py": "775a906ee49fde3a569fe191070d35afe3a2fe88b01e21f05a313ff5210c5dd0",
+    "rebuild/core/tests/test_v3_patient_topics.py": "088566618130e459035780fb3fb67c5c74d788a38a4b9fbb7a616988153af93e",
+    "rebuild/core/tests/test_v3_supersession_floor.py": "f32333e23e78c9be14246bafab681a30193d4568f678084d55cfff5495ab28fb",
+    "rebuild/core/tests/test_word_v3_workflow.py": "53e79f45b90f72b70d76691b079d09089e94558eb64ca2dfbcd637983ad6372a"
+  },
+  "methods": [
+    {
+      "original_selector": "core.tests.test_destination_roles.LegacyDefaultPath.test_finalize_refuses_generated_text_on_a_role_row",
+      "current_selectors": [
+        "core.tests.test_destination_roles.LegacyDefaultPath.test_finalize_refuses_generated_text_on_a_role_row"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 1,
+          "job": 111306810073,
+          "line": 3777,
+          "header": "ERROR: test_finalize_refuses_generated_text_on_a_role_row (core.tests.test_destination_roles.LegacyDefaultPath.test_finalize_refuses_generated_text_on_a_role_row)",
+          "cause": "django.core.exceptions.ValidationError: ['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']",
+          "block_sha256": "e99348119037e8a6e48c4df60bc28e3f0d72d6a2d8aa7bf002604edc39cd6799"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.LegacyDefaultPath.test_generated_or_accepted_text_on_a_role_row_is_refused_typed_text_exports",
+      "current_selectors": [
+        "core.tests.test_destination_roles.LegacyDefaultPath.test_generated_or_accepted_text_on_a_role_row_is_refused_typed_text_exports"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 2,
+          "job": 111306810073,
+          "line": 3799,
+          "header": "ERROR: test_generated_or_accepted_text_on_a_role_row_is_refused_typed_text_exports (core.tests.test_destination_roles.LegacyDefaultPath.test_generated_or_accepted_text_on_a_role_row_is_refused_typed_text_exports)",
+          "cause": "django.core.exceptions.ValidationError: ['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']",
+          "block_sha256": "90bae7cdca6cc274a03800870f0d1ec7bf28cb787943379bc3dee960aeda73e2"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.LegacyDefaultPath.test_pc14_the_signer_row_keeps_the_finalizers_name_rule",
+      "current_selectors": [
+        "core.tests.test_destination_roles.LegacyDefaultPath.test_pc14_the_signer_row_keeps_the_finalizers_name_rule"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 3,
+          "job": 111306810073,
+          "line": 3821,
+          "header": "ERROR: test_pc14_the_signer_row_keeps_the_finalizers_name_rule (core.tests.test_destination_roles.LegacyDefaultPath.test_pc14_the_signer_row_keeps_the_finalizers_name_rule)",
+          "cause": "django.core.exceptions.ValidationError: ['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']",
+          "block_sha256": "2192bb36b51d4fa6f9dcdb312e0adca198fb0fbf19f777160d9e53561ffc9cee"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.LegacyDefaultPath.test_rf16_rf17_signature_initials_and_signer_rows_are_never_generated_checklist_rows_are",
+      "current_selectors": [
+        "core.tests.test_destination_roles.LegacyDefaultPath.test_rf16_rf17_signature_initials_and_signer_rows_are_never_generated_checklist_rows_are"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 4,
+          "job": 111306810073,
+          "line": 3843,
+          "header": "ERROR: test_rf16_rf17_signature_initials_and_signer_rows_are_never_generated_checklist_rows_are (core.tests.test_destination_roles.LegacyDefaultPath.test_rf16_rf17_signature_initials_and_signer_rows_are_never_generated_checklist_rows_are)",
+          "cause": "django.core.exceptions.ValidationError: ['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']",
+          "block_sha256": "46813e2f08928208d2625020777c0479129fee2837f06f4f9da6c63f2f6cd685"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.RepairLegacyUsefulness.test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated",
+      "current_selectors": [
+        "core.tests.test_destination_roles.RepairLegacyUsefulness.test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated"
+      ],
+      "owner": "Word",
+      "status": "pending_word_affected_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 5,
+          "job": 111306810073,
+          "line": 3865,
+          "header": "ERROR: test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated (core.tests.test_destination_roles.RepairLegacyUsefulness.test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated) (label='Care plan signed and date of next review')",
+          "cause": "django.core.exceptions.ValidationError: ['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']",
+          "block_sha256": "38a4a468dde9f3e793213cac8514805fa59619d3278f88ac0e85f8098cf613ae"
+        },
+        {
+          "original_block_id": 6,
+          "job": 111306810073,
+          "line": 3888,
+          "header": "ERROR: test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated (core.tests.test_destination_roles.RepairLegacyUsefulness.test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated) (label='Consent form signed and dated')",
+          "cause": "django.core.exceptions.ValidationError: ['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']",
+          "block_sha256": "bb2b5a5e5181114db2456e8d12cf0abd00ccbbd2dfd9bf37b46b1e0c772581eb"
+        },
+        {
+          "original_block_id": 7,
+          "job": 111306810073,
+          "line": 3911,
+          "header": "ERROR: test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated (core.tests.test_destination_roles.RepairLegacyUsefulness.test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated) (label='Sign and symptom review')",
+          "cause": "django.core.exceptions.ValidationError: ['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']",
+          "block_sha256": "c18e3bff1db673dbe562564679456f85b6ff0fbe7fd332ae06889ad08aaf8c5b"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Word confirms no newer actual result exists for this exact original selector. Preserve the original subfailure blocks; source-neighbor controls and pure document packets do not prove this clinical workflow selector passed. Coherent affected/core regression remains pending."
+    },
+    {
+      "original_selector": "core.tests.test_generation_batch.BatchWorkflow.test_complete_constraints_guard_page_save_and_forced_stored_finalization",
+      "current_selectors": [
+        "core.tests.test_generation_batch.BatchWorkflow.test_complete_constraints_guard_page_save_and_forced_stored_finalization"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 8,
+          "job": 111306810073,
+          "line": 3934,
+          "header": "ERROR: test_complete_constraints_guard_page_save_and_forced_stored_finalization (core.tests.test_generation_batch.BatchWorkflow.test_complete_constraints_guard_page_save_and_forced_stored_finalization)",
+          "cause": "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+          "block_sha256": "90ad62925c8984fadb3970f63186c36b34d9483532655824a9425bc61034acfd"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Four affected methods passed at b8aef46b (65.310s); actual import_manifest-preserving constructors repaired. Unbound-copy SQL refusal remains a negative control."
+    },
+    {
+      "original_selector": "core.tests.test_word_v3_workflow.V3CheckboxNeedsABox.test_a_stored_checkbox_on_a_text_control_is_never_confirmed",
+      "current_selectors": [
+        "core.tests.test_word_v3_workflow.V3CheckboxNeedsABox.test_a_stored_checkbox_on_a_text_control_is_never_confirmed"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 9,
+          "job": 111306810073,
+          "line": 3995,
+          "header": "ERROR: test_a_stored_checkbox_on_a_text_control_is_never_confirmed (core.tests.test_word_v3_workflow.V3CheckboxNeedsABox.test_a_stored_checkbox_on_a_text_control_is_never_confirmed)",
+          "cause": "documents.service.DocumentError: This place is protected on the original form and remains unchanged; no answer can be written there. Nothing was added.",
+          "block_sha256": "bb0fbf815a434783d18ed959606c129ff003a5081a60a4506eb407e93c35186e"
+        }
+      ],
+      "evidence_keys": [
+        "word49",
+        "word5"
+      ],
+      "assessment": "These exact original checkbox selectors passed in the later5-method packet at0a657e42 (30.969s, actualexit0), separately from the original49 failed packet. Source-bound Consent exclusion and ordinary checkbox positive controls retain original human signing protection."
+    },
+    {
+      "original_selector": "core.tests.test_stripe_credentials.StripeCredentialTests.test_interface_labels_configuration_without_claiming_provider_verification",
+      "current_selectors": [
+        "core.tests.test_stripe_credentials.StripeIntegrationConfigurationTests.test_interface_labels_configuration_without_claiming_provider_verification"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 10,
+          "job": 111306810073,
+          "line": 4009,
+          "header": "ERROR: test_interface_labels_configuration_without_claiming_provider_verification (core.tests.test_stripe_credentials.StripeCredentialTests.test_interface_labels_configuration_without_claiming_provider_verification)",
+          "cause": "UnboundLocalError: cannot access local variable 'payments' where it is not associated with a value",
+          "block_sha256": "de8934b5545d7622a026ac718aa8a024d4ce71ceb4f4f13e39a50b90ff31fd69"
+        },
+        {
+          "original_block_id": 54,
+          "job": 111306810073,
+          "line": 4486,
+          "header": "FAIL: test_interface_labels_configuration_without_claiming_provider_verification (core.tests.test_stripe_credentials.StripeCredentialTests.test_interface_labels_configuration_without_claiming_provider_verification) (prefix='sk_test_')",
+          "cause": "django.test.testcases.DatabaseOperationForbidden: Database queries to 'default' are not allowed in SimpleTestCase subclasses. Either subclass TestCase or TransactionTestCase to ensure proper test isolation or add 'default' to core.tests.test_stripe_credentials.StripeCredentialTests.databases to silence this failure.",
+          "block_sha256": "c38f8f104dd68e7a6f672373a269b7ea50cf7c9af05a8816e8380767a58f7446"
+        }
+      ],
+      "evidence_keys": [
+        "http"
+      ],
+      "assessment": "24-method packet passed at 3d612a4f (58.235s). Active authorization routes have 126 denied intrusion checks and 21 authorized positive controls; twelve unmounted-route checks are separate. The original historical 124 served denominator is unchanged."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_draft_cleared_before_this_release_is_shown_with_its_lines_and_refused",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_draft_cleared_before_this_release_is_shown_with_its_lines_and_refused"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 11,
+          "job": 111306810073,
+          "line": 4018,
+          "header": "FAIL: test_a_draft_cleared_before_this_release_is_shown_with_its_lines_and_refused (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_draft_cleared_before_this_release_is_shown_with_its_lines_and_refused)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "c8d3d760f918a269a895e1a09893f6c7eef7dc00721aac2548ccae2713f9c7f6"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_draft_generated_before_the_rule_cannot_finalize_the_denied_finding_on_a_tick",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_draft_generated_before_the_rule_cannot_finalize_the_denied_finding_on_a_tick"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 12,
+          "job": 111306810073,
+          "line": 4030,
+          "header": "FAIL: test_a_draft_generated_before_the_rule_cannot_finalize_the_denied_finding_on_a_tick (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_draft_generated_before_the_rule_cannot_finalize_the_denied_finding_on_a_tick)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "bb3ae05cf7c3c5beeee4506184a9c1a46c4dca64447a8df9e36904d9d71dfb6c"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_finalized_draft_from_an_earlier_release_says_it_was_filled_in",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_finalized_draft_from_an_earlier_release_says_it_was_filled_in"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 13,
+          "job": 111306810073,
+          "line": 4042,
+          "header": "FAIL: test_a_finalized_draft_from_an_earlier_release_says_it_was_filled_in (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_finalized_draft_from_an_earlier_release_says_it_was_filled_in)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "8b9f1de35465c93ca40e25a2f015b8903b879d2402a329ab9b949a2e3b19a71a"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_finalized_record_keeps_what_was_actually_offered",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_finalized_record_keeps_what_was_actually_offered"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 14,
+          "job": 111306810073,
+          "line": 4053,
+          "header": "FAIL: test_a_finalized_record_keeps_what_was_actually_offered (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_finalized_record_keeps_what_was_actually_offered)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "a735f760953742ed78ee2594c8c4351e4499e9465e1b2966479bc8e3a2cc4560"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_governed_answer_cleared_on_a_stale_page_shows_its_lines",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_governed_answer_cleared_on_a_stale_page_shows_its_lines"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 15,
+          "job": 111306810073,
+          "line": 4065,
+          "header": "FAIL: test_a_governed_answer_cleared_on_a_stale_page_shows_its_lines (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_governed_answer_cleared_on_a_stale_page_shows_its_lines)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "a772bf4f8613c9ac380fb02e963fe157727ab00d547b5b201be65a09dfd7c7dc"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_governed_answer_cleared_to_nothing_needs_leave_blank",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_governed_answer_cleared_to_nothing_needs_leave_blank"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 16,
+          "job": 111306810073,
+          "line": 4076,
+          "header": "FAIL: test_a_governed_answer_cleared_to_nothing_needs_leave_blank (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_governed_answer_cleared_to_nothing_needs_leave_blank)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "5613bfdea3d0cb1b1dba7a7e6eceac482894b71255312131cd971c9cdab79dac"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_line_after_the_answer_is_shown_as_following_it",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_line_after_the_answer_is_shown_as_following_it"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 17,
+          "job": 111306810073,
+          "line": 4087,
+          "header": "FAIL: test_a_line_after_the_answer_is_shown_as_following_it (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_line_after_the_answer_is_shown_as_following_it)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "5f126bbb26ec80051f4bcafc830c415c94b2fb27ec9a127f3bc7d03683539341"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 18,
+          "job": 111306810073,
+          "line": 4098,
+          "header": "FAIL: test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_pre_repair_accepted_offer_under_a_heading_cannot_finalize)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "04212bac68abc1c719cbef745b5f8858eaa375425c4d159fa57c61dc7f66aec5"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_pre_repair_offer_under_a_heading_is_no_longer_offered_or_accepted",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_pre_repair_offer_under_a_heading_is_no_longer_offered_or_accepted"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 19,
+          "job": 111306810073,
+          "line": 4109,
+          "header": "FAIL: test_a_pre_repair_offer_under_a_heading_is_no_longer_offered_or_accepted (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_pre_repair_offer_under_a_heading_is_no_longer_offered_or_accepted)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "46efa88c034fdece2137c0395d0eb415d396b96da3e56196fe4c007158121320"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_save_reads_the_notes_governance_once",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_save_reads_the_notes_governance_once"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 20,
+          "job": 111306810073,
+          "line": 4120,
+          "header": "FAIL: test_a_save_reads_the_notes_governance_once (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_save_reads_the_notes_governance_once)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "11ce446eca6e087ceea1069ad5724f29ec432f554366647308096a541d87951e"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_make_a_decision_with_a_no_break_space",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_make_a_decision_with_a_no_break_space"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 21,
+          "job": 111306810073,
+          "line": 4131,
+          "header": "FAIL: test_a_stale_page_cannot_make_a_decision_with_a_no_break_space (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_make_a_decision_with_a_no_break_space)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "6002bac71431f16646c13a7cf477219997d896a4a8200012aa0efdf186caa624"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_make_a_decision_with_an_invisible_character",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_make_a_decision_with_an_invisible_character"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 22,
+          "job": 111306810073,
+          "line": 4142,
+          "header": "FAIL: test_a_stale_page_cannot_make_a_decision_with_an_invisible_character (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_make_a_decision_with_an_invisible_character)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "f6064f3ea31b4970c5ebc993d96a6cafca2a878e42690ece37e0af1d9ff5122e"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_turn_the_prefilled_governed_text_into_a_decision_with_a_space",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_turn_the_prefilled_governed_text_into_a_decision_with_a_space"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 23,
+          "job": 111306810073,
+          "line": 4153,
+          "header": "FAIL: test_a_stale_page_cannot_turn_the_prefilled_governed_text_into_a_decision_with_a_space (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_cannot_turn_the_prefilled_governed_text_into_a_decision_with_a_space)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "1e85953eda11af078aed4d31a189ba91cc768c2c48ff7656463623d1ada58899"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_keeps_an_accepted_governed_suggestion_despite_a_space",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_keeps_an_accepted_governed_suggestion_despite_a_space"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 24,
+          "job": 111306810073,
+          "line": 4164,
+          "header": "FAIL: test_a_stale_page_keeps_an_accepted_governed_suggestion_despite_a_space (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_stale_page_keeps_an_accepted_governed_suggestion_despite_a_space)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "7b3c228243b2fe518c83b887a8422ad72e499e8f5373602c36629daaf90bcec4"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_typed_decision_finalizes_and_the_export_carries_it_not_the_candidate",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_typed_decision_finalizes_and_the_export_carries_it_not_the_candidate"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 25,
+          "job": 111306810073,
+          "line": 4175,
+          "header": "FAIL: test_a_typed_decision_finalizes_and_the_export_carries_it_not_the_candidate (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_typed_decision_finalizes_and_the_export_carries_it_not_the_candidate)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "8a4cfa11e1c8b1242e0590de558c6dc1063371066018d85881c725bed036ba71"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_visible_edit_on_a_stale_page_keeps_what_governs_it",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_visible_edit_on_a_stale_page_keeps_what_governs_it"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 26,
+          "job": 111306810073,
+          "line": 4186,
+          "header": "FAIL: test_a_visible_edit_on_a_stale_page_keeps_what_governs_it (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_a_visible_edit_on_a_stale_page_keeps_what_governs_it)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "685dd4b74a1df4c2309cf2cc7959d979965da99ed8d34070762719b200199cfc"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_accepted_governed_offer_is_shown_held_and_decided_again_in_one_save",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_accepted_governed_offer_is_shown_held_and_decided_again_in_one_save"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 27,
+          "job": 111306810073,
+          "line": 4198,
+          "header": "FAIL: test_an_accepted_governed_offer_is_shown_held_and_decided_again_in_one_save (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_accepted_governed_offer_is_shown_held_and_decided_again_in_one_save)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "e31379b83e46b96a00a03c4ffd07fc7c36cf8d07a59c19671ee23d291149343a"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_answer_edited_before_this_release_is_shown_with_its_lines",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_answer_edited_before_this_release_is_shown_with_its_lines"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 28,
+          "job": 111306810073,
+          "line": 4210,
+          "header": "FAIL: test_an_answer_edited_before_this_release_is_shown_with_its_lines (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_answer_edited_before_this_release_is_shown_with_its_lines)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "94cef604cbd8662f9730b50b415d0d86dd95e176ad3fed9025f734b9b8aa7028"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_earlier_release_conflict_typed_then_cleared_needs_a_decision",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_earlier_release_conflict_typed_then_cleared_needs_a_decision"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 29,
+          "job": 111306810073,
+          "line": 4221,
+          "header": "FAIL: test_an_earlier_release_conflict_typed_then_cleared_needs_a_decision (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_earlier_release_conflict_typed_then_cleared_needs_a_decision)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "10d4d556ae997cea3cff2a0617030f7c3f412049aa113b4178fb76c6b8a9fffc"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_earlier_release_offer_this_release_withholds_note_wide_cannot_be_accepted",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_earlier_release_offer_this_release_withholds_note_wide_cannot_be_accepted"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 30,
+          "job": 111306810073,
+          "line": 4232,
+          "header": "FAIL: test_an_earlier_release_offer_this_release_withholds_note_wide_cannot_be_accepted (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_earlier_release_offer_this_release_withholds_note_wide_cannot_be_accepted)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "45a7b38bcfb6054506d0467b308fb5661670f6ba612304ecbd38cc7da6611731"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_invisible_answer_is_saved_as_no_answer",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_invisible_answer_is_saved_as_no_answer"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 31,
+          "job": 111306810073,
+          "line": 4243,
+          "header": "FAIL: test_an_invisible_answer_is_saved_as_no_answer (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_invisible_answer_is_saved_as_no_answer)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "bb275a951407be42da1494dd1d2f7ac28849be5b2f2c5108c7c1a2022d851798"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_oversized_answer_is_refused_before_it_is_read",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_oversized_answer_is_refused_before_it_is_read"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 32,
+          "job": 111306810073,
+          "line": 4254,
+          "header": "FAIL: test_an_oversized_answer_is_refused_before_it_is_read (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_an_oversized_answer_is_refused_before_it_is_read)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "dc6a44e18900000b71e20e624706f053b12a2464eeda1678057573a4b10dcc2d"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_governed_finding_is_generated_as_a_decision_not_an_answer",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_governed_finding_is_generated_as_a_decision_not_an_answer"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 33,
+          "job": 111306810073,
+          "line": 4265,
+          "header": "FAIL: test_the_governed_finding_is_generated_as_a_decision_not_an_answer (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_governed_finding_is_generated_as_a_decision_not_an_answer)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "7b475cacc534db1388aa05c888133bdd866d9905acfc1e8597026712a54d8844"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_held_candidate_cannot_be_accepted_by_a_crafted_post",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_held_candidate_cannot_be_accepted_by_a_crafted_post"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 34,
+          "job": 111306810073,
+          "line": 4276,
+          "header": "FAIL: test_the_held_candidate_cannot_be_accepted_by_a_crafted_post (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_held_candidate_cannot_be_accepted_by_a_crafted_post)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "54326de1f154da85581457d8e20f1bfa131380753a24e3c044001336e4572b8c"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_page_shows_the_candidate_and_its_governing_line_with_no_accept_control",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_page_shows_the_candidate_and_its_governing_line_with_no_accept_control"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 35,
+          "job": 111306810073,
+          "line": 4287,
+          "header": "FAIL: test_the_page_shows_the_candidate_and_its_governing_line_with_no_accept_control (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_the_page_shows_the_candidate_and_its_governing_line_with_no_accept_control)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "80ecbfdd7d14d304d8bac82bc385226089c8d1858d0d2aa1c301f0ea022349cb"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_ticking_reviewed_alone_cannot_finalize_and_nothing_is_exported",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_ticking_reviewed_alone_cannot_finalize_and_nothing_is_exported"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 36,
+          "job": 111306810073,
+          "line": 4298,
+          "header": "FAIL: test_ticking_reviewed_alone_cannot_finalize_and_nothing_is_exported (core.tests.test_denial_heading_governance.TheDecisionIsEnforcedThroughFinalizationAndExport.test_ticking_reviewed_alone_cannot_finalize_and_nothing_is_exported)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "df12e4edf4a713777ce1f6ed322dddb8e9e767e3ff181c7b9e10bd672c3c951f"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.RepairV3Usefulness.test_r1_05_a_checklist_signed_and_dated_line_can_be_replaced_by_its_answer",
+      "current_selectors": [
+        "core.tests.test_destination_roles.RepairV3Usefulness.test_r1_05_ambiguous_signed_form_stays_human_after_remove_add"
+      ],
+      "owner": "clinical source / Word role control",
+      "status": "pending_clinical_plan_repair",
+      "original_blocks": [
+        {
+          "original_block_id": 37,
+          "job": 111306810073,
+          "line": 4309,
+          "header": "FAIL: test_r1_05_a_checklist_signed_and_dated_line_can_be_replaced_by_its_answer (core.tests.test_destination_roles.RepairV3Usefulness.test_r1_05_a_checklist_signed_and_dated_line_can_be_replaced_by_its_answer)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "c5589827541ce489bd3c40dec157832d3c67afea7e979a58ea534992dcf3a833"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Original signing-place expectation is superseded by the explicitly named stronger source-bound human exclusion control. Its retained actual49-packet failure is Plan/finalization false hold: review!=finalized. Original automatic Plan expectation is unchanged; clinical owns the independent semantic repair. No pass is claimed."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.RepairV3Usefulness.test_r1_05_a_date_pair_that_does_not_close_the_label_keeps_43fcf214s_kind_and_is_generated",
+      "current_selectors": [
+        "core.tests.test_destination_roles.RepairV3Usefulness.test_r1_05_a_date_pair_that_does_not_close_the_label_keeps_43fcf214s_kind_and_is_generated"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 38,
+          "job": 111306810073,
+          "line": 4318,
+          "header": "FAIL: test_r1_05_a_date_pair_that_does_not_close_the_label_keeps_43fcf214s_kind_and_is_generated (core.tests.test_destination_roles.RepairV3Usefulness.test_r1_05_a_date_pair_that_does_not_close_the_label_keeps_43fcf214s_kind_and_is_generated) (label='Care plan signed and date of next review')",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "0e8045eb8cf5f6def9dcbaaf98cdad0cc9cf3a4d0f275277160d142538a9702c"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.SalvageV3.test_rr1_10_another_named_signers_dated_line_is_never_generated_on_v3",
+      "current_selectors": [
+        "core.tests.test_destination_roles.SalvageV3.test_rr1_10_another_named_signers_dated_line_is_never_generated_on_v3"
+      ],
+      "owner": "Word",
+      "status": "pending_word_affected_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 39,
+          "job": 111306810073,
+          "line": 4330,
+          "header": "FAIL: test_rr1_10_another_named_signers_dated_line_is_never_generated_on_v3 (core.tests.test_destination_roles.SalvageV3.test_rr1_10_another_named_signers_dated_line_is_never_generated_on_v3) (label='Signature (participant, dd/mm/yyyy)')",
+          "cause": "AssertionError: 'Signed or initialled by hand on the printed f[98 chars]ent.' != 'Signature requires explicit review by the fin[46 chars]tes.'",
+          "block_sha256": "239fea61f7f40a2d65b81b51291a51bfa217365527bdbf2b92ea1624da744a9a"
+        },
+        {
+          "original_block_id": 40,
+          "job": 111306810073,
+          "line": 4342,
+          "header": "FAIL: test_rr1_10_another_named_signers_dated_line_is_never_generated_on_v3 (core.tests.test_destination_roles.SalvageV3.test_rr1_10_another_named_signers_dated_line_is_never_generated_on_v3) (label='Signed (mother, DOB)')",
+          "cause": "AssertionError: 'Signed or initialled by hand on the printed f[98 chars]ent.' != 'Signature requires explicit review by the fin[46 chars]tes.'",
+          "block_sha256": "8a715fe17c16b1e0fd6b2d47c9a14b99560a5f75568cd132bf293e130f12c399"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Word confirms no newer actual result exists for this exact original selector. Preserve the original subfailure blocks; source-neighbor controls and pure document packets do not prove this clinical workflow selector passed. Coherent affected/core regression remains pending."
+    },
+    {
+      "original_selector": "core.tests.test_import_workflow.AutoImportWorkflow.test_valid_ordinary_parts_route_allows_large_v3_import_without_generic_batch_flag",
+      "current_selectors": [
+        "core.tests.test_import_workflow.AutoImportWorkflow.test_valid_ordinary_parts_route_allows_large_v3_import_without_generic_batch_flag"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 41,
+          "job": 111306810073,
+          "line": 4354,
+          "header": "FAIL: test_valid_ordinary_parts_route_allows_large_v3_import_without_generic_batch_flag (core.tests.test_import_workflow.AutoImportWorkflow.test_valid_ordinary_parts_route_allows_large_v3_import_without_generic_batch_flag)",
+          "cause": "AssertionError: 800 != 100",
+          "block_sha256": "1b972863598ad635a12addecfc47b44344f45da03bfdd994d332fb0c41983a6d"
+        }
+      ],
+      "evidence_keys": [
+        "switch"
+      ],
+      "assessment": "Exact original selector reproduced 800!=100 at c8578742 (4.684s, exit1); same selector passed with explicit true/false switch controls (4.858s, exit0), source fixture commit7268ff02. Original model/rate negatives and authenticated101-field upload/confirmation retained."
+    },
+    {
+      "original_selector": "core.tests.test_isolation_matrix.IsolationMatrix.test_intruders_get_the_documented_refusal_and_nothing_changes",
+      "current_selectors": [
+        "core.tests.test_isolation_matrix.IsolationMatrix.test_intruders_get_the_documented_refusal_and_nothing_changes"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 42,
+          "job": 111306810073,
+          "line": 4362,
+          "header": "FAIL: test_intruders_get_the_documented_refusal_and_nothing_changes (core.tests.test_isolation_matrix.IsolationMatrix.test_intruders_get_the_documented_refusal_and_nothing_changes) (intruder='sibling department', route='accept_role_suggestion', method='GET')",
+          "cause": "AssertionError: 404 != 405",
+          "block_sha256": "c8baeeb3e3b30ec75d22b4a057470dc730ca6edf3b06bd4eaf5ba354dcaf891b"
+        },
+        {
+          "original_block_id": 43,
+          "job": 111306810073,
+          "line": 4370,
+          "header": "FAIL: test_intruders_get_the_documented_refusal_and_nothing_changes (core.tests.test_isolation_matrix.IsolationMatrix.test_intruders_get_the_documented_refusal_and_nothing_changes) (intruder='other clinic', route='accept_role_suggestion', method='GET')",
+          "cause": "AssertionError: 404 != 405",
+          "block_sha256": "d1ffd68cadb685a675b2c180d7438001d381af85250feaa30fd7c0f85ca0cf67"
+        },
+        {
+          "original_block_id": 44,
+          "job": 111306810073,
+          "line": 4378,
+          "header": "FAIL: test_intruders_get_the_documented_refusal_and_nothing_changes (core.tests.test_isolation_matrix.IsolationMatrix.test_intruders_get_the_documented_refusal_and_nothing_changes) (intruder='other clinic owner', route='accept_role_suggestion', method='GET')",
+          "cause": "AssertionError: 404 != 405",
+          "block_sha256": "d57403faf8e33784866192a44740b4ca190f302d5260ea8af1b54e6e713bf50a"
+        }
+      ],
+      "evidence_keys": [
+        "http"
+      ],
+      "assessment": "24-method packet passed at 3d612a4f (58.235s). Active authorization routes have 126 denied intrusion checks and 21 authorized positive controls; twelve unmounted-route checks are separate. The original historical 124 served denominator is unchanged."
+    },
+    {
+      "original_selector": "core.tests.test_isolation_matrix.IsolationMatrix.test_positive_control_the_owner_resolves_every_department_object",
+      "current_selectors": [
+        "core.tests.test_isolation_matrix.IsolationMatrix.test_positive_control_the_owner_resolves_every_department_object"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 45,
+          "job": 111306810073,
+          "line": 4386,
+          "header": "FAIL: test_positive_control_the_owner_resolves_every_department_object (core.tests.test_isolation_matrix.IsolationMatrix.test_positive_control_the_owner_resolves_every_department_object) (route='accept_role_suggestion')",
+          "cause": "AssertionError: 404 unexpectedly found in (403, 404, 405) : accept_role_suggestion did not resolve for its owner",
+          "block_sha256": "cc8b08eebca00864c90a849c62890a374e17254abfafca34b597ef6134ad78fb"
+        }
+      ],
+      "evidence_keys": [
+        "http"
+      ],
+      "assessment": "24-method packet passed at 3d612a4f (58.235s). Active authorization routes have 126 denied intrusion checks and 21 authorized positive controls; twelve unmounted-route checks are separate. The original historical 124 served denominator is unchanged."
+    },
+    {
+      "original_selector": "core.tests.test_unlabelled_source_scope.SignatureIsRecognisedByPolicyOrLabel.test_signature_shaped_questions_are_recognised_wherever_they_sit",
+      "current_selectors": [
+        "core.tests.test_unlabelled_source_scope.SignatureIsRecognisedByPolicyOrLabel.test_signature_shaped_questions_are_recognised_wherever_they_sit"
+      ],
+      "owner": "Word policy fixture",
+      "status": "pending_stale_policy_diagnosis",
+      "original_blocks": [
+        {
+          "original_block_id": 46,
+          "job": 111306810073,
+          "line": 4395,
+          "header": "FAIL: test_signature_shaped_questions_are_recognised_wherever_they_sit (core.tests.test_unlabelled_source_scope.SignatureIsRecognisedByPolicyOrLabel.test_signature_shaped_questions_are_recognised_wherever_they_sit) (label='Electronically signed by (print name)', locator=('cell',))",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "b61cc0ddf08f831089244b30d4de5f5bc6626e3250d61978906251d9a9e6d674"
+        },
+        {
+          "original_block_id": 47,
+          "job": 111306810073,
+          "line": 4403,
+          "header": "FAIL: test_signature_shaped_questions_are_recognised_wherever_they_sit (core.tests.test_unlabelled_source_scope.SignatureIsRecognisedByPolicyOrLabel.test_signature_shaped_questions_are_recognised_wherever_they_sit) (label='Electronically signed by (print name)', locator=('tab_form',))",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "4dc7d69de2b180eca032df730e5f942d92528c82097c18078fb13d003ae1fa6d"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "No newer actual result exists for this exact selector. Two original print-name cell/tab subfailures remain. Current test demands finalizer identity for Electronically signed by (print name), while the newer passed unknown-signer control requires that caption remain human-owned without appointing finalizer. Do not repair the guard or infer an affected pass."
+    },
+    {
+      "original_selector": "core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download",
+      "current_selectors": [
+        "core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 48,
+          "job": 111306810073,
+          "line": 4411,
+          "header": "FAIL: test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) (case='r1-note1')",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "ba9d2245e4de6f43f4c1ab1265b54a4b542f79f7c4f8dafb26c49d45e8fb19fb"
+        },
+        {
+          "original_block_id": 49,
+          "job": 111306810073,
+          "line": 4421,
+          "header": "FAIL: test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) (case='r1-note2')",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "fa9e5ec863d84daf4e01a12c250c990e62a70226a7ba1b3bb096e220e8b0400d"
+        },
+        {
+          "original_block_id": 50,
+          "job": 111306810073,
+          "line": 4431,
+          "header": "FAIL: test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) (case='r1-note4')",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "d8bfbc2d6d2d08a569de7239b48e7954d88b2b1823ad4bf2f207ebbdf99b7e42"
+        }
+      ],
+      "evidence_keys": [
+        "import"
+      ],
+      "assessment": "Four unique affected methods passed across retained initial/narrow packets. Exact original human Consent exclusion is explicitly reviewed through v3_coverage; unchanged unreviewed source still refuses. FrozenN01 automatic_complete remains false; manual recovery is not automatic correctness."
+    },
+    {
+      "original_selector": "core.tests.test_word_v3_workflow.V3PrintedTicks.test_a_chosen_option_unticks_the_printed_one",
+      "current_selectors": [
+        "core.tests.test_word_v3_workflow.V3PrintedTicks.test_a_chosen_option_unticks_the_printed_one"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 51,
+          "job": 111306810073,
+          "line": 4441,
+          "header": "FAIL: test_a_chosen_option_unticks_the_printed_one (core.tests.test_word_v3_workflow.V3PrintedTicks.test_a_chosen_option_unticks_the_printed_one)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "00f2eff25e3d1aefa125c99b1d662c004895717f4f03e11b7c2fe6c75347032d"
+        }
+      ],
+      "evidence_keys": [
+        "word49",
+        "word5"
+      ],
+      "assessment": "These exact original checkbox selectors passed in the later5-method packet at0a657e42 (30.969s, actualexit0), separately from the original49 failed packet. Source-bound Consent exclusion and ordinary checkbox positive controls retain original human signing protection."
+    },
+    {
+      "original_selector": "core.tests.test_word_v3_workflow.V3PrintedTicks.test_boxes_left_unticked_are_exported_unticked_and_an_unanswered_choice_stays_as_printed",
+      "current_selectors": [
+        "core.tests.test_word_v3_workflow.V3PrintedTicks.test_boxes_left_unticked_are_exported_unticked_and_an_unanswered_choice_stays_as_printed"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 52,
+          "job": 111306810073,
+          "line": 4452,
+          "header": "FAIL: test_boxes_left_unticked_are_exported_unticked_and_an_unanswered_choice_stays_as_printed (core.tests.test_word_v3_workflow.V3PrintedTicks.test_boxes_left_unticked_are_exported_unticked_and_an_unanswered_choice_stays_as_printed)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "cdcf9ad9b3ff7817739bfda0838099d6b0154574d589cc83e8709c109a8013a9"
+        }
+      ],
+      "evidence_keys": [
+        "word49",
+        "word5"
+      ],
+      "assessment": "These exact original checkbox selectors passed in the later5-method packet at0a657e42 (30.969s, actualexit0), separately from the original49 failed packet. Source-bound Consent exclusion and ordinary checkbox positive controls retain original human signing protection."
+    },
+    {
+      "original_selector": "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_production_renderer_and_profile_carry_the_settings_for_this_model",
+      "current_selectors": [
+        "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_production_renderer_and_profile_carry_the_settings_for_this_model"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 53,
+          "job": 111306810073,
+          "line": 4463,
+          "header": "FAIL: test_the_production_renderer_and_profile_carry_the_settings_for_this_model (core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_production_renderer_and_profile_carry_the_settings_for_this_model)",
+          "cause": "AssertionError: {'pro[21 chars]-5-5-ordinary-v1', 'max_output_tokens': 20000,[101 chars]'us'} != {'pro[21 chars]-5-5-v1', 'max_output_tokens': 8000, 'timeout_[91 chars]'us'}",
+          "block_sha256": "787d42d43e3c171a70ad43b093f70cea8f357febc1853107eb3c6f21a8601065"
+        }
+      ],
+      "evidence_keys": [
+        "profile"
+      ],
+      "assessment": "Seven affected methods passed at b3b105b2 (6.562s); explicit disabled generic8k and unset default ordinary-v4/20k are distinct. Job snapshot is persisted; no provider request or installed migration claim."
+    },
+    {
+      "original_selector": "core.tests.test_v3_notes_floors.FloorCost.test_statements_that_cannot_oppose_are_never_compared",
+      "current_selectors": [
+        "core.tests.test_v3_notes_floors.FloorCost.test_statements_that_cannot_oppose_are_never_compared"
+      ],
+      "owner": "clinical",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 55,
+          "job": 111306810073,
+          "line": 4517,
+          "header": "FAIL: test_statements_that_cannot_oppose_are_never_compared (core.tests.test_v3_notes_floors.FloorCost.test_statements_that_cannot_oppose_are_never_compared)",
+          "cause": "AssertionError: 14196 != 0",
+          "block_sha256": "f718dc239ea8975035ffc1c779a9c1b3d4593db35e4b39622e151c039bc3470c"
+        }
+      ],
+      "evidence_keys": [
+        "clinical_cost"
+      ],
+      "assessment": "Original14196 predicate comparisons reproduced at ee9b0bc5 (7.278s, exit1); six affected methods passed after effective-polarity/disjoint-head filtering (34.625s). Outer negative operators and source attribution controls remain; source repair integrated."
+    },
+    {
+      "original_selector": "core.tests.test_v3_supersession_floor.RoundTwoOnSonnet55Default.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned",
+      "current_selectors": [
+        "core.tests.test_v3_supersession_floor.RoundTwoOnSonnet55Default.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned"
+      ],
+      "owner": "clinical",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 56,
+          "job": 111306810073,
+          "line": 4525,
+          "header": "FAIL: test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned (core.tests.test_v3_supersession_floor.RoundTwoOnSonnet55Default.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned) (notes='The patient takes warfarin 5 mg daily. Her husband switched to apixaban.')",
+          "cause": "AssertionError: Tuples differ: ('supported', 'The patient takes warfarin 5 mg daily.') != ('conflict', '')",
+          "block_sha256": "3352bdf5ed840e6ba9f6abc3c8bd2a09dd36bb5379504c5ebd934dffda6958e1"
+        },
+        {
+          "original_block_id": 57,
+          "job": 111306810073,
+          "line": 4542,
+          "header": "FAIL: test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned (core.tests.test_v3_supersession_floor.RoundTwoOnSonnet55Default.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned) (notes='Her husband switched to apixaban. The patient takes warfarin 5 mg daily.')",
+          "cause": "AssertionError: Tuples differ: ('supported', 'The patient takes warfarin 5 mg daily.') != ('conflict', '')",
+          "block_sha256": "5ff54e58ec7fc517c5ab3dad1625b42db2121107040b97d7464ee3136e4a947b"
+        }
+      ],
+      "evidence_keys": [
+        "clinical_cost",
+        "husband_original",
+        "husband_repaired"
+      ],
+      "assessment": "Four original husband-own-switch failed subcases across two methods retained; explicit patient, agent, ambiguous and passive replacement controls added in75cad680/rootb207f8f4. Four affected methods passed20.423s; sole explicit foreign event no longer incorrectly holds patient medication."
+    },
+    {
+      "original_selector": "core.tests.test_batch_effective_constraints.EffectiveWorkflow.test_page_save_forced_finalize_hold_then_explicit_override_exports_one",
+      "current_selectors": [
+        "core.tests.test_batch_effective_constraints.EffectiveWorkflow.test_page_save_forced_finalize_hold_then_explicit_override_exports_one"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 58,
+          "job": 111306810070,
+          "line": 3855,
+          "header": "ERROR: test_page_save_forced_finalize_hold_then_explicit_override_exports_one (core.tests.test_batch_effective_constraints.EffectiveWorkflow.test_page_save_forced_finalize_hold_then_explicit_override_exports_one)",
+          "cause": "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+          "block_sha256": "d6835113831c82994857375e4eb679cca1016fe41f9aed00c5e75f0a8a460c17"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Four affected methods passed at b8aef46b (65.310s); actual import_manifest-preserving constructors repaired. Unbound-copy SQL refusal remains a negative control."
+    },
+    {
+      "original_selector": "core.tests.test_batch_effective_constraints.EffectiveWorkflow.test_worker_checks_original_effective_state_before_atomic_adoption",
+      "current_selectors": [
+        "core.tests.test_batch_effective_constraints.EffectiveWorkflow.test_worker_checks_original_effective_state_before_atomic_adoption"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 59,
+          "job": 111306810070,
+          "line": 3919,
+          "header": "ERROR: test_worker_checks_original_effective_state_before_atomic_adoption (core.tests.test_batch_effective_constraints.EffectiveWorkflow.test_worker_checks_original_effective_state_before_atomic_adoption)",
+          "cause": "django.db.utils.ProgrammingError: An imported mapping keeps its original import choice and coverage evidence",
+          "block_sha256": "0660e6317c304683781badbba606ef05de54362b70cbf6a50bf8087942266bcc"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Four affected methods passed at b8aef46b (65.310s); actual import_manifest-preserving constructors repaired. Unbound-copy SQL refusal remains a negative control."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item",
+      "current_selectors": [
+        "core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 60,
+          "job": 111306810070,
+          "line": 3983,
+          "header": "ERROR: test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item (core.tests.test_destination_roles.ModelProposals.test_rf07_rf08_rf09_a_model_addition_is_never_adopted_it_is_a_review_item) (rid='RF08-None')",
+          "cause": "django.core.exceptions.ValidationError: ['Original integrity check failed.']",
+          "block_sha256": "7c3cad5b94c9c1848bccd30702a4f743a32d0a7187c43d34dc73aadaa6de0748"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_denial_heading_governance.TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm.test_a_placeholder_form_holds_the_denied_finding_through_finalization_and_export",
+      "current_selectors": [
+        "core.tests.test_denial_heading_governance.TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm.test_a_placeholder_form_holds_the_denied_finding_through_finalization_and_export"
+      ],
+      "owner": "Word admission / clinical workflow",
+      "status": "pending_coherent_regression",
+      "original_blocks": [
+        {
+          "original_block_id": 61,
+          "job": 111306810070,
+          "line": 3995,
+          "header": "FAIL: test_a_placeholder_form_holds_the_denied_finding_through_finalization_and_export (core.tests.test_denial_heading_governance.TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm.test_a_placeholder_form_holds_the_denied_finding_through_finalization_and_export)",
+          "cause": "AssertionError: False is not true",
+          "block_sha256": "b53f158ebbd326efd25560afcc115e829527de3b004f871a717be19ee7819e62"
+        }
+      ],
+      "evidence_keys": [
+        "batch"
+      ],
+      "assessment": "Twenty-six methods share generated() run_one False; one older placeholder method is separate. Only one original actual workflow diagnostic ran (1.960s, exit1): zero jobs/reservations/usage; ordinary Review of systems falsely classified ambiguous_source_action. Integrated Word ROS repair is not evidence all27 completed workflows now pass; unchanged full set awaits coherent gate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.LegacyIdentityReadsThePrintedLabel.test_l05_renaming_a_participants_signature_to_signature_makes_it_the_finalizers_as_on_43fcf214",
+      "current_selectors": [
+        "core.tests.test_destination_roles.LegacyIdentityReadsThePrintedLabel.test_l05_participant_signature_stays_blank_after_mapping_rename"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 62,
+          "job": 111306810070,
+          "line": 4008,
+          "header": "FAIL: test_l05_renaming_a_participants_signature_to_signature_makes_it_the_finalizers_as_on_43fcf214 (core.tests.test_destination_roles.LegacyIdentityReadsThePrintedLabel.test_l05_renaming_a_participants_signature_to_signature_makes_it_the_finalizers_as_on_43fcf214)",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "30cd59e6ebeea9d24f25b91de1c9ba4942ec23f1fb3438cf15fb8a01737afd45"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label",
+      "current_selectors": [
+        "core.tests.test_destination_roles.RepairV3Rename.test_r2_01_other_signer_dated_line_keeps_original_human_role_after_relabel"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 63,
+          "job": 111306810070,
+          "line": 4017,
+          "header": "FAIL: test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label (core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label) (label='Signature (participant, dd/mm/yyyy)', renamed='Participant')",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "3193a85a38dd3f28651d3c03c00cce18dc1e6f8cd5c64b5091ce17474d8e95d6"
+        },
+        {
+          "original_block_id": 64,
+          "job": 111306810070,
+          "line": 4026,
+          "header": "FAIL: test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label (core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label) (label='Signature (participant, dd/mm/yyyy)', renamed='Participant signature and date')",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "162baa81b4030615ec29354325081b4541a9cf10c93f532e056b29637511f4da"
+        },
+        {
+          "original_block_id": 65,
+          "job": 111306810070,
+          "line": 4035,
+          "header": "FAIL: test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label (core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label) (label='Signed (mother, DOB)', renamed='Mother DOB')",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "28c5b68c1cdad724d1085ac1539700198ef5e8be061aba1e3d58a6d217690427"
+        },
+        {
+          "original_block_id": 66,
+          "job": 111306810070,
+          "line": 4044,
+          "header": "FAIL: test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label (core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label) (label='Signed (mother, DOB)', renamed='DOB')",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "e642225e30160ab054e017cf8ac3b2761416d3a6e5b875eb27d0403774a719c0"
+        },
+        {
+          "original_block_id": 67,
+          "job": 111306810070,
+          "line": 4053,
+          "header": "FAIL: test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label (core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label) (label='Signed (mother, DOB)', renamed=\"Mother's DOB\")",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "52efca25c03b504030dba1f5b1519e1706abcffc5189b8818891cbb048fc160d"
+        },
+        {
+          "original_block_id": 68,
+          "job": 111306810070,
+          "line": 4062,
+          "header": "FAIL: test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label (core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label) (label='Signed (mother, DOB)', renamed=\"Mother's signature (DOB)\")",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "c28497f367fd377653d4af182dfe1df1d4df5be36e1f732e0e2ef2120369124b"
+        },
+        {
+          "original_block_id": 69,
+          "job": 111306810070,
+          "line": 4071,
+          "header": "FAIL: test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label (core.tests.test_destination_roles.RepairV3Rename.test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label) (label='Signature (father, born)', renamed='Father born')",
+          "cause": "AssertionError: 302 != 400",
+          "block_sha256": "b76153e40504a429f4c114fc7556fc0f1336ef34d9aad1e1caaf07266f36e665"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_destination_roles.V3Round1.test_r2_04_an_initial_reading_can_be_replaced_by_its_text_answer",
+      "current_selectors": [
+        "core.tests.test_destination_roles.V3Round1.test_r2_04_an_initial_reading_can_be_replaced_by_its_text_answer"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 70,
+          "job": 111306810070,
+          "line": 4080,
+          "header": "FAIL: test_r2_04_an_initial_reading_can_be_replaced_by_its_text_answer (core.tests.test_destination_roles.V3Round1.test_r2_04_an_initial_reading_can_be_replaced_by_its_text_answer)",
+          "cause": "AssertionError: 'text' != 'initials'",
+          "block_sha256": "56be941f63122fed11ea181a344bb0ea24ecc3b91310423ca52e83160d9ad256"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_import_workflow.OrdinaryDefaultImport.test_real_new_upload_and_quote_compile_the_frozen_note_on_the_v4_default_route",
+      "current_selectors": [
+        "core.tests.test_import_workflow.OrdinaryDefaultImport.test_real_new_upload_and_quote_compile_the_frozen_note_on_the_v4_default_route"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 71,
+          "job": 111306810070,
+          "line": 4091,
+          "header": "FAIL: test_real_new_upload_and_quote_compile_the_frozen_note_on_the_v4_default_route (core.tests.test_import_workflow.OrdinaryDefaultImport.test_real_new_upload_and_quote_compile_the_frozen_note_on_the_v4_default_route)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "87bc4fb548a1ec35dd0a92c7d8d5fd973e89052672f5795a7316e7ded952e056"
+        }
+      ],
+      "evidence_keys": [
+        "import"
+      ],
+      "assessment": "Four unique affected methods passed across retained initial/narrow packets. Exact original human Consent exclusion is explicitly reviewed through v3_coverage; unchanged unreviewed source still refuses. FrozenN01 automatic_complete remains false; manual recovery is not automatic correctness."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningGenerationAdmission.test_direct_enqueue_refuses_before_job_and_reservation",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningGenerationAdmission.test_direct_enqueue_refuses_before_job_and_reservation"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 72,
+          "job": 111306810070,
+          "line": 4101,
+          "header": "FAIL: test_direct_enqueue_refuses_before_job_and_reservation (core.tests.test_signing_areas.SigningGenerationAdmission.test_direct_enqueue_refuses_before_job_and_reservation)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "a5d0d4739746880e8849712292c8c5fb8641844f43f6842abeb997bd32ea2f1d"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningGenerationAdmission.test_http_refuses_before_quote_and_leaves_original_and_mapping_available",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningGenerationAdmission.test_http_refuses_before_quote_and_leaves_original_and_mapping_available"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 73,
+          "job": 111306810070,
+          "line": 4112,
+          "header": "FAIL: test_http_refuses_before_quote_and_leaves_original_and_mapping_available (core.tests.test_signing_areas.SigningGenerationAdmission.test_http_refuses_before_quote_and_leaves_original_and_mapping_available)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "b0fb6d94c5733e9d346682e78e9eb0ae18a373746a3ae9453075fa564c7e2098"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningGenerationAdmission.test_independent_voice_on_floating_form_keeps_its_reviewed_transcript_path",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningGenerationAdmission.test_independent_voice_on_floating_form_keeps_its_reviewed_transcript_path"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 74,
+          "job": 111306810070,
+          "line": 4123,
+          "header": "FAIL: test_independent_voice_on_floating_form_keeps_its_reviewed_transcript_path (core.tests.test_signing_areas.SigningGenerationAdmission.test_independent_voice_on_floating_form_keeps_its_reviewed_transcript_path)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "9a59275564c85cd84883036b20a01e61b23c99724ed21d45862c13f67bb8535b"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningGenerationAdmission.test_integrity_or_unavailable_parser_refuses_without_source_detail",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningGenerationAdmission.test_integrity_or_unavailable_parser_refuses_without_source_detail"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 75,
+          "job": 111306810070,
+          "line": 4134,
+          "header": "FAIL: test_integrity_or_unavailable_parser_refuses_without_source_detail (core.tests.test_signing_areas.SigningGenerationAdmission.test_integrity_or_unavailable_parser_refuses_without_source_detail)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "27e78ec5721ca3ab6218a0e6d254aa2730539ae3dfd12f352352c24796fc5bbf"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningGenerationAdmission.test_missing_historical_warning_still_refuses_direct_enqueue",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningGenerationAdmission.test_missing_historical_warning_still_refuses_direct_enqueue"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 76,
+          "job": 111306810070,
+          "line": 4145,
+          "header": "FAIL: test_missing_historical_warning_still_refuses_direct_enqueue (core.tests.test_signing_areas.SigningGenerationAdmission.test_missing_historical_warning_still_refuses_direct_enqueue)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "4f159b32eea2544b05983f65854b622771f25c05415183e613b4be2bd4c45536"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningGenerationAdmission.test_nonfloating_form_can_queue_hold_and_complete_generation",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningGenerationAdmission.test_nonfloating_form_can_queue_hold_and_complete_generation"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 77,
+          "job": 111306810070,
+          "line": 4156,
+          "header": "FAIL: test_nonfloating_form_can_queue_hold_and_complete_generation (core.tests.test_signing_areas.SigningGenerationAdmission.test_nonfloating_form_can_queue_hold_and_complete_generation)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "9780c3df1aeb40cbef3626a79f21c0acd50e8deb9ee143b2b677155fb350be17"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningGenerationAdmission.test_old_queued_job_refuses_before_provider_and_releases_real_hold",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningGenerationAdmission.test_old_queued_job_refuses_before_provider_and_releases_real_hold"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 78,
+          "job": 111306810070,
+          "line": 4167,
+          "header": "FAIL: test_old_queued_job_refuses_before_provider_and_releases_real_hold (core.tests.test_signing_areas.SigningGenerationAdmission.test_old_queued_job_refuses_before_provider_and_releases_real_hold)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "b17e4ffa5cfa528bc892113c05a0b05d4fa75e3d7c136b87ef587b04501582b6"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_signing_areas.SigningWorkflow.test_floating_form_warning_and_refused_export_keep_the_draft_and_original",
+      "current_selectors": [
+        "core.tests.test_signing_areas.SigningWorkflow.test_floating_form_warning_and_refused_export_keep_the_draft_and_original"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 79,
+          "job": 111306810070,
+          "line": 4178,
+          "header": "FAIL: test_floating_form_warning_and_refused_export_keep_the_draft_and_original (core.tests.test_signing_areas.SigningWorkflow.test_floating_form_warning_and_refused_export_keep_the_draft_and_original)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "a138ffca8198427245525c82006da218dff80993f8b5bdf0d7c02e365f2d7b22"
+        }
+      ],
+      "evidence_keys": [
+        "signing",
+        "word49"
+      ],
+      "assessment": "The first14-method packet retained one corrupted-original message assertion failure. Seven affected follow-up methods passed (8.030s), and these original admission/export selectors subsequently passed in the49-method Word packet. Original signing omissions/refusals remain separate negatives."
+    },
+    {
+      "original_selector": "core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_forced_stored_answer_does_not_ignore_a_new_source_actor_on_page_save_finalize",
+      "current_selectors": [
+        "core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_forced_stored_answer_does_not_ignore_a_new_source_actor_on_page_save_finalize"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 80,
+          "job": 111306810070,
+          "line": 4192,
+          "header": "FAIL: test_forced_stored_answer_does_not_ignore_a_new_source_actor_on_page_save_finalize (core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_forced_stored_answer_does_not_ignore_a_new_source_actor_on_page_save_finalize)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "87d96fead3488cd7d2bf80293610b2ae876aa29518e61ae6d50ac4b36d33a555"
+        }
+      ],
+      "evidence_keys": [
+        "patient"
+      ],
+      "assessment": "Original3 confirmation400 failures preserved. Four-method source-bound consent review packet passed at b65c594e (37.452s); no medical note or safety assertion changed. Actual whole workflow has3 supported answers plus5 manual corrections, with original protected Consent XML unchanged."
+    },
+    {
+      "original_selector": "core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_negative_allergy_and_related_assessment_refuse_actual_stored_routes",
+      "current_selectors": [
+        "core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_negative_allergy_and_related_assessment_refuse_actual_stored_routes"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 81,
+          "job": 111306810070,
+          "line": 4205,
+          "header": "FAIL: test_negative_allergy_and_related_assessment_refuse_actual_stored_routes (core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_negative_allergy_and_related_assessment_refuse_actual_stored_routes)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "0cc2eb188f73f23dc898dcc7e1d34c95a6cb34a5c57986faf75363c5a707e01b"
+        }
+      ],
+      "evidence_keys": [
+        "patient"
+      ],
+      "assessment": "Original3 confirmation400 failures preserved. Four-method source-bound consent review packet passed at b65c594e (37.452s); no medical note or safety assertion changed. Actual whole workflow has3 supported answers plus5 manual corrections, with original protected Consent XML unchanged."
+    },
+    {
+      "original_selector": "core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_whole_original_note_worker_review_correction_finalize_and_export",
+      "current_selectors": [
+        "core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_whole_original_note_worker_review_correction_finalize_and_export"
+      ],
+      "owner": "operations",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 82,
+          "job": 111306810070,
+          "line": 4218,
+          "header": "FAIL: test_whole_original_note_worker_review_correction_finalize_and_export (core.tests.test_v3_patient_topics.CompletePatientTopicWorkflow.test_whole_original_note_worker_review_correction_finalize_and_export)",
+          "cause": "AssertionError: 400 != 302",
+          "block_sha256": "e013fe9ec733f749d2186c9e5d144675870d77e5fad78ca061e1e0b5613e800f"
+        }
+      ],
+      "evidence_keys": [
+        "patient"
+      ],
+      "assessment": "Original3 confirmation400 failures preserved. Four-method source-bound consent review packet passed at b65c594e (37.452s); no medical note or safety assertion changed. Actual whole workflow has3 supported answers plus5 manual corrections, with original protected Consent XML unchanged."
+    },
+    {
+      "original_selector": "core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_a_parenthetical_naming_another_person_is_not_the_finalizers",
+      "current_selectors": [
+        "core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_unknown_and_other_signer_qualifiers_stay_human_owned_without_appointing_finalizer"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 83,
+          "job": 111306810070,
+          "line": 4231,
+          "header": "FAIL: test_a_parenthetical_naming_another_person_is_not_the_finalizers (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_a_parenthetical_naming_another_person_is_not_the_finalizers) (label='Signature (participant)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "5e71c01b955c562bf6f2e7a535ed67a0c1b561c6f4b726c192b34590352c0fc4"
+        },
+        {
+          "original_block_id": 84,
+          "job": 111306810070,
+          "line": 4241,
+          "header": "FAIL: test_a_parenthetical_naming_another_person_is_not_the_finalizers (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_a_parenthetical_naming_another_person_is_not_the_finalizers) (label='Signature (mother)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "42d5d9746b1831ec370db8563194cceb388026c299b3c6d8c6ffcc20e52c0b4a"
+        },
+        {
+          "original_block_id": 85,
+          "job": 111306810070,
+          "line": 4251,
+          "header": "FAIL: test_a_parenthetical_naming_another_person_is_not_the_finalizers (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_a_parenthetical_naming_another_person_is_not_the_finalizers) (label='Signature (father)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "529ceef90d45f1352846059db650f69068f279e2a00ab085e25dab207ffb14ac"
+        },
+        {
+          "original_block_id": 86,
+          "job": 111306810070,
+          "line": 4261,
+          "header": "FAIL: test_a_parenthetical_naming_another_person_is_not_the_finalizers (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_a_parenthetical_naming_another_person_is_not_the_finalizers) (label='Signature (donor)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "00cb9124527ff5a314ecb6a2b221e8bb90c74b6082cbe575518cae66673cd2a6"
+        },
+        {
+          "original_block_id": 87,
+          "job": 111306810070,
+          "line": 4271,
+          "header": "FAIL: test_a_parenthetical_naming_another_person_is_not_the_finalizers (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_a_parenthetical_naming_another_person_is_not_the_finalizers) (label=\"Signature (participant's consultant)\")",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "161544806d2ad7286611947303b4fe3be6c62bf13d91c3b6658ed8ecd53d7e4c"
+        },
+        {
+          "original_block_id": 88,
+          "job": 111306810070,
+          "line": 4281,
+          "header": "FAIL: test_a_parenthetical_naming_another_person_is_not_the_finalizers (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_a_parenthetical_naming_another_person_is_not_the_finalizers) (label='Signed by (doctor recruiting the participant)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "4bd130ddd3a60f145b827a1a603c91db8ff5a82ec67ddd8d8fdd0720244825e0"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_the_signature_lines_it_must_still_recognise_are_untouched",
+      "current_selectors": [
+        "core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_explicit_clinician_signature_identity_still_requires_the_reviewed_finalizer",
+        "core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_unknown_and_other_signer_qualifiers_stay_human_owned_without_appointing_finalizer"
+      ],
+      "owner": "Word",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 89,
+          "job": 111306810070,
+          "line": 4291,
+          "header": "FAIL: test_the_signature_lines_it_must_still_recognise_are_untouched (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_the_signature_lines_it_must_still_recognise_are_untouched) (label='Signature (print name)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "4485900a7ab94adf66e4250ec7560d20dcb536606738d9e32f9539c5e15139a8"
+        },
+        {
+          "original_block_id": 90,
+          "job": 111306810070,
+          "line": 4301,
+          "header": "FAIL: test_the_signature_lines_it_must_still_recognise_are_untouched (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_the_signature_lines_it_must_still_recognise_are_untouched) (label='Signature (consultant)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "946e8551d378bad74a8e35c59a17063893dad253f7743472d77cbaad5ca95906"
+        },
+        {
+          "original_block_id": 91,
+          "job": 111306810070,
+          "line": 4311,
+          "header": "FAIL: test_the_signature_lines_it_must_still_recognise_are_untouched (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_the_signature_lines_it_must_still_recognise_are_untouched) (label='Signed (GP)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "bdf97924cd93393c4b34e43c1a988bad79df16ca0c794c94ed9f6c6ba0cc011e"
+        },
+        {
+          "original_block_id": 92,
+          "job": 111306810070,
+          "line": 4321,
+          "header": "FAIL: test_the_signature_lines_it_must_still_recognise_are_untouched (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_the_signature_lines_it_must_still_recognise_are_untouched) (label='Electronically signed by (print name)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "11882c741c53f13d5941683a85c22b0f9889a97b7bfbf2f308719883eee3dab7"
+        },
+        {
+          "original_block_id": 93,
+          "job": 111306810070,
+          "line": 4331,
+          "header": "FAIL: test_the_signature_lines_it_must_still_recognise_are_untouched (core.tests.test_tab_form_policy.TabIdentityPolicyTests.test_the_signature_lines_it_must_still_recognise_are_untouched) (label='Signed by (name)')",
+          "cause": "AssertionError: ValidationError not raised",
+          "block_sha256": "575a3f3baec8157f61687890a7965dbf1e681fb3e320c2ed4a140150ef3586ad"
+        }
+      ],
+      "evidence_keys": [
+        "word49"
+      ],
+      "assessment": "Affected same-selector or explicitly mapped stronger human-role controls passed in the retained49-method packet; original counters remain. That packet itself exited1 (45pass/3fail/1error), so it is not a complete certificate."
+    },
+    {
+      "original_selector": "core.tests.test_v3_supersession_floor.RoundTwoOnSonnet5.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned",
+      "current_selectors": [
+        "core.tests.test_v3_supersession_floor.RoundTwoOnSonnet5.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned"
+      ],
+      "owner": "clinical",
+      "status": "scoped_success",
+      "original_blocks": [
+        {
+          "original_block_id": 94,
+          "job": 111306810070,
+          "line": 4341,
+          "header": "FAIL: test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned (core.tests.test_v3_supersession_floor.RoundTwoOnSonnet5.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned) (notes='The patient takes warfarin 5 mg daily. Her husband switched to apixaban.')",
+          "cause": "AssertionError: Tuples differ: ('supported', 'The patient takes warfarin 5 mg daily.') != ('conflict', '')",
+          "block_sha256": "baf238bd1c5ec5b32839da128c579330b6bdfa05030ee5e401c14de436ccd87b"
+        },
+        {
+          "original_block_id": 95,
+          "job": 111306810070,
+          "line": 4358,
+          "header": "FAIL: test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned (core.tests.test_v3_supersession_floor.RoundTwoOnSonnet5.test_m1_to_m5_each_arm_of_the_agent_and_bare_readings_is_pinned) (notes='Her husband switched to apixaban. The patient takes warfarin 5 mg daily.')",
+          "cause": "AssertionError: Tuples differ: ('supported', 'The patient takes warfarin 5 mg daily.') != ('conflict', '')",
+          "block_sha256": "3a2719c75f4206a318157e8cfa4ce98b7b2299c846b609793c9a13929a7c412c"
+        }
+      ],
+      "evidence_keys": [
+        "clinical_cost",
+        "husband_original",
+        "husband_repaired"
+      ],
+      "assessment": "Four original husband-own-switch failed subcases across two methods retained; explicit patient, agent, ambiguous and passive replacement controls added in75cad680/rootb207f8f4. Four affected methods passed20.423s; sole explicit foreign event no longer incorrectly holds patient medication."
+    }
+  ],
+  "limits": [
+    "Historical affected successes are bound to their listed tested source; they do not certify the current coherent candidate.",
+    "Original selector identities, subcase headers, source files and failure evidence remain preserved even where safety assertions were explicitly superseded.",
+    "The inventory excludes browser and non-core failure jobs; those retain separate denominators/evidence.",
+    "Word acceptance54/60 and18/20, actual live provider qualification and served private demonstration are separate gates."
+  ],
+  "coherent_affected_packets": [
+    {
+      "source_commit": "1684c2b8105534d66895783f78443215c33c4d59",
+      "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-coherent-gap-1684c2b8/result.json",
+      "result_sha256": "669e7faa482a9abb0cfbf059785c18d3aac3f7d0ef3525072dccd8dc21d214b2",
+      "real_exit_status": 1,
+      "actual_methods": 32,
+      "passing_methods": 30,
+      "failing_methods": 2,
+      "failure_blocks": 3,
+      "tests_seconds": "135.638",
+      "outer_seconds": "146.266",
+      "DB_absence_verified": true,
+      "original_failure_blocks_unchanged": true,
+      "outcomes": "27 retained denial methods, R104 and numeric2 pass; R105 actual finalization fails; RR1-10 two held-message assertions fail. This is not full CI."
+    },
+    {
+      "source_commit": "34e58835617dc04e757b6e1767a95b77dec08a1b",
+      "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-policy-check-34e58835/result.json",
+      "result_sha256": "d2c3f298153014f185ba741011ea16496007b775e17476e269769a1dc2bf1681",
+      "real_exit_status": 0,
+      "actual_methods": 4,
+      "passing_methods": 4,
+      "DB_absence_verified": true,
+      "outcomes": "Corrected policy class passes established finalizer positives and unknown/patient/witness/manager negatives. Runtime guard unchanged; original generic print-name failure retained."
+    },
+    {
+      "source_commit": "c9f5ff8e7c731bae630e7f24d9620ddd9378fff0",
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-remaining-route-c9f5ff8e",
+      "tests": 8,
+      "failures": 0,
+      "exit_status": 0,
+      "elapsed_test_seconds": 34.072,
+      "selectors": [
+        "RepairV3Usefulness/R1-05",
+        "SalvageV3/RR1-10",
+        "DocumentStatusFixture/6"
+      ],
+      "receipt_sha256": "31a87401746b0af5d0b2078c585d2243c809698dc196bdc730a5401b8e89d8b6",
+      "adjudication_sha256": "035e7698d3c139086b6b8424af3a1747f570a36f2624886119adbcacbdfc7973",
+      "qualification": "R105 original source and notes, valid Sonnet5.5 ordinary-v4 request contract, first supported Plan Rest., exact protected Consent preserved. RR110 both signer paragraphs unchanged. Three actual final exports archived before assertions/teardown. No provider.",
+      "instrument_annotation": "Original receipt selectors field was stale wrapper metadata; adjudication binds the executed command, script, eight-method log and source without altering original receipt.",
+      "test_database_absent": true
+    }
+  ]
+}

@@ -1,0 +1,1477 @@
+{
+  "source_manifest": {
+    "commit": "7f3b003d4b1478cad086ad88d8734166547b6498",
+    "contract": "clean final source; ten exact committed product components",
+    "files": [
+      {
+        "path": "rebuild/documents/word_v3.py",
+        "sha256": "2f4769d954676ec4ac58655c5a1ddce1a672ace2655d5f74f2b4230d5df08621"
+      },
+      {
+        "path": "rebuild/documents/engine.py",
+        "sha256": "aab66d5054d83df066337d7ea049b33e597e62d947708158460f8d2c870d3305"
+      },
+      {
+        "path": "rebuild/documents/service.py",
+        "sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5"
+      },
+      {
+        "path": "rebuild/documents/import_selection.py",
+        "sha256": "06df2620f8d52891511f9f6e20785c52ee215012cece0d3180a582449fed4128"
+      },
+      {
+        "path": "rebuild/documents/source_policy.py",
+        "sha256": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+      },
+      {
+        "path": "rebuild/core/import_binding.py",
+        "sha256": "89bc91176bfa32e5a93987923908c076f9133ccd0a1541fa62eccafa12ba5397"
+      },
+      {
+        "path": "rebuild/core/v3_mapping.py",
+        "sha256": "950834131edbb89c4c3c83a600502b592e816e9ce4d8067823696704c0d11ae9"
+      },
+      {
+        "path": "rebuild/core/views.py",
+        "sha256": "2719d18e670dca931b5bf0976ba76cd4c20e458fe42e764859b9240078b12cda"
+      },
+      {
+        "path": "rebuild/core/jobs.py",
+        "sha256": "a8309d1998206fe0b16ff833c2092deebccf1678bc0043229550f01ec18d00d1"
+      },
+      {
+        "path": "rebuild/core/migrations/0035_import_manifest.py",
+        "sha256": "627bb0430cfa942a92e38f97609b3dd2d80212683f1e0a6ff48428f97cb697bf"
+      }
+    ],
+    "measured_fixture": {
+      "path": "rebuild/core/tests/test_source_coverage_workflow.py",
+      "sha256": "2fa1d09ce4d203468f7ddaf71bd2979c7b0287f2e177335b8b2392ac156f5db7",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "cases": [
+    {
+      "name": "date_tab_separators",
+      "source_text": "Date: [DD\t/\tMM\t/\tYYYY]",
+      "requested_engine": "legacy",
+      "source_sha256": "bebc77051d8c6adb1e6ba54387668933d3c5848920b77b501f2ea0ea250ac9ec",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_tab_separators",
+      "source_text": "Date: [DD\t/\tMM\t/\tYYYY]",
+      "requested_engine": "v3",
+      "source_sha256": "bebc77051d8c6adb1e6ba54387668933d3c5848920b77b501f2ea0ea250ac9ec",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD / MM / YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 22,
+              "shape": "bracket"
+            },
+            "fingerprint": "68f38a1f85c50d896a8d0a6e994606beb8e797763c6366c430de3bf65ec69920"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "52cef7a788354cb1ff3a78290d2423ddf8f213618689db82708da7180588f100",
+        "initial_mapping_sha256": "52cef7a788354cb1ff3a78290d2423ddf8f213618689db82708da7180588f100",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": false
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "bebc77051d8c6adb1e6ba54387668933d3c5848920b77b501f2ea0ea250ac9ec",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed",
+      "actual_export_paragraphs": [
+        "Date: 2026-10-03",
+        "Reason: ______"
+      ],
+      "export_sha256": "665af96e1378b2204fab05952ee1349d0c93c8c509e9c81cafd996dfa3e2b6b9"
+    },
+    {
+      "name": "date_tab_separators",
+      "source_text": "Date: [DD\t/\tMM\t/\tYYYY]",
+      "requested_engine": "auto",
+      "source_sha256": "bebc77051d8c6adb1e6ba54387668933d3c5848920b77b501f2ea0ea250ac9ec",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD / MM / YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 22,
+              "shape": "bracket"
+            },
+            "fingerprint": "68f38a1f85c50d896a8d0a6e994606beb8e797763c6366c430de3bf65ec69920"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "52cef7a788354cb1ff3a78290d2423ddf8f213618689db82708da7180588f100",
+        "initial_mapping_sha256": "52cef7a788354cb1ff3a78290d2423ddf8f213618689db82708da7180588f100",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "bebc77051d8c6adb1e6ba54387668933d3c5848920b77b501f2ea0ea250ac9ec",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed"
+    },
+    {
+      "name": "date_nbsp_separators",
+      "source_text": "Date: [DD\u00a0/\u00a0MM/YYYY]",
+      "requested_engine": "legacy",
+      "source_sha256": "e8ef17e75b9170889e3b3a5c266a5ee30da01625e3f3b68c58df0afc1bd2cdb0",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_nbsp_separators",
+      "source_text": "Date: [DD\u00a0/\u00a0MM/YYYY]",
+      "requested_engine": "v3",
+      "source_sha256": "e8ef17e75b9170889e3b3a5c266a5ee30da01625e3f3b68c58df0afc1bd2cdb0",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD / MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 20,
+              "shape": "bracket"
+            },
+            "fingerprint": "db952a2f0fecbae578e96e2634b1242a133128a8cee62553919d47785558d248"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "9515dd46c1f7122b411883cb3ece23fc7243d5488895e4a89c1b49887a131b81",
+        "initial_mapping_sha256": "9515dd46c1f7122b411883cb3ece23fc7243d5488895e4a89c1b49887a131b81",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": false
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "e8ef17e75b9170889e3b3a5c266a5ee30da01625e3f3b68c58df0afc1bd2cdb0",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed",
+      "actual_export_paragraphs": [
+        "Date: 2026-10-03",
+        "Reason: ______"
+      ],
+      "export_sha256": "1d13c3055898cfe9cf914c5e5cb21cd867c5f11cf91688380813710837559fcc"
+    },
+    {
+      "name": "date_nbsp_separators",
+      "source_text": "Date: [DD\u00a0/\u00a0MM/YYYY]",
+      "requested_engine": "auto",
+      "source_sha256": "e8ef17e75b9170889e3b3a5c266a5ee30da01625e3f3b68c58df0afc1bd2cdb0",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD / MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 20,
+              "shape": "bracket"
+            },
+            "fingerprint": "db952a2f0fecbae578e96e2634b1242a133128a8cee62553919d47785558d248"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "9515dd46c1f7122b411883cb3ece23fc7243d5488895e4a89c1b49887a131b81",
+        "initial_mapping_sha256": "9515dd46c1f7122b411883cb3ece23fc7243d5488895e4a89c1b49887a131b81",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "e8ef17e75b9170889e3b3a5c266a5ee30da01625e3f3b68c58df0afc1bd2cdb0",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed"
+    },
+    {
+      "name": "date_line_separator",
+      "source_text": "Date: [DD\u2028/\u2028MM/YYYY]",
+      "requested_engine": "legacy",
+      "source_sha256": "d85bb7217195e974af92849d65b0f4d5d1c505aa35db34738593abd8c9fee82b",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_line_separator",
+      "source_text": "Date: [DD\u2028/\u2028MM/YYYY]",
+      "requested_engine": "v3",
+      "source_sha256": "d85bb7217195e974af92849d65b0f4d5d1c505aa35db34738593abd8c9fee82b",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD / MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 20,
+              "shape": "bracket"
+            },
+            "fingerprint": "608288bb62d998fdfea13d719b0c19ad4de76f20232cfc0395bebd0ba8084e11"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "568d2e41e26f00e8ec6dc151ce361e67d24f0a7627113c064bdaba3049c74cd9",
+        "initial_mapping_sha256": "568d2e41e26f00e8ec6dc151ce361e67d24f0a7627113c064bdaba3049c74cd9",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": false
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "d85bb7217195e974af92849d65b0f4d5d1c505aa35db34738593abd8c9fee82b",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed",
+      "actual_export_paragraphs": [
+        "Date: 2026-10-03",
+        "Reason: ______"
+      ],
+      "export_sha256": "b293acba0006e8a737ef2025589490ad68dfeb1e53da6b2ab72caf12a8c7a227"
+    },
+    {
+      "name": "date_line_separator",
+      "source_text": "Date: [DD\u2028/\u2028MM/YYYY]",
+      "requested_engine": "auto",
+      "source_sha256": "d85bb7217195e974af92849d65b0f4d5d1c505aa35db34738593abd8c9fee82b",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD / MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 20,
+              "shape": "bracket"
+            },
+            "fingerprint": "608288bb62d998fdfea13d719b0c19ad4de76f20232cfc0395bebd0ba8084e11"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "568d2e41e26f00e8ec6dc151ce361e67d24f0a7627113c064bdaba3049c74cd9",
+        "initial_mapping_sha256": "568d2e41e26f00e8ec6dc151ce361e67d24f0a7627113c064bdaba3049c74cd9",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "d85bb7217195e974af92849d65b0f4d5d1c505aa35db34738593abd8c9fee82b",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed"
+    },
+    {
+      "name": "date_newline_control",
+      "source_text": "Date: [DD\n/ MM/YYYY]",
+      "requested_engine": "legacy",
+      "source_sha256": "e016b0d761f97d3df1bac79e09ea0f4b2326bccc7627fb967ed09a5cbbae95c7",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_newline_control",
+      "source_text": "Date: [DD\n/ MM/YYYY]",
+      "requested_engine": "v3",
+      "source_sha256": "e016b0d761f97d3df1bac79e09ea0f4b2326bccc7627fb967ed09a5cbbae95c7",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [DD\n/ MM/YYYY]",
+              "start": 6,
+              "end": 20,
+              "id": "ed6c8fb7a76591020af9287d751366aa3570cec353db937fd7a6d34a186c7907"
+            }
+          ]
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "e016b0d761f97d3df1bac79e09ea0f4b2326bccc7627fb967ed09a5cbbae95c7",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "date_newline_control",
+      "source_text": "Date: [DD\n/ MM/YYYY]",
+      "requested_engine": "auto",
+      "source_sha256": "e016b0d761f97d3df1bac79e09ea0f4b2326bccc7627fb967ed09a5cbbae95c7",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [DD\n/ MM/YYYY]",
+              "start": 6,
+              "end": 20,
+              "id": "ed6c8fb7a76591020af9287d751366aa3570cec353db937fd7a6d34a186c7907"
+            }
+          ],
+          "block_generation": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "e016b0d761f97d3df1bac79e09ea0f4b2326bccc7627fb967ed09a5cbbae95c7",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "spaced_nondate_menu",
+      "source_text": "Response: [yes / no]",
+      "requested_engine": "legacy",
+      "source_sha256": "ddd7c827bdb7a36970ab98ebe990d46e143f4a6ce646b8efc2b1be0fe4674003",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "spaced_nondate_menu",
+      "source_text": "Response: [yes / no]",
+      "requested_engine": "v3",
+      "source_sha256": "ddd7c827bdb7a36970ab98ebe990d46e143f4a6ce646b8efc2b1be0fe4674003",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [yes / no]",
+              "start": 10,
+              "end": 20,
+              "id": "0e46ddd2bf3525dc764945bfdff724e0f595df46b76506a07683a4f4ae49ea75"
+            }
+          ]
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "ddd7c827bdb7a36970ab98ebe990d46e143f4a6ce646b8efc2b1be0fe4674003",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "spaced_nondate_menu",
+      "source_text": "Response: [yes / no]",
+      "requested_engine": "auto",
+      "source_sha256": "ddd7c827bdb7a36970ab98ebe990d46e143f4a6ce646b8efc2b1be0fe4674003",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [yes / no]",
+              "start": 10,
+              "end": 20,
+              "id": "0e46ddd2bf3525dc764945bfdff724e0f595df46b76506a07683a4f4ae49ea75"
+            }
+          ],
+          "block_generation": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "ddd7c827bdb7a36970ab98ebe990d46e143f4a6ce646b8efc2b1be0fe4674003",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "prefixed_spaced_menu",
+      "source_text": "Response: [type one / type two]",
+      "requested_engine": "legacy",
+      "source_sha256": "71d8a69021f48ec1c92120f3f389285b821f45a65008d9743b61e1b1cf212a06",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "prefixed_spaced_menu",
+      "source_text": "Response: [type one / type two]",
+      "requested_engine": "v3",
+      "source_sha256": "71d8a69021f48ec1c92120f3f389285b821f45a65008d9743b61e1b1cf212a06",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [type one / type two]",
+              "start": 10,
+              "end": 31,
+              "id": "587c0ceb9dbeb3087b908871459d9e212da19fc2b363842abff55cbed3b8cb79"
+            }
+          ]
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "71d8a69021f48ec1c92120f3f389285b821f45a65008d9743b61e1b1cf212a06",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "prefixed_spaced_menu",
+      "source_text": "Response: [type one / type two]",
+      "requested_engine": "auto",
+      "source_sha256": "71d8a69021f48ec1c92120f3f389285b821f45a65008d9743b61e1b1cf212a06",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [type one / type two]",
+              "start": 10,
+              "end": 31,
+              "id": "587c0ceb9dbeb3087b908871459d9e212da19fc2b363842abff55cbed3b8cb79"
+            }
+          ],
+          "block_generation": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "71d8a69021f48ec1c92120f3f389285b821f45a65008d9743b61e1b1cf212a06",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "unclosed_before_placeholder",
+      "source_text": "Site: [left/right; Comments: [enter notes]",
+      "requested_engine": "legacy",
+      "source_sha256": "b363dde6040d064bdfd238ca7a670b478b5512c1314a0270cfb1dabd5f0d57f2",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "unclosed_before_placeholder",
+      "source_text": "Site: [left/right; Comments: [enter notes]",
+      "requested_engine": "v3",
+      "source_sha256": "b363dde6040d064bdfd238ca7a670b478b5512c1314a0270cfb1dabd5f0d57f2",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Comments enter notes",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 29,
+              "end": 42,
+              "shape": "bracket"
+            },
+            "fingerprint": "cff533898a4a76b689eec91fffaf529c720146fbba35e7a42e4ed20d1fddfb19"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "48e382ebbcb605ce7b2ab89cba981dab0704535354fe8cfab3a8c60bff903a1b",
+        "initial_mapping_sha256": "48e382ebbcb605ce7b2ab89cba981dab0704535354fe8cfab3a8c60bff903a1b",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": false
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "b363dde6040d064bdfd238ca7a670b478b5512c1314a0270cfb1dabd5f0d57f2",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed"
+    },
+    {
+      "name": "unclosed_before_placeholder",
+      "source_text": "Site: [left/right; Comments: [enter notes]",
+      "requested_engine": "auto",
+      "source_sha256": "b363dde6040d064bdfd238ca7a670b478b5512c1314a0270cfb1dabd5f0d57f2",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Comments enter notes",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 29,
+              "end": 42,
+              "shape": "bracket"
+            },
+            "fingerprint": "cff533898a4a76b689eec91fffaf529c720146fbba35e7a42e4ed20d1fddfb19"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "48e382ebbcb605ce7b2ab89cba981dab0704535354fe8cfab3a8c60bff903a1b",
+        "initial_mapping_sha256": "48e382ebbcb605ce7b2ab89cba981dab0704535354fe8cfab3a8c60bff903a1b",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "b363dde6040d064bdfd238ca7a670b478b5512c1314a0270cfb1dabd5f0d57f2",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed"
+    },
+    {
+      "name": "unclosed_before_date",
+      "source_text": "Site: [left/right; Date: [DD/MM/YYYY]",
+      "requested_engine": "legacy",
+      "source_sha256": "da4f68bb6d22ebc805f38f4c7be7f06c79fbff905c1ee0a774f9e5ddb25b46a7",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "unclosed_before_date",
+      "source_text": "Site: [left/right; Date: [DD/MM/YYYY]",
+      "requested_engine": "v3",
+      "source_sha256": "da4f68bb6d22ebc805f38f4c7be7f06c79fbff905c1ee0a774f9e5ddb25b46a7",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD/MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 25,
+              "end": 37,
+              "shape": "bracket"
+            },
+            "fingerprint": "953f8879bd1f47e6c6ec0a1e046780dbd0b9890cf008930116323a80985d411e"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "c53412023f73d8a7eff687ef264ab2c3f65f1fbfcff24a66f1ed36ecb5835697",
+        "initial_mapping_sha256": "c53412023f73d8a7eff687ef264ab2c3f65f1fbfcff24a66f1ed36ecb5835697",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": false
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "da4f68bb6d22ebc805f38f4c7be7f06c79fbff905c1ee0a774f9e5ddb25b46a7",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed"
+    },
+    {
+      "name": "unclosed_before_date",
+      "source_text": "Site: [left/right; Date: [DD/MM/YYYY]",
+      "requested_engine": "auto",
+      "source_sha256": "da4f68bb6d22ebc805f38f4c7be7f06c79fbff905c1ee0a774f9e5ddb25b46a7",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD/MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 25,
+              "end": 37,
+              "shape": "bracket"
+            },
+            "fingerprint": "953f8879bd1f47e6c6ec0a1e046780dbd0b9890cf008930116323a80985d411e"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "c53412023f73d8a7eff687ef264ab2c3f65f1fbfcff24a66f1ed36ecb5835697",
+        "initial_mapping_sha256": "c53412023f73d8a7eff687ef264ab2c3f65f1fbfcff24a66f1ed36ecb5835697",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "da4f68bb6d22ebc805f38f4c7be7f06c79fbff905c1ee0a774f9e5ddb25b46a7",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "allowed"
+    },
+    {
+      "name": "unclosed_plain_control",
+      "source_text": "Location: [upper/lower",
+      "requested_engine": "legacy",
+      "source_sha256": "ec3733aafcc0fb54e19866fb7883499da737430d15cf5c61e6559f7ea6877b7c",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "unclosed_plain_control",
+      "source_text": "Location: [upper/lower",
+      "requested_engine": "v3",
+      "source_sha256": "ec3733aafcc0fb54e19866fb7883499da737430d15cf5c61e6559f7ea6877b7c",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "unbalanced_bracketed_source",
+              "detail": "This slash-bearing source range has no closing bracket. Its answer or authoring role is unresolved; preserve the exact text and review it before generation: [upper/lower",
+              "start": 10,
+              "end": 22,
+              "id": "c6878010d4b61e89966c90ae6574d68be4b77a44801c5fadfe359ee39de5b948"
+            }
+          ]
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "ec3733aafcc0fb54e19866fb7883499da737430d15cf5c61e6559f7ea6877b7c",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "unclosed_plain_control",
+      "source_text": "Location: [upper/lower",
+      "requested_engine": "auto",
+      "source_sha256": "ec3733aafcc0fb54e19866fb7883499da737430d15cf5c61e6559f7ea6877b7c",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "initial_mapping_sha256": "e4435fa0e360316ecc7eea9f5539dbccc4c37c04037da7d3e009b8f926a58c45",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "unbalanced_bracketed_source",
+              "detail": "This slash-bearing source range has no closing bracket. Its answer or authoring role is unresolved; preserve the exact text and review it before generation: [upper/lower",
+              "start": 10,
+              "end": 22,
+              "id": "c6878010d4b61e89966c90ae6574d68be4b77a44801c5fadfe359ee39de5b948"
+            }
+          ],
+          "block_generation": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "ec3733aafcc0fb54e19866fb7883499da737430d15cf5c61e6559f7ea6877b7c",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "closed_paired_control",
+      "source_text": "Site: [left/right]; Date: [DD/MM/YYYY]",
+      "requested_engine": "legacy",
+      "source_sha256": "a06c6d791b84e946598e1620b99af55cf30b8531a6af22af4ae861767a9ad867",
+      "inspection_refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "closed_paired_control",
+      "source_text": "Site: [left/right]; Date: [DD/MM/YYYY]",
+      "requested_engine": "v3",
+      "source_sha256": "a06c6d791b84e946598e1620b99af55cf30b8531a6af22af4ae861767a9ad867",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD/MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 26,
+              "end": 38,
+              "shape": "bracket"
+            },
+            "fingerprint": "a9e440e2941304637269227a225a14abc62ba68f0a39887cc96cda68cd8f6b7a"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "b54629291d00eb337147a203fdf5f0cd50c65b4029fce9a7114ac9b81bf93334",
+        "initial_mapping_sha256": "b54629291d00eb337147a203fdf5f0cd50c65b4029fce9a7114ac9b81bf93334",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "requested_engine": "v3",
+          "block_generation": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [left/right]",
+              "start": 6,
+              "end": 18,
+              "id": "50401c2394e7467767955aa724cadea230510894124736da51669afa3cf5649e"
+            }
+          ]
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "a06c6d791b84e946598e1620b99af55cf30b8531a6af22af4ae861767a9ad867",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    },
+    {
+      "name": "closed_paired_control",
+      "source_text": "Site: [left/right]; Date: [DD/MM/YYYY]",
+      "requested_engine": "auto",
+      "source_sha256": "a06c6d791b84e946598e1620b99af55cf30b8531a6af22af4ae861767a9ad867",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date DD/MM/YYYY",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 26,
+              "end": 38,
+              "shape": "bracket"
+            },
+            "fingerprint": "a9e440e2941304637269227a225a14abc62ba68f0a39887cc96cda68cd8f6b7a"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "manifest": {
+        "strategy": "physical-coverage-v1",
+        "engine": "v3",
+        "engine_version": "word-v3-ec3-v1",
+        "mapping_sha256": "b54629291d00eb337147a203fdf5f0cd50c65b4029fce9a7114ac9b81bf93334",
+        "initial_mapping_sha256": "b54629291d00eb337147a203fdf5f0cd50c65b4029fce9a7114ac9b81bf93334",
+        "coverage": {
+          "legacy_omissions": [],
+          "legacy_unmapped": [],
+          "automatic_complete": false,
+          "review_required": true,
+          "selected_engine_issues": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "code": "printed_bracket_alternatives",
+              "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [left/right]",
+              "start": 6,
+              "end": 18,
+              "id": "50401c2394e7467767955aa724cadea230510894124736da51669afa3cf5649e"
+            }
+          ],
+          "block_generation": true
+        },
+        "legacy_refusal": "no_fields",
+        "v3_refusal": "",
+        "source_sha256": "a06c6d791b84e946598e1620b99af55cf30b8531a6af22af4ae861767a9ad867",
+        "engine_code_sha256": "dfa01a163bd6432cdac71018ca5e7d724c1f56312d8a17cb7d4a9ac078a611a7"
+      },
+      "admission_binding": "refused",
+      "binding_refusal": "['This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage.']"
+    }
+  ],
+  "stripped_quarantine_controls": [
+    {
+      "case": "D27",
+      "engine": "legacy",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    },
+    {
+      "case": "D27",
+      "engine": "v3",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    },
+    {
+      "case": "D35",
+      "engine": "legacy",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    },
+    {
+      "case": "D35",
+      "engine": "v3",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    }
+  ],
+  "historical_guard_observations": [
+    {
+      "case": "D27",
+      "empty_historical_manifest_legacy_admission": [
+        "",
+        ""
+      ],
+      "scope": "pure historical guard observation; no actual stored legacy version or browser admission witness"
+    },
+    {
+      "case": "D35",
+      "empty_historical_manifest_legacy_admission": [
+        "",
+        ""
+      ],
+      "scope": "pure historical guard observation; no actual stored legacy version or browser admission witness"
+    }
+  ],
+  "stored_export_route_AST_unchanged_since096": true,
+  "provider_requests": 0,
+  "database_connections": 0,
+  "elapsed_seconds": 20.278
+}

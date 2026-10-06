@@ -1,0 +1,20 @@
+{
+  "source_commit": "45bf344a0fe9ea2c9e83bc6e966ff38340972b3f",
+  "methods": 7,
+  "passed": 7,
+  "seconds": 8.03,
+  "exit_status": 0,
+  "database_destroyed": true,
+  "provider_calls": 0,
+  "log_sha256": "a8ef128d6d165278c9cd2fbcdcef3a9dabc66bd5797271d6bd9a5147d5c1136e",
+  "raw_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/ordinary-configuration-regression.log",
+  "coverage": [
+    "changed-original signing refusal and no financial request",
+    "prepared configuration actual SOAP mapping and request construction",
+    "inactive fixture contract row",
+    "explicit relations=0 generic 8k versus explicit=1 ordinary20k",
+    "historical stored profile reconstruction",
+    "MFA Services valid/invalid model and badge",
+    "Sonnet55Console model/price metadata"
+  ]
+}

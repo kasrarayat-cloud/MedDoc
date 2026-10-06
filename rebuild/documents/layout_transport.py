@@ -24,6 +24,8 @@ LAYOUT_UNAVAILABLE = ('This form has tab-column answers that only the isolated l
                       'available here. Until it is, no answer on this form can be exported; the unchanged form can '
                       'still be downloaded.')
 LAYOUT_NEEDED = 'This form needs the isolated layout verifier before its tab-column answers can be used.'
+LAYOUT_PROCESSING_LIMIT = ('This form could not be checked within secure document processing limits. Nothing was '
+                          'exported. An administrator can review the retained processing evidence before you retry.')
 
 
 def canonical(value):
@@ -73,6 +75,8 @@ def verify_document(data, mapping=None, answers=None):
             if peer_uid != int(expected_uid): raise ValueError('Untrusted layout peer')
             send(stream, request); response = receive(stream)
         if not isinstance(response, dict) or not response.get('verified'):
+            if isinstance(response, dict) and response.get('failure_code') == 'processing_limit':
+                raise DocumentError(LAYOUT_PROCESSING_LIMIT, 'layout_unavailable')
             raise DocumentError('The rendered form does not establish these tab-column answer destinations. Review the original.',
                                 'layout_unresolved')
         receipt = response['receipt']

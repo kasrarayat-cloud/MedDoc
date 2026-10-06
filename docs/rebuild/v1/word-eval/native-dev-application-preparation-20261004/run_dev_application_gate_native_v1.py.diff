@@ -1,0 +1,46 @@
+--- run_dev_application_gate_v2.py
++++ run_dev_application_gate_native_v1.py
+@@ -82,10 +82,11 @@
+  manifest=json.loads(manifest_path.read_text());rights=json.loads(LEDGER.read_text())['records']
+  by_id={row['development_id']:row for row in rights}
+  ids=args.ids.split(',');assert len(ids)==len(set(ids)) and 1<=len(ids)<=3
++ assert set(ids) <= {'D01','D02'}
+  assert all(identity in by_id and by_id[identity]['offline_filled_copy_replay_supported'] for identity in ids)
+  families={row['sha256']:row['families_declared'] for row in manifest['sets']['dev']}
+  records=[dict(by_id[identity],families=families[by_id[identity]['sha256']]) for identity in ids]
+- out=BASE/('dev-application-'+commit[:12]+'-'+str(time.time_ns()));out.mkdir(mode=0o700)
++ out=BASE/('dev-native-application-'+commit[:12]+'-'+str(time.time_ns()));out.mkdir(mode=0o700)
+  deadline=1200;started=time.monotonic()
+ 
+  def proof():
+@@ -110,18 +111,18 @@
+   'set':'dev','records':records,'output':str(out),'layout_socket':str(socket),
+   'rights_ledger':str(LEDGER),'rights_sha256':LEDGER_SHA,'manifest_sha256':MANIFEST_SHA,
+   'source_hashes':before,'database_name':'quillmd_qa_sol_word_dev'+str(os.getpid()),
+-  'helpers':HELPERS,'original_profile_scope':'Fixed existing mechanical/GT-choice profiles; no first-generation clinical quality claim',
++  'helpers':HELPERS,'original_profile_scope':'Unchanged fixed profiles plus separately reported native clinician recovery; no first-generation clinical quality claim',
+   'historical_pdfium_version':'unverified','prospective_pdfium_version':'4.30.0'}
+  database_before=database_presence(source,preparation['database_name'])
+  write(out/'database-before.json',database_before)
+  assert database_before['all_absent'],'Prospective task database already exists; nothing was launched'
+  write(out/'plan.json',preparation)
+- harness_before={name:digest((BASE/name).read_bytes()) for name in ('run_dev_application_gate_v2.py','dev_application_gate_v2.py','fixed_render_checker.py')}
++ harness_before={name:digest((BASE/name).read_bytes()) for name in ('run_dev_application_gate_native_v1.py','dev_application_gate_native_v1.py','fixed_render_checker.py')}
+  preparation['prospective_harness_sha256']=harness_before
+  # Bind the prepared code before any process starts; the plan is already an
+  # immutable output, so retain this additional identity separately.
+  write(out/'prospective-harness-before.json',harness_before)
+- harness=BASE/'dev_application_gate_v2.py';text=harness.read_text();assert text.count('__PLAN__')==1
++ harness=BASE/'dev_application_gate_native_v1.py';text=harness.read_text();assert text.count('__PLAN__')==1
+  derived=out/'workflow.py';derived.write_text(text.replace('__PLAN__',str(out/'plan.json')));derived.chmod(0o600)
+  write(out/'harness-provenance.json',{'original':str(harness),'sha256':digest(harness.read_bytes()),'derived_sha256':digest(derived.read_bytes()),
+   'render_checker_sha256':digest((BASE/'fixed_render_checker.py').read_bytes()),'automatic_mapping_corrections':0,'all_cases_previously_exposed':True})
+@@ -166,7 +167,7 @@
+      fonts=sorted(set(layout_source.safety(word_v3.open_package(original))+layout_source.safety(word_v3.open_package(export.read_bytes()))))
+      (workspace/'requested-fonts.txt').write_text('\n'.join(fonts or ['sans-serif'])+'\n')
+      rendered=layout_server.render(workspace)
+-     config=workspace/'checker-input.json';write(config,{'fields':json.loads((out/identity/'initial-mapping.json').read_text())['fields'],'answers':data['fixed_answers']})
++     config=workspace/'checker-input.json';write(config,{'fields':json.loads((out/identity/'readonly-coordinate-projection.json').read_text())['fields'],'answers':data['fixed_answers']})
+      response=subprocess.run([str(PY),'-I','-B',str(BASE/'fixed_render_checker.py'),str(source/'docs/rebuild/v1/word-eval/final_eval.py'),
+       str(rendered/'document.pdf'),str(rendered/'instrumented.pdf'),str(config)],capture_output=True,text=True,timeout=min(90,deadline-(time.monotonic()-started)))
+      (workspace/'checker.stdout').write_text(response.stdout);(workspace/'checker.stderr').write_text(response.stderr)

@@ -1,0 +1,140 @@
+{
+  "source": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "original_paid_source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "scope": "Limited transfer of16 exact retained generation artifacts through fresh current original/maps/admission/normal review/final export. SDK dictionary equality is not a raw HTTP byte-order claim. No new provider qualification, human microphone/native Word qualification, broader Word acceptance or clinical-generalization claim.",
+  "actual_methods_passed": 16,
+  "typed": {
+    "desired_supported": 35,
+    "desired_supported_denominator": 36,
+    "correct_holds": 40,
+    "correct_hold_denominator": 40,
+    "overholds": [
+      {
+        "attempt": 2,
+        "case": "N01",
+        "field": "v3_2/HPI",
+        "cause": "broad symptom-class independence floor; no safe narrow repair"
+      }
+    ],
+    "unsafe": 0,
+    "manual_answers": 0,
+    "all14_exports_byte_identical_to_retained": true
+  },
+  "voice": [
+    {
+      "attempt": 17,
+      "paired_ASR": 16,
+      "supported": 3,
+      "held": 1,
+      "new_patient_context_review": true,
+      "new_review_id": "205ea4af-a638-4918-bd5c-cff5a28a8794",
+      "new_review_source_sha256": "ab251f1b25ff18a0857269e7fc112e7e5dd67021c10b1350d2cab99421b9844d",
+      "raw_sha256": "0bc680af144a1e6ff6bc42fafab03edc641c07aad786a3a2beea1b713b941678",
+      "reviewed_sha256": "ab251f1b25ff18a0857269e7fc112e7e5dd67021c10b1350d2cab99421b9844d",
+      "submitted_audio_sha256": "3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7",
+      "no_old_signed_token_copied": true,
+      "first_status_text_evidence_equal_retained": true,
+      "manual_answers": 0,
+      "export_sha256": "5ef3a23c32a69023ea5c0eaccf7a7701fd037bf518fc19b6e837b3354c7ccd86",
+      "export_bytes_equal_retained": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "read_back_passed": true,
+      "declared_holds": [
+        "SOAP whole Subjective invalidated pain6\u21923"
+      ],
+      "unsafe": 0,
+      "unnecessary_holds": 0
+    },
+    {
+      "attempt": 19,
+      "paired_ASR": 18,
+      "supported": 10,
+      "held": 1,
+      "new_patient_context_review": true,
+      "new_review_id": "3ff71a15-ed57-410d-b657-5f31a8cf3c15",
+      "new_review_source_sha256": "bb44d3c6608e7965492e21e71ee164714966ba946987833172a57f5b07422d97",
+      "raw_sha256": "67ed8e080d25ceabd6da4a43afd788652b53ea0de6c58ff28e890d0282aca735",
+      "reviewed_sha256": "bb44d3c6608e7965492e21e71ee164714966ba946987833172a57f5b07422d97",
+      "submitted_audio_sha256": "dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c",
+      "no_old_signed_token_copied": true,
+      "first_status_text_evidence_equal_retained": true,
+      "manual_answers": 0,
+      "export_sha256": "dea0c9a75dca84696d90458d5235842fa15e9893535a92c7901d7e209b35ce46",
+      "export_bytes_equal_retained": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "read_back_passed": true,
+      "declared_holds": [
+        "C08 bloodloss0mL versus <1mL unchanged ambiguity"
+      ],
+      "unsafe": 0,
+      "unnecessary_holds": 0
+    }
+  ],
+  "all16_exports_byte_identical_to_retained": true,
+  "all16_fresh_source_mapping_admission": true,
+  "15_AST_4_inputs": true,
+  "current_source_hashes": {
+    "core/v3_field_relations.py": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+    "core/generation_batch.py": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+    "core/batch_jobs.py": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+    "core/generation.py": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+    "core/ordinary_source_scope.py": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+    "core/reviewed_source.py": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+    "core/reviewed_procedure_source.py": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+    "core/source_scope.py": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+    "core/v3_actors.py": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+    "core/v3_syntax.py": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+    "core/v3_literal_facts.py": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+    "core/reviewed_speaker.py": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+    "core/transcript_context.py": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+    "core/v3_destination.py": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+    "core/v3_mapping.py": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+    "core/v3_syntax_model.json": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+    "requirements.txt": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+    "requirements-production.lock": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+    "requirements-production.manifest.json": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade",
+    "core/import_binding.py": "d1dc63785444249baa48652831be08dbd774f88d618e2b70c6c15f0eeb016f23",
+    "core/destination_roles.py": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418",
+    "core/models.py": "03cd2bcbfd109676de24664379cbaa2ca8a4460595cad3e1d2564a273d3153dc",
+    "core/views.py": "de7ddbfaa6d96cd61e7c6013d5aaf3cba76defab47c4a09ddc7a89fe083c55a7",
+    "core/jobs.py": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1",
+    "documents/word_v3.py": "5a579ec9e7aa68b64731cd177efcdad9b0decd82dc0487a1a94b5ebc714011bb",
+    "documents/service.py": "1a692ee6a29edd679c35dbb3b693b2ffdafcae2fb49af9683dd04ed2b91b3970",
+    "documents/engine.py": "f4a5ee0e2e02c6b17e39fd110bb9058de7622066c5f37724a3761a1ce29f2e01",
+    "documents/layout.py": "400998e21476dd9725c18eb75570bb3495910dc44308be835cb4867fba1a7bd5",
+    "ops/sonnet5_stages.py": "2277cf606eadeaefd2ab36935e36d41b2202cda10eef592e3375321bc2677fc9",
+    "quillmd/urls.py": "8b18cfea37098a2a38ffc1ff347495af676b93b03331f1a30c3e97656c5c38c5"
+  },
+  "current_application_worker_config": {
+    "model": "claude-sonnet-5-5",
+    "ordinary_field_contract": "ordinary-field-relations-v4",
+    "max_output_tokens": 20000,
+    "thinking": "between_tools",
+    "effort": "medium",
+    "mode": "fixture"
+  },
+  "new_simulated_receipts": 18,
+  "new_simulated_actual_cost": "0E-12",
+  "new_simulated_customer_charges": "0E-12",
+  "provider_calls": 0,
+  "renderer_calls": 0,
+  "paid_campaign_ledger_mutations": 0,
+  "prior_paid_outcomes_unchanged": {
+    "attempts": 195,
+    "calculated_exposure": "2.147100264000",
+    "not_invoice_reconciliation": true
+  },
+  "preserved_failures": {
+    "voice_r1": "2fixture worker reconciliations caused solely by archivedHTTPenvelope metadata KeyError; actualexit1/directDBabsence. No current provider unknown.",
+    "aggregate_first": "Decimal zero string comparison instrument assertion; corrected Decimal comparison."
+  },
+  "resource_handoff": {
+    "all_supervisors_terminated_reaped": true,
+    "all_owned_normal_test_db_absent": true,
+    "released_to_root": true
+  }
+}

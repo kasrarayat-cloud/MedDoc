@@ -1,5 +1,9 @@
 # V1 release acceptance matrix (synthetic inputs only)
 
+Current continuation evidence is appended below. Historical rows keep their
+original result and tested revision; an older spending blocker is not current
+authority.
+
 One finite matrix, run against the merged V1 candidate branch. Each row names what proves it. No paid campaign
 beyond the existing eligible authorization; rows that need provider spend or an owner session are marked and
 stay unrun until authorized. Results are filled in only from executed commands, never from expectations.
@@ -189,3 +193,56 @@ providers. None is a whole-document automatic qualification or native Word resul
 nested19independent controls close their demonstrated bounded findings. Source-context semantic counterexamples
 remain open; its feature is off. ActualSonnet5 generation/served migration and independent60-file qualification
 remain unrun. Saved4caa exactCI36355693407/secrets36355693409 succeeded; new candidate CI is separately pending.
+
+
+### Sol continuation: standing authority and measured private evidence (2026-10-03T04:30:52Z)
+
+Row25's historical “spend approval” blocker is superseded by the committed
+`quillmd-v1-private-api-testing-standing-20260930` authority, verified against
+SHA256 `9178279297a173697f8becc89d0ab24f510b87231c3d692934e8d60fce41652c`.
+Necessary private synthetic tests have no owner monetary ceiling. This entry
+creates no grant and alters no historical approval, consumed attempt or balance.
+
+Existing standing campaigns retain119 consumed attempts (5 model checks,
+94 generations,11 mappings,9 transcriptions),118 completed outcomes and one
+historical transport outcome now resolved append-only as HTTP400. There are
+zero open outcomes and zero new provider requests in this continuation at this
+entry. Calculated known metered usage is USD1.1404629876; historical maximum
+exposure including the uncertain bound is USD1.415165987600. Authenticated
+provider invoices remain unavailable. The prior staged campaign USD0.130880 is
+separate. The prospectively declared new campaign cannot send until finished
+clinical source is refuted and affected integrated checks pass.
+
+The exposed QA PostgreSQL credential was rotated through the protected route;
+a fresh new-password connection succeeds, a fresh old-password connection
+fails, and original QA doctor/admin/worker reconnect. Installed production
+credentials and services were not changed. The original incident transcript
+is retained protected in place, with its hash and logging-path fix recorded.
+
+On private immutable789c0372,124 actual served HTTP authorization controls pass:
+department list/detail/API/export, revoked access, real MFA admin console,
+doctor-host/admin-host separation and alternate-host rejection. Nine financial
+model fingerprints remain unchanged across that run; six owned fixture
+accounts were retired. Four earlier failed runs remain retained. This is
+internal verification, not row36's independent security review.
+
+Custom Word remains unqualified against the broad54/60 and18/20 contract.
+The frozen first eligible development diagnostic is strict2/31 whole forms;
+33 eligible attempts include32 imports and a protected-format refusal, with
+restricted rights cases and sealed renewed cohort kept separate. Historical
+40/20 denominators are not changed. The original owner form has a genuine
+browser fixture first result3/17 and clinician-corrected17/17 export, with seven
+other areas blank. Three supplemental authored forms yield8/8 first fixture
+answers through browser/worker/review/finalization/export and physical checks.
+These are neither provider nor native Word passes. New adjacent-write-in
+work is still failing qualification; no field-count gain closes the Word gate.
+
+Typed notes retain the actual14-case paired76 classifications: relationsv4
+27 correct of36 supported references,9 unnecessary holds,40 correct holds,
+zero observed unsafe; plain6 correct,29 unnecessary holds,40 correct holds,
+one unadjudicated. The earlier35-reference description was an accounting
+error, corrected without changing raw outputs. Existing five voice generations
+remain separately denominated; only two are currentv4. A hypothetical new
+proof replay is not a new audio/transcript/worker/export result. Human
+microphone acceptance, native Microsoft Word, corpus rights/independence,
+covered hosting/custody/agreements and external security remain genuine gates.

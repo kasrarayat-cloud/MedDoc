@@ -1,0 +1,46 @@
+{
+  "recorded_utc": "2026-10-03T22:07:49.630553+00:00",
+  "source_head": "dedac1625032e32c7a149e6771be22e26c307eb1",
+  "files": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/ops/offsite_account_audit.py",
+      "bytes": 31683,
+      "sha256": "3dcb164ec4cc81668e2d38a23080177ea913fc6bd5870edc75602aaa5e3d1a9f"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/ops/offsite_renewal_administration.py",
+      "bytes": 9230,
+      "sha256": "7c4505504967b2192be831759315a701582c058b22395ab8fcbd8a1a323fc2b6"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/ops/offsite_renewal.py",
+      "bytes": 14070,
+      "sha256": "18ea15fd6ec04715d33dff699f896aab1e7f12d0380a7ba73d1d99c48aaf1f61"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/ops/automatic_offsite.py",
+      "bytes": 41643,
+      "sha256": "aa4ae4675c38641e415596750e2f4b33fc7b128691f8fa6715e21feb8f8a21e0"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/ops/backup_alerts.py",
+      "bytes": 64300,
+      "sha256": "11328255580d6cfad6e7faf7d4db15685ef48ffbdd900a1070f15faf769ed9c8"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/ops/scheduled_backup.py",
+      "bytes": 10885,
+      "sha256": "f9c3a5cdddec3740551b2f0413d5b6b4d3f7ba8fbd8c65920af577634d7d37dd"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/backup-secrets/offsite-policy.json",
+      "bytes": 741,
+      "sha256": "742f57d226a44fcb2d0b764e9e9febec00458e3dbee92bd9eafa9bb3d96df7b2"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/restore-checks/restore-aa337127b29071d1/verification.json",
+      "bytes": 827,
+      "sha256": "5e900543d002fcb8a91580ce6aeab02a20a1bcfed115d1a0a301455dccec2ec6"
+    }
+  ]
+}

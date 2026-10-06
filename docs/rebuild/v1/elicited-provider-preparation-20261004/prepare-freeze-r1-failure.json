@@ -1,0 +1,10 @@
+{
+  "exit_code": 1,
+  "source": "Original synthetic label Date patient was seen by a clinician",
+  "actual_mapping_kind": "date",
+  "failure": "Preparation expected text/long_text for whole-sentence answer; inspector correctly identified a date field.",
+  "provider_calls": 0,
+  "DB_calls": 0,
+  "original_sha256": "d5e0b8b8562e4774cf36d382a92579f5785c3687da7892bce614a7cb36b02710",
+  "repair": "Use separately authored narrative contact question, preserving original failed synthetic bytes; no existing corpus/gold or app guard change."
+}

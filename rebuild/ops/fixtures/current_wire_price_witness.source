@@ -1,0 +1,182 @@
+"""Prospective pure financial witness. Execute a declared literal copy outside the candidate archive.
+
+Prepared by default. Matching a captured request and financial receipt is not semantic qualification,
+provider batch/context qualification, invoice reconciliation or permission to renew a source fingerprint.
+Original process failures must be sealed separately by the bounded normal runner.
+"""
+from pathlib import Path
+import os,sys,json,hashlib,socket,subprocess,argparse,re
+from decimal import Decimal,ROUND_CEILING
+from types import SimpleNamespace
+from uuid import uuid4
+os.umask(0o077)
+sys.dont_write_bytecode=True
+parser=argparse.ArgumentParser(description='Prepared offline captured-wire financial witness; no provider or database calls.')
+parser.add_argument('--source',type=Path)
+parser.add_argument('--revision')
+parser.add_argument('--evidence',type=Path)
+parser.add_argument('--attempt',action='append')
+parser.add_argument('--output',type=Path)
+parser.add_argument('--execute',action='store_true')
+args=parser.parse_args()
+if not args.execute:
+ print(json.dumps({'status':'prepared','provider_requests':0,'database_queries':0,'fingerprints_changed':False,'clinical_qualification':False}))
+ raise SystemExit(0)
+if (args.source is None or not re.fullmatch('[0-9a-f]{40}',args.revision or '')
+    or args.evidence is None or not args.attempt or args.output is None):
+ parser.error('Execution needs exact clean worktree/revision, retained evidence attempts and a new owned output directory.')
+if args.source.is_symlink():
+ raise ValueError('Source aliases are not an exact isolated identity.')
+source=args.source.resolve(strict=True)
+if source.parent!=Path('/opt/meddoc-pro/.worktrees'):
+ raise ValueError('Only an isolated exact-source worktree may be witnessed.')
+if subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()!=args.revision:
+ raise ValueError('Source revision changed.')
+if subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=source,text=True).strip():
+ raise ValueError('Tracked source changed.')
+if (source/'rebuild/.env').exists():
+ raise ValueError('The offline witness does not use an environment file.')
+if any(not re.fullmatch('[0-9]{3,}',attempt) for attempt in args.attempt):
+ raise ValueError('Evidence attempt identity is malformed.')
+evidence=args.evidence.resolve(strict=True)
+if (evidence.name!='evidence' or evidence.parent.parent!=Path('/opt/meddoc-pro/rebuild/.runtime')
+    or not re.fullmatch('v1-standing-api-testing-20[0-9]{6}(?:-([2-9]|[1-9][0-9]))?',evidence.parent.name)):
+ raise ValueError('Only retained standing-authority synthetic evidence may be read.')
+owned=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations').resolve()
+root=args.output
+if root.is_symlink() or not root.parent.resolve(strict=True).is_relative_to(owned):
+ raise ValueError('Output must be a new directory in the task-owned evidence area.')
+root.mkdir(mode=0o700,exist_ok=False)
+source_tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=source,text=True).strip()
+modules=['core/v3_field_relations.py','core/generation_batch.py','core/batch_jobs.py','core/generation.py','core/billing.py','core/transcript_context.py',
+ 'core/ordinary_source_scope.py','core/reviewed_source.py','core/reviewed_procedure_source.py','core/source_scope.py',
+ 'core/v3_actors.py','core/v3_syntax.py','core/v3_literal_facts.py','core/reviewed_speaker.py']
+source_bytes={p:hashlib.sha256((source/'rebuild'/p).read_bytes()).hexdigest()for p in modules}
+connections=[]
+def denied(sock,address):
+ connections.append(repr(address));raise AssertionError('Network/database denied in pure price witness')
+socket.socket.connect=denied
+os.environ.update(DJANGO_SETTINGS_MODULE='quillmd.settings',QUILLMD_ENV_MANAGED='1',QUILLMD_SECRET_KEY='synthetic-offline-price-witness',QUILLMD_STATE_DIR=str(root/'state'),QUILLMD_DB_HOST='127.0.0.1',QUILLMD_DB_PORT='1',QUILLMD_DB_NAME='unreachable_price_witness',QUILLMD_DB_USER='unreachable_price_witness',QUILLMD_DB_PASSWORD='unused-synthetic-password',QUILLMD_DATA_MODE='synthetic',QUILLMD_AI_MODE='fixture')
+sys.path.insert(0,str(source/'rebuild'))
+os.environ.update(QUILLMD_DEEPGRAM_RATE_PER_MINUTE='0.0043',QUILLMD_DEEPGRAM_RATE_PER_SECOND='',QUILLMD_VOICE_MAX_COST='0.20',QUILLMD_PROVIDER_DISCOUNT_RATE='0')
+import django;django.setup()
+from django.test import override_settings
+from django.core.exceptions import ValidationError
+from core import generation as g,v3_field_relations as r,generation_batch as b,transcript_context as tc
+flags=dict(AI_MODE='live',AI_PROVIDER='anthropic',AI_MODEL=g.SONNET_5_5,AI_INPUT_RATE='2',AI_OUTPUT_RATE='10',AI_CACHED_RATE='0.20',AI_THINKING='disabled',AI_EFFORT='medium',AI_INFERENCE_GEO='',V3_FIELD_RELATIONS=False,V3_FIELD_RELATIONS_SWITCH=None,V3_HISTORY_CONTEXT=False,V3_GENERATION_BATCHES=False,QUILLMD_WORD_ENGINE='v3')
+
+def reconstruct_request(directory, manifest, wire, config):
+ """Bind one actual ordinary request, including a full-plan batch child."""
+ payload=json.loads(wire['messages'][0]['content'])
+ fields=payload['catalogue'];notes=payload['notes']
+ plan_path=directory/'batch-plan.json'
+ if not plan_path.exists():
+  compiled=r.compile_request(notes,fields,config,context_labels=[row['label'] for row in payload['requirements']],requirements=payload['requirements'])
+  assert compiled['wire']==wire
+  return compiled,r.maximum_cost(notes,fields,config,context_labels=[row['label'] for row in payload['requirements']],requirements=payload['requirements']),'ordinary_single'
+ assert manifest['evidence']['batch-plan.json']==hashlib.sha256(plan_path.read_bytes()).hexdigest()
+ child_path=directory/'compiled-child-request.json'
+ assert manifest['evidence']['compiled-child-request.json']==hashlib.sha256(child_path.read_bytes()).hexdigest()
+ plan=json.loads(plan_path.read_text())
+ assert plan['config']==config and plan['fields']==fields and plan['notes']==notes
+ assert plan['original_sha256']==hashlib.sha256((directory/'case/form.docx').read_bytes()).hexdigest()
+ assert plan['mapping_sha256']==b.digest(fields) and plan['notes_sha256']==hashlib.sha256(notes.encode()).hexdigest()
+ assert not plan.get('patient_default_context')  # Genuine reviewed voice has its separate proof.
+ parts=[(i,part) for i,part in enumerate(plan['parts'],1) if part['field_ids']==payload['requested_field_ids']]
+ assert len(parts)==1
+ ordinal,part=parts[0]
+ compiled=r.compile_request(notes,fields,config,context_labels=[row['label'] for row in plan['requirements']],requirements=plan['requirements'],requested_ids=part['field_ids'],constraints=plan['constraints'])
+ assert compiled['wire']==wire==b.request(plan,ordinal)==json.loads(child_path.read_text())
+ assert part['request_sha256']==b.digest(wire)
+ rate=g.rates(config);profile=g.job_request_profile(config);size=len(json.dumps(wire).encode())
+ quote=(Decimal(size+12000)*rate['input_per_million']+Decimal(profile['max_output_tokens'])*rate['output_per_million'])/1000000
+ if profile.get('inference_geo')=='us':quote*=g.US_INFERENCE_MULTIPLIER
+ quote=quote.quantize(g.COST_QUANTUM,rounding=ROUND_CEILING)
+ assert part['input_token_bound']==size+12000 and Decimal(part['maximum_cost'])==quote
+ assert Decimal(part['maximum_charge'])==quote*Decimal('1.5')
+ return compiled,quote,'ordinary_batch_child'
+
+assert g.US_INFERENCE_MULTIPLIER==Decimal('1.1')
+rows=[];witnesses=[]
+with override_settings(**flags):
+ for number in args.attempt:
+  directory=evidence/number
+  if directory.is_symlink() or (directory/'manifest.json').is_symlink():raise ValueError('Evidence aliases are refused.')
+  manifest=json.loads((directory/'manifest.json').read_text())
+  assert manifest['authority_id']=='quillmd-v1-private-api-testing-standing-20260930'
+  assert manifest['settings']['data_mode']=='synthetic'
+  assert manifest['runner']['commit']==args.revision and manifest['runner']['clean']
+  for name,sha in manifest['evidence'].items():
+   path=Path(name);artifact=directory/path
+   if (path.is_absolute() or '..' in path.parts or path.suffix not in ('.json','.body','.txt','.docx')
+       or artifact.is_symlink() or not artifact.resolve(strict=True).is_relative_to(directory.resolve(strict=True))):
+    raise ValueError('Only regular manifest-bound synthetic evidence files are read.')
+   assert re.fullmatch('[0-9a-f]{64}',sha) and hashlib.sha256(artifact.read_bytes()).hexdigest()==sha
+  request=json.loads((directory/'request.json').read_text());wire=request['body_json'];payload=json.loads(wire['messages'][0]['content']);fields=payload['catalogue'];notes=payload['notes'];config=g.configuration(fields)
+  compiled,quote,request_kind=reconstruct_request(directory,manifest,wire,config)
+  response=json.loads((directory/'provider-result.json').read_text())['provider_output'];units=response['usage'];rate=g.rates(config)
+  raw=json.loads((directory/'provider-response.body').read_text())
+  receipt=json.loads((directory/'provider-response.json').read_text())
+  assert receipt['status_code']==200 and receipt['body_json']==raw
+  assert receipt['body_sha256']==manifest['evidence']['provider-response.body']
+  assert all(raw[k]==response[k] for k in ('id','model','stop_reason'))
+  assert [(p['type'],p.get('text'))for p in raw['content']]==[(p['type'],p.get('text'))for p in response['content']]
+  assert all(raw['usage'][k]==units[k] for k in ('input_tokens','output_tokens'))
+  assert units['cache_creation_input_tokens']==units['cache_read_input_tokens']==0
+  assert raw['usage']['inference_geo']=='global'
+  assert response['model']==config['model'] and response['stop_reason']=='end_turn'
+  assert (rate['input_per_million'],rate['output_per_million'],rate['cached_per_million'])==(Decimal('2'),Decimal('10'),Decimal('0.20'))
+  calculated=(Decimal(units['input_tokens'])*rate['input_per_million']+Decimal(units['output_tokens'])*rate['output_per_million'])/1000000
+  audit=json.loads((directory/'audit-billing.json').read_text());matched=[row for row in audit['rows']if row['provider_resource_id']==response['id']];assert len(matched)==1
+  row=matched[0];assert row['http_request_id']==receipt['request_id']
+  assert audit['all_checks_pass'] and all(row['checks'].values())
+  assert row['configured_pricing_fingerprint_at_enqueue']==config['pricing_version']
+  assert row['simulated'] is False and row['invoice_reconciled'] is False
+  assert Decimal(row['defined_cost_usd'])==calculated
+  assert Decimal(row['user_charge_usd'])==calculated*Decimal('1.5')
+  assert Decimal(row['customer_limit_usd'])==quote*Decimal('1.5')
+  assert calculated<=quote and row['checks']['no_held_reservation']
+  rows.append({'attempt':int(number),'request_kind':request_kind,'manifest_sha256':hashlib.sha256((directory/'manifest.json').read_bytes()).hexdigest(),'request_file_sha256':manifest['evidence']['request.json'],'recorded_http_body_sha256':request['body_sha256'],'compiled_wire_dict_equals_actual_http_body':True,'quoted_wire_bytes':len(json.dumps(wire).encode()),'actual_http_body_bytes':request['body_bytes'],'max_tokens':wire['max_tokens'],'model_sent':wire['model'],'model_returned':response['model'],'stop':response['stop_reason'],'provider_calculated_cost':str(calculated),'provider_maximum_quote':str(quote),'settled_retail_charge':row['user_charge_usd'],'stored_customer_limit':row['customer_limit_usd'],'request_id':row['http_request_id'],'message_id':response['id'],'all_audit_checks_pass':True,'invoice_reconciled':False,'audit_sha256':manifest['evidence']['audit-billing.json']})
+  # The full same original/field/source catalogue also reconstructs one complete
+  # batch child; this is an offline financial witness, not another send.
+  version=SimpleNamespace(pk=uuid4(),contract='v3',fields=fields,review_requirements=[],template=SimpleNamespace(sha256=hashlib.sha256((directory/'case/form.docx').read_bytes()).hexdigest()),generation_constraints=None)
+  encounter=SimpleNamespace(pk=uuid4(),revision=0,notes=notes,template_version=version)
+  for geo in ['', 'us']:
+   with override_settings(AI_INFERENCE_GEO=geo):
+    cfg=g.configuration(fields)
+    proof=tc.token_for(SimpleNamespace(pk=uuid4(),job_id=uuid4(),reviewed_by_id=uuid4(),source_revision=1,source_sha256=tc.digest(notes),raw_sha256=tc.digest(notes),result_sha256='0'*64,reviewed_sha256=tc.digest(notes),span_start=0,span_end=len(notes)))
+    for context in ['',proof]:
+     plan=b.plan_for(encounter,cfg,patient_context=context)
+     joined=[key for part in plan['parts'] for key in part['field_ids']]
+     assert len(joined)==len(set(joined)) and set(joined)=={field['key'] for field in compiled['asked']}
+     if not geo and not context:
+      whole={**plan,'parts':[{'field_ids':payload['requested_field_ids']}]}
+      assert b.request(whole,1)==wire
+     total=Decimal(0)
+     for ordinal,part in enumerate(plan['parts'],1):
+      child=b.request(plan,ordinal);size=len(json.dumps(child).encode());rates=g.rates(cfg)
+      exact=(Decimal(size+12000)*rates['input_per_million']+Decimal(child['max_tokens'])*rates['output_per_million'])/1000000
+      if geo=='us':exact*=g.US_INFERENCE_MULTIPLIER
+      exact=exact.quantize(g.COST_QUANTUM,rounding=ROUND_CEILING)
+      assert Decimal(part['maximum_cost'])==exact and part['input_token_bound']==size+12000
+      assert part['request_sha256']==b.digest(child)
+      assert Decimal(part['maximum_charge'])==exact*Decimal('1.5');total+=Decimal(part['maximum_charge'])
+      assert child['max_tokens']==cfg['request_profile']['max_output_tokens']==20000
+      child_payload=json.loads(child['messages'][0]['content'])
+      assert child_payload['catalogue']==payload['catalogue'] and child_payload['notes']==payload['notes']
+      assert child_payload['requested_field_ids']==part['field_ids']
+      if context:
+       assert json.loads(child['messages'][0]['content'])['patient_default_context']['default_subject']=='encounter_patient'
+     assert Decimal(plan['maximum_charge'])==total
+     witnesses.append({'attempt':int(number),'geo':geo,'patient_context':bool(context),'parts':len(plan['parts']),'maximum_charge':str(total),'all_children_fully_priced_and_digest_bound':True,'pure_context_fixture_not_human_review':bool(context)})
+    for bad in ['forged-token',proof+'changed']:
+     try:b.plan_for(encounter,cfg,patient_context=bad)
+     except ValidationError:pass
+     else:raise AssertionError('Changed transcript proof was quoted')
+assert not connections
+assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()==args.revision
+assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=source,text=True).strip()
+assert source_bytes=={p:hashlib.sha256((source/'rebuild'/p).read_bytes()).hexdigest()for p in modules}
+report={'source_head':args.revision,'source_tree':source_tree,'witness_source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'source_bytes':source_bytes,'current_actual_provider_rows':rows,'pure_batch_child_price_witnesses':witnesses,'network_connect_attempts':connections,'new_provider_requests':0,'database_queries':0,'scanner_fingerprints_changed':False,'clinical_qualification':False,'context_live_provider_qualified':False,'batch_live_provider_qualified':False}
+with (root/'result.json').open('x')as f:json.dump(report,f,indent=2)
+print(json.dumps({'actual_provider_rows':len(rows),'pure_witnesses':len(witnesses),'network_attempts':len(connections),'scanner_fingerprints_changed':False,'result_sha256':hashlib.sha256((root/'result.json').read_bytes()).hexdigest()}))

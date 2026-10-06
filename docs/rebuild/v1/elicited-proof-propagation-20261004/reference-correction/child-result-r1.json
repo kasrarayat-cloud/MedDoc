@@ -1,0 +1,15 @@
+{
+  "selectors": [
+    "core.tests.test_elicited_source_reference.ElicitedSourceReference",
+    "core.tests.test_v3_literal_facts.OrdinaryLiteralFacts",
+    "core.tests.test_v3_notes_floors.EveryArm.test_every_exemption_keeps_its_control_useful"
+  ],
+  "tests_run": 16,
+  "failures": 0,
+  "errors": 0,
+  "successful": true,
+  "network_attempts": [],
+  "provider_calls": 0,
+  "DB_calls": 0,
+  "elapsed_seconds": 22.94652837299509
+}

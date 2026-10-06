@@ -1,0 +1,48 @@
+{
+  "state": "PROSPECTIVELY_SEALED_BEFORE_UNCHANGED_CANDIDATE_RERUN",
+  "source_commit": "7907ae5aa38c2a6c9e27eab1b09a758df315125b",
+  "ids": [
+    "D01",
+    "D02",
+    "D03"
+  ],
+  "files": {
+    "dev_application_gate_v2.py": "a996c18cd4ee0b7373a1a2eac8d86070dd96e46e5d51710a86aac5f86fe654e0",
+    "run_dev_application_gate_v2.py": "38b02636093e8c8997da15a02973f8f9d67501ced3c9347b5d9a66a26ac6b1ac",
+    "fixed_render_checker.py": "ab0cb64fb4133cadb3f1672323751d30e950712d0443724b8e3440a609d9024d",
+    "consolidate_original_word_gate.py": "4f0f5764b61e45f709088d21bbfa7658b54c42c5995be0e13ad338a8f7e511ec"
+  },
+  "diff_sha256": "2c40903d17be6f00257f6f3a9c0118e0099b937f2295dc8bb64b6c01a4c1bc14",
+  "prior_seal": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/acceptance-application-adapter-seal-v2-20261004.json",
+  "prior_seal_sha256": "6b4c6e58aa119874d25a0332cd038b201f99ea46d16a3f78c182ca5622e749ab",
+  "first_failed_attempt": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-application-7907ae5aa38c-1791088965997043816",
+  "first_failed_child_exit": 1,
+  "first_failed_seconds": 9.121,
+  "first_failure": "DiscoverRunner.run_tests expected string test label; class object rejected before test discovery/DB creation/original upload",
+  "first_attempt_had_document_workflows": false,
+  "first_incomplete_original_denominators_preserved": [
+    "D01",
+    "D02",
+    "D03"
+  ],
+  "first_failed_evidence_sha256": {
+    "workflow.log": "e3fe40e1415c037b556d416b462cc798aa4341ccc416be0efaf0555675b114b2",
+    "partial-summary.json": "497371c1e6369a677529122276c76d0c675a59d487194448a916f0ff9708c6ed",
+    "process-teardown.json": "0afd7329ad166d4bb1b852007c335aacc21e0e6c3ef5eb2ad0a1cc07100ee200",
+    "database-before.json": "61ad075209ca14709629a0f7e74f17b67653f963ee465b2fbcc1cb94ecf58d54",
+    "database-after.json": "61ad075209ca14709629a0f7e74f17b67653f963ee465b2fbcc1cb94ecf58d54",
+    "prospective-harness-before.json": "4cd195df7a64e7ec47cf381273653dcfcfc4de9a6c9a365283eff164c97ddfc3",
+    "prospective-harness-after.json": "4cd195df7a64e7ec47cf381273653dcfcfc4de9a6c9a365283eff164c97ddfc3"
+  },
+  "change": "Register module and call its string class label, as already qualified D10/D30 harness; outer selects this new inner version and preserves old runner/source/attempt",
+  "application_scorer_corpus_rights_threshold_render_profiles_changed": false,
+  "provider_calls": 0,
+  "tests_executed_before_seal": 0,
+  "thresholds": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  }
+}

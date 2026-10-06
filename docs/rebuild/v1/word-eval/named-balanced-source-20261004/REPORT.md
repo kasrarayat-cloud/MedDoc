@@ -1,0 +1,20 @@
+# Balanced named-selection source correction, 2026-10-04
+
+Source `ae2a04dbd5e6c15ef7f94938fa17e16e503bf207` is frozen in `/opt/meddoc-pro/.worktrees/v1-word-named-balanced-source-20261004`. It follows the held source commits `7dc6800d948eddadba8dcf41eb0518eaee623c11` and `5535a9bb7b7674e4065d17cdb078d9f1a6324197`; neither failed snapshot is replaced. Root independent refutation remains required before integration.
+
+The original D07 Delivered group has complete local Yes/No/Unknown selection commands. Its reference to Quantity above belongs to a conditional datum rather than the selected object. The initial scope repair admitted that group but also admitted five concrete human-response/signing instructions. The first correction closed those five; the author then retained two additional square-bracketed/quoted appointments that still exported Work into the human-assigned group. All seven original mappings and wrong exports remain under the protected task evidence root.
+
+The finished correction reads complete balanced clauses and proper parenthetical, bracketed and quoted qualifiers before allowing the local object proof. It reuses the existing action and prospective-response predicates. Malformed delimiter framing cannot establish named scope. The source text, physical bindings, option names, skip qualifiers, cardinality and accepted answer names remain exact; there are no new name/role lists or answer aliases.
+
+Evidence is `/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-scope-human-correction-20261004` (H below):
+
+- `before7dc/` reproduces five Ops wrong exports byte-identically and retains the ordinary manager-recorded observation positive.
+- `qualified-clause-probe-5535/` retains the additional square and quoted wrong originals, maps, answers and exports.
+- `corrective-focused/` preserves the first 19-method result with two ordinary-initial subfailures; `corrective-focused-v2/` is the subsequent 19-method pass on the first correction.
+- `balanced-focused/` preserves 22 methods: 21 passed, one positive-fixture lookup error. That expectation treated a short bracketed phrase as pure instruction ink although the established reader already classified it as a separate placeholder. `bracket-policy-5535/` and `bracket-policy-balanced/` prove identical old/new placeholder holds and usable complete ordinary qualifiers. The policy was not relaxed.
+- `balanced-focused-qualified/` passes all four affected balanced-source methods in 11.107 seconds, actual exit 0. The source is identical to the preceding 22-method run; only the invalid positive expectation and its explicit placeholder countercontrol changed.
+- `final-retained/` and `final-retained-replay/` retain the exact-source replay, actual exit 0 in 7.642 seconds. All seven historical wrong mappings refuse before export; fresh originals expose no ordinary Modality destination. Empty exports are byte-identical. The ordinary positive's old and fresh exports retain SHA `f2256d1714942eba0fa4c05d282c5766db009155502ef10737410a48deca282a`.
+
+The exact original D07 inspector mapping equals the preceding qualified source mapping, and its full printed `No (skip to #12)` export remains byte-identical, SHA `a2c0fe1c93d5852b3a80265c58a727ac3e82817489dfa45fbc74684d38edbc40`. This is source-only preservation/recovery evidence: the recorded 25/28 source score is distinct from C's actual served 23/28 result. It is not a whole-document qualification or a new automatic gate result. Original fixed GT28, the full 60/20 denominators and 54/60 plus 18/20 gates are unchanged.
+
+Every child used a bounded 180-second wrapper, completed normally and was reaped. These checks used no database, provider, renderer, service, external upload or native Microsoft Word. Source remains clean. The next independent work is D10's actual long-export refusal cause, D30's explicit manager blank-review recovery, and a finite common-layout repair grounded in the retained whole-document failures.

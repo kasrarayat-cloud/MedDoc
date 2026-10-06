@@ -1,0 +1,122 @@
+{
+  "source_commit": "7907ae5aa38c2a6c9e27eab1b09a758df315125b",
+  "actual_test_exit": 0,
+  "outer_exit": 1,
+  "elapsed_seconds": 77.259,
+  "fixed_document_successes": 0,
+  "supplemental_complete_successes": 0,
+  "database": {
+    "verified": true,
+    "requested_database": "quillmd_qa_sol_word_dev1076511",
+    "checked_names": [
+      "quillmd_qa_sol_word_dev1076511",
+      "test_quillmd_qa_sol_word_dev1076511"
+    ],
+    "present": [],
+    "all_absent": true,
+    "provider_calls": 0
+  },
+  "process": {
+    "worker_exit": 0,
+    "renderer_exit": -2,
+    "socket_removed": true,
+    "timed_out": false
+  },
+  "source_unchanged": true,
+  "harness_unchanged": true,
+  "provider_calls": 0,
+  "results": {
+    "D04": {
+      "GT": 27,
+      "mapping": {
+        "ok": 16,
+        "missed": 11,
+        "wrong": 0,
+        "extras": 0,
+        "strict": false
+      },
+      "failures": [
+        "Fixed strict first-pass whole-document mapping failed"
+      ],
+      "profiles": {
+        "empty": {
+          "export_sha256": "cebb55cd73453bdb6c8caf0fc040861daf9b074bf3cca278b6243e98e02da175",
+          "failures": [],
+          "fixed_protocol_passed": true,
+          "passed": true
+        },
+        "ordinary": {
+          "export_sha256": "de6fdb0cb8bc87fcc5981abc84cc1b6f933c7dbd33c427f7f15437b47b43da03",
+          "failures": [
+            "Fixed independent original-destination choice reader failed"
+          ],
+          "fixed_protocol_passed": false,
+          "passed": false
+        },
+        "long": {
+          "export_sha256": "5b96dd95e138f6addad6b93d275eb82b7b186ad3a97e57fbd760fec0edea38d4",
+          "failures": [
+            "Fixed independent original-destination choice reader failed"
+          ],
+          "fixed_protocol_passed": false,
+          "passed": false
+        }
+      }
+    },
+    "D05": {
+      "GT": 6,
+      "mapping": {
+        "ok": 6,
+        "missed": 0,
+        "wrong": 0,
+        "extras": 2,
+        "strict": false
+      },
+      "failures": [
+        "Fixed strict first-pass whole-document mapping failed"
+      ],
+      "profiles": {
+        "empty": {
+          "export_sha256": "104bd900da6207985438509371a70d6bff6dad81e79d45f5b9f6ee17e8012818",
+          "failures": [
+            "unchanged part differs: word/footer2.xml",
+            "Fixed independent original-destination choice reader failed"
+          ],
+          "fixed_protocol_passed": false,
+          "passed": false
+        },
+        "ordinary": {
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ],
+          "fixed_protocol_passed": null,
+          "passed": false
+        },
+        "long": {
+          "export_sha256": null,
+          "failures": [
+            "Actual explicit answer review refused"
+          ],
+          "fixed_protocol_passed": null,
+          "passed": false
+        }
+      }
+    },
+    "D07": {
+      "GT": 28,
+      "mapping": {
+        "ok": 13,
+        "missed": 10,
+        "wrong": 5,
+        "extras": 6,
+        "strict": false
+      },
+      "failures": [
+        "Fixed strict first-pass whole-document mapping failed",
+        "Actual source-bound partial coverage review refused; no manual map repair"
+      ],
+      "profiles": {}
+    }
+  }
+}

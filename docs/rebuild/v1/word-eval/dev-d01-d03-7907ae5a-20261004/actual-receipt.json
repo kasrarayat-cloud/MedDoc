@@ -1,0 +1,78 @@
+{
+  "source_commit": "7907ae5aa38c2a6c9e27eab1b09a758df315125b",
+  "source_unchanged": true,
+  "harness_unchanged": true,
+  "actual_test_exit": 0,
+  "outer_exit": 1,
+  "elapsed_seconds": 25.16,
+  "database": {
+    "verified": true,
+    "requested_database": "quillmd_qa_sol_word_dev1061912",
+    "checked_names": [
+      "quillmd_qa_sol_word_dev1061912",
+      "test_quillmd_qa_sol_word_dev1061912"
+    ],
+    "present": [],
+    "all_absent": true,
+    "provider_calls": 0
+  },
+  "process": {
+    "worker_exit": 0,
+    "renderer_exit": -2,
+    "socket_removed": true,
+    "timed_out": false
+  },
+  "provider_calls": 0,
+  "word_gate_credit": 0,
+  "results": {
+    "D01": {
+      "n": 92,
+      "actual_selected_engine": "legacy",
+      "mapping": {
+        "ok": null,
+        "missed": null,
+        "wrong": null,
+        "extras": null,
+        "strict": null
+      },
+      "failures": [
+        "Actual selected application processor is not contract v3; no engine override or mapping substitute"
+      ],
+      "automatic_success": false,
+      "fixed_protocol_success": false
+    },
+    "D02": {
+      "n": 24,
+      "actual_selected_engine": "legacy",
+      "mapping": {
+        "ok": null,
+        "missed": null,
+        "wrong": null,
+        "extras": null,
+        "strict": null
+      },
+      "failures": [
+        "Actual selected application processor is not contract v3; no engine override or mapping substitute"
+      ],
+      "automatic_success": false,
+      "fixed_protocol_success": false
+    },
+    "D03": {
+      "n": 88,
+      "actual_selected_engine": "v3",
+      "mapping": {
+        "ok": 45,
+        "missed": 32,
+        "wrong": 11,
+        "extras": 2,
+        "strict": false
+      },
+      "failures": [
+        "Fixed strict first-pass whole-document mapping failed",
+        "Actual source-bound partial coverage review refused; no manual map repair"
+      ],
+      "automatic_success": false,
+      "fixed_protocol_success": false
+    }
+  }
+}

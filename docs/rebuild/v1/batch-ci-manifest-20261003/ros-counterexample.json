@@ -1,0 +1,207 @@
+[
+  {
+    "phase": "generation-http-response",
+    "rows": [
+      {
+        "encounter": "23eb296e-091d-428c-84ee-90a2390b66bc",
+        "notes": "Review of systems: negative for the following:\nSymptoms: chest pain",
+        "status": "draft",
+        "answers": {},
+        "original_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+        "template_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+        "template_contract": "",
+        "mapping": [
+          {
+            "key": "cell_0",
+            "kind": "text",
+            "label": "Review of systems",
+            "locator": {
+              "cell": 0
+            }
+          },
+          {
+            "key": "cell_1",
+            "kind": "text",
+            "label": "Symptoms",
+            "locator": {
+              "cell": 1
+            }
+          }
+        ],
+        "import_manifest": {
+          "engine": "legacy",
+          "coverage": {
+            "legacy_unmapped": [],
+            "review_required": true,
+            "block_generation": true,
+            "legacy_omissions": [],
+            "requested_engine": "legacy",
+            "automatic_complete": false,
+            "advanced_layout_pending": 0,
+            "advanced_unresolved_areas": [
+              {
+                "id": "2012dcbc99ba60ac95a5eb5ea19fe0be0c92b3389cfa41234a7f9cea9f734731",
+                "code": "ambiguous_source_action",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[0]/tc[1]",
+                "detail": "This printed action does not establish who performs it. Keep this precise destination unchanged; a review click does not authorize the act. Location: word/document.xml#b/tbl[0]/tr[0]/tc[1]"
+              }
+            ],
+            "v3_uncovered_legacy_places": []
+          },
+          "strategy": "physical-coverage-v1",
+          "v3_refusal": "",
+          "source_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+          "engine_version": "legacy-v2",
+          "legacy_refusal": "",
+          "mapping_sha256": "d11933ecccedc48e5aa882e049dd8d5750ee1a6911009ac84b6b9071abf84047",
+          "engine_code_sha256": "e90e31cf340baad124b1bb924e2db1a4a453965dd2c326559090932051282362",
+          "initial_mapping_sha256": "d11933ecccedc48e5aa882e049dd8d5750ee1a6911009ac84b6b9071abf84047"
+        },
+        "confirmation": null,
+        "jobs": [],
+        "reservations": 0,
+        "usage": []
+      }
+    ],
+    "http_status": 302,
+    "location": "/encounters/23eb296e-091d-428c-84ee-90a2390b66bc/",
+    "messages": [
+      "This import has unmapped answer areas. No generation or charge is allowed until a clinician reviews the exact exclusions or a new original/mapping repairs them. Excluded areas remain unchanged and do not count as supported coverage."
+    ],
+    "body": ""
+  },
+  {
+    "phase": "before-run-one",
+    "rows": [
+      {
+        "encounter": "23eb296e-091d-428c-84ee-90a2390b66bc",
+        "notes": "Review of systems: negative for the following:\nSymptoms: chest pain",
+        "status": "draft",
+        "answers": {},
+        "original_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+        "template_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+        "template_contract": "",
+        "mapping": [
+          {
+            "key": "cell_0",
+            "kind": "text",
+            "label": "Review of systems",
+            "locator": {
+              "cell": 0
+            }
+          },
+          {
+            "key": "cell_1",
+            "kind": "text",
+            "label": "Symptoms",
+            "locator": {
+              "cell": 1
+            }
+          }
+        ],
+        "import_manifest": {
+          "engine": "legacy",
+          "coverage": {
+            "legacy_unmapped": [],
+            "review_required": true,
+            "block_generation": true,
+            "legacy_omissions": [],
+            "requested_engine": "legacy",
+            "automatic_complete": false,
+            "advanced_layout_pending": 0,
+            "advanced_unresolved_areas": [
+              {
+                "id": "2012dcbc99ba60ac95a5eb5ea19fe0be0c92b3389cfa41234a7f9cea9f734731",
+                "code": "ambiguous_source_action",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[0]/tc[1]",
+                "detail": "This printed action does not establish who performs it. Keep this precise destination unchanged; a review click does not authorize the act. Location: word/document.xml#b/tbl[0]/tr[0]/tc[1]"
+              }
+            ],
+            "v3_uncovered_legacy_places": []
+          },
+          "strategy": "physical-coverage-v1",
+          "v3_refusal": "",
+          "source_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+          "engine_version": "legacy-v2",
+          "legacy_refusal": "",
+          "mapping_sha256": "d11933ecccedc48e5aa882e049dd8d5750ee1a6911009ac84b6b9071abf84047",
+          "engine_code_sha256": "e90e31cf340baad124b1bb924e2db1a4a453965dd2c326559090932051282362",
+          "initial_mapping_sha256": "d11933ecccedc48e5aa882e049dd8d5750ee1a6911009ac84b6b9071abf84047"
+        },
+        "confirmation": null,
+        "jobs": [],
+        "reservations": 0,
+        "usage": []
+      }
+    ]
+  },
+  {
+    "phase": "after-run-one",
+    "rows": [
+      {
+        "encounter": "23eb296e-091d-428c-84ee-90a2390b66bc",
+        "notes": "Review of systems: negative for the following:\nSymptoms: chest pain",
+        "status": "draft",
+        "answers": {},
+        "original_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+        "template_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+        "template_contract": "",
+        "mapping": [
+          {
+            "key": "cell_0",
+            "kind": "text",
+            "label": "Review of systems",
+            "locator": {
+              "cell": 0
+            }
+          },
+          {
+            "key": "cell_1",
+            "kind": "text",
+            "label": "Symptoms",
+            "locator": {
+              "cell": 1
+            }
+          }
+        ],
+        "import_manifest": {
+          "engine": "legacy",
+          "coverage": {
+            "legacy_unmapped": [],
+            "review_required": true,
+            "block_generation": true,
+            "legacy_omissions": [],
+            "requested_engine": "legacy",
+            "automatic_complete": false,
+            "advanced_layout_pending": 0,
+            "advanced_unresolved_areas": [
+              {
+                "id": "2012dcbc99ba60ac95a5eb5ea19fe0be0c92b3389cfa41234a7f9cea9f734731",
+                "code": "ambiguous_source_action",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[0]/tc[1]",
+                "detail": "This printed action does not establish who performs it. Keep this precise destination unchanged; a review click does not authorize the act. Location: word/document.xml#b/tbl[0]/tr[0]/tc[1]"
+              }
+            ],
+            "v3_uncovered_legacy_places": []
+          },
+          "strategy": "physical-coverage-v1",
+          "v3_refusal": "",
+          "source_sha256": "18063b114fc6c7f168298d56b0ad3ba043bfdc944c93ccab8b7c7f827c62004a",
+          "engine_version": "legacy-v2",
+          "legacy_refusal": "",
+          "mapping_sha256": "d11933ecccedc48e5aa882e049dd8d5750ee1a6911009ac84b6b9071abf84047",
+          "engine_code_sha256": "e90e31cf340baad124b1bb924e2db1a4a453965dd2c326559090932051282362",
+          "initial_mapping_sha256": "d11933ecccedc48e5aa882e049dd8d5750ee1a6911009ac84b6b9071abf84047"
+        },
+        "confirmation": null,
+        "jobs": [],
+        "reservations": 0,
+        "usage": []
+      }
+    ],
+    "worker_returned": false
+  }
+]

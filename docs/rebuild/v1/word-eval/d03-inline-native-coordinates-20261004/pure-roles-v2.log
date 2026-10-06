@@ -1,0 +1,77 @@
+test_every_other_initial_place_stays_held (documents.test_destination_roles.DashQualifiedInitial.test_every_other_initial_place_stays_held) ... ok
+test_the_dash_qualified_reading_is_released (documents.test_destination_roles.DashQualifiedInitial.test_the_dash_qualified_reading_is_released) ... ok
+test_the_declared_cost_a_person_before_the_dash_is_released_as_on_43fcf214 (documents.test_destination_roles.DashQualifiedInitial.test_the_declared_cost_a_person_before_the_dash_is_released_as_on_43fcf214) ... ok
+test_the_v3_kind_rule_is_unchanged (documents.test_destination_roles.DashQualifiedInitial.test_the_v3_kind_rule_is_unchanged) ... ok
+test_coordinate_read_has_no_effect_on_export_bytes_or_physical_roles (documents.test_destination_roles.ExportedWritingCoordinates.test_coordinate_read_has_no_effect_on_export_bytes_or_physical_roles) ... ok
+test_disjoint_write_in_is_proven_in_each_original_container (documents.test_destination_roles.ExportedWritingCoordinates.test_disjoint_write_in_is_proven_in_each_original_container) ... ok
+test_overlapping_control_and_whole_parent_exclusions_still_refuse (documents.test_destination_roles.ExportedWritingCoordinates.test_overlapping_control_and_whole_parent_exclusions_still_refuse) ... ok
+test_same_process_different_originals_recomputes_native_offsets (documents.test_destination_roles.ExportedWritingCoordinates.test_same_process_different_originals_recomputes_native_offsets) ... ok
+test_unknown_and_block_native_controls_keep_whole_slot_fallback (documents.test_destination_roles.ExportedWritingCoordinates.test_unknown_and_block_native_controls_keep_whole_slot_fallback) ... ok
+test_r2_01_a_frame_holding_ordinary_questions_is_not_a_signing_box (documents.test_destination_roles.FramesAndNeighbours.test_r2_01_a_frame_holding_ordinary_questions_is_not_a_signing_box)
+R2-01 (HIGH): the box reading made a whole frame a signing place from its heading ('Initial referral', ... ok
+test_r2_01_a_signature_inside_a_frame_keeps_its_own_role (documents.test_destination_roles.FramesAndNeighbours.test_r2_01_a_signature_inside_a_frame_keeps_its_own_role) ... ok
+test_r2_02_an_after_label_neighbour_keeps_its_answer (documents.test_destination_roles.FramesAndNeighbours.test_r2_02_an_after_label_neighbour_keeps_its_answer)
+R2-02 (HIGH): 'Printed name:    Signature: ______' - the signature's segment started at Printed name's ... ok
+test_the_rest_of_a_signing_frame_stays_the_frames (documents.test_destination_roles.FramesAndNeighbours.test_the_rest_of_a_signing_frame_stays_the_frames)
+Excepting the engine's areas inside a signing box never opens the box's other paragraphs: 'Signed by the ... ok
+test_a_line_beside_an_inline_control_keeps_its_own_answer (documents.test_destination_roles.InlineSigningControls.test_a_line_beside_an_inline_control_keeps_its_own_answer)
+The control's segment ends at the next engine area: 'Name' on the same line stays answerable. ... ok
+test_l1f3_an_inline_signing_control_owns_its_line (documents.test_destination_roles.InlineSigningControls.test_l1f3_an_inline_signing_control_owns_its_line) ... ok
+test_checklist_states_and_adjectives_are_not_roles (documents.test_destination_roles.LegacyRoleKind.test_checklist_states_and_adjectives_are_not_roles) ... ok
+test_every_legacy_match_is_a_kind_rule_match (documents.test_destination_roles.LegacyRoleKind.test_every_legacy_match_is_a_kind_rule_match)
+Restricting, never widening: each reading is one the engine's kind rule already gives. ... ok
+test_signatures_and_initials_are_roles (documents.test_destination_roles.LegacyRoleKind.test_signatures_and_initials_are_roles) ... ok
+test_a_locked_content_control_is_protected (documents.test_destination_roles.ProtectedAndPolicy.test_a_locked_content_control_is_protected) ... ok
+test_a_manual_field_in_a_patient_section_carries_the_printed_author_role (documents.test_destination_roles.ProtectedAndPolicy.test_a_manual_field_in_a_patient_section_carries_the_printed_author_role) ... ok
+test_pc11_the_protected_signing_block_stays_refused (documents.test_destination_roles.ProtectedAndPolicy.test_pc11_the_protected_signing_block_stays_refused) ... ok
+test_the_attestation_cell_is_a_policy_role (documents.test_destination_roles.ProtectedAndPolicy.test_the_attestation_cell_is_a_policy_role) ... ok
+test_a_signing_verb_still_governs_an_initial_report (documents.test_destination_roles.ReadingsReleased.test_a_signing_verb_still_governs_an_initial_report) ... ok
+test_declared_residual_a_consent_question_box_stays_a_signing_box (documents.test_destination_roles.ReadingsReleased.test_declared_residual_a_consent_question_box_stays_a_signing_box) ... ok
+test_r2_03_an_adjective_initial_no_longer_makes_a_signing_box (documents.test_destination_roles.ReadingsReleased.test_r2_03_an_adjective_initial_no_longer_makes_a_signing_box)
+R2-03: the engine declines these boxes (its own reading is unchanged), but the role also refused the ... ok
+test_r2_04_a_clinical_reading_the_kind_rule_types_initials_is_not_a_role (documents.test_destination_roles.ReadingsReleased.test_r2_04_a_clinical_reading_the_kind_rule_types_initials_is_not_a_role)
+Retain the seven historical controls with current physical-source behavior. ... ok
+test_r2_05_an_unlocked_control_inside_a_locked_frame_is_answerable (documents.test_destination_roles.ReadingsReleased.test_r2_05_an_unlocked_control_inside_a_locked_frame_is_answerable)
+R2-05: a contentLocked rich-text frame around 'Hospital number: ' + an unlocked plain-text control: the ... ok
+test_rf01_rf03_rf04_lines (documents.test_destination_roles.RemoveThenAdd.test_rf01_rf03_rf04_lines) ... ok
+test_rf02_signature_column_cell (documents.test_destination_roles.RemoveThenAdd.test_rf02_signature_column_cell) ... ok
+test_rf05_declaration_signature_line (documents.test_destination_roles.RemoveThenAdd.test_rf05_declaration_signature_line) ... ok
+test_a_signature_or_initials_and_date_place_stays_a_signing_place (documents.test_destination_roles.RepairDatePairs.test_a_signature_or_initials_and_date_place_stays_a_signing_place) ... ok
+test_the_kind_rule_is_43fcf214s_for_a_pair_that_is_not_one_place (documents.test_destination_roles.RepairDatePairs.test_the_kind_rule_is_43fcf214s_for_a_pair_that_is_not_one_place) ... ok
+test_a_label_the_kind_rule_reads_as_text_is_no_legacy_role (documents.test_destination_roles.RepairLegacyRoleIsTheV3Rule.test_a_label_the_kind_rule_reads_as_text_is_no_legacy_role) ... ok
+test_rf16_rf17_signing_rows_stay_roles (documents.test_destination_roles.RepairLegacyRoleIsTheV3Rule.test_rf16_rf17_signing_rows_stay_roles) ... ok
+test_the_legacy_role_is_never_wider_than_the_kind_rule (documents.test_destination_roles.RepairLegacyRoleIsTheV3Rule.test_the_legacy_role_is_never_wider_than_the_kind_rule) ... ok
+test_the_typed_rows_fill (documents.test_destination_roles.RepairLogColumns.test_the_typed_rows_fill) ... ok
+test_l1f2_a_signature_and_date_place_is_a_signing_place (documents.test_destination_roles.SignatureAndDate.test_l1f2_a_signature_and_date_place_is_a_signing_place)
+L1:F2 (HIGH): the date word removed the signature reading, so 'Signature and date: ____' became a DATE field ... ok
+test_pc04_a_signature_date_stays_a_date (documents.test_destination_roles.SignatureAndDate.test_pc04_a_signature_date_stays_a_date) ... ok
+test_l1f4_a_footer_signing_box (documents.test_destination_roles.SigningBoxQuestionShapes.test_l1f4_a_footer_signing_box) ... ok
+test_l1f4_a_question_with_a_break_or_drawing_still_makes_a_signing_box (documents.test_destination_roles.SigningBoxQuestionShapes.test_l1f4_a_question_with_a_break_or_drawing_still_makes_a_signing_box) ... ok
+test_l1f6_the_caption_of_a_vml_signature_line (documents.test_destination_roles.SigningCaptionAndLine.test_l1f6_the_caption_of_a_vml_signature_line)
+(b) the engine's signature area is the VML line paragraph; its caption paragraph took a manual text answer. ... ok
+test_l1f6_the_writing_line_under_a_signature_caption (documents.test_destination_roles.SigningCaptionAndLine.test_l1f6_the_writing_line_under_a_signature_caption)
+(a) 'Consultant signature:' then '____': the engine maps the underline as an ordinary 'Answer' field, and fill ... ok
+test_l1f7_declared_residual_a_typed_initials_column_fills_as_on_43fcf214 (documents.test_destination_roles.SigningColumns.test_l1f7_declared_residual_a_typed_initials_column_fills_as_on_43fcf214)
+L1:F7 (pre-existing on 43fcf214) is a declared residual again: a log table's column carries no role, because ... ok
+test_pc10_an_admin_grid_without_a_signing_column_is_unchanged (documents.test_destination_roles.SigningColumns.test_pc10_an_admin_grid_without_a_signing_column_is_unchanged) ... ok
+test_date_questions_about_a_signature_stay_date_questions (documents.test_destination_roles.SigningPlaceReader.test_date_questions_about_a_signature_stay_date_questions) ... ok
+test_declared_residuals_stay_held (documents.test_destination_roles.SigningPlaceReader.test_declared_residuals_stay_held)
+Fail closed: the same wording prints a real signing place ('Note signed by attending physician', 'Patient ... ok
+test_l1f1_l1f5_every_refuted_signing_label_is_a_place (documents.test_destination_roles.SigningPlaceReader.test_l1f1_l1f5_every_refuted_signing_label_is_a_place)
+L1:F1 (HIGH): e555540d needed 'by' after 'signed', so 'Signed (Consultant)' and eight more were not roles and ... ok
+test_r2_06_a_number_after_initial_is_the_adjective (documents.test_destination_roles.SigningPlaceReader.test_r2_06_a_number_after_initial_is_the_adjective)
+R2-06: 'Initial 12-lead ECG' and 'Initial 4AT score' were held as initials (a digit is never an imperative's ... ok
+test_an_ordinary_question_box_is_not_a_role (documents.test_destination_roles.SigningQuestionBox.test_an_ordinary_question_box_is_not_a_role) ... ok
+test_notes_and_areas_of_the_box_are_unchanged (documents.test_destination_roles.SigningQuestionBox.test_notes_and_areas_of_the_box_are_unchanged)
+The reading adds a role only: the engine's own fields and notes are exactly what they were. ... ok
+test_rf18_a_signing_box_is_a_role_whatever_it_prints (documents.test_destination_roles.SigningQuestionBox.test_rf18_a_signing_box_is_a_role_whatever_it_prints)
+The question_box_signing reading, taken BEFORE the empty-cell check: empty, a drawing, or guidance ink. ... ok
+test_pc01_pc02_an_ordinary_blank_beside_a_signature_on_one_line_stays_answerable (documents.test_destination_roles.SpanAndSegment.test_pc01_pc02_an_ordinary_blank_beside_a_signature_on_one_line_stays_answerable) ... ok
+test_rf06_a_signature_owns_its_line_segment_up_to_the_next_engine_area (documents.test_destination_roles.SpanAndSegment.test_rf06_a_signature_owns_its_line_segment_up_to_the_next_engine_area)
+'Signature: ______ (use black ink)': an insertion after the printed guidance does not touch the signature's ... ok
+test_the_segment_ends_where_the_next_engine_area_starts (documents.test_destination_roles.SpanAndSegment.test_the_segment_ends_where_the_next_engine_area_starts) ... ok
+
+----------------------------------------------------------------------
+Ran 54 tests in 26.939s
+
+OK

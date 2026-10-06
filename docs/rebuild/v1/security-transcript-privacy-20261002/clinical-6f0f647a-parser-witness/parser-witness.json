@@ -1,0 +1,3222 @@
+{
+  "source_commit": "6f0f647a3d10227fc7ed9a30698c1877a7fff22f",
+  "all_source_hashes_unchanged": true,
+  "database_connections": 0,
+  "provider_requests": 0,
+  "cases": [
+    {
+      "name": "without_same_swelling",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has a left ankle without swelling.",
+      "units": [
+        {
+          "source": {
+            "id": 1,
+            "quote": "Examination mild swelling over the left lateral ankle.",
+            "start": 0,
+            "end": 54,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "named_keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "swell",
+              "swelling"
+            ],
+            "predicates": [
+              [
+                [
+                  "swell",
+                  "swelling"
+                ],
+                false,
+                null,
+                [
+                  "ankle",
+                  "lateral",
+                  "left"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": false,
+            "main_patient": false,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [],
+              "unknown": false,
+              "descriptive": true,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "ankl",
+                "ankle",
+                "examin",
+                "examination",
+                "swell",
+                "swelling"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": null,
+              "anchor_gender": null,
+              "current": false,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "missing",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "core": [
+              "ankle",
+              "swelling"
+            ],
+            "nominal": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "later",
+              "lateral",
+              "left",
+              "mild",
+              "swell",
+              "swelling"
+            ],
+            "core_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": false,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "unresolved",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "swell",
+                "swelling"
+              ],
+              false,
+              null,
+              [
+                "ankle",
+                "lateral",
+                "left"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "Examination",
+              "lemma": "examination",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nmod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 1,
+              "text": "mild",
+              "lemma": "mild",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 2,
+              "text": "swelling",
+              "lemma": "swelling",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 3,
+              "text": "over",
+              "lemma": "over",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 4,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 5,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 6,
+              "text": "lateral",
+              "lemma": "lateral",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 7,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 3,
+              "head_text": "over"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "swelling"
+            }
+          ]
+        },
+        {
+          "source": {
+            "id": 2,
+            "quote": "The patient has a left ankle without swelling.",
+            "start": 55,
+            "end": 101,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "ankl",
+              "ankle"
+            ],
+            "named_keys": [
+              "ankl",
+              "ankle"
+            ],
+            "predicates": [
+              [
+                [
+                  "have"
+                ],
+                false,
+                "present",
+                [
+                  "ankle",
+                  "left"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": true,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [
+                "class"
+              ],
+              "unknown": false,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "ankl",
+                "ankle",
+                "swell"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": "explicit",
+              "anchor_gender": null,
+              "current": true,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "patient",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "ankle",
+              "left",
+              "swell"
+            ],
+            "core": [
+              "ankle"
+            ],
+            "nominal": [
+              "ankle",
+              "left"
+            ],
+            "keys": [
+              "ankl",
+              "ankle",
+              "left",
+              "swell"
+            ],
+            "core_keys": [
+              "ankl",
+              "ankle"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "patient",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "ankl",
+            "ankle"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "have"
+              ],
+              false,
+              "present",
+              [
+                "ankle",
+                "left"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "The",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 1,
+              "head_text": "patient"
+            },
+            {
+              "i": 1,
+              "text": "patient",
+              "lemma": "patient",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 2,
+              "text": "has",
+              "lemma": "have",
+              "pos": "VERB",
+              "tag": "VBZ",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 3,
+              "text": "a",
+              "lemma": "a",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 5,
+              "head_text": "ankle"
+            },
+            {
+              "i": 4,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 5,
+              "head_text": "ankle"
+            },
+            {
+              "i": 5,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 6,
+              "text": "without",
+              "lemma": "without",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 7,
+              "text": "swelling",
+              "lemma": "swell",
+              "pos": "VERB",
+              "tag": "VBG",
+              "dep": "pcomp",
+              "head_i": 6,
+              "head_text": "without"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "has"
+            }
+          ]
+        }
+      ],
+      "confirmed_patient": [
+        1
+      ],
+      "nominal_patient": [
+        1
+      ],
+      "dependent_reach": {},
+      "elliptical_dependencies": {},
+      "exclusive_reattributions": {},
+      "malformed_denial_dependencies": [],
+      "prefixed_modifier_dependencies": [],
+      "relation_causes": []
+    },
+    {
+      "name": "absent_same_swelling",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has absent swelling over the left ankle.",
+      "units": [
+        {
+          "source": {
+            "id": 1,
+            "quote": "Examination mild swelling over the left lateral ankle.",
+            "start": 0,
+            "end": 54,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "named_keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "swell",
+              "swelling"
+            ],
+            "predicates": [
+              [
+                [
+                  "swell",
+                  "swelling"
+                ],
+                false,
+                null,
+                [
+                  "ankle",
+                  "lateral",
+                  "left"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": false,
+            "main_patient": false,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [],
+              "unknown": false,
+              "descriptive": true,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "ankl",
+                "ankle",
+                "examin",
+                "examination",
+                "swell",
+                "swelling"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": null,
+              "anchor_gender": null,
+              "current": false,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "missing",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "core": [
+              "ankle",
+              "swelling"
+            ],
+            "nominal": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "later",
+              "lateral",
+              "left",
+              "mild",
+              "swell",
+              "swelling"
+            ],
+            "core_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": false,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "unresolved",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "swell",
+                "swelling"
+              ],
+              false,
+              null,
+              [
+                "ankle",
+                "lateral",
+                "left"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "Examination",
+              "lemma": "examination",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nmod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 1,
+              "text": "mild",
+              "lemma": "mild",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 2,
+              "text": "swelling",
+              "lemma": "swelling",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 3,
+              "text": "over",
+              "lemma": "over",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 4,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 5,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 6,
+              "text": "lateral",
+              "lemma": "lateral",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 7,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 3,
+              "head_text": "over"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "swelling"
+            }
+          ]
+        },
+        {
+          "source": {
+            "id": 2,
+            "quote": "The patient has absent swelling over the left ankle.",
+            "start": 55,
+            "end": 107,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "absent"
+            ],
+            "named_keys": [
+              "absent",
+              "ankl",
+              "ankle"
+            ],
+            "predicates": [
+              [
+                [
+                  "have"
+                ],
+                false,
+                "present",
+                [
+                  "absent",
+                  "ankle",
+                  "left"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": true,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": false,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [
+                "class"
+              ],
+              "unknown": false,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "absent",
+                "ankl",
+                "ankle",
+                "swell"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": "explicit",
+              "anchor_gender": null,
+              "current": false,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "patient",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "absent",
+              "ankle",
+              "left",
+              "swell"
+            ],
+            "core": [
+              "absent"
+            ],
+            "nominal": [
+              "absent",
+              "ankle",
+              "left"
+            ],
+            "keys": [
+              "absent",
+              "ankl",
+              "ankle",
+              "left",
+              "swell"
+            ],
+            "core_keys": [
+              "absent"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "patient",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "absent"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "have"
+              ],
+              false,
+              "present",
+              [
+                "absent",
+                "ankle",
+                "left"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "The",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 1,
+              "head_text": "patient"
+            },
+            {
+              "i": 1,
+              "text": "patient",
+              "lemma": "patient",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 2,
+              "text": "has",
+              "lemma": "have",
+              "pos": "VERB",
+              "tag": "VBZ",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 3,
+              "text": "absent",
+              "lemma": "absent",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 4,
+              "text": "swelling",
+              "lemma": "swell",
+              "pos": "VERB",
+              "tag": "VBG",
+              "dep": "acl",
+              "head_i": 3,
+              "head_text": "absent"
+            },
+            {
+              "i": 5,
+              "text": "over",
+              "lemma": "over",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 4,
+              "head_text": "swelling"
+            },
+            {
+              "i": 6,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 8,
+              "head_text": "ankle"
+            },
+            {
+              "i": 7,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 8,
+              "head_text": "ankle"
+            },
+            {
+              "i": 8,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 5,
+              "head_text": "over"
+            },
+            {
+              "i": 9,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "has"
+            }
+          ]
+        }
+      ],
+      "confirmed_patient": [
+        1
+      ],
+      "nominal_patient": [
+        1
+      ],
+      "dependent_reach": {},
+      "elliptical_dependencies": {},
+      "exclusive_reattributions": {},
+      "malformed_denial_dependencies": [],
+      "prefixed_modifier_dependencies": [],
+      "relation_causes": []
+    },
+    {
+      "name": "free_same_swelling",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has a swelling-free left ankle.",
+      "units": [
+        {
+          "source": {
+            "id": 1,
+            "quote": "Examination mild swelling over the left lateral ankle.",
+            "start": 0,
+            "end": 54,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "named_keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "swell",
+              "swelling"
+            ],
+            "predicates": [
+              [
+                [
+                  "swell",
+                  "swelling"
+                ],
+                false,
+                null,
+                [
+                  "ankle",
+                  "lateral",
+                  "left"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": false,
+            "main_patient": false,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [],
+              "unknown": false,
+              "descriptive": true,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "ankl",
+                "ankle",
+                "examin",
+                "examination",
+                "swell",
+                "swelling"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": null,
+              "anchor_gender": null,
+              "current": false,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "missing",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "core": [
+              "ankle",
+              "swelling"
+            ],
+            "nominal": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "later",
+              "lateral",
+              "left",
+              "mild",
+              "swell",
+              "swelling"
+            ],
+            "core_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": false,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "unresolved",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "swell",
+                "swelling"
+              ],
+              false,
+              null,
+              [
+                "ankle",
+                "lateral",
+                "left"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "Examination",
+              "lemma": "examination",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nmod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 1,
+              "text": "mild",
+              "lemma": "mild",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 2,
+              "text": "swelling",
+              "lemma": "swelling",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 3,
+              "text": "over",
+              "lemma": "over",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 4,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 5,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 6,
+              "text": "lateral",
+              "lemma": "lateral",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 7,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 3,
+              "head_text": "over"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "swelling"
+            }
+          ]
+        },
+        {
+          "source": {
+            "id": 2,
+            "quote": "The patient has a swelling-free left ankle.",
+            "start": 55,
+            "end": 98,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "ankl",
+              "ankle"
+            ],
+            "named_keys": [
+              "ankl",
+              "ankle"
+            ],
+            "predicates": [
+              [
+                [
+                  "have"
+                ],
+                false,
+                "present",
+                [
+                  "ankle",
+                  "free",
+                  "left"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": true,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [
+                "class"
+              ],
+              "unknown": false,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "ankl",
+                "ankle",
+                "free",
+                "swell"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": "explicit",
+              "anchor_gender": null,
+              "current": true,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "patient",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "ankle",
+              "free",
+              "left",
+              "swell"
+            ],
+            "core": [
+              "ankle"
+            ],
+            "nominal": [
+              "ankle",
+              "free",
+              "left"
+            ],
+            "keys": [
+              "ankl",
+              "ankle",
+              "free",
+              "left",
+              "swell"
+            ],
+            "core_keys": [
+              "ankl",
+              "ankle"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "patient",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "ankl",
+            "ankle"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "have"
+              ],
+              false,
+              "present",
+              [
+                "ankle",
+                "free",
+                "left"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "The",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 1,
+              "head_text": "patient"
+            },
+            {
+              "i": 1,
+              "text": "patient",
+              "lemma": "patient",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 2,
+              "text": "has",
+              "lemma": "have",
+              "pos": "VERB",
+              "tag": "VBZ",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 3,
+              "text": "a",
+              "lemma": "a",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 8,
+              "head_text": "ankle"
+            },
+            {
+              "i": 4,
+              "text": "swelling",
+              "lemma": "swell",
+              "pos": "VERB",
+              "tag": "VBG",
+              "dep": "npadvmod",
+              "head_i": 6,
+              "head_text": "free"
+            },
+            {
+              "i": 5,
+              "text": "-",
+              "lemma": "-",
+              "pos": "PUNCT",
+              "tag": "HYPH",
+              "dep": "punct",
+              "head_i": 6,
+              "head_text": "free"
+            },
+            {
+              "i": 6,
+              "text": "free",
+              "lemma": "free",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 8,
+              "head_text": "ankle"
+            },
+            {
+              "i": 7,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 8,
+              "head_text": "ankle"
+            },
+            {
+              "i": 8,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 9,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "has"
+            }
+          ]
+        }
+      ],
+      "confirmed_patient": [
+        1
+      ],
+      "nominal_patient": [
+        1
+      ],
+      "dependent_reach": {},
+      "elliptical_dependencies": {},
+      "exclusive_reattributions": {},
+      "malformed_denial_dependencies": [],
+      "prefixed_modifier_dependencies": [],
+      "relation_causes": []
+    },
+    {
+      "name": "same_topic_explicit_other",
+      "notes": "Examination mild swelling over the left lateral ankle. Her father has no swelling over the left ankle.",
+      "units": [
+        {
+          "source": {
+            "id": 1,
+            "quote": "Examination mild swelling over the left lateral ankle.",
+            "start": 0,
+            "end": 54,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "named_keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "swell",
+              "swelling"
+            ],
+            "predicates": [
+              [
+                [
+                  "swell",
+                  "swelling"
+                ],
+                false,
+                null,
+                [
+                  "ankle",
+                  "lateral",
+                  "left"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": false,
+            "main_patient": false,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [],
+              "unknown": false,
+              "descriptive": true,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "ankl",
+                "ankle",
+                "examin",
+                "examination",
+                "swell",
+                "swelling"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": null,
+              "anchor_gender": null,
+              "current": false,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "missing",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "core": [
+              "ankle",
+              "swelling"
+            ],
+            "nominal": [
+              "ankle",
+              "examination",
+              "lateral",
+              "left",
+              "mild",
+              "swelling"
+            ],
+            "keys": [
+              "ankl",
+              "ankle",
+              "examin",
+              "examination",
+              "later",
+              "lateral",
+              "left",
+              "mild",
+              "swell",
+              "swelling"
+            ],
+            "core_keys": [
+              "ankl",
+              "ankle",
+              "swell",
+              "swelling"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": false,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "unresolved",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "swell",
+                "swelling"
+              ],
+              false,
+              null,
+              [
+                "ankle",
+                "lateral",
+                "left"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "Examination",
+              "lemma": "examination",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nmod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 1,
+              "text": "mild",
+              "lemma": "mild",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 2,
+              "text": "swelling",
+              "lemma": "swelling",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 3,
+              "text": "over",
+              "lemma": "over",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 2,
+              "head_text": "swelling"
+            },
+            {
+              "i": 4,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 5,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 6,
+              "text": "lateral",
+              "lemma": "lateral",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "ankle"
+            },
+            {
+              "i": 7,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 3,
+              "head_text": "over"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "swelling"
+            }
+          ]
+        },
+        {
+          "source": {
+            "id": 2,
+            "quote": "Her father has no swelling over the left ankle.",
+            "start": 55,
+            "end": 102,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "ankl",
+              "ankle",
+              "fath",
+              "father",
+              "swell",
+              "swelling"
+            ],
+            "named_keys": [
+              "ankl",
+              "ankle",
+              "fath",
+              "father",
+              "swell",
+              "swelling"
+            ],
+            "predicates": [
+              [
+                [
+                  "have"
+                ],
+                true,
+                "present",
+                [
+                  "ankle",
+                  "left",
+                  "swelling"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": false,
+            "other_floor": true,
+            "quantified_denial": true,
+            "reattribution": false,
+            "denial_nouns": [
+              "swell",
+              "swelling"
+            ],
+            "denial_heads": [
+              "have"
+            ],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [
+              "ankl",
+              "ankle",
+              "fath",
+              "father",
+              "left",
+              "swell",
+              "swelling"
+            ],
+            "intention": false,
+            "sole": {
+              "nouns_ok": false,
+              "genders": [
+                "Fem"
+              ],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "finding",
+                "symptom"
+              ],
+              "reach": [
+                "class"
+              ],
+              "unknown": true,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "ankl",
+                "ankle",
+                "fath",
+                "father",
+                "swell",
+                "swelling"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": null,
+              "anchor_gender": null,
+              "current": true,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "other",
+            "other": true,
+            "mentions_other": true,
+            "content": [
+              "ankle",
+              "father",
+              "left",
+              "swelling"
+            ],
+            "core": [
+              "father",
+              "swelling"
+            ],
+            "nominal": [
+              "ankle",
+              "father",
+              "left",
+              "swelling"
+            ],
+            "keys": [
+              "ankl",
+              "ankle",
+              "fath",
+              "father",
+              "left",
+              "swell",
+              "swelling"
+            ],
+            "core_keys": [
+              "fath",
+              "father",
+              "swell",
+              "swelling"
+            ],
+            "gender": null,
+            "pronoun_genders": [
+              "Fem"
+            ],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "other",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "fath",
+            "father",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "have"
+              ],
+              true,
+              "present",
+              [
+                "ankle",
+                "left",
+                "swelling"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "Her",
+              "lemma": "her",
+              "pos": "PRON",
+              "tag": "PRP$",
+              "dep": "poss",
+              "head_i": 1,
+              "head_text": "father"
+            },
+            {
+              "i": 1,
+              "text": "father",
+              "lemma": "father",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 2,
+              "text": "has",
+              "lemma": "have",
+              "pos": "VERB",
+              "tag": "VBZ",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 3,
+              "text": "no",
+              "lemma": "no",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 4,
+              "head_text": "swelling"
+            },
+            {
+              "i": 4,
+              "text": "swelling",
+              "lemma": "swelling",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 5,
+              "text": "over",
+              "lemma": "over",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 4,
+              "head_text": "swelling"
+            },
+            {
+              "i": 6,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 8,
+              "head_text": "ankle"
+            },
+            {
+              "i": 7,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 8,
+              "head_text": "ankle"
+            },
+            {
+              "i": 8,
+              "text": "ankle",
+              "lemma": "ankle",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 5,
+              "head_text": "over"
+            },
+            {
+              "i": 9,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "has"
+            }
+          ]
+        }
+      ],
+      "confirmed_patient": [
+        1
+      ],
+      "nominal_patient": [
+        1
+      ],
+      "dependent_reach": {},
+      "elliptical_dependencies": {},
+      "exclusive_reattributions": {},
+      "malformed_denial_dependencies": [],
+      "prefixed_modifier_dependencies": [],
+      "relation_causes": [
+        [
+          {
+            "id": 2,
+            "quote": "Her father has no swelling over the left ankle.",
+            "start": 55,
+            "end": 102,
+            "correction_value": null
+          },
+          null
+        ]
+      ]
+    },
+    {
+      "name": "without_left_pain",
+      "notes": "The patient reports pain in the left knee. The patient has a left knee without pain.",
+      "units": [
+        {
+          "source": {
+            "id": 1,
+            "quote": "The patient reports pain in the left knee.",
+            "start": 0,
+            "end": 42,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "knee",
+              "pain"
+            ],
+            "named_keys": [
+              "knee",
+              "pain"
+            ],
+            "predicates": [
+              [
+                [
+                  "report"
+                ],
+                false,
+                "present",
+                [
+                  "knee",
+                  "left",
+                  "pain"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": true,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "symptom"
+              ],
+              "reach": [],
+              "unknown": false,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "knee",
+                "pain"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": "explicit",
+              "anchor_gender": null,
+              "current": true,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "patient",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "knee",
+              "left",
+              "pain",
+              "report"
+            ],
+            "core": [
+              "pain"
+            ],
+            "nominal": [
+              "knee",
+              "left",
+              "pain"
+            ],
+            "keys": [
+              "knee",
+              "left",
+              "pain",
+              "report"
+            ],
+            "core_keys": [
+              "pain"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "patient",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "knee",
+            "pain"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "report"
+              ],
+              false,
+              "present",
+              [
+                "knee",
+                "left",
+                "pain"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "The",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 1,
+              "head_text": "patient"
+            },
+            {
+              "i": 1,
+              "text": "patient",
+              "lemma": "patient",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 2,
+              "head_text": "reports"
+            },
+            {
+              "i": 2,
+              "text": "reports",
+              "lemma": "report",
+              "pos": "VERB",
+              "tag": "VBZ",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "reports"
+            },
+            {
+              "i": 3,
+              "text": "pain",
+              "lemma": "pain",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 2,
+              "head_text": "reports"
+            },
+            {
+              "i": 4,
+              "text": "in",
+              "lemma": "in",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 3,
+              "head_text": "pain"
+            },
+            {
+              "i": 5,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 7,
+              "head_text": "knee"
+            },
+            {
+              "i": 6,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "knee"
+            },
+            {
+              "i": 7,
+              "text": "knee",
+              "lemma": "knee",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 4,
+              "head_text": "in"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "reports"
+            }
+          ]
+        },
+        {
+          "source": {
+            "id": 2,
+            "quote": "The patient has a left knee without pain.",
+            "start": 43,
+            "end": 84,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "knee",
+              "pain"
+            ],
+            "named_keys": [
+              "knee",
+              "pain"
+            ],
+            "predicates": [
+              [
+                [
+                  "have"
+                ],
+                false,
+                "present",
+                [
+                  "knee",
+                  "left",
+                  "pain"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": true,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "symptom"
+              ],
+              "reach": [
+                "class"
+              ],
+              "unknown": false,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "knee",
+                "pain"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": "explicit",
+              "anchor_gender": null,
+              "current": true,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "patient",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "knee",
+              "left",
+              "pain"
+            ],
+            "core": [
+              "knee",
+              "pain"
+            ],
+            "nominal": [
+              "knee",
+              "left",
+              "pain"
+            ],
+            "keys": [
+              "knee",
+              "left",
+              "pain"
+            ],
+            "core_keys": [
+              "knee",
+              "pain"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": "patient",
+            "cause": {
+              "id": 1,
+              "quote": "The patient reports pain in the left knee.",
+              "start": 0,
+              "end": 42,
+              "correction_value": null
+            },
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "patient",
+            "self_other": false,
+            "hold_cause": {
+              "id": 1,
+              "quote": "The patient reports pain in the left knee.",
+              "start": 0,
+              "end": 42,
+              "correction_value": null
+            }
+          },
+          "claim_keys": [
+            "knee",
+            "pain"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "have"
+              ],
+              false,
+              "present",
+              [
+                "knee",
+                "left",
+                "pain"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "The",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 1,
+              "head_text": "patient"
+            },
+            {
+              "i": 1,
+              "text": "patient",
+              "lemma": "patient",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 2,
+              "text": "has",
+              "lemma": "have",
+              "pos": "VERB",
+              "tag": "VBZ",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 3,
+              "text": "a",
+              "lemma": "a",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 5,
+              "head_text": "knee"
+            },
+            {
+              "i": 4,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 5,
+              "head_text": "knee"
+            },
+            {
+              "i": 5,
+              "text": "knee",
+              "lemma": "knee",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 6,
+              "text": "without",
+              "lemma": "without",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 2,
+              "head_text": "has"
+            },
+            {
+              "i": 7,
+              "text": "pain",
+              "lemma": "pain",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 6,
+              "head_text": "without"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "has"
+            }
+          ]
+        }
+      ],
+      "confirmed_patient": [],
+      "nominal_patient": [],
+      "dependent_reach": {},
+      "elliptical_dependencies": {},
+      "exclusive_reattributions": {},
+      "malformed_denial_dependencies": [],
+      "prefixed_modifier_dependencies": [],
+      "relation_causes": []
+    },
+    {
+      "name": "same_polarity_exclusive",
+      "notes": "The patient reports pain in the left knee. Only her father has left knee pain.",
+      "units": [
+        {
+          "source": {
+            "id": 1,
+            "quote": "The patient reports pain in the left knee.",
+            "start": 0,
+            "end": 42,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "knee",
+              "pain"
+            ],
+            "named_keys": [
+              "knee",
+              "pain"
+            ],
+            "predicates": [
+              [
+                [
+                  "report"
+                ],
+                false,
+                "present",
+                [
+                  "knee",
+                  "left",
+                  "pain"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": true,
+            "other_floor": false,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": true,
+              "genders": [],
+              "bad_pronoun": false,
+              "fronted": false,
+              "classes": [
+                "symptom"
+              ],
+              "reach": [],
+              "unknown": false,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": true,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "knee",
+                "pain"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": "explicit",
+              "anchor_gender": null,
+              "current": true,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "patient",
+            "other": false,
+            "mentions_other": false,
+            "content": [
+              "knee",
+              "left",
+              "pain",
+              "report"
+            ],
+            "core": [
+              "pain"
+            ],
+            "nominal": [
+              "knee",
+              "left",
+              "pain"
+            ],
+            "keys": [
+              "knee",
+              "left",
+              "pain",
+              "report"
+            ],
+            "core_keys": [
+              "pain"
+            ],
+            "gender": null,
+            "pronoun_genders": [],
+            "embedded": [],
+            "cues": [],
+            "past": false,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": null,
+            "cause": null,
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "patient",
+            "self_other": false,
+            "hold_cause": null
+          },
+          "claim_keys": [
+            "knee",
+            "pain"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "report"
+              ],
+              false,
+              "present",
+              [
+                "knee",
+                "left",
+                "pain"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "The",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 1,
+              "head_text": "patient"
+            },
+            {
+              "i": 1,
+              "text": "patient",
+              "lemma": "patient",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 2,
+              "head_text": "reports"
+            },
+            {
+              "i": 2,
+              "text": "reports",
+              "lemma": "report",
+              "pos": "VERB",
+              "tag": "VBZ",
+              "dep": "ROOT",
+              "head_i": 2,
+              "head_text": "reports"
+            },
+            {
+              "i": 3,
+              "text": "pain",
+              "lemma": "pain",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 2,
+              "head_text": "reports"
+            },
+            {
+              "i": 4,
+              "text": "in",
+              "lemma": "in",
+              "pos": "ADP",
+              "tag": "IN",
+              "dep": "prep",
+              "head_i": 3,
+              "head_text": "pain"
+            },
+            {
+              "i": 5,
+              "text": "the",
+              "lemma": "the",
+              "pos": "DET",
+              "tag": "DT",
+              "dep": "det",
+              "head_i": 7,
+              "head_text": "knee"
+            },
+            {
+              "i": 6,
+              "text": "left",
+              "lemma": "left",
+              "pos": "ADJ",
+              "tag": "JJ",
+              "dep": "amod",
+              "head_i": 7,
+              "head_text": "knee"
+            },
+            {
+              "i": 7,
+              "text": "knee",
+              "lemma": "knee",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "pobj",
+              "head_i": 4,
+              "head_text": "in"
+            },
+            {
+              "i": 8,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 2,
+              "head_text": "reports"
+            }
+          ]
+        },
+        {
+          "source": {
+            "id": 2,
+            "quote": "Only her father has left knee pain.",
+            "start": 43,
+            "end": 78,
+            "correction_value": null
+          },
+          "actors": {
+            "habitual": false,
+            "past_time": false,
+            "dependent": false,
+            "claim_keys": [
+              "fath",
+              "father",
+              "leav",
+              "leave",
+              "pain"
+            ],
+            "named_keys": [
+              "fath",
+              "father",
+              "knee",
+              "pain"
+            ],
+            "predicates": [
+              [
+                [
+                  "leav",
+                  "leave"
+                ],
+                false,
+                "present",
+                [
+                  "knee",
+                  "pain"
+                ],
+                false
+              ]
+            ],
+            "negated_keys": [],
+            "finite_past": false,
+            "present_tense": true,
+            "main_patient": false,
+            "other_floor": true,
+            "quantified_denial": false,
+            "reattribution": false,
+            "denial_nouns": [],
+            "denial_heads": [],
+            "ceased_keys": [],
+            "bare_cessation": false,
+            "topic_denial_keys": [],
+            "surface_keys": [],
+            "intention": false,
+            "sole": {
+              "nouns_ok": false,
+              "genders": [
+                "Fem"
+              ],
+              "bad_pronoun": false,
+              "fronted": true,
+              "classes": [
+                "symptom"
+              ],
+              "reach": [
+                "class"
+              ],
+              "unknown": true,
+              "descriptive": false,
+              "doubt_only": false,
+              "negation_only": false,
+              "multi_topic": false,
+              "self_contained": false,
+              "keys": [
+                "fath",
+                "father",
+                "knee",
+                "leav",
+                "leave",
+                "pain"
+              ],
+              "sides": [
+                "left"
+              ],
+              "uncertain": false,
+              "anchor": null,
+              "anchor_gender": null,
+              "current": false,
+              "advcl": [],
+              "presenting": false
+            },
+            "readable": true,
+            "kind": "other",
+            "other": true,
+            "mentions_other": true,
+            "content": [
+              "father",
+              "knee",
+              "leave",
+              "pain"
+            ],
+            "core": [
+              "father",
+              "pain"
+            ],
+            "nominal": [
+              "father",
+              "knee",
+              "pain"
+            ],
+            "keys": [
+              "fath",
+              "father",
+              "knee",
+              "leav",
+              "leave",
+              "pain"
+            ],
+            "core_keys": [
+              "fath",
+              "father",
+              "pain"
+            ],
+            "gender": null,
+            "pronoun_genders": [
+              "Fem"
+            ],
+            "embedded": [],
+            "cues": [],
+            "past": true,
+            "age": false,
+            "standalone": true,
+            "patient_past": false,
+            "bounded": []
+          },
+          "resolved": {
+            "current": "patient",
+            "cause": {
+              "id": 1,
+              "quote": "The patient reports pain in the left knee.",
+              "start": 0,
+              "end": 42,
+              "correction_value": null
+            },
+            "other_since": false,
+            "other_ever": false,
+            "patient_gender": null,
+            "actor": "other",
+            "self_other": false,
+            "hold_cause": {
+              "id": 1,
+              "quote": "The patient reports pain in the left knee.",
+              "start": 0,
+              "end": 42,
+              "correction_value": null
+            }
+          },
+          "claim_keys": [
+            "fath",
+            "father",
+            "leav",
+            "leave",
+            "pain"
+          ],
+          "negated_keys": [],
+          "predicates": [
+            [
+              [
+                "leav",
+                "leave"
+              ],
+              false,
+              "present",
+              [
+                "knee",
+                "pain"
+              ],
+              false
+            ]
+          ],
+          "tokens": [
+            {
+              "i": 0,
+              "text": "Only",
+              "lemma": "only",
+              "pos": "ADV",
+              "tag": "RB",
+              "dep": "advmod",
+              "head_i": 2,
+              "head_text": "father"
+            },
+            {
+              "i": 1,
+              "text": "her",
+              "lemma": "her",
+              "pos": "PRON",
+              "tag": "PRP$",
+              "dep": "poss",
+              "head_i": 2,
+              "head_text": "father"
+            },
+            {
+              "i": 2,
+              "text": "father",
+              "lemma": "father",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "nsubj",
+              "head_i": 4,
+              "head_text": "left"
+            },
+            {
+              "i": 3,
+              "text": "has",
+              "lemma": "have",
+              "pos": "AUX",
+              "tag": "VBZ",
+              "dep": "aux",
+              "head_i": 4,
+              "head_text": "left"
+            },
+            {
+              "i": 4,
+              "text": "left",
+              "lemma": "leave",
+              "pos": "VERB",
+              "tag": "VBN",
+              "dep": "ROOT",
+              "head_i": 4,
+              "head_text": "left"
+            },
+            {
+              "i": 5,
+              "text": "knee",
+              "lemma": "knee",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "compound",
+              "head_i": 6,
+              "head_text": "pain"
+            },
+            {
+              "i": 6,
+              "text": "pain",
+              "lemma": "pain",
+              "pos": "NOUN",
+              "tag": "NN",
+              "dep": "dobj",
+              "head_i": 4,
+              "head_text": "left"
+            },
+            {
+              "i": 7,
+              "text": ".",
+              "lemma": ".",
+              "pos": "PUNCT",
+              "tag": ".",
+              "dep": "punct",
+              "head_i": 4,
+              "head_text": "left"
+            }
+          ]
+        }
+      ],
+      "confirmed_patient": [],
+      "nominal_patient": [],
+      "dependent_reach": {},
+      "elliptical_dependencies": {},
+      "exclusive_reattributions": {},
+      "malformed_denial_dependencies": [],
+      "prefixed_modifier_dependencies": [],
+      "relation_causes": []
+    }
+  ],
+  "elapsed_seconds": 2.152
+}

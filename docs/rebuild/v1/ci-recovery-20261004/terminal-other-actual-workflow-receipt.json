@@ -1,0 +1,159 @@
+{
+  "child_test_seconds": 16.047,
+  "cross_department_authenticated_export": 404,
+  "evidence": {
+    "02-initial-mapping.json": "1e9594b11b00c95a658d68fc35a077897943a06b009ac109a44d4012fdfa53d8",
+    "08-enqueued.json": "e1dac69f1136467faba4dd27b928bdbea11638dce3eca0150e065125c8e323d1",
+    "09-first-result.json": "58c309b105f7174af338a67e2da5565652ace0be7aef1f43659c7a3964ea3388",
+    "11-review-post.json": "90e5c35c4e7626c76ae7c87fae31b7fb6d50f7b7c50f74c58e40dd90fc0cc972",
+    "12-persisted-review.json": "85a91c6be286897e28106f3b2cc87935135ca1b1859bf48d15285c4d1d561996",
+    "14-export-before-assert.docx": "15c98034002b7fd9b94f944c4d9e128231a3052833a77116bba19377d0dde34a",
+    "14-final-state.json": "7635366f39a4e8991c1624e1f53e6bab745c6b088380782d870984f1ac72c3cf",
+    "15-authenticated-download.docx": "15c98034002b7fd9b94f944c4d9e128231a3052833a77116bba19377d0dde34a",
+    "16-package-fidelity.json": "4b8f192ab9408bc430d92ca8216c0aa3ea3ffba7b6eb40feab00308dbd49a9d6",
+    "17-foreign-download.json": "83b251b79fe579600b0d216b637aa6b702853326c576a3a69b17b18c20f0ebab",
+    "19-partial-mapping.json": "941232979d3702818dae018ac66d923d1fd36d96e77af7f7d6758171791e682f",
+    "20-partial-review.html": "cbecdf877d2a743497b646af664e51c32c7027c46ea5ed3b95074a4ad75783db",
+    "21-partial-confirm-refusal.html": "8daa7b36b0a85f85d158515dfc04f2368a11824eec69364bb95c047a8ec307d6",
+    "21-partial-confirm-refusal.json": "be32c80ffc11a231cb0e7cda4e0ebe7ec0305227c8fa2c5125c5b5f51741ae20",
+    "22-financial-final.json": "28618ae9500dccff73201dfc4514f02e91028adfe065cdf9b35241f651bd80cb",
+    "catalog_absence.py": "09c8399fefe9380c7c248db41d751adc49b1dc9062d46b8f5e79a97f47214b78",
+    "db-after.log": "7803fb10eab7937f547a2fc1c0607008f6f52657d18a65d9506f5c3afcf9797b",
+    "db-before.log": "7803fb10eab7937f547a2fc1c0607008f6f52657d18a65d9506f5c3afcf9797b",
+    "execution-manifest.json": "257b564971e1d7af906542460b4bd98671fe75c916f98b9a0c517ca5a99d50d0",
+    "original.docx": "1608a95aa010c0d1c99e30e5f7e78b741a0be04327e8e0b7be5dde7f5bd6c1db",
+    "partial-original.docx": "66ab9c97ee0b70264d4d2f2aa8cd947e77b9f84527fa61b9757fdc9fa3b7b0bf",
+    "result.json": "9bc2f19ce63e39c5a93078ce405220a87f0045833bfa8102fe3e55e2170d0e40",
+    "run_packet.py": "032fdaefa496dabebf93a9ad28eeeaae11ccd81fad78a4e275ab8296bdbe7dea",
+    "source-after.json": "c80152965e5c24ec8edf9100d8d620a5476caeb0050955057ec4cb074b3574e5",
+    "source-before.json": "c80152965e5c24ec8edf9100d8d620a5476caeb0050955057ec4cb074b3574e5",
+    "tests-result.json": "074330c057cedfd387dfbd5d6a17d5b9ee532fb69961f1b54e4e73d9a66e246f",
+    "tests.log": "87c64bdf444068b60e8bdf9b6f1792503f28a3cb448b53349a90af43bcbf7cb9",
+    "workflow-complete.json": "e3aac69733057075d198a21d0e2f9ef164dff7c4ef9ae73ea4451e8c4b3dad1e",
+    "workflow.py": "195fef1d3cac6b05e8975c430c06bda287eab8d2a611070fbacafb7f34d338d2"
+  },
+  "evidence_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/terminal-other-b98b98fc-20261004/replay-02",
+  "financial": {
+    "automatic_word_acceptance": false,
+    "first_status_counts": {
+      "conflict": 1
+    },
+    "jobs": 1,
+    "manual_edits": 1,
+    "native_word_inspection": false,
+    "provider_requests": 0,
+    "reservations": [],
+    "usage": [
+      {
+        "actual_cost": "0E-12",
+        "charged_cost": "0E-12",
+        "simulated": true
+      }
+    ]
+  },
+  "first_answers": {
+    "clinician_edits": 1,
+    "conflict": 1,
+    "missing": 0,
+    "supported": 0
+  },
+  "limitations": [
+    "No live provider usefulness",
+    "No native Word or visual pagination/clipping inspection",
+    "No fixed corpus membership, denominator or threshold change",
+    "No human microphone/browser acceptance",
+    "No installed/private demo mutation"
+  ],
+  "mapping": {
+    "first_auto_fields": 1,
+    "first_automatic_complete": false,
+    "label": "Other (specify)",
+    "mapping_confirmation_persisted": true,
+    "original_fingerprint_hash_bound": true,
+    "partial_confirm_response": 400,
+    "partial_confirmation_count": 0,
+    "partial_coverage_issues": 2,
+    "partial_generation_blocked": true,
+    "printed_question": "19. Other (specify)",
+    "selected_engine": "v3",
+    "target": {
+      "type": "cell_append"
+    }
+  },
+  "method": "__main__.TerminalOther.test_other_actual_routes_preserve_original_and_neighbors",
+  "normal_and_test_database_catalog_absent": true,
+  "original_first_attempt": {
+    "cause": "Harness expected numbered display label; actual mapping normalizes label to Other(specify) and preserves numbered original source question. First attempt reached upload/review only; no product defect demonstrated.",
+    "files": {
+      "02-initial-mapping.json": "1e9594b11b00c95a658d68fc35a077897943a06b009ac109a44d4012fdfa53d8",
+      "03-mapping-review.html": "02797d03d375cbc56c01927f42c1f567c7d3382d732defb85eaa7ec91b68d7c9",
+      "db-after.log": "03a606844fae3169ec6773ddc8efc63a3b2445c594fc2679a6c9d92df7eba849",
+      "execution-manifest.json": "2baa224dee83200938a8dff4023c2ce5e926833671cc4114db8da6a61fba5b7a",
+      "original.docx": "1608a95aa010c0d1c99e30e5f7e78b741a0be04327e8e0b7be5dde7f5bd6c1db",
+      "tests.log": "a3f1ae2b8276618e569d7df2433b8cfe5dc6d305aaf001eff0b8c9c2c6490e93",
+      "workflow.py": "71d848816371f0225c1e32a7172113afe276508efddaba38705acfb9f4f90fe6"
+    },
+    "result": {
+      "actual_child_exit": 1,
+      "actual_outer_exit": 1,
+      "catalog_after_exit": 0,
+      "catalog_before_exit": 0,
+      "child_timed_out": false,
+      "cleanup_bytes": 0,
+      "elapsed_seconds": 13.959426,
+      "installed_mutations": 0,
+      "manifest_sha256": "2baa224dee83200938a8dff4023c2ce5e926833671cc4114db8da6a61fba5b7a",
+      "provider_calls": 0,
+      "renderer_started": false,
+      "source_unchanged": true
+    },
+    "root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/terminal-other-b98b98fc-20261004"
+  },
+  "preservation": {
+    "all_untargeted_raw_zip_parts_exact": true,
+    "export_download_equal": true,
+    "full_long_answer_once_in_target_and_document": true,
+    "layout_rendered": false,
+    "original_caption_subtree_exact": true,
+    "original_immutable": true,
+    "untargeted_cells_exact": [
+      0,
+      1,
+      3,
+      4,
+      5
+    ]
+  },
+  "replay": {
+    "actual_child_exit": 0,
+    "actual_outer_exit": 0,
+    "catalog_after_exit": 0,
+    "catalog_before_exit": 0,
+    "child_timed_out": false,
+    "cleanup_bytes": 0,
+    "elapsed_seconds": 28.797989,
+    "installed_mutations": 0,
+    "manifest_sha256": "257b564971e1d7af906542460b4bd98671fe75c916f98b9a0c517ca5a99d50d0",
+    "provider_calls": 0,
+    "renderer_started": false,
+    "source_unchanged": true
+  },
+  "scope": "ONE supplemental project-authored fixture HTTP upload-to-download method; no corpus, provider, nativeWord or acceptance qualification",
+  "source_commit": "b98b98fc893acf2b17004945e0e1721fd2b0da97",
+  "source_tracked_files_verified_before_and_after": 5579,
+  "workflow": {
+    "candidate": "b98b98fc893acf2b17004945e0e1721fd2b0da97",
+    "clinician_edits": 1,
+    "complete": true,
+    "denied_foreign_download": true,
+    "export_sha256": "15c98034002b7fd9b94f944c4d9e128231a3052833a77116bba19377d0dde34a",
+    "first_status_counts": {
+      "conflict": 1
+    },
+    "long_answer_characters": 3899,
+    "partial_mapping_refused": true,
+    "provider_calls": 0,
+    "scope": "One supplemental project-authored actual fixture upload/review/confirm/generate/edit/finalize/download; no provider or nativeWord or60/20 qualification",
+    "source_sha256": "1608a95aa010c0d1c99e30e5f7e78b741a0be04327e8e0b7be5dde7f5bd6c1db"
+  }
+}

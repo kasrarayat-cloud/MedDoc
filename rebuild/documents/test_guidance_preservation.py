@@ -35,6 +35,10 @@ def legacy_text(*, name='', label='', limit='1', points='2', result=' ', default
 class LegacyTextBounds(unittest.TestCase):
     def mapped(self, **kwargs):
         raw = data(legacy_text(**kwargs)); fields = w.inspect(raw)['fields']
+        if not fields:
+            # Exercise the old stored protected mapping as well as new imports.
+            detector = w.Detector(w.open_package(raw)); detector.detect()
+            fields = w.mapped_fields(detector, detector.source_guidance_areas)
         self.assertEqual(len(fields), 1)
         return raw, fields
 
@@ -91,6 +95,81 @@ class LegacyTextBounds(unittest.TestCase):
             with self.assertRaises(w.V3Failure) as failure: w.fill(raw, forged, {field['key']:'A'})
             self.assertEqual(failure.exception.code, 'protected_source_guidance')
 
+    def test_new_import_preserves_guidance_separately_from_real_answer_fields(self):
+        help_text = 'Press TAB to continue.\nRead the complete original instructions Ω.'
+        doc = legacy_text(help_text=help_text)
+        doc.add_paragraph('Observed code: ____')
+        raw = data(doc); found = w.inspect(raw)
+        self.assertEqual([f['label'] for f in found['fields']], ['Observed code'])
+        self.assertEqual(len(found['preserved_source_guidance']), 1)
+        record = found['preserved_source_guidance'][0]
+        self.assertEqual(record['text'], help_text)
+        self.assertTrue(record['write_protected'])
+        self.assertEqual(record['role'], 'source_guidance')
+        index = w.SlotIndex(w.open_package(raw))
+        self.assertEqual(record['fingerprint'], w.fingerprint(index.by_id[record['part']+'#'+record['slot']].el))
+        field = found['fields'][0]
+        final = w.fill(raw, found['fields'], {field['key']: 'O'})
+        self.assertEqual(w.fingerprint(index.by_id['word/document.xml#b/p[0]'].el),
+                         w.fingerprint(w.SlotIndex(w.open_package(final)).by_id['word/document.xml#b/p[0]'].el))
+        self.assertTrue(any(r['place'].endswith('/ff[0]') for r in w.destination_roles_of(w.open_package(raw))))
+
+    def test_preserved_guidance_is_never_offered_as_a_place_to_add_a_field(self):
+        # Refutation 2026-10-05 (round 3): once guidance stopped being a mapped field, mapping review listed the
+        # control and its empty host paragraph as open places, and a field added there refused every answer.
+        doc = legacy_text(help_text='Press TAB to continue.')
+        doc.add_paragraph('Observed code: ____')
+        raw = data(doc)
+        slots = [row['slot'] for row in w.outline(raw)['slots']]
+        self.assertNotIn('word/document.xml#b/p[0]', slots)
+        self.assertFalse([slot for slot in slots if slot.startswith('word/document.xml#b/p[0]/')])
+        self.assertIn('word/document.xml#b/p[1]', slots)
+        for changes in ({'name': 'BloodGroup'}, {'points': '22'}, {'help_text': None}):
+            with self.subTest(changes=changes):
+                listed = [row['slot'] for row in w.outline(data(legacy_text(**changes)))['slots']]
+                self.assertIn('word/document.xml#b/p[0]/ff[0]', listed)
+
+    def test_a_guidance_host_that_prints_its_own_line_stays_a_place(self):
+        # Refutation round 5: a paragraph holding an underlined writing line beside a guidance control was dropped
+        # from the outline, so the engine's own field there failed mapping confirmation.
+        doc = legacy_text(help_text='Press TAB to continue.')
+        line = etree.fromstring('<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                '<w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>')
+        doc.paragraphs[0]._p.insert(1 if doc.paragraphs[0]._p.find(w.q('w:pPr')) is not None else 0, line)
+        doc.add_paragraph('Plan: ____')
+        raw = data(doc)
+        slots = [row['slot'] for row in w.outline(raw)['slots']]
+        self.assertIn('word/document.xml#b/p[0]', slots)
+        self.assertNotIn('word/document.xml#b/p[0]/ff[0]', slots)
+
+    def test_a_guidance_host_with_only_spaces_beside_its_controls_is_not_a_place(self):
+        # Refutation round 6: once any run outside the controls kept a host, D31's guidance host with one trailing
+        # space was offered on the mapping page as a place that refuses every field. Spaces, empty runs and a plain
+        # tab print nothing; printed text still keeps the host a place.
+        def host(*runs):
+            doc = legacy_text(help_text='Press TAB to continue.')
+            for xml in runs:
+                doc.paragraphs[0]._p.append(etree.fromstring(
+                    '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">%s</w:r>' % xml))
+            doc.add_paragraph('Plan: ____')
+            return [row['slot'] for row in w.outline(data(doc))['slots']]
+
+        for runs in (('<w:rPr><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve"> </w:t>',),
+                     ('<w:rPr><w:sz w:val="22"/></w:rPr>',), ('<w:tab/>',)):
+            with self.subTest(runs=runs):
+                slots = host(*runs)
+                self.assertNotIn('word/document.xml#b/p[0]', slots)
+                self.assertIn('word/document.xml#b/p[1]', slots)
+        self.assertIn('word/document.xml#b/p[0]', host('<w:t>Comments</w:t>'))
+
+    def test_source_guidance_classification_keeps_legitimate_one_character_controls(self):
+        for changes in ({'name':'BloodGroup'}, {'label':'Blood group: '}, {'points':'22'},
+                        {'result':'A'}, {'default':'O'}, {'limit':'2'}, {'help_text':None}):
+            with self.subTest(changes=changes):
+                found = w.inspect(data(legacy_text(**changes)))
+                self.assertEqual(len(found['fields']), 1)
+                self.assertEqual(found['preserved_source_guidance'], [])
+
     def test_micro_source_protection_cannot_be_bypassed_by_replacing_its_parent(self):
         raw, fields = self.mapped(); field = fields[0]
         p = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#b/p[0]']
@@ -143,15 +222,20 @@ class LegacyTextBounds(unittest.TestCase):
 
     def test_sandbox_json_roundtrip_keeps_protection_and_original_help_xml(self):
         from documents import inspect_template, fill_template, DocumentError
-        raw = data(legacy_text())
+        doc = legacy_text(); doc.add_paragraph('Observation: ____'); raw = data(doc)
         with tempfile.TemporaryDirectory() as directory:
             original = Path(directory)/'original.docx'; final = Path(directory)/'final.docx'; original.write_bytes(raw)
-            fields = json.loads(json.dumps(inspect_template(original,engine='v3')['fields']))
-            self.assertTrue(fields[0]['write_protected'])
+            info = json.loads(json.dumps(inspect_template(original,engine='v3')))
+            fields = info['fields']
+            self.assertEqual([f['label'] for f in fields], ['Observation'])
+            source = info['import_manifest']['coverage']['preserved_source_guidance']
+            self.assertEqual(source[0]['text'], 'Press TAB to continue.')
             fill_template(original,fields,{},final)
             self.assertEqual(final.read_bytes(),raw)
-            fields[0].pop('write_protected'); fields[0].pop('review_reason')
-            with self.assertRaises(DocumentError): fill_template(original,fields,{fields[0]['key']:'A'},final)
+            detector = w.Detector(w.open_package(raw)); detector.detect()
+            old_fields = w.mapped_fields(detector, detector.source_guidance_areas)
+            old_fields[0].pop('write_protected'); old_fields[0].pop('review_reason')
+            with self.assertRaises(DocumentError): fill_template(original,old_fields,{old_fields[0]['key']:'A'},final)
             self.assertEqual(original.read_bytes(),raw)
 
 

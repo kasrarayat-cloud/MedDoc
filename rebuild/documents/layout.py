@@ -1,14 +1,14 @@
 """Output-only DOCX pagination safeguards; originals are never rewritten.
 
-The qualified WM IOV table contains two limbs. Keep-with-next protects a heading's
-first row only; it cannot label later continuation pages. Split that exact table
-at its existing Left Leg heading and repeat each table's own heading, including
-its original units. Every original row and visible character remains in order.
-A one-point empty paragraph keeps Word from merging the two tables again.
-The six mapped free-text location rows may span pages, with the same limb/unit
-header repeated. Their answers can exceed one page; forbidding a split cannot
-keep such a row together and caused missing headers in the evaluation renderer.
-Numeric rows and headings remain indivisible. Unrelated tables are untouched.
+The qualified WM IOV table contains two limbs in one original table. Preserve
+that table and its physical row destinations. Keep-with-next binds each original
+section heading to its first numeric row. Do not invent a repeating header: a
+single table cannot switch its repeated first-row header to the later limb.
+The six mapped free-text location rows may span pages. Their answers can exceed
+one page; forbidding a split cannot keep such a row together. Numeric rows and
+headings remain indivisible. Existing header properties and unrelated tables
+are untouched. Already separate 14-row limb tables retain their existing
+independent repeated-header behavior.
 
 These properties express layout intent. Native Microsoft Word appearance still
 requires opening the real application exports; XML checks are not that evidence.
@@ -32,12 +32,6 @@ WM_NUMERIC_ROWS = ['GSV at the SFJ', 'GSV at the Proximal Thigh', 'GSV at the Kn
                    'GSV Below Knee', 'SSV at the SPJ', 'SSV at the Proximal Calf',
                    'AAGSV at the SFJ', 'AAGSV at the Proximal Thigh', 'PAGSV at the SFJ',
                    'PAGSV at the Proximal Thigh']
-# Adjacent OOXML tables merge without an intervening paragraph. No clinical text
-# is inserted; one point of spacing is the only new document body paragraph.
-TABLE_SEPARATOR = ('<w:p><w:pPr><w:spacing w:before="0" w:after="0" '
-                   'w:line="20" w:lineRule="exact"/></w:pPr></w:p>')
-
-
 def _text(fragment):
     """The visible text of a fragment. `<w:t>` EXACTLY — `<w:t[^>]*>` also matches `<w:tcW>`."""
     return ' '.join(''.join(TEXT.findall(fragment)).split())
@@ -120,16 +114,12 @@ def _repair_table(table):
         if _columns(row)[1:] == captions:
             repaired = _keep_paragraphs_together(repaired)
             headings += 1
-            if sections:
+            if len(rows) == 14:
                 repaired = _with_row_property(repaired, '<w:tblHeader/>')
         replacements.append(repaired)
-    if sections and len(sections) == 2:
-        # Copy the processor's table properties/grid exactly to both sections.
-        # All original rows are partitioned once, in the same order.
-        prefix, suffix = table[:first], table[last:]
-        right = prefix + ''.join(replacements[:14]) + suffix
-        left = prefix + ''.join(replacements[14:]) + suffix
-        return right + TABLE_SEPARATOR + left, headings
+    # Preserve the original table boundary and native table/row coordinates.
+    # Splitting a 28-row original made left-limb saved destinations unreadable
+    # by their source-bound row numbers. No post-export recombination is used.
     for row, replacement in zip(rows, replacements):
         table = table.replace(row, replacement, 1)
     return table, headings
@@ -181,11 +171,13 @@ def repair_export(path):
             return {'tables': 0, 'heading_rows': 0}
         original = archive.read(DOCUMENT).decode('utf-8')
         entries = [(info, archive.read(info.filename)) for info in archive.infolist()]
+        comment = archive.comment
     repaired, summary = apply_table_continuation(original)
     if repaired == original:
         return summary
     temporary = path.with_name(path.name + '.layout')
     with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED) as out:
+        out.comment = comment
         for info, payload in entries:
             out.writestr(info, repaired.encode('utf-8') if info.filename == DOCUMENT else payload)
     shutil.move(str(temporary), str(path))

@@ -1,0 +1,30 @@
+{
+  "format": "quillmd-v1-private-install-declaration-v1",
+  "status": "prepared",
+  "baseline": "dedac1625032e32c7a149e6771be22e26c307eb1",
+  "schema_path": "docs/rebuild/v1/private-synthetic-install-preparation-20261004/schema-contract.json",
+  "catalog_contract": null,
+  "baseline_static": null,
+  "recovery": null,
+  "changed_paths": [],
+  "preparation_paths": [],
+  "expected_delta": [
+    "Exactly the normally merged, cited, reviewed complete source delta; public ingress and unrelated tenants unchanged.",
+    "Nineteen source-bound forward core migrations from 0018 through 0037, including the existing branch union and merge.",
+    "All historical columns and rows, final downloads, originals, recordings, financial/audit history and private files preserved.",
+    "Only captured recorder/content-type/permission additions; all twenty-four new core tables empty at the stopped transition.",
+    "Reviewed source-bound public static assets; historical immutable assets retained.",
+    "Explicit Sonnet 5.5 ordinary-v4, automatic Word preference and invite-only registration after unchanged product qualification gates.",
+    "Only the three private doctor/admin/worker surfaces restart; existing operational timers regain their exact prior active set.",
+    "Local encrypted stopped capture plus retained prior source/environment/static; no new restore drill or B2 renewal claim."
+  ],
+  "required_before_freeze": [
+    "Actual frozen synthetic PostgreSQL before/after catalog contract and its source hashes.",
+    "Exact complete changed-path list and declared preparation-source bytes for the coherent merged target.",
+    "Exact retained completed dedac static and independent restore receipt identities; do not reuse expired B2 tickets.",
+    "Source refutation, exact CI, 54/60 plus 18/20 family/safety Word qualification and real-provider usefulness gates.",
+    "Exact-target technical qualification receipt at the fixed owner-only prospective evidence path."
+  ],
+  "failure_policy": "Leave private surfaces stopped; retain original phases, inventories, current schema and recovery assets. Prefer a cited forward repair. No automatic source checkout, down-migration, historical database/environment restoration or public/real-patient cutover.",
+  "installed_mutation_performed": false
+}

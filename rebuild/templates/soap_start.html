@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Use SOAP note{% endblock %}
+{% block breadcrumb %}Form library <span>/</span> SOAP note{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Built-in form</div><h1>Use SOAP note</h1><p>Organize your documented notes into Subjective, Objective, Assessment and Plan.</p></div></div>
+<ol class="step-list" aria-label="Document workflow"><li class="current" aria-current="step">Choose department</li><li>Review mapping</li><li>Add notes</li><li>Review &amp; export</li></ol>
+<div class="split">
+  <section class="form-section">
+    {% if has_departments %}<form method="post" data-submit-once>{% csrf_token %}{{ form.as_p }}<div class="form-footer"><button type="submit" data-pending-label="Preparing form…">Review SOAP form</button><a href="{% url 'dashboard' %}#templates">Cancel</a></div></form>
+    {% else %}<div class="empty-state compact"><p>A clinician or organization owner needs an active department membership to use this form. Ask your clinic administrator to confirm your access.</p><a href="{% url 'dashboard' %}">Return to workspace</a></div>{% endif %}
+  </section>
+  <aside class="aside"><h2>Review before export</h2><p>One blank Word original is saved in your department's form library and reused. Review its mapping, add typed notes or a reviewed transcript, then review each draft answer with its source evidence.</p><p>Include your clinical assessment and plan in the notes. QuillMD does not supply a diagnosis or treatment decision when it is missing. You can edit an answer or choose “Leave blank — reviewed” before finalizing.</p><p class="small muted">Text cells grow onto later pages. Finalization and Word download use the preserved original and the mapping version selected for that document.</p></aside>
+</div>
+{% endblock %}

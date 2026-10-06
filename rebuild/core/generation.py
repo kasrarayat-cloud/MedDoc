@@ -1950,6 +1950,7 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
     that, for both validators and the page): each other text's occurrences are summarized once per note, and the
     result memoized (eleventh and twelfth passes: a hundred questions over one repeated line held the row lock).
     `index` None: `evidence` alone."""
+    date_scope = ()
     if len(governance) > 11 and evidence:
         scope = governance[11]
         warnings = v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, field_key, answer_text)
@@ -1961,8 +1962,24 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
             if evidence_needs_review(notes, scope['preceding']['named'].get('smoker', ()), evidence):
                 warnings += scope['units']
         if re.search(SUBJECTS[0], str(label or ''), re.I):
-            spans = {span[:2] for entry in evidence if (span := v3_evidence_span(entry))}
-            warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
+            from .source_scope import completed_receipt_question
+            from .v3_field_relations import read as ordinary_read
+            preceding=scope['preceding'];matches=preceding['named'].get(question_key(label),())
+            target=next((f for f in matches if f['key']==field_key),None) if field_key is not None else None
+            target=target if target is not None else matches[0] if len(matches)==1 else None
+            # A source-labelled completed receipt records document information;
+            # it grants no consent or signing act. Only the full bound relation
+            # can discharge this note-wide consent floor. All specific source
+            # opposition/correction/actor warnings above remain in force.
+            receipt=bool(target and target.get('kind') in ('text','long_text')
+                and not target.get('write_protected') and not target.get('answer_policy')
+                and completed_receipt_question(target)
+                and all((pair:=preceding['parsed'].get(u['id'])) and pair[0]==question_key(label)
+                    for u in v3_evidence_units(preceding,evidence).values())
+                and ordinary_read(preceding,label,evidence,ordinary_relation,text=answer_text,field_key=field_key)['valid'])
+            if not receipt:
+                spans = {span[:2] for entry in evidence if (span := v3_evidence_span(entry))}
+                warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
         if warnings:
             # Keep every warning's location; never turn this into an adoptable suggestion.
             unique = {unit['id']: unit for unit in warnings}
@@ -1975,8 +1992,11 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
                      'same': not re.search(r'[\r\n]', notes[min(unit['end'], first_end):max(unit['start'], first_start)]),
                      **({'syntax_incomplete': True} if unit.get('syntax_incomplete') else {}),
                      **({'other_person': True} if unit.get('other_person') and unit['id'] not in corrections else {}),
-                     **({'unread': True} if unit.get('unread') else {})}
+                    **({'unread': True} if unit.get('unread') else {})}
                     for unit in unique.values()]
+        from .source_scope import date_correction_governance
+        governance, date_scope = date_correction_governance(governance, label, evidence,
+            ordinary_relation, field_key, answer_text)
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
     anywhere, by_label, value_of, memo = index
@@ -2002,7 +2022,8 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
             memo[part] = occurrences_of(governance, found, len(text)) if found else None
         if memo[part] is not None:
             others.append(memo[part])
-    memo_key = (tuple((entry.get('quote'), entry.get('start')) for entry in evidence), tuple(dict.fromkeys(wanted)))
+    memo_key = (tuple((entry.get('quote'), entry.get('start')) for entry in evidence),
+                tuple(dict.fromkeys(wanted)), date_scope)
     if memo_key not in memo:
         memo[memo_key] = governed_context(governance, notes, evidence, others)
     found = memo[memo_key]
@@ -2081,10 +2102,10 @@ def v3_repair_apart(reading, answer_ids, repaired_ids):
 
 def v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, field_key, answer_text):
     """The note's corrections that govern an answer (`judged_context`): every one, note-wide, as before - except, for an
-    answer whose ordinary relation record is valid, a bare backward repair (`v3_bare_repairs`) written wholly BEFORE
-    every line of the answer when the answer is POSITIVELY about another topic (`v3_repair_apart`: 'Allergies:
-    penicillin. Sorry, I mean amoxicillin.' above 'Smoker: No.'). It still governs everything before it, its own line,
-    and any later line that may repeat what it withdrew; every other correction is unchanged."""
+    answer whose ordinary relation record is valid, a bare backward repair (`v3_bare_repairs`) when the answer is
+    POSITIVELY about another topic (`v3_repair_apart`: 'Allergies: penicillin. Sorry, I mean amoxicillin.' above
+    'Smoker: No.'). An earlier answer additionally requires explicit patient subjects and no backward source
+    invalidation. Its own line, a shared topic, an inferred actor and every other correction remain held."""
     corrections = list(scope['corrections'])
     reading = scope.get('preceding')
     if not corrections or ordinary_relation is None or not reading:
@@ -2102,8 +2123,18 @@ def v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, fi
     answer_ids = set(v3_evidence_units(reading, evidence))
     if len(answer_ids) != len(evidence):
         return corrections
-    return [unit for unit in corrections if not (unit['id'] in bare and unit['end'] <= start
-                                                 and v3_repair_apart(reading, answer_ids, bare[unit['id']]))]
+    # A repair of a positively named labelled value does not retract an
+    # independently documented patient assertion about another topic. The old
+    # after-only rule unnecessarily held an earlier presenting complaint.
+    # Every selected assertion must already name the patient explicitly; a
+    # pronoun/nominal/inherited actor cannot gain ownership at this boundary.
+    from .source_scope import _date_scope_backward_dependency
+    selected = list(v3_evidence_units(reading, evidence).values())
+    explicit_answer = bool(all(reading['patients'].get(uid) for uid in answer_ids)
+        and not _date_scope_backward_dependency(reading, selected))
+    return [unit for unit in corrections if not (unit['id'] in bare
+        and (unit['end'] <= start or explicit_answer)
+        and v3_repair_apart(reading, answer_ids, bare[unit['id']]))]
 
 
 def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_units=None, v3_parsed=None):
@@ -2515,12 +2546,23 @@ def plain_printed_side_option(field, value):
     return bool(chosen and '\n' not in chosen and plain_value(PRINTED_SIDE_PREFIX.sub('side', value, count=1)))
 
 
+MISSING_RECORD_VALUE = re.compile(
+    r'\s*(?:(?:currently|presently)\s+)?(?:not|never)\s+(?:yet\s+)?'
+    r'(?:documented|recorded|provided|available)(?:\s+(?:yet|in\s+(?:the\s+)?(?:notes|record|chart)))?\s*[.!?]?\s*', re.I)
+
+
 def v3_shape_holds(quote, value):
     """Rules (d)-(g) of contract v3 for one unit (`quote`, and its labelled `value` or the quote itself); rule (c), more
     than one sentence in the unit, is `inner_sentence_end`. Read once per unit per validation (R3-4)."""
     return bool(
         # (d) A value that asks or trails off answers nothing ('Nausea, vomiting or abdominal pain?').
         ASKS_OR_TRAILS_OFF.search(value)
+        # A complete labelled omission state supplies no clinical value. Read
+        # the entire value, never a substring: an actual negative ('no known
+        # drug allergies', 'not taking warfarin') is a different statement.
+        # Compatibility and invisible-character readings are hold-only; the
+        # candidate, quotation and offsets remain exactly as supplied.
+        or any(MISSING_RECORD_VALUE.fullmatch(reading) for reading in safety_readings(value))
         # (e) Nor does one shaped as a pointer to other lines (F7).
         or points_elsewhere(value)
         # (f) A self-correction inside the sentence (read with invisible characters removed too).
@@ -2724,6 +2766,10 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
         values[index] = value
         references[index] = {label for label, pattern in patterns.items() if label != owner
                              and any(pattern.search(text) for text in readings(value))}
+        if 'medications' in references[index] and all(text==value for text in readings(value)):
+            from .source_scope import medication_argument_references
+            if medication_argument_references(value,patterns['medications']):
+                references[index].remove('medications')
         # This complete visit-purpose clause names a topic without asserting its
         # value. Record the relation explicitly; a suffix or another source unit
         # cannot use this exception. Unknown ownership stays in the reference scan.
@@ -2926,11 +2972,16 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                                 if own_part and own_part[2] <= len(text) else None)
                         shift = part[2] if part else 0
                         instruction = text[shift:]
+                        from .source_scope import conditional_plan_scope
+                        plan_condition = conditional_plan_scope(instruction) if part and part[0]==owner else None
                         if (RETURN_IF_INSTRUCTION.fullmatch(instruction)
                                 and not any(UNSETTLED.search(r) or SELF_CORRECTION.search(r)
                                             or SCOPE_POINTER.search(r) for r in readings(instruction))):
                             span = (unit['start'] + low + shift, unit['start'] + high)
                             found.append((low, high)); local_conditional.append(span)
+                            conditional_units.add(unit['id'])
+                        elif plan_condition is not None:
+                            local_conditional.append(tuple(unit['start']+low+shift+at for at in plan_condition))
                             conditional_units.add(unit['id'])
                     # A labelled Plan's retained tail can contain its complete return
                     # instruction on the same line. Only that exact two-part form is relaxed.
@@ -3308,6 +3359,7 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
     scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
     scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
     scoped['ordinary_syntax'] = ordinary.get('syntax_ids', set())
+    scoped['ordinary_elicited'] = ordinary.get('elicited_ids', set())
     complete = set()
     if label in reading['general']:
         for group in reading['groups']:
@@ -3318,6 +3370,12 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
                 if unit['id'] in reading['conditional_unsafe'] or (not ordinary['self_reference'] and unit['id'] in reading['coupled'].get(label, ())) or (label in reading['ambiguous_subjects']
                     and reading['subjects'][unit['id']] == label)}
     matches = reading['named'].get(label, ())
+    from .source_scope import receipt_date_warnings, document_status_questions
+    warnings.update((unit['id'], unit) for unit in document_status_questions(reading))
+    receipt_field=next((f for f in matches if f['key']==field_key),None) if field_key is not None else None
+    receipt_field=receipt_field if receipt_field is not None else matches[0] if len(matches)==1 else None
+    if receipt_field is not None:
+        warnings.update((unit['id'],unit) for unit in receipt_date_warnings(reading,receipt_field,selected.values()))
     if len(matches) == 1:
         from .v3_destination import side_warnings, policy_warnings, temporal_warnings, option_warnings
         warnings.update((unit['id'], unit) for unit in
@@ -3338,13 +3396,20 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
     for kind, start, end in reading['inherited_causes']:
         index = bisect.bisect_right(starts, start) - 1
         if index >= 0:
-            unit = reading['units'][index]; warnings[unit['id']] = unit
+            unit = reading['units'][index]
+            from .source_scope import future_event_at, completed_document_status_boundary
+            if kind=='lexical' and ordinary['valid'] and future_event_at(reading,unit,start,end):
+                continue
+            if (kind == 'unfinished' and ordinary['valid'] and start == unit['start'] and end == unit['end']
+                    and completed_document_status_boundary(reading, unit, list(selected.values()), receipt_field)):
+                continue
+            warnings[unit['id']] = unit
     for unit in selected.values():
         if not v3_complete_statement(reading, unit, scoped):
             warnings.setdefault(unit['id'], {**unit, 'syntax_incomplete': True})
         subject = reading['subjects'][unit['id']]
         own = reading['parsed'][unit['id']]
-        if (unit['id'] in reading['unresolved_subjects'] or (subject and subject != label)
+        if ((unit['id'] in reading['unresolved_subjects'] and unit['id'] not in ordinary.get('owned_subject_ids', ())) or (subject and subject != label)
                 or (own and own[0] != label)):
             warnings[unit['id']] = unit
         before, changer = reading['neighbours'][unit['id']]
@@ -3430,7 +3495,8 @@ def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=fro
     # 2026-09-30).
     if uid in proven:
         if proven_by_relation:
-            causes.extend(v3_relation_causes(reading, unit, label, selected, field_key))
+            causes.extend(v3_relation_causes(reading, unit, label, selected, field_key,
+                                             elicited=uid in scoped.get('ordinary_elicited', ())))
         return causes
     if readable and any(not any(low <= unit['start'] + at < high for low, high in reading['conditional_spans'])
                         for at in info['bounded']):
@@ -3567,6 +3633,8 @@ def v3_current_state_field(field):
     label = question_key(field.get('label'))
     if label in GENERAL_NARRATIVE_FIELDS:
         return False
+    from .source_scope import completed_receipt_question
+    if completed_receipt_question(field):return False
     if re.search(LETTER_BEFORE + r'(?:history|past|previous|prior|ever|when|since|last|date|dated|onset)' + LETTER_AFTER,
                  label, re.I):
         return False
@@ -3737,7 +3805,7 @@ def v3_opposed_candidates(reading, uid):
     return found
 
 
-def v3_relation_causes(reading, unit, label, selected, field_key=None):
+def v3_relation_causes(reading, unit, label, selected, field_key=None, *, elicited=False):
     """⚠️ HOLD-ONLY FLOORS FOR A UNIT THE ORDINARY FIELD RELATIONS PROVE (2026-09-30). The model's per-unit relations are
     the evidence that neighbouring statements are independent; these are the structural readings its 'independent'
     cannot remove. [(cause, flag)], like `v3_added_causes`; every one only ever HOLDS, and the unit they apply to is one
@@ -3811,7 +3879,8 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # The field itself: by its key when a repeated label names several ('Other' under three printed questions).
     field = next((f for f in matches if f['key'] == field_key), None) if field_key is not None else None
     field = field if field is not None else (matches[0] if len(matches) == 1 else None)
-    elicited = (label, uid) in reading.get('_literal_elicited', ())
+    # Only this field's successful ordinary read supplies the literal proof;
+    # a mutable marker on a caller reading is not an admission contract.
     # 2026-10-01: a note whose single-patient scope is POSITIVELY established (`v3_actors.sole_patient`: every nominal
     # word known to name no person, one gender, the patient presented first) has nobody else in it, so the actor run's
     # 'other' / 'ambiguous' for a pronoun after an article opener ('A 45-year-old man presents ... He ...') is not
@@ -3828,6 +3897,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # cancer.'; 'His father had a heart attack at 55. He has asthma. Allergies: none known.'): nothing in the note
     # says it is the patient's, whatever the model called the other line.
     if info['kind'] != 'patient' and uid not in sole:
+        from .source_scope import reserved_identity_source
         first_other = None
         for other in units[:reading['position'][uid]]:
             found, seen = actors[other['id']], resolved[other['id']]
@@ -3837,12 +3907,15 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 first_other = None
                 break                       # the note presents the patient before this statement (its main subject)
             if first_other is None and (not found['readable'] or found['other_floor'] or seen.get('self_other')
-                                        or (found['kind'] == 'pronoun' and seen.get('actor') == 'other')):
+                                        or (found['kind'] == 'pronoun' and seen.get('actor') == 'other')) and not reserved_identity_source(reading,other,unit,field):
                 first_other = other
         if first_other is not None:
             causes.append((first_other, None))
     # BOUNDED
-    if not elicited and any(not (field is not None and v3_bound_by_destination(field, unit, at)) for at in info['bounded']):
+    if not elicited and any(not ((field is not None and v3_bound_by_destination(field, unit, at))
+            or (label in PLAN_FIELDS and uid in reading['conditional_units']
+                and any(low <= unit['start']+at < high for low,high in reading['conditional_spans'])))
+            for at in info['bounded']):
         causes.append((unit, 'syntax_incomplete'))
     # DATED PAST
     if field is not None and (
@@ -3858,11 +3931,40 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
+    from .source_scope import bare_affects,ceased_affects,explicit_patient_endings,owned_oppositions,unresolved_medication_affects,unresolved_medication_changes,elliptical_dependencies,exclusive_reattributions,separate_sides,malformed_denial_dependencies,prefixed_modifier_dependencies,clinical_modifier_negations,pure_foreign_clause,denied_ending_keys
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
-                  if other['id'] != uid and other['id'] not in selected)
+                  if other['id'] != uid and other['id'] not in selected and bare_affects(reading,other,unit))
+    causes.extend((other,None) for other in unresolved_medication_changes(reading)
+                  if other['id']!=uid and other['id'] not in selected and unresolved_medication_affects(reading,other,unit))
+    causes.extend((other,None) for other in explicit_patient_endings(reading,unit)
+                  if not (text_answer and other['id'] in selected))
+    causes.extend((other,None) for other in owned_oppositions(reading,unit))
+    # An elliptical other-person attribution or topicless temporal modifier
+    # cannot become independent merely because the model called it so.
+    causes.extend((other,None) for other in elliptical_dependencies(reading).get(uid,()))
+    causes.extend((other,None) for other in exclusive_reattributions(reading).get(uid,()))
     # OPPOSED SAME TOPIC (only the units an arm can meet by its own kind of key: `v3_opposed_candidates`)
     mine_claim, mine_negated = reading['claim_keys'][uid], reading['negated_keys'][uid]
     mine = reading['predicates'][uid]
+    causes.extend((other,None) for other,topics in malformed_denial_dependencies(reading)
+        if other['id']!=uid and topics & (mine_claim | info.get('named_keys',frozenset())))
+    causes.extend((other,None) for other,topics in prefixed_modifier_dependencies(reading)
+        if other['id']!=uid and (shared := topics & (mine_claim | info.get('named_keys',frozenset())))
+        and not separate_sides(reading,unit,other,shared))
+    modifier_negations=clinical_modifier_negations(reading)
+    mine_modifiers=modifier_negations.get(uid,{})
+    if mine_modifiers.get('ambiguous'):causes.append((unit,'syntax_incomplete'))
+    my_negative=mine_negated | mine_modifiers.get('negative',frozenset())
+    for other in units:
+        oid=other['id']
+        if oid==uid or pure_foreign_clause(reading,other):continue
+        theirs_modifiers=modifier_negations.get(oid,{})
+        their_negative=reading['negated_keys'][oid] | theirs_modifiers.get('negative',frozenset())
+        shared=(theirs_modifiers.get('negative',frozenset()) & (mine_claim | info.get('named_keys',frozenset()))) - my_negative
+        shared |= (mine_modifiers.get('negative',frozenset()) & (reading['claim_keys'][oid] | actors[oid].get('named_keys',frozenset()))) - their_negative
+        shared |= theirs_modifiers.get('ambiguous',frozenset()) & (mine_claim | info.get('named_keys',frozenset()))
+        shared |= mine_modifiers.get('ambiguous',frozenset()) & actors[oid].get('named_keys',frozenset())
+        if shared and not separate_sides(reading,unit,other,shared):causes.append((other,None))
     mine_timeless = [v3_without_time(record) for record in mine]
     labelled = reading.get('labelled_claims', {})
     position = reading['position']
@@ -3874,13 +3976,18 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 or (found['kind'] == 'pronoun' and resolved[oid].get('actor') == 'other')))):
             continue
         theirs = reading['predicates'][oid]
-        if (mine_claim & reading['negated_keys'][oid] or mine_negated & reading['claim_keys'][oid]
+        # Denial of a complete ended event keeps that event's polarity. It is
+        # not a lexical denial of using its named medication. Other denials,
+        # unknown arguments and separately owned endings retain every floor.
+        other_negated=reading['negated_keys'][oid]-denied_ending_keys(reading,other)
+        overlap=(mine_claim & other_negated) | (mine_negated & reading['claim_keys'][oid])
+        if ((overlap and not separate_sides(reading,unit,other,overlap))
                 or any(v3_opposed_predicates(first, v3_without_time(second)) for first in mine_timeless for second in theirs)
                 or v3_denies_labelled(labelled.get(uid), theirs) or v3_denies_labelled(labelled.get(oid), mine)
                 or v3_ends_labelled(labelled.get(uid), found) or v3_ends_labelled(labelled.get(oid), info)
                 # a cessation of what it claims or names (2026-10-02, RSL-4: 'takes apixaban 5 mg' tags the drug an
                 # adverb, so it claims nothing); one a text answer selects with it is part of that answer (its history)
-                or (found['ceased_keys'] & (mine_claim | info.get('named_keys', frozenset()))
+                or (ceased_affects(reading,other,unit)
                     and not (text_answer and oid in selected))):
             causes.append((other, None))
     # ANOTHER PERSON'S SAME TOPIC (none in a single-patient note)
@@ -3906,7 +4013,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     my_words = mine_claim
     for other in v3_floor_index(reading)['class_denials']:
         oid = other['id']
-        if oid == uid or oid in selected:
+        if oid == uid or oid in selected or pure_foreign_clause(reading,other):
             continue
         found = actors[oid]
         surface = found['surface_keys']
@@ -3915,7 +4022,9 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         # a re-attribution away from the patient, or a class denied OF THE ANSWER's own predicate ('takes no
         # anticoagulants' / 'takes warfarin') or naming what it claims ('has had no pain' / 'presents with chest pain';
         # not a modifier of it: 'expects no relationship changes' / 'The relationship reporting condition ...')
-        if found['reattribution'] or found['denial_heads'] & my_heads or found['denial_nouns'] & my_words:
+        shared=(found['denial_nouns']-denied_ending_keys(reading,other)) & my_words
+        if (found['reattribution'] or found['denial_heads'] & my_heads
+                or (shared and not separate_sides(reading,unit,other,shared))):
             causes.append((other, None))
     return causes
 
@@ -4074,6 +4183,15 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             [{k: choice[k] for k in ('quote', 'start', 'end')} for choice in sorted(choices, key=lambda u:u['start'])],
             ordinary_relation, field_key=item.key) if v3 and ordinary_relation is not None else {
                 'ids': set(), 'warnings': [], 'valid': False, 'self_reference': False}
+        field_inherited=inherited
+        if v3 and ordinary['valid']:
+            from .source_scope import future_event_at, completed_document_status_boundary
+            preceding=governance[11]['preceding']
+            field_inherited=any(not any(
+                kind == 'lexical' and u['start']<=start<u['end'] and future_event_at(preceding,u,start,end)
+                or kind == 'unfinished' and start == u['start'] and end == u['end']
+                and completed_document_status_boundary(preceding,u,choices,field)
+                for u in preceding['units']) for kind,start,end in preceding['inherited_causes'])
         if ordinary['warnings']: guarded = True
         history = {'ids': set(), 'warnings': []}
         if v3 and history_context is not None:
@@ -4128,7 +4246,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if notes[unit['start']:unit['end']]!=quote: raise ValidationError('Evidence offset mismatch.')
             evidence.append({k:unit[k] for k in ('quote','start','end')})
             if unit['correction_value'] and corrected_quantity(unit,field) is None: guarded=True
-            if v3 and unit['id'] in governance[11]['preceding']['unresolved_subjects']: guarded=True
+            if (v3 and unit['id'] in governance[11]['preceding']['unresolved_subjects']
+                    and unit['id'] not in ordinary.get('owned_subject_ids', ())): guarded=True
             # Fragments still hold. Contract v3 also recognizes complete syntax
             # beyond the historical verb list, without changing any context guard.
             if v3:
@@ -4162,9 +4281,12 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # (b2) HOLD-ONLY, kept: ONE STATEMENT, TWO SPECIFIC QUESTIONS. An unlabelled statement selected into two
                 # or more text questions that are not general narrative destinations is owned by none of them ('He has
                 # hypertension and takes lisinopril 10 mg daily.' for both Past medical history and Medications); rule
-                # (b) holds this shape only when a sentence stands before it.
+                # (b) holds this shape only when a sentence stands before it. A complete ordinary relation plus the
+                # bounded reviewed-source phrase/observation proof can serve independently applicable destinations;
+                # ambiguous/repeated competitors still refuse in that relation's reader.
                 if (label not in governance[11]['preceding']['general'] and not colon_labelled[unit['id']]
-                        and field.get('kind') in ('text','long_text') and len(specific_claims.get(unit['id'],()))>1):
+                        and field.get('kind') in ('text','long_text') and len(specific_claims.get(unit['id'],()))>1
+                        and unit['id'] not in ordinary.get('shared_ids', set())):
                     guarded=True
                 # (c) More than one sentence in one unit (a labelled line's remainder, a lowercase continuation), and
                 # (d)-(f) (`v3_shape_holds`): read once per unit (`shape_holds`).
@@ -4190,13 +4312,13 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if value and (value not in texts or unit['id'] in history['ids'] or unit['id'] in ordinary['ids'] or unit['id'] in complete_paragraphs.get(item.key, ())
                           or (v3 and label in governance[11]['preceding']['general']
                               and unit['id'] in scoped['complete'])): texts.append(value)
-        conflict=item.conflict or len(explicit)>1 or injection or (inherited and bool(texts)) or guarded
+        conflict=item.conflict or len(explicit)>1 or injection or (field_inherited and bool(texts)) or guarded
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
         own=evidence
         governed=judged_context(governance,notes,index,field['label'],own,history_context=history_context,
                                ordinary_relation=ordinary_relation,field_key=item.key)   # the RAW label
-        if (inherited or injection) and texts:
+        if (field_inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
         answer={'text':'\n'.join(texts) if status=='supported' else '',
@@ -4207,7 +4329,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             # The whole note stands in `evidence`, or its own unit IS the whole note (tenth pass: a one-sentence note's
             # ready answer, cleared, was judged fail-closed as if its evidence were the substituted span).
             answer['own_evidence']=own
-        if inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
+        if field_inherited and not (item.conflict or len(explicit)>1 or injection or guarded):
             answer=with_scope_suggestion(answer,notes,texts,own,set(explicit),
                                          governed,note_erratum=governance[8])
         elif status=='supported' and (context:=governed) is not None:
@@ -4809,6 +4931,25 @@ def request_bytes(request,without=()):
                        'schema':request['schema'].__module__+'.'+request['schema'].__qualname__,'payload':payload},default=repr)
 
 
+def role_response_bound(request):
+    """Reserve the complete canonical response, including optional role rows.
+
+    One token per serialized byte is conservative. Every question can select all
+    offered source units once; quote mode can retain every original source line.
+    Thinking gets separate headroom under adaptive thinking. An optional row that
+    cannot fit is left unasked, so adding it never spends the ordinary response's
+    room. Incomplete provider output still fails the whole job without settlement
+    as a successful usable generation.
+    """
+    payload=request['payload']
+    if request['natural']:
+        member='unit_ids';values=[u['id'] for u in payload['source_units']]
+    else:
+        member='quotes';values=payload['notes'].splitlines()
+    body={'fields':[{'key':q['key'],member:values,'conflict':False} for q in payload['questions']]}
+    return len(json.dumps(body).encode())
+
+
 def role_request(notes,form,context_labels,config,v3_fields,plain,candidates):
     """(suggested, asked, request) of a job admitted under the role-suggestion contract: the role fields it asks, every
     field it asks, and the request it sends. `form`, `context_labels`: what generate() was given; `plain`: the request
@@ -4826,6 +4967,12 @@ def role_request(notes,form,context_labels,config,v3_fields,plain,candidates):
         asked=v3_generation_fields(form,context_labels,keys)[0]
         try:built=extractive_request(notes,asked,plain['payload']['context_labels'],config,v3_fields)
         except ValidationError:return None
+        if config.get('mode')=='live':
+            profile=job_request_profile(config)
+            # Native adaptive thinking and text share max_tokens. Reserving 20%
+            # keeps optional role output from consuming the entire capped budget.
+            reserve=profile['max_output_tokens']//5 if profile.get('thinking') else 0
+            if role_response_bound(built)+reserve>profile['max_output_tokens']:return None
         return (keys,asked,built) if request_bytes(built,keys)==expected else None
     order=[f['key'] for f in form if isinstance(f,dict) and f.get('key') in candidates]
     found=asking(frozenset(order))

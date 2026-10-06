@@ -355,6 +355,7 @@ class LayoutGateOnTheCompleteFormBatch(V3Fixture, TestCase):
         self.template, first = self.uploaded(data=mixed_form(['Question %03d' % (i + 1) for i in range(101)]),
                                              name='SYNTHETIC tab-column batch')
         self.version = TemplateVersion.objects.create(template=self.template, number=2, fields=first.fields, contract='v3',
+            document_backend=first.document_backend, import_manifest=first.import_manifest,
             generation_constraints=manifest(first.fields, self.template.sha256), created_by=self.user)
         self.confirm(self.template, self.version)
         self.assertEqual(len(self.version.fields), 102)

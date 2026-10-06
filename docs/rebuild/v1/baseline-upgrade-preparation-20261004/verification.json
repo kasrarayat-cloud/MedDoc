@@ -1,0 +1,127 @@
+{
+  "applied_core_count": 37,
+  "authorized_downloads": 2,
+  "baseline": [
+    "core",
+    "0018_servicehealth"
+  ],
+  "denied_cross_department_downloads": 2,
+  "files": {
+    "exports/historical.docx": {
+      "bytes": 36718,
+      "sha256": "083db8ddf8efd339274378728be3e6ba951d78b6f52111d5f6ae477499b5ab0f"
+    },
+    "originals/historical.docx": {
+      "bytes": 36703,
+      "sha256": "f67f8696dc164e2e1f726bd4b11043e3cb6b3a74ef18589e1ec35f3ffd06a603"
+    },
+    "receipts/historical.json": {
+      "bytes": 84,
+      "sha256": "65210034406cd864b3a57c25aa69f39703060b5f3adeb5ef3796d8673beb2153"
+    }
+  },
+  "historical_invoice_status": "unclassified synthetic evidence; no reconciliation inferred",
+  "historical_payment_mode": "unknown; NULL preserved",
+  "migration_sha256": {
+    "0019_clinicinvitation": "aa92ae3550b051f34e9a7ecfbd26931ed9e3570bcb52138348cd7241129ffac8",
+    "0020_payment_livemode": "56f29d3fe71f6652973b305272fdbac850fd5398130dba4ffbf7e87ad1a777d4",
+    "0021_word_v3_mapping_review": "408c2210c3b244356b6d387c826287a0a8b63ce49730299e008142f9ba725be2",
+    "0022_mapping_job_scope": "676524cdd12693c58ba56b06644c0b197c5ae6bd69ec6909a87b66185cc9e549",
+    "0023_retention_preservation": "958487f6c3e4adeb1059a6aa5b5324962fe1acc62c680be7572b254c9a928240",
+    "0024_preserved_file": "21babc41e8c119cf9bbe6ed57f0cf118c26639cd56e3b520616d9c44f7994f7c",
+    "0025_preservation_guards": "33a8d1e3b6d20ff73cc0c1fecb91344ec67a738425c9607352d8549db95da268",
+    "0026_preservation_scope_identity": "8c6c7a516e7e9da34aa10d495659313fac4947e7f0d499a9b2901742b94a3a44",
+    "0027_generation_batches": "911a9c4f846a5441cd672d99571a6fd1389005b35aec4161a9a3bbe6b84d9d9c",
+    "0028_disposition_preparation": "a29506a90269672983ee79da6d19adb802e2c5bc944486d3fff1b6ce50a6d379",
+    "0029_merge_batch_disposition": "f8910d3e3ab81cd81b0d43db61dfcebd5bb8b09aa473b41281107f3f64879a82",
+    "0030_empty_draft_disposition": "ac0610f2112577addc1ddd8dca15c69a65a22df5489dceb349e70a76740fa5c7",
+    "0031_previous_release_mapping_writes": "585af52ce4faf98e41f5c364dd9e841d016e97f538c9ebdef5d35a1884a57766",
+    "0032_restore_hold_replay_admission": "ab50b3c3b5d57bea681c1f304f8771a0e19522373d852787703d19d26f1fa428",
+    "0033_redaction_tombstone": "a60c7bd76fd61087b0dd9c9643cca3fb4d89e0e0f4c6cc8a24bf1feb733e4213",
+    "0034_coding_ledger": "e0e936770284f2fbbf25c0382435b07ce5b9ea2ed7e80eb256c76d3225469aeb",
+    "0035_import_manifest": "627bb0430cfa942a92e38f97609b3dd2d80212683f1e0a6ff48428f97cb697bf",
+    "0036_transcript_review": "ea0a01cb6bc512759d3961638a5a6a1348d7c15d456d49a85ba7ebaddafbce97",
+    "0037_transcript_redaction_boundary": "a238cb5412eea595995a31c4f2bc95ad62e72219ce53fcb0447678072ff1271f"
+  },
+  "old_columns_sha256": "d420fffdd4a7491afd6b065acdc64849c1ce398b93cada6720260a0fffc36357",
+  "passed": true,
+  "row_counts": {
+    "core.auditevent": 1,
+    "core.code": 1,
+    "core.codeset": 1,
+    "core.codesuggestion": 1,
+    "core.costreconciliation": 1,
+    "core.department": 2,
+    "core.encounter": 2,
+    "core.invitation": 0,
+    "core.job": 2,
+    "core.ledgerentry": 5,
+    "core.loginattempt": 0,
+    "core.membership": 2,
+    "core.organization": 1,
+    "core.patient": 1,
+    "core.payment": 1,
+    "core.platformcost": 0,
+    "core.providerreceipt": 1,
+    "core.refund": 0,
+    "core.reservation": 1,
+    "core.servicehealth": 0,
+    "core.template": 1,
+    "core.templateversion": 1,
+    "core.usage": 1,
+    "core.user": 2,
+    "core.user_groups": 0,
+    "core.user_user_permissions": 0,
+    "core.verification": 0,
+    "core.wallet": 3,
+    "core.webhookevent": 1
+  },
+  "scope": "synthetic own-database forward rehearsal; no installed mutation or provider calls",
+  "target": [
+    [
+      "auth",
+      "0012_alter_user_first_name_max_length"
+    ],
+    [
+      "contenttypes",
+      "0002_remove_content_type_name"
+    ],
+    [
+      "core",
+      "0037_transcript_redaction_boundary"
+    ],
+    [
+      "otp_totp",
+      "0003_add_timestamps"
+    ],
+    [
+      "sessions",
+      "0001_initial"
+    ]
+  ],
+  "source_base": "6d44ff862d93f1e7f2f4a0fa85c329f33190dc0d",
+  "tested_route_fixture_commit": "a769536b6c5b2d724abc69a33a255d35929d72f9",
+  "test_module_sha256": "8340cd5839805270fb2b4d43b5cb620f321c1d9f5ad351f5bf3efb74e37e613d",
+  "test_methods": 1,
+  "test_seconds": "10.756",
+  "actual_exit": 0,
+  "database_destroyed": true,
+  "historical_table_count": 29,
+  "historical_row_count": 32,
+  "snapshots": {
+    "baseline-rows.json": "fac5758be9afafd5986ddcf2a5a784c5797810c364c67a4c6abf5f1b87e33ca3",
+    "historical.json": "65210034406cd864b3a57c25aa69f39703060b5f3adeb5ef3796d8673beb2153",
+    "verification.json": "325c9d0a3b24ac1bbdc9c13a6235a93f89dcdb3a9e0d3c8947e5c4d9cf1623e7",
+    "migration-plan.json": "d4d2383498b9dd876284a39257d0639b3630455d2f721c75d15ea3942d59e6f6",
+    "historical.docx": "083db8ddf8efd339274378728be3e6ba951d78b6f52111d5f6ae477499b5ab0f",
+    "upgraded-old-columns.json": "fac5758be9afafd5986ddcf2a5a784c5797810c364c67a4c6abf5f1b87e33ca3"
+  },
+  "first_attempt": {
+    "scope": "fixture helper parameter collided with Organization.name before population or forward rehearsal",
+    "test_seconds": "10.178",
+    "actual_exit": 1,
+    "database_destroyed": true,
+    "log_sha256": "d2d8e62e6842769e0b2c6e253c0b5338ef5f5fd030494700b9c47993a185c9bc"
+  },
+  "passing_log_sha256": "9524f018a4dd0dad12d6290fece89692be3bc5eff94dea73efc65beb0c9f7721"
+}

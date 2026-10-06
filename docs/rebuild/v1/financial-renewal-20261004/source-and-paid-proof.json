@@ -1,0 +1,3502 @@
+{
+  "format": "quillmd-financial-source-renewal-20261004-v1",
+  "candidate_base": "1983e7fa1ac32c8687cb30b590981b80847189ee",
+  "financial_proof_only": true,
+  "clinical_release_qualification": false,
+  "invoice_reconciled": false,
+  "original_evidence_packet": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/financial-renewal-19d1e269/source-and-genuine-evidence.json",
+    "sha256": "15d702b58fda130e23713d6982e096fa6545871696d30b320ad203705d1f8d9e"
+  },
+  "original_accepted_three_fingerprints": {
+    "ORDINARY_PRICED_SHA256": "efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb",
+    "BATCH_PRICED_MODULES": {
+      "core/generation_batch.py": "c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02",
+      "core/batch_jobs.py": "0e5dc19bda55a29a3b07691dca2a256da1e5198d85d2ef130a7545d1e0bffeda"
+    }
+  },
+  "renewed_values": {
+    "ORDINARY_PRICED_SHA256": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+    "BATCH_PRICED_MODULES": {
+      "core/generation_batch.py": "3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152",
+      "core/batch_jobs.py": "b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74"
+    },
+    "ORDINARY_PRICED_DEPENDENCIES": {
+      "core/generation.py": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "core/ordinary_source_scope.py": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+      "core/reviewed_source.py": "8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157",
+      "core/reviewed_procedure_source.py": "aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0",
+      "core/source_scope.py": "5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1",
+      "core/v3_actors.py": "bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275",
+      "core/v3_syntax.py": "d38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96",
+      "core/v3_literal_facts.py": "5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034",
+      "core/reviewed_speaker.py": "4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91",
+      "core/transcript_context.py": "e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff",
+      "core/v3_destination.py": "b8ff1dff5825ef66c86c43d3db21fd9e7b9b8468179205ebac01899e347809ef",
+      "core/v3_mapping.py": "34cae0324aa323299cea26e035c560d32a5aeda23fc25e435234ab73c2e5c87c"
+    },
+    "ORDINARY_PRICED_INPUTS": {
+      "core/v3_syntax_model.json": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+      "requirements.txt": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+      "requirements-production.lock": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+      "requirements-production.manifest.json": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade"
+    }
+  },
+  "whole_module_function_and_import_scope": [
+    {
+      "path": "core/v3_field_relations.py",
+      "bytes_sha256": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "whole_AST_sha256": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "FieldSelection",
+          "line": 73,
+          "AST_sha256": "d012d6377ec594587e5f8d5e44dbeac4a8acc4e7459b1ce07460944278d64524"
+        },
+        {
+          "name": "FieldSelections",
+          "line": 83,
+          "AST_sha256": "71f1c76cf4d965c3bb1e089f9bfa892c3aac953c8fbd4c0c6b8de68da8110f33"
+        },
+        {
+          "name": "digest",
+          "line": 88,
+          "AST_sha256": "9eef5209a1fa28b854d2b4a890951a0f2594b372227561a3c9e4fa0b5c14a836"
+        },
+        {
+          "name": "enabled",
+          "line": 93,
+          "AST_sha256": "af0009d66dfc4c5c2b07055f17257e4ac1b8280e2f125297ba6a65efb2d2fc95"
+        },
+        {
+          "name": "require_config",
+          "line": 105,
+          "AST_sha256": "20219617858e1c0ab047a519f8eaaeda2cebe526ce89118a7e09fdbcee3cc398"
+        },
+        {
+          "name": "options",
+          "line": 117,
+          "AST_sha256": "e7d7e7cb3e5aaa1a3be14f570c89dc0c6c4b6b852bee732eb4b845b7492c743c"
+        },
+        {
+          "name": "binding",
+          "line": 126,
+          "AST_sha256": "600c563a7c9f0cf5ac8ce386bc65ce33e2b11ebfad27e4fc1c582b2dac1ca706"
+        },
+        {
+          "name": "competitors",
+          "line": 132,
+          "AST_sha256": "5273c0424d7f6587c56f995db351fe9064397ed9c958f8319c714066cd2d258c"
+        },
+        {
+          "name": "response_bound",
+          "line": 136,
+          "AST_sha256": "9b141408872404362cb3631950be47f4ae73016780c4882dc29c8c4438e66ef7"
+        },
+        {
+          "name": "response_schema",
+          "line": 155,
+          "AST_sha256": "04c22d3dfa3cb2a865d84e644d46bac88c5975b0da96cd5bab4053adca3ea979"
+        },
+        {
+          "name": "_malformed",
+          "line": 185,
+          "AST_sha256": "299e07c1c5701d461b6d3bf2befeaa5f3d7fefca09d8edc834122a27d9816027"
+        },
+        {
+          "name": "_members",
+          "line": 189,
+          "AST_sha256": "e8f9b0df1241538c9038341a1b9c09efda3e0c625b4ae3a1b1cf99539d173f98"
+        },
+        {
+          "name": "_no_constant",
+          "line": 196,
+          "AST_sha256": "a2d1857bb2f7de95a0a81e4680f67c396df1c8cd261a404dc872d27a374ba553"
+        },
+        {
+          "name": "parse",
+          "line": 200,
+          "AST_sha256": "40ba2b053c90f8242bc8124d2794d619b92ef9e4390997c322d915c73a4f293e"
+        },
+        {
+          "name": "compile_request",
+          "line": 262,
+          "AST_sha256": "810780a5564ac47ce8a8291de12b9dcd9f8fb8cb8cc9beb09765895f493da623"
+        },
+        {
+          "name": "maximum_cost",
+          "line": 305,
+          "AST_sha256": "3ee0145813390f0b92a1bc09e998b38dc68f1bd4c2276268aad9beea147f0538"
+        },
+        {
+          "name": "disagrees",
+          "line": 314,
+          "AST_sha256": "b31cabf7662545024362494adcb51842fd8119137fbc332df58a7aeceeb3d3e9"
+        },
+        {
+          "name": "claimed",
+          "line": 326,
+          "AST_sha256": "b233ddf2f351966b4b36eae000f677cbe97463b576dcfee82a7d35d564f09651"
+        },
+        {
+          "name": "records",
+          "line": 338,
+          "AST_sha256": "40eafc912da3e02eee9704fd38b3ad342f0f352d5267ade9f560acd135120c35"
+        },
+        {
+          "name": "sole_released",
+          "line": 376,
+          "AST_sha256": "ecf6c0c548980a1f6d961b05ac19cd82b4a60b58b66b815217debaa7862c6b92"
+        },
+        {
+          "name": "_owner",
+          "line": 429,
+          "AST_sha256": "b074acd13c3fec8fb7e5623597d156afbcd08b37d7e79cc2f025f6a6630fd351"
+        },
+        {
+          "name": "sole_independent",
+          "line": 436,
+          "AST_sha256": "d5305c2511d628c0e16a1fffd6801a8058720cdaa5f5d337e931b229b38b1201"
+        },
+        {
+          "name": "option_view",
+          "line": 540,
+          "AST_sha256": "e6deb532331ed0dd901efb043e6b78f1c0a7cea20e8ca9012f2b618e08509dd3"
+        },
+        {
+          "name": "own_heading_reference",
+          "line": 552,
+          "AST_sha256": "9a1070d56407269bfe0c26ce85020de525e5a45f955776867116cec8b0e72b26"
+        },
+        {
+          "name": "read",
+          "line": 571,
+          "AST_sha256": "6c6a034e8d4f378f56861a90535e11da77b24698e645711a058fb3b4785285a9"
+        },
+        {
+          "name": "generate",
+          "line": 727,
+          "AST_sha256": "fa603584c728533e59036fcb6e3aae2bdc7712d2aa48845635b818838a014c10"
+        },
+        {
+          "name": "validated",
+          "line": 747,
+          "AST_sha256": "f6e81b7413de75a4f1112a1dac5ac9092335018fa6d9b4e935c26c033805bfdc"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/generation_batch.py",
+      "bytes_sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+      "whole_AST_sha256": "3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "BatchSelections",
+          "line": 49,
+          "AST_sha256": "39f95ac98a0aee319de9987e3fd4b7e8317e464af227cb2f55938edbc368f92f"
+        },
+        {
+          "name": "digest",
+          "line": 53,
+          "AST_sha256": "1df04d1976502b2c06558c23ec24acf144499a7f35389362e7d8031abfb2cc0f"
+        },
+        {
+          "name": "enabled",
+          "line": 58,
+          "AST_sha256": "955b1a86266f3fa45cad02371bce9f7cfafd3fde253d3c270e17543084f21261"
+        },
+        {
+          "name": "needed",
+          "line": 62,
+          "AST_sha256": "24faaf56464446be87009d697f50fdad5a6075e7dd0de120b5c7d4b05f2dbf00"
+        },
+        {
+          "name": "refuse",
+          "line": 73,
+          "AST_sha256": "e09f7799c81837b9ae3223029cce56e97c2e98ef5bb130c9bb42a90d27477e20"
+        },
+        {
+          "name": "relations_parts",
+          "line": 77,
+          "AST_sha256": "78f529ad9c44b5339bff161a9f019c7ef51954207d52b2b1cda1f522b4079c7e"
+        },
+        {
+          "name": "require_config",
+          "line": 84,
+          "AST_sha256": "de8b645226f8321024026d89047b4e7f881b4525bc435d3f1e8afb6a844cbebb"
+        },
+        {
+          "name": "constraints",
+          "line": 103,
+          "AST_sha256": "0f919d9ea1d062f7c1a49936895ba7979bf1790f5f5c600fefb03ab9eab93947"
+        },
+        {
+          "name": "plan_constraints",
+          "line": 172,
+          "AST_sha256": "a2df95f3ed7e04917f626bb3da9f0f88e64a1a0cabaf2c96f2539b7045e16e3e"
+        },
+        {
+          "name": "constraint_values",
+          "line": 182,
+          "AST_sha256": "585450401175482701d685929a4cb7d05f6f03c3b86ac363f4100b97dea9b820"
+        },
+        {
+          "name": "option_reader",
+          "line": 198,
+          "AST_sha256": "39f5dd82b3f43abecf92a1abefcdf6c4d7a93b3d21ec77381a6a6b0756a6b5ce"
+        },
+        {
+          "name": "effective_values",
+          "line": 213,
+          "AST_sha256": "fd3cfdef7d602c2e36b70c781eeb57fac13caa93bd8cc34d900e2e6710854a3e"
+        },
+        {
+          "name": "validate_constraints",
+          "line": 251,
+          "AST_sha256": "2577d69cbf7db15a72aec0c0e50bd9c3a5b7dbd4603a3f137f4a3ada093d7b75"
+        },
+        {
+          "name": "check_answers",
+          "line": 270,
+          "AST_sha256": "c315efe5e0d0af9ad0be772d2ac13b18d10e682a609d885379b4977e9b2843fa"
+        },
+        {
+          "name": "partitions",
+          "line": 278,
+          "AST_sha256": "45d9662d1fd6e23bbb2ce999d5aaceb7aecee1eab56c99ad90f5d330efcca263"
+        },
+        {
+          "name": "request",
+          "line": 311,
+          "AST_sha256": "1ad27207f5698a90233952110c0e98735587ea650174a194475cf697a12ce982"
+        },
+        {
+          "name": "plan_for",
+          "line": 353,
+          "AST_sha256": "4e134e558503123697e5beb4b7ade36b3b93c4002b8260f4c92e7a40008eda95"
+        },
+        {
+          "name": "parse_part",
+          "line": 410,
+          "AST_sha256": "bce7c60fe91a38f10f03daf569d55d418e2c4051228968060fca2e4e303363b5"
+        },
+        {
+          "name": "assemble",
+          "line": 448,
+          "AST_sha256": "d15cf3b89df7614582f406d779f7fbc9b67bac2e33f3957aea39576a25227caf"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/batch_jobs.py",
+      "bytes_sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+      "whole_AST_sha256": "b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "pending",
+          "line": 21,
+          "AST_sha256": "cef831ebd009f655270e8b08b5aba785baaa981e967ee3c484f7cad248f4449f"
+        },
+        {
+          "name": "quote",
+          "line": 26,
+          "AST_sha256": "d9e85da726264c6a7a86eb09d2962fd38789908d5692f5fea6b01440d365ddbb"
+        },
+        {
+          "name": "event",
+          "line": 34,
+          "AST_sha256": "099a00a9a0b2b96b8c8e62a454c5f53b35d19581b084c576e0a7509cca6a2cd5"
+        },
+        {
+          "name": "enqueue",
+          "line": 41,
+          "AST_sha256": "3df36e64edb71692fa9b7d3660472130d700aeb8688bea10218b199085ca75ec"
+        },
+        {
+          "name": "current_plan",
+          "line": 111,
+          "AST_sha256": "ff428557049925943e816c0b694f60a141d0cc47b62d82da5dde1e1081d5c8fb"
+        },
+        {
+          "name": "fixture_response",
+          "line": 135,
+          "AST_sha256": "04959b95f998e8f8cd8e564eeb81463eb7c696a7af7f7b994baa84af7bc8568e"
+        },
+        {
+          "name": "store_response",
+          "line": 153,
+          "AST_sha256": "3e4b247d443cfec736b1ec48a61a93961b985d1ab1518615d0cb319642913cc3"
+        },
+        {
+          "name": "read_response",
+          "line": 195,
+          "AST_sha256": "227b1531de4008992b7a4fd53822e5dab8029e7d9621fc98e255ad54a80f65fd"
+        },
+        {
+          "name": "stop",
+          "line": 209,
+          "AST_sha256": "e5bb7b8994442bce9ce8500e94c85ebcc2f5b2390428c1d783951e866212fbb9"
+        },
+        {
+          "name": "finish",
+          "line": 256,
+          "AST_sha256": "3e672e174dcd0227a001ad15899c442baa994a79e71ce4bf64a0054089a84400"
+        },
+        {
+          "name": "run_one",
+          "line": 307,
+          "AST_sha256": "b1619312cba8449df62db51fd0304c195a05790399c3d3722e21eb5435d652ab"
+        },
+        {
+          "name": "mark_stale",
+          "line": 398,
+          "AST_sha256": "5cda3c4f7da607b81071410e88277da64b151ea6ea834e7231f9d901a0377fed"
+        },
+        {
+          "name": "cancel_child",
+          "line": 417,
+          "AST_sha256": "76c573564e7e55db6868c0987dd6b16165ed63c56e9a12fe63db46402d77c0d1"
+        },
+        {
+          "name": "require_admin",
+          "line": 429,
+          "AST_sha256": "be35f8ec4419f21c2bfab92bedb03f6e0b0cf60bee456893ae0ed9c4f116cabb"
+        },
+        {
+          "name": "resolve_view",
+          "line": 434,
+          "AST_sha256": "5a8a28ab97de0eb6de1468709352b64a7b6178b512e8dcb2b3107b47ed14e1b7"
+        },
+        {
+          "name": "recover_recorded",
+          "line": 492,
+          "AST_sha256": "b585d6787b01e26c1ce73c6e02c3a218ef04c607f69c06c3888f027fae4267cd"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/generation.py",
+      "bytes_sha256": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "whole_AST_sha256": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "Selection",
+          "line": 16,
+          "AST_sha256": "c7c61ff2f05027aa4dbdd1b701057c15e3b32694e2fa0c085696757e21dff1f5"
+        },
+        {
+          "name": "Selections",
+          "line": 21,
+          "AST_sha256": "9172163d3ab32a452cfdf4fc4f06874e1abe1d4881d19c1b0717e2ab92eb0ce6"
+        },
+        {
+          "name": "UnitSelection",
+          "line": 25,
+          "AST_sha256": "98a4148ed2df9188281b0dbd11fb030cb88bb396a40f1d0da735571e2595448d"
+        },
+        {
+          "name": "UnitSelections",
+          "line": 31,
+          "AST_sha256": "e51d63ddb27372209dd3abd0842efe68d374ace68697ae88ddd19c9398603bd5"
+        },
+        {
+          "name": "claude_generation",
+          "line": 210,
+          "AST_sha256": "6c4e721c71763a85c30326d88bbf09413618b731fff842c5325f0eaa4bb6918d"
+        },
+        {
+          "name": "plain_model_id",
+          "line": 237,
+          "AST_sha256": "a74e70e33ce3c29edf7610f4ce8668f5359e3e94c6a2b4c47e0485a41da39772"
+        },
+        {
+          "name": "unprofiled",
+          "line": 242,
+          "AST_sha256": "0402bef6637739ebd5340f078c6194965bf10483444a5c89e0544681612f06c2"
+        },
+        {
+          "name": "request_profile",
+          "line": 262,
+          "AST_sha256": "513ed84f6c5db5b98e0287823fec720f35127c1f1400c8d9482bd54c2af1d806"
+        },
+        {
+          "name": "_refuse_profile",
+          "line": 312,
+          "AST_sha256": "701f4f91168af3707bba782cc8193995d4815003b9169654599800de1448ddc8"
+        },
+        {
+          "name": "job_request_profile",
+          "line": 319,
+          "AST_sha256": "a9653c9bb7c4d184996fd78c12c07cc6f021f5d1692e696098f29d3c185b23dd"
+        },
+        {
+          "name": "listed_rates",
+          "line": 389,
+          "AST_sha256": "9723cc57c44bf3e1034e80f6d13d680e1fbb8378d18a51ec7dd61ae429d879a2"
+        },
+        {
+          "name": "anthropic_request",
+          "line": 399,
+          "AST_sha256": "3ab92ed024ab3e86b35228644f2719833cb54de14beba29124a2ece42aea235e"
+        },
+        {
+          "name": "us_inference_priced",
+          "line": 422,
+          "AST_sha256": "d9b09a7ec8543b9307d5636113f150f28404f3c787498e4cee14656718be6538"
+        },
+        {
+          "name": "anthropic_usage_facts",
+          "line": 430,
+          "AST_sha256": "f178a88ccaa74573ec76923c74a3c02744eab4a444d2d5d86c2af31e112aa700"
+        },
+        {
+          "name": "us_inference_multiplier",
+          "line": 446,
+          "AST_sha256": "b88b1100be456f0f956b5a3558108db980c129536e7b74abb42977e2a970a39b"
+        },
+        {
+          "name": "configuration",
+          "line": 453,
+          "AST_sha256": "17399a604ccdc6593117976dd6d4218c1f6dd1efddf9a391ad7f6a3b2df3c14f"
+        },
+        {
+          "name": "field_relations_enabled",
+          "line": 505,
+          "AST_sha256": "8eb1da1951f5dc5a14cda8871410441e581d4d455e1d7a9d9d959eb4a3f81644"
+        },
+        {
+          "name": "ordinary_pricing_version",
+          "line": 520,
+          "AST_sha256": "7a7ce6f0f6766f3ca590e2bcbdbe7c2150b358965afa55bb9207ad27b7883ce8"
+        },
+        {
+          "name": "role_suggestions",
+          "line": 540,
+          "AST_sha256": "4a5d3dc7f6d18d209dfa41c2357e3cba42b34ca95ecc39e8544bb780ecf060bd"
+        },
+        {
+          "name": "admitted_with_role_suggestions",
+          "line": 545,
+          "AST_sha256": "c8799f0167ded03d2449d75d0b011f4afc2c3ec295e21b4f3578294dd8699c5c"
+        },
+        {
+          "name": "narrative_contract",
+          "line": 557,
+          "AST_sha256": "acc88126c15672f676fd38a79ad4ffcf3e46a13677e4df2d434c760889beac7a"
+        },
+        {
+          "name": "narrative_refusal",
+          "line": 562,
+          "AST_sha256": "b5bf361563c82e11dd31e8b7b5ffb5d431f76d326b3e00e65f1276230b10dadc"
+        },
+        {
+          "name": "normalized_discount",
+          "line": 574,
+          "AST_sha256": "5b9cf3532ca13428ce56b2059f7c385f0e8ed2c14100512f69815046cecd07e9"
+        },
+        {
+          "name": "discount_rate",
+          "line": 591,
+          "AST_sha256": "58e26b35050dbd1ed5483b2fa77c7d3af8552a77f8dd27883f5dd558f0b4d125"
+        },
+        {
+          "name": "discounted_cost",
+          "line": 595,
+          "AST_sha256": "2d517b29806942fee9a1b3abfed735e1f0a3f13cc886bfd5be7488aeb23ca060"
+        },
+        {
+          "name": "cost_rates",
+          "line": 604,
+          "AST_sha256": "70496a31c70175338e12185d127f42cf5c16f2ecbd7bc7547319bab64dc6af85"
+        },
+        {
+          "name": "rates",
+          "line": 609,
+          "AST_sha256": "504eea70c848f7d77c8a1934dac74cf502fb091910f905ff3c9edf290f44e95a"
+        },
+        {
+          "name": "maximum_cost",
+          "line": 617,
+          "AST_sha256": "952a4b833198456c96c0c53f932a4490ed9cd04ff9293a2ef42b52662bb80b07"
+        },
+        {
+          "name": "Labels",
+          "line": 668,
+          "AST_sha256": "f6c4d125caf4007125ba2840429776af1eac704eaacf2160e8eabe26099e4c3d"
+        },
+        {
+          "name": "question_key",
+          "line": 688,
+          "AST_sha256": "b56b1f95e7a462312c8f6eb0e9b2aafb8c82aa27643302984ea5602c14cf7e1e"
+        },
+        {
+          "name": "recognized_labels",
+          "line": 694,
+          "AST_sha256": "68d4cb23cb381134483f39ac94794ee3fdb6a27488699cde534862770e3a71e0"
+        },
+        {
+          "name": "labelled_value",
+          "line": 704,
+          "AST_sha256": "e8e4aea833e78bbd8846a6ea5324d47e826177e5b569f9cbccc1c09520e1d360"
+        },
+        {
+          "name": "natural_v3",
+          "line": 737,
+          "AST_sha256": "30be6b6d94f8c496548b747d901ca80bf834353dea0980bdbc0a8e6a7dc1a36d"
+        },
+        {
+          "name": "v3_natural_contract",
+          "line": 743,
+          "AST_sha256": "5f47664194bd36dcc0281cead2fa9b43aeb430b9862a8ce998767b300ea5462c"
+        },
+        {
+          "name": "fixture",
+          "line": 748,
+          "AST_sha256": "78ab5a83a91672ef0faa4da6abe70b1786f9e8b8a6a5a1155c74f24077b63449"
+        },
+        {
+          "name": "corrected_quantity",
+          "line": 828,
+          "AST_sha256": "c0f5a3698142bebed8b6e03f769a7a41c4b7e5f559a31a6f1b6f7f0069c4832e"
+        },
+        {
+          "name": "tab_evidence_contract",
+          "line": 847,
+          "AST_sha256": "21ae2b2469af9670529e1a3aa4b1e20d348f85547ee78a6dc53afe504d7e4fec"
+        },
+        {
+          "name": "sentence_boundaries",
+          "line": 852,
+          "AST_sha256": "df1dccef27a0c80a89289f4e5eee032592bdbd5e4cafcb6f9e0417997ead19c5"
+        },
+        {
+          "name": "SourceUnits",
+          "line": 865,
+          "AST_sha256": "487474a85ae84f1413ec6775ad7b07719ae5cd971ffcb2e2f7a78b5da1afaf40"
+        },
+        {
+          "name": "source_units",
+          "line": 872,
+          "AST_sha256": "b52ef7339379ed78b3b3858b1a3619f66aa5d1b3a66cbca2099ff5b634e4129d"
+        },
+        {
+          "name": "unit_selections",
+          "line": 928,
+          "AST_sha256": "026ced1404b380b80108799f332fd6fea3ddcc3b27ea754eee29744a510bd4e4"
+        },
+        {
+          "name": "tab_source_value",
+          "line": 939,
+          "AST_sha256": "21826d7b67a8d12edd7fa96f997d1818d4faf66b19c9e9dd70c0e8abbb5646d9"
+        },
+        {
+          "name": "suggestible",
+          "line": 971,
+          "AST_sha256": "04186d1f60ee96b45ec710a267f17afa2d54376d1051b95211321d76117ea4b1"
+        },
+        {
+          "name": "negative_heading",
+          "line": 1000,
+          "AST_sha256": "3a06afe72b9034856c2d4d57af73fad91c77acc90f7fcdd5d8aafe7621b1fe2a"
+        },
+        {
+          "name": "invisible",
+          "line": 1038,
+          "AST_sha256": "9ef15896a5b3130164b14d58bf69105aecd2bfc4ddb6218073a5c68aecdbcacb"
+        },
+        {
+          "name": "blanks",
+          "line": 1049,
+          "AST_sha256": "074d8632fb6b1c12a5cf26bec94ea20b53172a226c1946d0b21aba0843ecbee0"
+        },
+        {
+          "name": "visible_end",
+          "line": 1058,
+          "AST_sha256": "2d87f042a90e757fe02d7ec5272dd8b3518a965a4bd498d1c7b88bad36f17634"
+        },
+        {
+          "name": "blank_set",
+          "line": 1070,
+          "AST_sha256": "0a9681ecec719f25814a463805ee23d7e1e08371c84a6785e277f8ee01c2a7bf"
+        },
+        {
+          "name": "heading_colon",
+          "line": 1101,
+          "AST_sha256": "b7cfd8f6e6b8aa5605fa354be060ac4fe95dab2557a31b67f6eb15ecfa3aa631"
+        },
+        {
+          "name": "ends_in_colon",
+          "line": 1141,
+          "AST_sha256": "f53ebfb779b8d3b041c03a112c07941363d96093400fe0485180a2cd26b3be80"
+        },
+        {
+          "name": "readings",
+          "line": 1146,
+          "AST_sha256": "537c4321625b87b800667c4af6d3879093ffb139af9c7c4213fb8078fa6e7534"
+        },
+        {
+          "name": "safety_readings",
+          "line": 1160,
+          "AST_sha256": "9c613acfe3bb0dbb7c0bb6620b905eea1eaa34fd02387dc57da8ff652adc2142"
+        },
+        {
+          "name": "invisibles",
+          "line": 1171,
+          "AST_sha256": "be83cf333c7d8d32afcb042b2ef88144047b71901ed929958a1cbb297638fac2"
+        },
+        {
+          "name": "denial_before_colon",
+          "line": 1177,
+          "AST_sha256": "0917c415afc5efa7e7720fb9920bac1cf50a294f54dabdf298297644a48b7080"
+        },
+        {
+          "name": "governs_other_lines",
+          "line": 1188,
+          "AST_sha256": "cc94f874f115e87dd16f5782621d730dce6d2675f2e0e25128ab2349445bf2a2"
+        },
+        {
+          "name": "_plain_pointer_only",
+          "line": 1203,
+          "AST_sha256": "adc9f8045061c8dd47a48886f0f36317fa5c825754665a3f7e26e9585c2b1feb"
+        },
+        {
+          "name": "with_scope_suggestion",
+          "line": 1226,
+          "AST_sha256": "34f2498a7cd9e48400d5024ef90cefa4c4a69e4b029835aa7da3ea355b1ba83b"
+        },
+        {
+          "name": "held_reason",
+          "line": 1396,
+          "AST_sha256": "aeaec08df4a32e425c697eb92c96f601e6877747ffc300079a58b3826493051d"
+        },
+        {
+          "name": "changes_meaning",
+          "line": 1410,
+          "AST_sha256": "3f5d7ee9334c073aaeb33b5b597a0cd705231d934c3653bda8bbf886dbf9d3ea"
+        },
+        {
+          "name": "positioned_readings",
+          "line": 1415,
+          "AST_sha256": "4e1cb77fcafc8519a0bcc1c8bfc470e6c012f496d3a6a6ea14ff4369ca006b1a"
+        },
+        {
+          "name": "forward_points",
+          "line": 1426,
+          "AST_sha256": "54cd0e0beb8d6a4dccf955e89a67cdfb28e55262f5cfd5427de6ee6c45676182"
+        },
+        {
+          "name": "erratum_points",
+          "line": 1449,
+          "AST_sha256": "976c0a5799a1e49351a75bd07b3e04e9096afa35de5e6e33b88a6dd541472406"
+        },
+        {
+          "name": "bracketed",
+          "line": 1468,
+          "AST_sha256": "90309c79f0f79972827e9117c663e3e1c40b9adc33467ac1e45947c6d34107d3"
+        },
+        {
+          "name": "sentence_spans",
+          "line": 1482,
+          "AST_sha256": "0f03ab2010651c0fd5648c8e316b034f3b621726afcb1e05e3e1fd1c888073dd"
+        },
+        {
+          "name": "qualified_word_form",
+          "line": 1494,
+          "AST_sha256": "208ef1a3d793efcff09bc2273669537cec3ab714025e77946d4b3b6307cb6e1f"
+        },
+        {
+          "name": "bare_label",
+          "line": 1515,
+          "AST_sha256": "64dac776f188a3bdf8ace861f55ff25709a69103539d6ff766fb92777d941a04"
+        },
+        {
+          "name": "heading_governance",
+          "line": 1531,
+          "AST_sha256": "924d192f203c2279d710b327862d1e1ade4f07579ccc0be32d8363901e490c81"
+        },
+        {
+          "name": "question_labels",
+          "line": 1686,
+          "AST_sha256": "4ea03a6f7c1bab3f109ee9b550f28546f2f27d4e3dd22f064be284c79abf8a44"
+        },
+        {
+          "name": "question_value_heading",
+          "line": 1691,
+          "AST_sha256": "53b4047a5aac040f06a8aea1db36b0d94c7fa352998c7525152d51c2126ac0ae"
+        },
+        {
+          "name": "answered_label",
+          "line": 1704,
+          "AST_sha256": "f396f438f24ec3f14efb47240654c087a5dadb30ef4c69ed31fe0bb5932e6075"
+        },
+        {
+          "name": "corrects_its_own_answer",
+          "line": 1716,
+          "AST_sha256": "2fe6a45e39317f1f8addfec34c481865c7c1b704b1116a473972592c229361cc"
+        },
+        {
+          "name": "shown_quote",
+          "line": 1729,
+          "AST_sha256": "3c50900ce939262deac9e1466f013c8d2ffcedb406949ed029ea5228f04361a2"
+        },
+        {
+          "name": "Occurrences",
+          "line": 1735,
+          "AST_sha256": "61151e693b2e160dd116a5f1449f17ef75b8326bf3ffdde9f96df9c02ad48bc4"
+        },
+        {
+          "name": "occurrences_of",
+          "line": 1740,
+          "AST_sha256": "bfef3ec0608da818889dbbd26bd5ee77b4f78bb7748c4b29e4d65d7fbbac789b"
+        },
+        {
+          "name": "governed_context",
+          "line": 1748,
+          "AST_sha256": "e42252d58e5407f119d7ad499a9c2db7d35fe2100dceee9ea6e8fbd1d6812e7e"
+        },
+        {
+          "name": "held_for_decision",
+          "line": 1890,
+          "AST_sha256": "afb3a12bd4fb3e777bd79de084b53fadf3d407a9cdf118c85aa317d93fb7abd5"
+        },
+        {
+          "name": "with_governing_lines",
+          "line": 1901,
+          "AST_sha256": "3c4edae85bb5d5343cf2052687c29078a80e0daeb9ab8804b735a955fd3c49e1"
+        },
+        {
+          "name": "occurrence_index",
+          "line": 1911,
+          "AST_sha256": "d186c976a58c46ef11a388835f73aedbb292d1a9e6e3cd591c0728ae26f61fa2"
+        },
+        {
+          "name": "judged_context",
+          "line": 1947,
+          "AST_sha256": "62ab622f1476d345f8b03955e2a2d6d747006b8a145b830c250330ffd2aa4b2d"
+        },
+        {
+          "name": "v3_bare_repairs",
+          "line": 2040,
+          "AST_sha256": "20679df800a4d059022198c0f34b0a0423c7e05eed381610667c16c5ded9cd5c"
+        },
+        {
+          "name": "v3_repair_apart",
+          "line": 2081,
+          "AST_sha256": "ce5a8b98ff5ec289d6610b5fdc8059d95c50abc749f368c3fbc9bb1aa11d1040"
+        },
+        {
+          "name": "v3_relation_corrections",
+          "line": 2103,
+          "AST_sha256": "6f10526acf8262f59abdbebe062fde76d588895940fc563d9605407a25caba4b"
+        },
+        {
+          "name": "governance_for",
+          "line": 2140,
+          "AST_sha256": "f66b73da9f90276c93b28295359d7064293ea652f094999b2b6b288cc2267c18"
+        },
+        {
+          "name": "page_context",
+          "line": 2175,
+          "AST_sha256": "0a1d1a5701731f5e0c2dc01faf4859ef7c07bc60ba5e7a565534a0f757413c3e"
+        },
+        {
+          "name": "withheld_note_wide",
+          "line": 2183,
+          "AST_sha256": "4cd006869cb6b8b2c15d628ad02444fde39a29b9ecd16507afc5135f4667a281"
+        },
+        {
+          "name": "offer_context",
+          "line": 2189,
+          "AST_sha256": "dc341dc845053fbea61a2b576d1e6b86917e45bb0351db7053347317230e3645"
+        },
+        {
+          "name": "governed_supported",
+          "line": 2199,
+          "AST_sha256": "edcade8651ec17ecb92ee915aeb2898ebc1a0cbec9e2245402c93643cc250e72"
+        },
+        {
+          "name": "own_evidence",
+          "line": 2209,
+          "AST_sha256": "e01972a31f60c160dab65f52c88e52674bdfe3e35d65b97d611d7e06dc6a6268"
+        },
+        {
+          "name": "seen_text",
+          "line": 2222,
+          "AST_sha256": "c46a3e2f2c06dcf6ec92399ab4a2410a1315cfe5cf6213d95be5a2ad4585f2b8"
+        },
+        {
+          "name": "looks_the_same",
+          "line": 2227,
+          "AST_sha256": "a30e3231f02a7d40a049e1916de5d561baf07d131ad568f4995f960a3aff000e"
+        },
+        {
+          "name": "is_empty",
+          "line": 2235,
+          "AST_sha256": "bed394ea4a06d839b517c1e9f8046ade8646e853656b827fa36c6a4acac377e0"
+        },
+        {
+          "name": "cleared_governed",
+          "line": 2240,
+          "AST_sha256": "2ab41b955666995527471b2b279f878f5052b7d5881ddf8f689930ca19598851"
+        },
+        {
+          "name": "as_currently_governed",
+          "line": 2260,
+          "AST_sha256": "28e48ab4879db82ad15c5747a1f64864402844b37fd1459173756b8b5f02db08"
+        },
+        {
+          "name": "governed_decisions",
+          "line": 2296,
+          "AST_sha256": "1ca5b46ffac23463b7969d33b9df2e42e0f5c5a1b19543743cb0f587cc766da3"
+        },
+        {
+          "name": "v3_record_retraction",
+          "line": 2381,
+          "AST_sha256": "41d1690caa077242b3cd312e54c380132be9dbe4493d158f91bc8e3666923a54"
+        },
+        {
+          "name": "v3_note_correction",
+          "line": 2408,
+          "AST_sha256": "298f297777bea77159a2fc1ff46d7ddebfce147c209ac074b03487e227882d72"
+        },
+        {
+          "name": "see_instruction",
+          "line": 2434,
+          "AST_sha256": "4f18369d0063d2e0653bd43204ace4d9a43aafe2f0fb045a1f9658fe2436cc03"
+        },
+        {
+          "name": "points_elsewhere",
+          "line": 2440,
+          "AST_sha256": "34e3a8cabcb6d322c66e2373a11d778deb846ba9d07753b66781a89ed007daf3"
+        },
+        {
+          "name": "runs_on",
+          "line": 2457,
+          "AST_sha256": "96914bd06dd47fb5556954169f7e98b789671595f1bcc16984d5ba8810993809"
+        },
+        {
+          "name": "inner_sentence_end",
+          "line": 2477,
+          "AST_sha256": "070f4b0409d7d0b53f324828e16e343911e65063120954e66af50766a453b5e9"
+        },
+        {
+          "name": "plain_value",
+          "line": 2516,
+          "AST_sha256": "fee8ca148e3d6b8ccbcef949e235501006c431bd1179328b8744ac5e920a8696"
+        },
+        {
+          "name": "plain_printed_side_option",
+          "line": 2540,
+          "AST_sha256": "8e308a1c3a0cdba4e2f34640b235d29341bb2824195b6640edda5153c923c4ed"
+        },
+        {
+          "name": "v3_shape_holds",
+          "line": 2549,
+          "AST_sha256": "23a95373c8b37238f3e4ddf910b18978966a7ac6b0eb7aa963d4dc3b2c273662"
+        },
+        {
+          "name": "paragraph_neighbours",
+          "line": 2563,
+          "AST_sha256": "490411213bb760b1b58b4d8893038a5901949878e1574af9b7d1dd4333364b7d"
+        },
+        {
+          "name": "v3_identity_value",
+          "line": 2590,
+          "AST_sha256": "18a9b677d28e32d9a5067c02840f931e4dd95a6eba56187344dd1cae9d4611cb"
+        },
+        {
+          "name": "v3_cross_paragraph",
+          "line": 2594,
+          "AST_sha256": "0053323b0e24d57ce1ae9f12de3943b1d3e98a1062f5f46b4c998431bf0c6ab2"
+        },
+        {
+          "name": "v3_label_pattern",
+          "line": 2626,
+          "AST_sha256": "47a12c9a527523766900de9cc1739bb868923c9dea18dc3204bf1b5eb1abfcd4"
+        },
+        {
+          "name": "v3_medication_complement_holds",
+          "line": 2662,
+          "AST_sha256": "c2bfdea332d96a0aeea16c4abba7e52c5045606f0452361ad0704c129e332f16"
+        },
+        {
+          "name": "v3_field_subjects",
+          "line": 2670,
+          "AST_sha256": "4c44908f27a58207d9363571f7167e2238cc9dccccd41bbee0d5313105a9c3bf"
+        },
+        {
+          "name": "v3_related_source_blocks",
+          "line": 2736,
+          "AST_sha256": "683e1135ae30e7807b0c593751ff04299f48814256bd9051474887bbe42a1203"
+        },
+        {
+          "name": "v3_preceding_reading",
+          "line": 2808,
+          "AST_sha256": "d007336cf7e8d1c3ab24fff0b0809c9502b96db7c58fce1235d1aa644e430387"
+        },
+        {
+          "name": "v3_evidence_span",
+          "line": 3247,
+          "AST_sha256": "a33a27c73969cc2ae134ab4f7ec6a5e66c8a2786d9daceaf03a9869029578130"
+        },
+        {
+          "name": "v3_evidence_units",
+          "line": 3257,
+          "AST_sha256": "80a7a82514a7b66433f1b02860d58b124430ff54cd843af1ce98cf783e2bb0bc"
+        },
+        {
+          "name": "v3_scope_selection",
+          "line": 3263,
+          "AST_sha256": "9e66011323084ce4ef153d94ed263ffd3d4881d533ca622f18b60d483ad26545"
+        },
+        {
+          "name": "v3_preceding_warnings",
+          "line": 3331,
+          "AST_sha256": "1dd37a32cbfa9a4a8668a0c32acc3ae8e5c2cda79dcb826e0d8d888a39ce710b"
+        },
+        {
+          "name": "v3_nearest",
+          "line": 3424,
+          "AST_sha256": "98f3ef3b3c970c5ab288504a228d5dd2b73398ff439fa2a209b38042d31030ca"
+        },
+        {
+          "name": "v3_added_causes",
+          "line": 3437,
+          "AST_sha256": "c9f119db0fde46fcbaf0a6d1caf9480774a5294b7da427df90d46cc08cc6bde2"
+        },
+        {
+          "name": "v3_word_causes",
+          "line": 3540,
+          "AST_sha256": "25cfe03dd7cd93c388396ad4d00116ab2224e16932736ffc765740dddc8914bf"
+        },
+        {
+          "name": "v3_label_keys",
+          "line": 3586,
+          "AST_sha256": "1c440602bf9ffe0b0fff972473eba47479877d715f56b6e69ff2c872b84dc979"
+        },
+        {
+          "name": "v3_elicited_frames",
+          "line": 3592,
+          "AST_sha256": "6d73db6247216996a468f8c1073e380598e7ef401e5c6ff510686d103cfe840c"
+        },
+        {
+          "name": "v3_bound_by_destination",
+          "line": 3599,
+          "AST_sha256": "c0bc0bbb32dd3ec871bb704229cd1fa0f48d454df286aa69f45136fb87c4c7bf"
+        },
+        {
+          "name": "v3_current_state_field",
+          "line": 3614,
+          "AST_sha256": "fb32f28717e16b076b58b6c5aff5bd2abf54c7a6806019d59b5a3ebf70df0bca"
+        },
+        {
+          "name": "v3_plan_question",
+          "line": 3639,
+          "AST_sha256": "f07961153192050cae25620177f8366411160b0802cc17070b6ddb2bcc47676a"
+        },
+        {
+          "name": "v3_without_time",
+          "line": 3652,
+          "AST_sha256": "c1ad080dd1fa070d91c715c1b2ea6b16b251a7f540ee594441ebaeb41457732e"
+        },
+        {
+          "name": "v3_opposed_predicates",
+          "line": 3663,
+          "AST_sha256": "d263a72e87d9303923e0f7e8bf0d712f4c952a6840db5a9882338718d22f7e28"
+        },
+        {
+          "name": "v3_denies_labelled",
+          "line": 3684,
+          "AST_sha256": "2f2f90dce48591199304721a72d9180cf858ec2f56c2376ffdb0cf628d90ffde"
+        },
+        {
+          "name": "v3_ends_labelled",
+          "line": 3711,
+          "AST_sha256": "710889c2472251e868f4f8f7f98560096c11008cc6ad649773b391c3f13b3607"
+        },
+        {
+          "name": "v3_floor_index",
+          "line": 3717,
+          "AST_sha256": "a565c6f96f4ce282f83b5c890e17ec23ad786b62f9e4a27bd1fbb4b589150180"
+        },
+        {
+          "name": "v3_opposed_candidates",
+          "line": 3761,
+          "AST_sha256": "38b291fb5e924056166987541af74968f25e98184fef64a6fc90475d758405f9"
+        },
+        {
+          "name": "v3_relation_causes",
+          "line": 3795,
+          "AST_sha256": "f520dc5a8687b7a6b4794add11d286d0b0a23aa01385a0f76c58c1eadcc79ecd"
+        },
+        {
+          "name": "v3_complete_statement",
+          "line": 4018,
+          "AST_sha256": "b0abf08e533bd719d97516c2eaf6e6f040909378e275615c48d9af787b9a4e1c"
+        },
+        {
+          "name": "nearby_entry",
+          "line": 4031,
+          "AST_sha256": "8c7d8bf81f4ddf33fb0637a88a53c5d8289c3384d4c155045b236f0ad82fd728"
+        },
+        {
+          "name": "validate_tab_selections",
+          "line": 4039,
+          "AST_sha256": "bd7537ad1038161f42ade218590cfe5db4ea6aa23bf0fe76a9091fa9e3b3e685"
+        },
+        {
+          "name": "validate_selections",
+          "line": 4340,
+          "AST_sha256": "6b70308113b6cc3a48e3a50967efa56ef7e590e36240592a27afaf99671705fd"
+        },
+        {
+          "name": "anthropic_settlement",
+          "line": 4452,
+          "AST_sha256": "7836017c162ed6458cb98b07cdce6806391b0a38e524830548d06401380e11b6"
+        },
+        {
+          "name": "narrative_fixture",
+          "line": 4488,
+          "AST_sha256": "fc03be39464d1efc69cf57785ce49b68d6bf1a826e625110a7c4d61ced0fe46c"
+        },
+        {
+          "name": "generate_narrative",
+          "line": 4517,
+          "AST_sha256": "6b6cab2e8eed8879e8d5632cc303d28785a34d8f0e4675344dbc0b05c5b3b9dd"
+        },
+        {
+          "name": "narrative_validated",
+          "line": 4539,
+          "AST_sha256": "da5790fec23f84c2ac8e56fd1bef6c111adf5bf562d264a02b4a8665ad40894d"
+        },
+        {
+          "name": "adoption",
+          "line": 4554,
+          "AST_sha256": "77715265648afbebfa51f23a9a0b7a3a9d7f44284cd15c36ad6516f073b1d21c"
+        },
+        {
+          "name": "refuse_switched_mode",
+          "line": 4569,
+          "AST_sha256": "a8d7d61cf2e285764865c071838d509c52375c53454de59c343f41feffe2e8c5"
+        },
+        {
+          "name": "v3_generation_fields",
+          "line": 4602,
+          "AST_sha256": "25e8538a284e89b9fe08e20da5e7c86ff45d3ae71afa8f274bb6dd030b375845"
+        },
+        {
+          "name": "LabelledLines",
+          "line": 4622,
+          "AST_sha256": "8d548386205a64697a5d7544d7d114c1d59a64fe0d00e891b678fa9719aa7a0c"
+        },
+        {
+          "name": "v3_labelled_source",
+          "line": 4655,
+          "AST_sha256": "53e3fdf8bb5fb94c0e8af6ec798218cd2ce1b2c77ad46db4bb465230001f849b"
+        },
+        {
+          "name": "without_closing_stop",
+          "line": 4680,
+          "AST_sha256": "2bd6e50ab1e863a8a6d8dd81d2a913aa71f1e0225ab83a116ab03df07c9f0448"
+        },
+        {
+          "name": "named_option",
+          "line": 4692,
+          "AST_sha256": "2b46bb8b8cdab0eebec168a17f76dcc6f6da69cf014610adc02fc4f6cf7d1838"
+        },
+        {
+          "name": "v3_option_value",
+          "line": 4705,
+          "AST_sha256": "4e93b376300bab82c9a245da2573e9c35879c4083b2bb62c8ec816353f5a3266"
+        },
+        {
+          "name": "v3_option_answer",
+          "line": 4725,
+          "AST_sha256": "4a37c3bedfc020e814b1607b6e1be16463557cb1573d48a2d1929854aeaca24c"
+        },
+        {
+          "name": "v3_repeated",
+          "line": 4759,
+          "AST_sha256": "a9c1a706966e0c8a6d9bbd039c3f2b2514914648ebb2bfcb47c200b1af15995b"
+        },
+        {
+          "name": "v3_adopted",
+          "line": 4774,
+          "AST_sha256": "c165c5bbe1e7d22421b65958133d04604c1119ee0099e39ca40f29a1d6417b83"
+        },
+        {
+          "name": "before_the_provider",
+          "line": 4816,
+          "AST_sha256": "516d01132fc650d38afaaba26803ca71024f7323af0a2ca853a94016f933aa2e"
+        },
+        {
+          "name": "request_limits",
+          "line": 4834,
+          "AST_sha256": "45e93aec477c1e66f0bdee71b765d0df23ab95339f3b1ec0cc11c85048a35c57"
+        },
+        {
+          "name": "extractive_request",
+          "line": 4838,
+          "AST_sha256": "c32023d31e7ec058300d3b71264b4a65c0aa5441789a93dff764a652c3d2e167"
+        },
+        {
+          "name": "request_bytes",
+          "line": 4912,
+          "AST_sha256": "fb117dea41b1827f6c646489f001a4809cdd4f40e3225e7a10bb550e97a6eb0c"
+        },
+        {
+          "name": "role_response_bound",
+          "line": 4920,
+          "AST_sha256": "622823d408587452c6d54803ac2c7b25a9e01293e8f389ab337e6534ea0aae72"
+        },
+        {
+          "name": "role_request",
+          "line": 4939,
+          "AST_sha256": "9099435856b67d86b6864b1fd4694901429b4579719dd1f9fc6fa92195a135a3"
+        },
+        {
+          "name": "generate",
+          "line": 4973,
+          "AST_sha256": "06f370ae9e44107f8e2dc7747b36342e8b1d3d6c83c83c8f5207b5cbb5e12124"
+        },
+        {
+          "name": "validated",
+          "line": 5055,
+          "AST_sha256": "9e642a2c3c806ea5f77f890d41baac6ce79138d2f2c520570c2a6c06e2bed502"
+        },
+        {
+          "name": "v3_result",
+          "line": 5100,
+          "AST_sha256": "250bbb1f5b4e6f2d2373d2d0aa4c7075f7614c6bb25f5ebbb5177fe8d71c3f60"
+        },
+        {
+          "name": "role_records",
+          "line": 5110,
+          "AST_sha256": "b3ab210c5259600cf7f53546d9f0339355048417ef669b86b7013a0985f9dcce"
+        },
+        {
+          "name": "role_suggested",
+          "line": 5117,
+          "AST_sha256": "1aa318b1d80e09c95142dfb4b5e062bff09b0f2f8e6ee7c84a1138a4eafd7c7e"
+        },
+        {
+          "name": "role_validated",
+          "line": 5125,
+          "AST_sha256": "0344025aa092c85d20e8fd8112e45b7913345b6cee321cfcfd8f0f290a738d0d"
+        },
+        {
+          "name": "role_reading",
+          "line": 5164,
+          "AST_sha256": "95598d34586512b39317e015dca478baf350dfac2e999c7c7df5ea71c458e680"
+        },
+        {
+          "name": "role_adopted",
+          "line": 5176,
+          "AST_sha256": "38abb73ec32a10417dd629d92fbf51337296c6e0af183fbfa24c4c8a9ad1ce64"
+        },
+        {
+          "name": "role_offered",
+          "line": 5188,
+          "AST_sha256": "9ddc924c827c8b792b481d5e19edc4322e20eaeb7ad2c0fec21673746eb82174"
+        },
+        {
+          "name": "reread_role_suggestions",
+          "line": 5205,
+          "AST_sha256": "e825095070c45d690590f254d403e3bff7d3a803ab57b6edd3e2ff9fa373b142"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/ordinary_source_scope.py",
+      "bytes_sha256": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "whole_AST_sha256": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "apply",
+          "line": 9,
+          "AST_sha256": "e323fdfed937a8a7bdec81961b7540ef450854bc3ccc335f4c736b586af1175e"
+        },
+        {
+          "name": "effective",
+          "line": 79,
+          "AST_sha256": "50e71ff01adab20df58c253548a4ceee1ca8cdd3b4ca9d36237a8b10e8f0df1f"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/reviewed_source.py",
+      "bytes_sha256": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "whole_AST_sha256": "8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "backward_attribution",
+          "line": 9,
+          "AST_sha256": "918fd0a31faa7d59db2a148a4b010a7af1859cc0121b96486ee9490281222646"
+        },
+        {
+          "name": "complete_ids",
+          "line": 81,
+          "AST_sha256": "aafdf8739ddf5906bc2096e1c26cc17ea330f4ffdd6698ea18123de209c9669b"
+        },
+        {
+          "name": "self_reference",
+          "line": 239,
+          "AST_sha256": "370ef1a03a8fdbbf2c2c7c0f4a53c672ca88c7b068e80951e91b18da29e9dfaa"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/reviewed_procedure_source.py",
+      "bytes_sha256": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "whole_AST_sha256": "aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "destination",
+          "line": 8,
+          "AST_sha256": "80995d9f2b0df4d15056c7c0368b1aad9106a09065a18c79af12f8c5493a2852"
+        },
+        {
+          "name": "complete",
+          "line": 29,
+          "AST_sha256": "2243a7328ee1491affa4e56976cf09da4a2eb4e1be06b04ee1c72c8247c3e6de"
+        },
+        {
+          "name": "caption",
+          "line": 84,
+          "AST_sha256": "3fc12a40bb1f8c8ab827d4e3510fac219da0ff02b46613f744d054e6fef17c80"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/source_scope.py",
+      "bytes_sha256": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "whole_AST_sha256": "5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "transition_scope",
+          "line": 8,
+          "AST_sha256": "fdf3ab69e3c16faf5be02eb11e156595b2de342d335b730bf4051730aa5572e7"
+        },
+        {
+          "name": "bare_affects",
+          "line": 82,
+          "AST_sha256": "0f8691f70aebb4efc248d2d7784ee33191cf4d4bf1b650859f3990a0fedf9ede"
+        },
+        {
+          "name": "medication_affects",
+          "line": 104,
+          "AST_sha256": "e0ddc4e8e9a79b090d75314b708dc64a4a40c6971c383cb4856e440ae2d84946"
+        },
+        {
+          "name": "nominal_carrier",
+          "line": 113,
+          "AST_sha256": "e907deebed53e98a52b8456870292b671aba919ce7c5d24172223f9d94e08338"
+        },
+        {
+          "name": "detached_passive_theme",
+          "line": 122,
+          "AST_sha256": "ff9ae5199a95495b197fd742c8ab53de4d7f3cdd8077a7ad2bcebb24fbf178e2"
+        },
+        {
+          "name": "owned_clause",
+          "line": 162,
+          "AST_sha256": "abbdd6c9a06724491e260960b7464b8395cfea734aaa11ba1ec3146dadd25776"
+        },
+        {
+          "name": "detached_active_theme",
+          "line": 189,
+          "AST_sha256": "4517913dd272450d41a9aac6c7db33575766c0103d0abff8f0e192c14e63fb29"
+        },
+        {
+          "name": "denied_ending",
+          "line": 210,
+          "AST_sha256": "dcce17f8afd142aa0443322f6e1981a40d9eb40c92524c642e36f7b8d493312f"
+        },
+        {
+          "name": "replacement_relation",
+          "line": 241,
+          "AST_sha256": "18eddd0cee2fbe732611727e4804ebbe5b7a7d9fd55c35bd4cbf2c5d12f7499b"
+        },
+        {
+          "name": "future_event_at",
+          "line": 293,
+          "AST_sha256": "3bd1af59cb909940860945b5d40709e024703d1926e684ebb94523aa7b06bc10"
+        },
+        {
+          "name": "continued_medication",
+          "line": 330,
+          "AST_sha256": "95ec36cec9edc226bfec3d6406fd99d84cbac8eed80be294eed923e57044086a"
+        },
+        {
+          "name": "resumed_current",
+          "line": 350,
+          "AST_sha256": "075da43cfae99d58167bb167d28b8d43c2f2d7bd5108676fb72607926f723f5c"
+        },
+        {
+          "name": "completed_receipt_question",
+          "line": 405,
+          "AST_sha256": "17d0eae0873bb28fd25a07834a4ce4e6e35f75b0e1873921a216208f6c62510d"
+        },
+        {
+          "name": "receipt_date_warnings",
+          "line": 440,
+          "AST_sha256": "3e75523c09e6d6a95f9ce7b09e0b76d9868a959ce4cb5f6b4d681d61471dc22e"
+        },
+        {
+          "name": "reserved_identity_source",
+          "line": 475,
+          "AST_sha256": "afcca356ccf7c8dc71c14f9ac10bc20204e77e2f2954e35086923671c2d1b609"
+        },
+        {
+          "name": "_document_event_caption",
+          "line": 509,
+          "AST_sha256": "809338a1e4b90778d2f2a4d2bece97b9b4065f6c3c2d16d5f3c08453ace742a4"
+        },
+        {
+          "name": "document_status_questions",
+          "line": 533,
+          "AST_sha256": "630d698036502504add832799b5dd357a3827730e72e64d7798d23f3b5fcbce9"
+        },
+        {
+          "name": "completed_document_status_boundary",
+          "line": 547,
+          "AST_sha256": "ad1dea2594d7ffaae74a2fce0235196f6479ee73382689381827d92d584493d6"
+        },
+        {
+          "name": "conditional_plan_scope",
+          "line": 598,
+          "AST_sha256": "324245f2211fb4eefb650332a36a387e86c3147a10b7dd979f329928eeb63e1f"
+        },
+        {
+          "name": "clause_readings",
+          "line": 652,
+          "AST_sha256": "77cc0245ff7071928f14954748b4602e465d90b599c7e3009e4389df310a5313"
+        },
+        {
+          "name": "denied_ending_keys",
+          "line": 806,
+          "AST_sha256": "7f2151795fabbc2e56148b8b566da7728de7ae0b9851e910d5721cf123ba981a"
+        },
+        {
+          "name": "ending_affects",
+          "line": 814,
+          "AST_sha256": "434063bceb4e548eca1f95b4aeebc3c3853f6c50ab2ac65fc78ea05edcd59050"
+        },
+        {
+          "name": "bounded_mixed_endings",
+          "line": 831,
+          "AST_sha256": "30ee9b8fadd16f54f77382d3d5ecafdefc8bba77522abacf26b050a77e3f4e09"
+        },
+        {
+          "name": "ceased_affects",
+          "line": 839,
+          "AST_sha256": "3e7f5dfbe626dab1a3038142d99c5b8968973d1afc9f6aaffa1f0e6b9286cb5b"
+        },
+        {
+          "name": "explicit_patient_endings",
+          "line": 858,
+          "AST_sha256": "6c252538ecfc464560a041cdd8f0f47be4b84123ac9710b096389c805dae9e2e"
+        },
+        {
+          "name": "owned_oppositions",
+          "line": 876,
+          "AST_sha256": "03dfef2742bdde46ab90ac0718680cd074fb9af11823a2254f53d20713d704b7"
+        },
+        {
+          "name": "distinct_observation_and_assessment",
+          "line": 918,
+          "AST_sha256": "48f2f4bb3a044bea3df228b643f2c92cab72583478acb96f2db8e2412cb80de2"
+        },
+        {
+          "name": "unresolved_medication_changes",
+          "line": 961,
+          "AST_sha256": "0e4696f1836c4c558cfcc775ec151f0981f0a986b6724696005f4e4e0d8b2eb2"
+        },
+        {
+          "name": "unresolved_medication_affects",
+          "line": 1019,
+          "AST_sha256": "aabe4f711e272565ecaad352c6aabf800fbd6982bf7de428837778ac2976e237"
+        },
+        {
+          "name": "medication_argument_references",
+          "line": 1038,
+          "AST_sha256": "620cf954b7a9e3401c11820a11e62e3b2182fc3c2951a2c2691cb940fcf75bb2"
+        },
+        {
+          "name": "elliptical_dependencies",
+          "line": 1071,
+          "AST_sha256": "380e27e2203a63d5547f1597e844209ec4d664ec1caa28d1ac5ae3dc347de5ad"
+        },
+        {
+          "name": "exclusive_reattributions",
+          "line": 1139,
+          "AST_sha256": "c0f8c1d58532ff3ba90fc81f4cfd260e3f94a0b2caecce63ddbf3eceda278222"
+        },
+        {
+          "name": "separate_sides",
+          "line": 1277,
+          "AST_sha256": "67d739b20a20d1a13f8e6eabf3f5d0c841b9f7712773a97e664434ef74ea3dc2"
+        },
+        {
+          "name": "malformed_denial_dependencies",
+          "line": 1346,
+          "AST_sha256": "b96aef5d3f23644673201f3a6b3e888a4f42fd1c28cb3df1db4cfba19b2a867c"
+        },
+        {
+          "name": "prefixed_modifier_dependencies",
+          "line": 1376,
+          "AST_sha256": "7710017f5f67e34f7718e9fe5411a49a78f84bdf02a6f71d39fd1540fd9f8041"
+        },
+        {
+          "name": "pure_foreign_clause",
+          "line": 1401,
+          "AST_sha256": "b547edd52ab35e0061b81d70221a446abb41bb60cc1138514e260b0b30167637"
+        },
+        {
+          "name": "negative_operator",
+          "line": 1458,
+          "AST_sha256": "cbbd1a73a22da40036608e67adc4bae81ebc216223862af2d977ec09cf4dea0f"
+        },
+        {
+          "name": "negative_clinical_modifiers",
+          "line": 1470,
+          "AST_sha256": "2f38e5988274db1786b21164df2e6130a727f064f1f947f19c23a97ca9ae8228"
+        },
+        {
+          "name": "ambiguous_negative_complements",
+          "line": 1494,
+          "AST_sha256": "6b189d1c7d0d301b9d978ff232d49da4e4801d3261b2deddbdc1b6641c28c30b"
+        },
+        {
+          "name": "uncertain_negative_arguments",
+          "line": 1524,
+          "AST_sha256": "4b8d583eca82c7e3347bd5cd15c05e7bf9f620a67cdced027e5c75b2340abc89"
+        },
+        {
+          "name": "negative_phrase_anchor",
+          "line": 1561,
+          "AST_sha256": "0b9a2c3370be9052a27cdf6d22f473cbebffa166d238e39786b47eb2d5d938e9"
+        },
+        {
+          "name": "clinical_modifier_negations",
+          "line": 1588,
+          "AST_sha256": "fcc6b7e767123e486fbd7ef16897074651323771c9b77daefb3959e8de15c4a4"
+        },
+        {
+          "name": "_date_scope_backward_dependency",
+          "line": 1641,
+          "AST_sha256": "eb6d701413eb2a6f11aa6ca2c075bc99df4da86bd0e91c42800d848585b3f4ce"
+        },
+        {
+          "name": "date_correction_governors",
+          "line": 1673,
+          "AST_sha256": "e8d57c7968b46dd1d1aaba8790c3b467c3c67427e5c622d4509646af55a12996"
+        },
+        {
+          "name": "_without_date_governors",
+          "line": 1759,
+          "AST_sha256": "02b18d1eea2b506ffd2b9cd16aaebde888fca2e5c824c0c7bc4c51f8231d4d43"
+        },
+        {
+          "name": "date_correction_governance",
+          "line": 1773,
+          "AST_sha256": "886d4d67df92494b0de41ff03553b396f5e845cc062294f4e811f4fa37b30553"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/v3_actors.py",
+      "bytes_sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "whole_AST_sha256": "bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "_fold_text",
+          "line": 121,
+          "AST_sha256": "1c5645657637f2825f27f44172f35c08fea52a858e90eb37cee9e0ffcf9459af"
+        },
+        {
+          "name": "_fold",
+          "line": 125,
+          "AST_sha256": "c9826a0c7ff66941b0519901256e277e4f1df30b60993240d05e4db35e7b9f75"
+        },
+        {
+          "name": "_lemma",
+          "line": 130,
+          "AST_sha256": "933184205cf5b762bcc517d1a7d62727fd5e159e111a94e38a44dfd8f65d3030"
+        },
+        {
+          "name": "stem",
+          "line": 134,
+          "AST_sha256": "1056425ddced36f2aacd9008bb640f171afa797f93995215c4db6934b2310ac0"
+        },
+        {
+          "name": "keys",
+          "line": 154,
+          "AST_sha256": "5a68ba40228c52962880a0649baa8bfa8f172656319c42a49aa8ed20dc135b59"
+        },
+        {
+          "name": "other_patient",
+          "line": 166,
+          "AST_sha256": "7def50ea2d138c5b3d2a4e70dc5c688ca6b196aa94ca02d63ac7f6909c820ddc"
+        },
+        {
+          "name": "this_patient",
+          "line": 173,
+          "AST_sha256": "d12cadf191ca57b5e956d53d818fe7bd0e12550266391242882ad2b2a4a3419a"
+        },
+        {
+          "name": "_kin_compound",
+          "line": 177,
+          "AST_sha256": "f9e46efde2a8b451d4119f49c8fc3c2ef62486da1e2846f1b584eefbca638572"
+        },
+        {
+          "name": "names_carer",
+          "line": 191,
+          "AST_sha256": "d4de2ebaa01d3179124c33a6fb955caaca26bacc6bb9802b3b6ade6080d7d7ef"
+        },
+        {
+          "name": "names_person",
+          "line": 200,
+          "AST_sha256": "356244ba2db85c85bfee54f5f9815ba4ac6c69e614cf1ce143fc5fd916c3912b"
+        },
+        {
+          "name": "_family",
+          "line": 220,
+          "AST_sha256": "beb306ba87ccbfe43c601d9d2e6a19e44ee51eb9c6488019edbbbf4282a04707"
+        },
+        {
+          "name": "_carer_bears",
+          "line": 225,
+          "AST_sha256": "6e20a9cb4f1a1af8346859516b543fdf7fdc46ee91d54af9fabf6371c4c4fefc"
+        },
+        {
+          "name": "_personal",
+          "line": 235,
+          "AST_sha256": "d0236def67c7af547c497d0c234b38e9e1747a03cc93da8d492679a34b591e28"
+        },
+        {
+          "name": "_gender",
+          "line": 239,
+          "AST_sha256": "23162f47968d147046a399d5d4c8959f8c73e9c04be0a2964500ff9d56996b5a"
+        },
+        {
+          "name": "_noun_gender",
+          "line": 244,
+          "AST_sha256": "d97a6ae17d62dcfb8f5e374c8152761ecc333d9681e5d79b62b5bc7341d03108"
+        },
+        {
+          "name": "_described_by_age",
+          "line": 249,
+          "AST_sha256": "2777be6f95dce7591e41fab747c0d44f903c1ff9ebc5979676e10cdc1a06a01d"
+        },
+        {
+          "name": "_core_lemmas",
+          "line": 262,
+          "AST_sha256": "cf8a20884dff164e30cd7a5d9db0d8ed08e7248b08864993830544dad0e5d42c"
+        },
+        {
+          "name": "_content",
+          "line": 280,
+          "AST_sha256": "65e61d54b3c158eccbee9883a38fb4d36213496c04748e561007196917a70c6f"
+        },
+        {
+          "name": "_past",
+          "line": 285,
+          "AST_sha256": "25f81f36acaf0da2b066b9a2bac266b96cd631d8b631249be58fdd102fb8d029"
+        },
+        {
+          "name": "_claim_lemmas",
+          "line": 353,
+          "AST_sha256": "47a3946e4b57fa5c923aa15ab6cf5d50bffdaceb3e7afdc133a1e02f30f7c135"
+        },
+        {
+          "name": "_tense",
+          "line": 380,
+          "AST_sha256": "2d216426402e0bde75d1524a1bb7c5364b4762e0ec07aaf00b981acc8b4ebfe7"
+        },
+        {
+          "name": "_complement",
+          "line": 391,
+          "AST_sha256": "257b4ff37e0b005448e3da33cb6e7cc2f745fa0fe8f38ace0e35449244aca0f6"
+        },
+        {
+          "name": "_negates",
+          "line": 407,
+          "AST_sha256": "c77e571e6283b3686d2556afb892c88c76ca83570381b2e82a6ab214f78d0bfd"
+        },
+        {
+          "name": "_predicates",
+          "line": 417,
+          "AST_sha256": "d362f4b3b84b6718efebfdf76e7e50adf604d8d661dc415de860f0df98ee369e"
+        },
+        {
+          "name": "_denied",
+          "line": 463,
+          "AST_sha256": "1f7bfbe9ebe0fa4ddbeba5eb2678e928d2164e510af4137b53eaa151d755c42c"
+        },
+        {
+          "name": "_subjects",
+          "line": 478,
+          "AST_sha256": "a7b06cdf4524ad1122a88e9b2002f3740c7ec1b2863813eeb059b9bd8a0f5ce1"
+        },
+        {
+          "name": "_phrase_lemmas",
+          "line": 486,
+          "AST_sha256": "6d515403e49b1ef642664a56089988527385be38236ee8df0429150e3bb62456"
+        },
+        {
+          "name": "_agent",
+          "line": 499,
+          "AST_sha256": "7a068eb33548d5b7f4113877a99d0c964e7678be05dd4444a01b85c6f5b56c07"
+        },
+        {
+          "name": "_superseded",
+          "line": 508,
+          "AST_sha256": "18fa107cc838ff44c352fe654475cdb97802f8cee6ae8264345cb907185c8ddd"
+        },
+        {
+          "name": "_agent_repaired",
+          "line": 613,
+          "AST_sha256": "3d681c500f2d8bbc47965121d5ea6c01476ed9e8a76f11d7139fdaa30a3d97d5"
+        },
+        {
+          "name": "_superseded_repaired",
+          "line": 621,
+          "AST_sha256": "24ee64522d1b34f8f42a29e77ceaea943287e11a4e62a8823f897fb05ff45d72"
+        },
+        {
+          "name": "_on_hold",
+          "line": 721,
+          "AST_sha256": "7eb5eb05d4b2e7e93cec4e22d472bdc4dbdf01abfcc0d705de7dd8247b8abea9"
+        },
+        {
+          "name": "_floor_reading",
+          "line": 737,
+          "AST_sha256": "0aa8aa8c00042203be77aa1445073b66a41a200121a8caf9f39e50982c784758"
+        },
+        {
+          "name": "sole_bears_on",
+          "line": 1045,
+          "AST_sha256": "bd4d8de85f66ebec07e89afdaa4182f395e5b86f67b6257093bbacd96d887b26"
+        },
+        {
+          "name": "_misread",
+          "line": 1071,
+          "AST_sha256": "2b91cd92fad7a467f700b9ddf3b5973299d1ee4929d4145563a3f24ad898b377"
+        },
+        {
+          "name": "_the_patient",
+          "line": 1079,
+          "AST_sha256": "09a584946a28f48302ee9606661510bfd1bfb4f952e56d7c857dcb8897a59a9f"
+        },
+        {
+          "name": "_sole_noun_ok",
+          "line": 1091,
+          "AST_sha256": "859c1a0af9dca115da1a8c015c1ad50a7c94bf721bf7010e26b513d04068fc3a"
+        },
+        {
+          "name": "_initialism_of_run",
+          "line": 1155,
+          "AST_sha256": "81b3e6e1777cd7698da8c19c6310b2c6ceb501435b3724dab4ecf4cd8a7e752b"
+        },
+        {
+          "name": "_sole_reading",
+          "line": 1186,
+          "AST_sha256": "cb180c7889a1c4eae2194dd19481d3015c4162013388d7bcd7d1c0244300093f"
+        },
+        {
+          "name": "sole_patient",
+          "line": 1418,
+          "AST_sha256": "2b1892553877b1b28df69746ab644c96aec161b7244af79d27c9b69793b9ddda"
+        },
+        {
+          "name": "neutral_field",
+          "line": 1463,
+          "AST_sha256": "1701e2ab38a3db4eb81069e3a0903a3e27c05113b2e7a304c8364b9caa059893"
+        },
+        {
+          "name": "_unread",
+          "line": 1542,
+          "AST_sha256": "f53a8b57006799772fee99839a09f23ac29b4be3f743ce03429fa040e78a976f"
+        },
+        {
+          "name": "read",
+          "line": 1573,
+          "AST_sha256": "82c2c410ff355c07860fd61f6de6bdd32da2f6535cb79377d2164f12c895fc96"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/v3_syntax.py",
+      "bytes_sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "whole_AST_sha256": "d38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "_verbs",
+          "line": 24,
+          "AST_sha256": "862de549cc538f0e3f467eb51c7fdb90c28ce425275001effe73b28b65caeef8"
+        },
+        {
+          "name": "_bare_patient_clause",
+          "line": 36,
+          "AST_sha256": "65b66508d9629717735b5c2c4dfaeb949a7f7fb0d2bef695787fd238f8e66a5f"
+        },
+        {
+          "name": "_parser",
+          "line": 56,
+          "AST_sha256": "e241973959b0e363c25f83ead3b7c9320af7ac1f2f7784cfc8be898128adc98a"
+        },
+        {
+          "name": "_reader",
+          "line": 76,
+          "AST_sha256": "5821f24e2dce5c5aabc1e29ae10a8282a8791f06d81b0a65afaf2b65ea442273"
+        },
+        {
+          "name": "docs",
+          "line": 93,
+          "AST_sha256": "2288606fefa7102ddd38f012333f4726e0f349bd41a6b46337c774f323a249eb"
+        },
+        {
+          "name": "_complete",
+          "line": 113,
+          "AST_sha256": "abd073e66650f7755dad994ecf439db076b3b5604306294d5b5240ea75f1d4b7"
+        },
+        {
+          "name": "complete_ids",
+          "line": 152,
+          "AST_sha256": "8f446ec9149faaf0e85e9c5fc11ad2be6827b2127217b616811db83b0c94a942"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/v3_literal_facts.py",
+      "bytes_sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "whole_AST_sha256": "5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "_contact_question",
+          "line": 26,
+          "AST_sha256": "1e8f2c18904c6c770e2f5e912c00c31c3d8e9a7f712beb4c13bc5635d6f3af00"
+        },
+        {
+          "name": "_foreign_context",
+          "line": 31,
+          "AST_sha256": "0b9af3936b6a745d3fe506c9793851e35acbdca27393fbcea861a3bb0b7bd865"
+        },
+        {
+          "name": "_word",
+          "line": 66,
+          "AST_sha256": "ee897d0c9286bafa017e44c3df6d335c306dac96f94fd909b4ee922ca2cf2194"
+        },
+        {
+          "name": "_finite",
+          "line": 71,
+          "AST_sha256": "1c45e121b042b16c462f996842107963b693b49db301edf634d86e60e2c07727"
+        },
+        {
+          "name": "_nominal",
+          "line": 76,
+          "AST_sha256": "d6c256c5ce6e69c3ebef21ee49fe883c14221691860d605803bf4f28d09a27d2"
+        },
+        {
+          "name": "_patient_object",
+          "line": 84,
+          "AST_sha256": "582a49e8abcaacc4299a4f1791a3af9f4004a8c36d921043c2069d42b4c6de95"
+        },
+        {
+          "name": "_base",
+          "line": 91,
+          "AST_sha256": "70056f7501905c9834a8eb0d89432863b3db3562e7a9e303abe37338325aa1b2"
+        },
+        {
+          "name": "_patient_copular_complement",
+          "line": 98,
+          "AST_sha256": "e9184bfceef89a2438983b2f5446935b3061396df423ac1804170e8d60a006eb"
+        },
+        {
+          "name": "_simple_fact",
+          "line": 145,
+          "AST_sha256": "0234ced334c3ca8dfc5b16c44104fa9fed15c3d9b596b6d3c3287562832f5c9f"
+        },
+        {
+          "name": "_Unbounded",
+          "line": 172,
+          "AST_sha256": "721fe6d9bacd4a6a588770007483ce5d005abbd60dc958fbee966004d9920de1"
+        },
+        {
+          "name": "OpposedClaim",
+          "line": 176,
+          "AST_sha256": "71ac165ceb0196ec4941b2b903cbf9a73a1dc856eb4b135d6207505251d7a2c8"
+        },
+        {
+          "name": "_dash",
+          "line": 222,
+          "AST_sha256": "7aa3248ea4d19c0b448e82a18dca9506db585cc948ede2b0cb18fff2ce89066b"
+        },
+        {
+          "name": "_separator",
+          "line": 226,
+          "AST_sha256": "5dbfd5328d292eed397bc91c8bb5542918c078cb1091e624a7ce0f4e7e904145"
+        },
+        {
+          "name": "_answered",
+          "line": 236,
+          "AST_sha256": "f080b4c5a4be53a1814454efccce65f804695a04620a603f8c698f5f552cd298"
+        },
+        {
+          "name": "_singular",
+          "line": 241,
+          "AST_sha256": "df080dc6526124d514f7aff6134a4e6ce44f01b4cbaf4e0c588cb23b5b4314d5"
+        },
+        {
+          "name": "_surface",
+          "line": 248,
+          "AST_sha256": "3e58f164a709beb55e8832f6ec544076ce10bb04a94af4cd79cabb3f18aedc1e"
+        },
+        {
+          "name": "_wordlike",
+          "line": 278,
+          "AST_sha256": "4c90be395da26cefa1456529b822b4cafdde6daa95c54e68fc0f0a36e9e1296c"
+        },
+        {
+          "name": "_related",
+          "line": 284,
+          "AST_sha256": "9df81de2e53ec822ad2277132e57e3bce4e2d80a1573a68b7c4236e07c729a0f"
+        },
+        {
+          "name": "_quantifier",
+          "line": 297,
+          "AST_sha256": "27ed72e41d217547873e9c79828320ed79bca3529abe4a3e0046ef6913cd0829"
+        },
+        {
+          "name": "_topic_word",
+          "line": 307,
+          "AST_sha256": "e57690f20ecc3a1144ecf7a94bf3a4d70554255b3e3fd73929364d6efd8b5006"
+        },
+        {
+          "name": "_combine",
+          "line": 316,
+          "AST_sha256": "e2868596507b12082aabd50cb7fac81230628811e9983ba48100cfbba469a7d1"
+        },
+        {
+          "name": "_topic_readings",
+          "line": 322,
+          "AST_sha256": "938fc4ad6944763fad4cef358919e6812f5aa950e48283a479c128927170fdcc"
+        },
+        {
+          "name": "_words",
+          "line": 357,
+          "AST_sha256": "e77daa24daec303cdfa713e87a684fecca800beda2ef9b6df11aa6d57b8cf639"
+        },
+        {
+          "name": "_initials",
+          "line": 363,
+          "AST_sha256": "96dafc55d4ef6968bbf874abb57438da12093e5c1c9ace073e9f46f6684233eb"
+        },
+        {
+          "name": "_cover",
+          "line": 368,
+          "AST_sha256": "6acd6d18baa33cbc3c531f2e04d63129a8fcb50d6b6fc686e4298bff161f2528"
+        },
+        {
+          "name": "_main_clause",
+          "line": 393,
+          "AST_sha256": "e39a50dbdf842dc7a4a42e860779fd6ead2ab333bb7209b59809cc05fb36a7c3"
+        },
+        {
+          "name": "_clause_subject",
+          "line": 399,
+          "AST_sha256": "204f467059087bfa7d9649106d700fa6084cf45f08261a02b1ee6d1729a065e2"
+        },
+        {
+          "name": "_possible_patient",
+          "line": 407,
+          "AST_sha256": "c10fed9d5182a2e448fb92e02abacfd3b6ad61e0e0ad737795dc6d353a841ca2"
+        },
+        {
+          "name": "_conjunct_chain",
+          "line": 424,
+          "AST_sha256": "6b6361c794f220e0d4f8e57a0d098b5c36b3d46492844f239608b6d06e63b67a"
+        },
+        {
+          "name": "_negations",
+          "line": 432,
+          "AST_sha256": "07ab7adac12ad8eca28baa19f2eeb806df2036499c97e735ba205327047909b7"
+        },
+        {
+          "name": "_elided",
+          "line": 437,
+          "AST_sha256": "0b7042a9f1cf4a94e501ff7c4960c7c0c77177db95a154ba0c31c5e25be8e450"
+        },
+        {
+          "name": "_predicate_prep",
+          "line": 447,
+          "AST_sha256": "498ee92e83bd2629a8cf74b2a482ded52af587df3e74ead144b610a4b8446bef"
+        },
+        {
+          "name": "_occurrence",
+          "line": 477,
+          "AST_sha256": "b3c6e0fb04b8f924d3709f7d8c6a790071a11386cce6734c17244b39a7be0010"
+        },
+        {
+          "name": "_answers",
+          "line": 593,
+          "AST_sha256": "680bfb2cd2882a1fd8277baa531314de3949c6627ccc707e65c18efafc5c56b6"
+        },
+        {
+          "name": "_label",
+          "line": 604,
+          "AST_sha256": "0b78f79626d5c0c4e0d3cfb830d26ea2b14a8e066ed676f1870af42935ad9c49"
+        },
+        {
+          "name": "_limit",
+          "line": 609,
+          "AST_sha256": "cf639b0efb668371dd8a572a35c0d46c9ee7d12b8db97523267abf645744dd7b"
+        },
+        {
+          "name": "_question",
+          "line": 616,
+          "AST_sha256": "f07031a4c9857b4be3e0b2d7fa732462cde1b69d55f10ca275c335f2b6f0c2d3"
+        },
+        {
+          "name": "_parts",
+          "line": 620,
+          "AST_sha256": "64af67519bc3a451593eb33ae80c8390166934052e1ecaf72c63d0bb5d95b9fc"
+        },
+        {
+          "name": "_bare",
+          "line": 649,
+          "AST_sha256": "f6390313c920a848370c117c30bae74f94c967973ac7707ef982295f3dd06a30"
+        },
+        {
+          "name": "_claim",
+          "line": 662,
+          "AST_sha256": "32699a3278bf0f91f6ace81becbfc4a84db1be1b5106af53cff7c9515c68856e"
+        },
+        {
+          "name": "_covered",
+          "line": 707,
+          "AST_sha256": "15df4f372e3645c1d9b35d936685c4f93d295f52a43c0db9bb0e4b6818be3cd9"
+        },
+        {
+          "name": "_different_time",
+          "line": 727,
+          "AST_sha256": "0493815e3095b9dae5cd712848493d734a2e576e88aaa7bb5501091cb97bcef0"
+        },
+        {
+          "name": "_opposes",
+          "line": 738,
+          "AST_sha256": "5a47420e0870202e5129655b80258c17e2ba481e2f306d6fbd32f67c3ab3c0b6"
+        },
+        {
+          "name": "_segments",
+          "line": 764,
+          "AST_sha256": "cb3e14823092391c475bcdf672f7d1a475d8961790198fd88b180ebf73ca6318"
+        },
+        {
+          "name": "_value",
+          "line": 778,
+          "AST_sha256": "d020a3e5e98adde05f8e0065a3af8ad4d40ef19a38ab9101cb8ccaecea879f46"
+        },
+        {
+          "name": "_names_topic",
+          "line": 785,
+          "AST_sha256": "e8084fef4d1baf7c87bbd2b2be314081f7d42664bed68ab85a812fa583a2b5bc"
+        },
+        {
+          "name": "_selected_claims",
+          "line": 803,
+          "AST_sha256": "9a78cce69fef0c2016de43895e774b7f57f30e3fcf2cfd3c4a3df06f752998d3"
+        },
+        {
+          "name": "_occurrences",
+          "line": 821,
+          "AST_sha256": "95c8d9a0ac4be318cb92df73e387f7ec5730ba45ae5bb6a4f7ac89aa94c6ca53"
+        },
+        {
+          "name": "_fragment",
+          "line": 841,
+          "AST_sha256": "4d0cb6a95fbe1ea6fdd25395a05951107ed12d42423fdb1c6a473c39549d0da7"
+        },
+        {
+          "name": "_stems",
+          "line": 850,
+          "AST_sha256": "ed86422e74d6da32e85574f2306a5fcafd79a9af0cc158f7774ce8cc807df4ed"
+        },
+        {
+          "name": "_summary",
+          "line": 857,
+          "AST_sha256": "b18579f1fb77470a44616babeb89196945aff12acfb4b538d1d8353f294fa8cb"
+        },
+        {
+          "name": "_mentions",
+          "line": 866,
+          "AST_sha256": "706cfbdc59b5a3bd98119cc93fced37b3294e6ec744d8898605ab0f151246cce"
+        },
+        {
+          "name": "opposed_ids",
+          "line": 876,
+          "AST_sha256": "e11ffebb1e1d5fadc2c5a630e0add17573f8ae6366921b6d3c01210ba75ef8ff"
+        },
+        {
+          "name": "_elicited_report",
+          "line": 1001,
+          "AST_sha256": "eb56012f696a82afcacc261101ee9d33d568260b714248890cff55aed5912570"
+        },
+        {
+          "name": "complete_ids",
+          "line": 1024,
+          "AST_sha256": "c93e7e0bc7e7f613529a3f7b3e2c17a856cb34ecda45338edeaebd4505b635b1"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/reviewed_speaker.py",
+      "bytes_sha256": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "whole_AST_sha256": "4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "frames",
+          "line": 8,
+          "AST_sha256": "4b5b4d422d0f783098a306c122174c0d69b4d6997a79c20939c7a46f548eff12"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/transcript_context.py",
+      "bytes_sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "whole_AST_sha256": "e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "digest",
+          "line": 21,
+          "AST_sha256": "7f105b94a6bdb51ca6c647df05c4c89229744dd9a3d6fd3d5eceee6c247a57e8"
+        },
+        {
+          "name": "token_for",
+          "line": 24,
+          "AST_sha256": "e52eddd86a651ea08f8684492e00e9283b1f9f59f83be2b1b19b65811b42262d"
+        },
+        {
+          "name": "verified",
+          "line": 31,
+          "AST_sha256": "a7c6039458a8c606b23c6ec4cc5e4f0927dc5742ca442d6081cdc6c887598954"
+        },
+        {
+          "name": "current",
+          "line": 44,
+          "AST_sha256": "8924b3a87a727c3bb20ba049117233a52b33fa4cabe80c9c9c8a09f82127f587"
+        },
+        {
+          "name": "admitted",
+          "line": 53,
+          "AST_sha256": "8af2b46eba22dfdd6107bda2498fb85ea26b112fe956fe02869c79207392512d"
+        },
+        {
+          "name": "payload",
+          "line": 60,
+          "AST_sha256": "d7c0d79e11e23e79d81e299c934128b27a4f027e93af69f89f255e54858db750"
+        },
+        {
+          "name": "apply",
+          "line": 66,
+          "AST_sha256": "5d355b62831bd2a9453feafb1a3a343ebb3545461c02b7eae4f6e76de88eab9b"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/v3_destination.py",
+      "bytes_sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "whole_AST_sha256": "b8ff1dff5825ef66c86c43d3db21fd9e7b9b8468179205ebac01899e347809ef",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "sides",
+          "line": 11,
+          "AST_sha256": "82b642d87ded1fe617da32474bbffd2b6a64d91457fa0772e660374744059930"
+        },
+        {
+          "name": "side_warnings",
+          "line": 25,
+          "AST_sha256": "037dab95ac869a4c808a22ad590637466095528f2446a42b2cdbd5ebfa063039"
+        },
+        {
+          "name": "review_requirements",
+          "line": 46,
+          "AST_sha256": "d301b4ea970a20f7ab4c9e529bb3aedb3fb1f96331422f4b1b44138f4b109cc7"
+        },
+        {
+          "name": "review_claims",
+          "line": 72,
+          "AST_sha256": "59d128f3f348cfadbb1adaadb0352ea97aab3e3cdd368029b5ca4f96c19bb5e4"
+        },
+        {
+          "name": "explicit_patient_report",
+          "line": 99,
+          "AST_sha256": "475b162065d8582a102f27ae6797f66047a3c8e4f667fc516054cdd294830b10"
+        },
+        {
+          "name": "policy_warnings",
+          "line": 103,
+          "AST_sha256": "db7c5abfdc4d6fb2fbca77d62ba99178e8c40baa1571d67628c0443c096dcb0a"
+        },
+        {
+          "name": "word_roots",
+          "line": 149,
+          "AST_sha256": "7ac47bc3cc03f78675cacb78a4519ece5200c538ee78db2a1d07ec68f40288b6"
+        },
+        {
+          "name": "temporal_scopes",
+          "line": 160,
+          "AST_sha256": "4f6979539bd89a402c71be15a3dee47d3861b648219c47492a2148a62af79092"
+        },
+        {
+          "name": "destination_temporal_scopes",
+          "line": 165,
+          "AST_sha256": "4aa858a7acad5947b8bc4964a4ad6f1e75737c4faa5082aa50418c8daa869124"
+        },
+        {
+          "name": "temporal_warnings",
+          "line": 188,
+          "AST_sha256": "3132ceee6848cc01b75328a834679a4e33790ebcb2c9b89732d8eaa86c756381"
+        },
+        {
+          "name": "predicate_polarity",
+          "line": 219,
+          "AST_sha256": "eabd2bd8b31980fd611528ef9289c1e845799ea576eb14e78edb291e0dccaa3e"
+        },
+        {
+          "name": "option_warnings",
+          "line": 257,
+          "AST_sha256": "57cb85359a23c47ebb66b9eb89c11284fe89bb36e9a5c24f9022cb2857ef0dce"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    },
+    {
+      "path": "core/v3_mapping.py",
+      "bytes_sha256": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "whole_AST_sha256": "34cae0324aa323299cea26e035c560d32a5aeda23fc25e435234ab73c2e5c87c",
+      "scope": "entire ast.Module including imports, globals, all classes/functions",
+      "functions": [
+        {
+          "name": "field_limit",
+          "line": 34,
+          "AST_sha256": "0fb98abda0fe3352e863eca47abcba453c5028b1eddf686875db32783288d957"
+        },
+        {
+          "name": "is_v3_version",
+          "line": 54,
+          "AST_sha256": "46df7c8659d1478feef6f33b109c36d5964a114cf810d20a35a06cffdb498bc4"
+        },
+        {
+          "name": "is_v3_fields",
+          "line": 58,
+          "AST_sha256": "3ff98640998bc47b4674f0f6c5cfdb11b2afc52334d3380574c1e57f05dbd1c5"
+        },
+        {
+          "name": "answerable",
+          "line": 63,
+          "AST_sha256": "2167b5c46dacc4f2f64a677e7a37dd64aa6966aa269feabda14e7b9adc0ece63"
+        },
+        {
+          "name": "export_refusal",
+          "line": 68,
+          "AST_sha256": "a5a67930891f0523a4140ee081d134deb2bdd967daa100d778a5c838de954f08"
+        },
+        {
+          "name": "generation_refusal",
+          "line": 104,
+          "AST_sha256": "a9054eb4147d22dfe3c2086c88355d0b757b557b5cfb5ecc57bdf30499432936"
+        },
+        {
+          "name": "admission_refusals",
+          "line": 121,
+          "AST_sha256": "7e3ca0957ff55ef2ba32b32477913ed2efa99b53deeb3c63daf941f4f5123a3c"
+        },
+        {
+          "name": "counted_tab_column",
+          "line": 150,
+          "AST_sha256": "6b98ef743e564579e607374a4f566515d3f02df814e56f1d4e4a21eccc501c41"
+        },
+        {
+          "name": "export_needs_verifier",
+          "line": 166,
+          "AST_sha256": "9add30c0195065901fb16fa5df532f42b408c342e95fead87796be1e899e663a"
+        },
+        {
+          "name": "_source_refusal",
+          "line": 197,
+          "AST_sha256": "7cb74a5540175b830e9a2549b5e9909cea29e270e3032ef460fb9cea86e60362"
+        },
+        {
+          "name": "too_many_fields",
+          "line": 219,
+          "AST_sha256": "cf9110c1f2dc39dfd1e9f9dd92b0efd83e79be3f010b1d2f87cb6ecd5029420b"
+        },
+        {
+          "name": "label_of",
+          "line": 228,
+          "AST_sha256": "09e48911728daa1e5cb3266c8d382d6303185afbaa8be7420f39a7b5b5f7f30f"
+        },
+        {
+          "name": "question_parts",
+          "line": 232,
+          "AST_sha256": "abc958af2ba6648574cdc22194b8b096877e871e83fbd8cb09c1a6cf3556d865"
+        },
+        {
+          "name": "option_for",
+          "line": 255,
+          "AST_sha256": "a5a2aab0c1e18d25f29f156cc534446a42c606c678561803a32ee03fa00e6d76"
+        },
+        {
+          "name": "columns",
+          "line": 269,
+          "AST_sha256": "fd25251084530a25d6ebc8866de3de2fe1540cb6d1d01cc0b0dab5d114ebd1da"
+        },
+        {
+          "name": "_shown",
+          "line": 277,
+          "AST_sha256": "36c36032601034aeef8f5bd055471b1fc8e124caa25ac94763fb9c19f00f3d10"
+        },
+        {
+          "name": "table_rows",
+          "line": 282,
+          "AST_sha256": "abf731532f5b3dd1455b65ea5a53d818f254c4b32366bb9417e7be29ee9657ff"
+        },
+        {
+          "name": "normalize",
+          "line": 303,
+          "AST_sha256": "bb5f9b08e823eb69e9a53d4287a4fce2a5b14f79ac3a34b84d6389aec3304c81"
+        },
+        {
+          "name": "fill_answers",
+          "line": 350,
+          "AST_sha256": "b13613d7107b869de254584aaa730f5b62f39cd4c92dbbb1e44c6d2552d09ca9"
+        },
+        {
+          "name": "shows_words",
+          "line": 387,
+          "AST_sha256": "167f4fea6dd8181a58f8c0f2a651dbc4be48a53a5770e1534f10650921568d72"
+        },
+        {
+          "name": "printed_words",
+          "line": 393,
+          "AST_sha256": "8d57a2c423ec60a770cb84eff1361aa2746a9d0182228367b9aa5bfe3d556d8b"
+        },
+        {
+          "name": "as_printed",
+          "line": 405,
+          "AST_sha256": "d265c34129dec73a4f2c3ae4248a18acbe6491bcdf4ff650ea4b9315d2ef5614"
+        },
+        {
+          "name": "review_note",
+          "line": 419,
+          "AST_sha256": "d0da33a5d37fd0e33cecf8189373e52bb9fc7496499d2809b2791e468d1646ba"
+        },
+        {
+          "name": "blank_note",
+          "line": 440,
+          "AST_sha256": "77a1663bb8c6e7ffcc4d8e224ddf24c2c70eb75e26c02a0507e11cb2b7463c69"
+        },
+        {
+          "name": "finalized_note",
+          "line": 447,
+          "AST_sha256": "112df541d2e4e5ae82bf66886d3f5b3d20f1d4a8e246c204527fd41f29171e22"
+        },
+        {
+          "name": "input_for",
+          "line": 459,
+          "AST_sha256": "6f28b6f83ee31046f398eae488cc0cd95d0695765bbe1edbe6515d52e0ce9279"
+        },
+        {
+          "name": "_slot",
+          "line": 468,
+          "AST_sha256": "f002193c277ddde391b42f813745d06bd6bb7ef7fe7e12824342b956e3a928c5"
+        },
+        {
+          "name": "mapped_slots",
+          "line": 472,
+          "AST_sha256": "c1d38244ca8478868f6d8cc232dc78f189b7eadc494ca0920cb82510f870a4e7"
+        },
+        {
+          "name": "is_mapped",
+          "line": 492,
+          "AST_sha256": "0b99c2e6084e770cc557d172c1ee5669ae18bb553c534cf30b248e3b527ace74"
+        },
+        {
+          "name": "open_places",
+          "line": 501,
+          "AST_sha256": "b86a711878d24860d7c6516a862619fe0e026bca2f5edc3a554f8de8ba1a6a09"
+        },
+        {
+          "name": "missing_boxes",
+          "line": 524,
+          "AST_sha256": "bb16495b14d21e8d45db8217cbc41ac2493bea0d07717a7b43ccbf0c818385e2"
+        },
+        {
+          "name": "checkboxes_off_box",
+          "line": 544,
+          "AST_sha256": "930ea5dbf6b7909f1f92e5528bfb9e705d5e32a532d1a62e413792ecf137050a"
+        },
+        {
+          "name": "insert_in_document_order",
+          "line": 551,
+          "AST_sha256": "0e8b982545c79d3815f23333b6f3e6aa0f977d986502dd2c890959a0c5a6e29f"
+        }
+      ],
+      "equal_04fb_AST": true,
+      "equal_481b_AST": true
+    }
+  ],
+  "genuine_attempts": [
+    {
+      "campaign": "quillmd-v1-standing-api-testing-20261004-3",
+      "attempt": 2,
+      "manifest_sha256": "eec0ad735501b1689c195cd2f8233fa0624a3fefe65e8fe40821a13dc6d9fb32",
+      "source": "04fb7603282dc47eda98058c6d790f407951acba",
+      "send": {
+        "case": "ordinary-batch-101-v1",
+        "form": "ordinary-batch-101-v1",
+        "group": "ordinary_batch",
+        "id": "ordinary_batch:part-1",
+        "index": 1,
+        "kind": "generation",
+        "path": "ordinary_batch_first",
+        "pricing_key": "ordinary_notes_field_relations"
+      },
+      "settings": {
+        "ai_mode": "live",
+        "data_mode": "synthetic",
+        "database": {
+          "host": "127.0.0.1",
+          "name": "quillmd_qa_standing_20261004_3",
+          "port": "55731"
+        },
+        "effort": "medium",
+        "inference_geo": "",
+        "layout_socket": "",
+        "mapping_assistance": false,
+        "model": "claude-sonnet-5-5",
+        "price_settings": {
+          "QUILLMD_DEEPGRAM_RATE_PER_MINUTE": "0.0043",
+          "QUILLMD_DEEPGRAM_RATE_PER_SECOND": "",
+          "QUILLMD_PROVIDER_DISCOUNT_RATE": "0"
+        },
+        "pricing_version": "configured-v1:d15bca4a92a0869453c9fd5fd98d1a38321f21ae0d5f6f2b06b4a01332758ff2",
+        "provider": "anthropic",
+        "rates": {
+          "cached": "0.20",
+          "input": "2",
+          "output": "10"
+        },
+        "request_profile": {
+          "effort": "medium",
+          "max_output_tokens": 8000,
+          "profile": "claude-sonnet-5-5-v1",
+          "thinking": {
+            "type": "between_tools"
+          },
+          "timeout_seconds": 120
+        },
+        "stage_flags": {
+          "QUILLMD_LAYOUT_SERVICE_UID": "",
+          "QUILLMD_LAYOUT_SOCKET": "",
+          "QUILLMD_MAPPING_ASSISTANCE": "0",
+          "QUILLMD_MAPPING_ASSISTANCE_LIVE": "0",
+          "QUILLMD_V3_FIELD_RELATIONS": "0",
+          "QUILLMD_V3_GENERATION_BATCHES": "0",
+          "QUILLMD_V3_HISTORY_CONTEXT": "0",
+          "QUILLMD_WM_NARRATIVE": "0",
+          "QUILLMD_WORD_ENGINE": "v3"
+        },
+        "state_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004-3/qa-state",
+        "thinking": "between_tools",
+        "word_engine": "v3"
+      },
+      "watched_count": 59,
+      "actual_model": "claude-sonnet-5-5",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 19774,
+        "output_tokens": 6909,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "stop": "end_turn",
+      "receipt_request_id": "req_011Cfh6fV7MZtEnhnindgnqe",
+      "paid_cost": "0.108638000000",
+      "QA_retail_charge": "0.162957000000",
+      "customer_limit": "0.465567000000",
+      "checks": {
+        "durable_receipt_matches": true,
+        "exact_1_5_multiplier": true,
+        "ledger_debit_matches": true,
+        "no_held_reservation": true,
+        "over_limit_absorbed_exactly": true,
+        "payer_matches_authorized_snapshot": true,
+        "recomputed_defined_cost_matches": true,
+        "recorded_list_cost_matches": true,
+        "stored_result_hash_matches": true,
+        "usage_scope_matches_job": true
+      },
+      "audit_all_checks": true,
+      "wallets": [
+        {
+          "kind": "promo",
+          "balance": "9.832750000000",
+          "reserved": "0.459681000000",
+          "checks": {
+            "balance_equals_ledger": true,
+            "reserved_equals_holds": true
+          }
+        },
+        {
+          "kind": "paid",
+          "balance": "0E-12",
+          "reserved": "0E-12",
+          "checks": {
+            "balance_equals_ledger": true,
+            "reserved_equals_holds": true
+          }
+        }
+      ],
+      "invoice_reconciled": false,
+      "captured_file_hashes": {
+        "answers-after-child.json": "7dbbefd8744a4023575d71535f93060447b449d849dd9d8789f1dc0ad2a6fce2",
+        "audit-billing.json": "d64d24691bdb6fd63c9db539e459d8125597b2b989b15158a4c7ced34012ac83",
+        "audit-expected-intermediate.json": "3b694d89a1f02a88e8a57a2b4998d29fa145deea81f8740be3144c37a40b0652",
+        "batch-plan.json": "7c70e05b1d74df1c1748055a9ffa549e06c087d5bdc2f846f7cbd481863a9938",
+        "case/form.docx": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+        "case/mapping.json": "f61260af1d120812eb16de40b11d392bdba50e252e7ec63dc05781843e96ce0c",
+        "case/notes.txt": "de970e31aebb017775b8d2678f1b1e3871a4f622ade997c436f6195693cc8ba5",
+        "classification.json": "b83dea30bc2e88ec9fbfe474e41ea868abfa15432a3b75fc7b44497f84bc66be",
+        "compiled-child-request.json": "45566576d02beb25ab656c5194f8798e0517512676bb70c59480da44034d8bf5",
+        "product-result.json": "f4af418a6465a6d6c70a176a1868d748053c7228b7028f2085ba3f01a5316674",
+        "provider-response.body": "ec32d38f03a3ab5898947c63cd9d2c033da920984848c73f032f744035b94706",
+        "provider-response.json": "315ad8dabcd303da8ba903430a1d9922d69b74cbdd9e55994d10255d21029891",
+        "provider-result.json": "ae00b14959c3a3fcd14360609b96bc876f698a7917a0032ab2b84ccaf73ff0c6",
+        "request.json": "c29b77b1916c899dfde6838797bb46674232ac3b82718a0c7d387a5526e796d8"
+      }
+    },
+    {
+      "campaign": "quillmd-v1-standing-api-testing-20261004-3",
+      "attempt": 3,
+      "manifest_sha256": "27af2b576272a21b1e8b14b686bfb934969e2732efbd62c5932b63e914289e70",
+      "source": "04fb7603282dc47eda98058c6d790f407951acba",
+      "send": {
+        "case": "ordinary-batch-101-v1",
+        "form": "ordinary-batch-101-v1",
+        "group": "ordinary_batch",
+        "id": "ordinary_batch:part-2",
+        "index": 2,
+        "kind": "generation",
+        "path": "ordinary_batch_second",
+        "pricing_key": "ordinary_notes_field_relations"
+      },
+      "settings": {
+        "ai_mode": "live",
+        "data_mode": "synthetic",
+        "database": {
+          "host": "127.0.0.1",
+          "name": "quillmd_qa_standing_20261004_3",
+          "port": "55731"
+        },
+        "effort": "medium",
+        "inference_geo": "",
+        "layout_socket": "",
+        "mapping_assistance": false,
+        "model": "claude-sonnet-5-5",
+        "price_settings": {
+          "QUILLMD_DEEPGRAM_RATE_PER_MINUTE": "0.0043",
+          "QUILLMD_DEEPGRAM_RATE_PER_SECOND": "",
+          "QUILLMD_PROVIDER_DISCOUNT_RATE": "0"
+        },
+        "pricing_version": "configured-v1:d15bca4a92a0869453c9fd5fd98d1a38321f21ae0d5f6f2b06b4a01332758ff2",
+        "provider": "anthropic",
+        "rates": {
+          "cached": "0.20",
+          "input": "2",
+          "output": "10"
+        },
+        "request_profile": {
+          "effort": "medium",
+          "max_output_tokens": 8000,
+          "profile": "claude-sonnet-5-5-v1",
+          "thinking": {
+            "type": "between_tools"
+          },
+          "timeout_seconds": 120
+        },
+        "stage_flags": {
+          "QUILLMD_LAYOUT_SERVICE_UID": "",
+          "QUILLMD_LAYOUT_SOCKET": "",
+          "QUILLMD_MAPPING_ASSISTANCE": "0",
+          "QUILLMD_MAPPING_ASSISTANCE_LIVE": "0",
+          "QUILLMD_V3_FIELD_RELATIONS": "0",
+          "QUILLMD_V3_GENERATION_BATCHES": "0",
+          "QUILLMD_V3_HISTORY_CONTEXT": "0",
+          "QUILLMD_WM_NARRATIVE": "0",
+          "QUILLMD_WORD_ENGINE": "v3"
+        },
+        "state_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004-3/qa-state",
+        "thinking": "between_tools",
+        "word_engine": "v3"
+      },
+      "watched_count": 59,
+      "actual_model": "claude-sonnet-5-5",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 18388,
+        "output_tokens": 78,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "stop": "end_turn",
+      "receipt_request_id": "req_011Cfh6hzH6DakvQtRokZyMu",
+      "paid_cost": "0.037556000000",
+      "QA_retail_charge": "0.056334000000",
+      "customer_limit": "0.459681000000",
+      "checks": {
+        "durable_receipt_matches": true,
+        "exact_1_5_multiplier": true,
+        "ledger_debit_matches": true,
+        "no_held_reservation": true,
+        "over_limit_absorbed_exactly": true,
+        "payer_matches_authorized_snapshot": true,
+        "recomputed_defined_cost_matches": true,
+        "recorded_list_cost_matches": true,
+        "stored_result_hash_matches": true,
+        "usage_scope_matches_job": true
+      },
+      "audit_all_checks": true,
+      "wallets": [
+        {
+          "kind": "promo",
+          "balance": "9.776416000000",
+          "reserved": "0E-12",
+          "checks": {
+            "balance_equals_ledger": true,
+            "reserved_equals_holds": true
+          }
+        },
+        {
+          "kind": "paid",
+          "balance": "0E-12",
+          "reserved": "0E-12",
+          "checks": {
+            "balance_equals_ledger": true,
+            "reserved_equals_holds": true
+          }
+        }
+      ],
+      "invoice_reconciled": false,
+      "captured_file_hashes": {
+        "aggregate-state.json": "923a3ee6293a7da8432ef01150307bcf758b331f23a44073ae259a4e5061b707",
+        "answers-adopted.json": "0d9f93a1b00f502333108bedba9b1387a52bd7b470fb0e6eece83d6a59cc3ab3",
+        "answers-after-child.json": "7dbbefd8744a4023575d71535f93060447b449d849dd9d8789f1dc0ad2a6fce2",
+        "answers-reviewed.json": "82a52a50f843122a5c886327a3e0259ba1fcab8ab1ec7386fd4705abce421362",
+        "audit-billing.json": "93ccf5365410b141b08fa3c3c9a3739a9a7cb256d0eec9a998794006097542bd",
+        "batch-plan.json": "7c70e05b1d74df1c1748055a9ffa549e06c087d5bdc2f846f7cbd481863a9938",
+        "case/form.docx": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+        "case/mapping.json": "f61260af1d120812eb16de40b11d392bdba50e252e7ec63dc05781843e96ce0c",
+        "case/notes.txt": "de970e31aebb017775b8d2678f1b1e3871a4f622ade997c436f6195693cc8ba5",
+        "classification.json": "40616feba00ab88be4e701d67b907ce75f9494214f8e24b30119bcee3b893d67",
+        "compiled-child-request.json": "45f11c5beffe57b49c70ca55161bdd9ebdffc1f1abf2440124d200c443b04c0a",
+        "export.docx": "2754342f6e70b9fa642245669fcb28500c349cb86fc04e987d0de702e4df3154",
+        "export.json": "8ec9473a4381882d749c560c2245c1f2dca74ade7842efa79bbdbb64bb3cd040",
+        "product-result.json": "b5c466529a6a5cf883ec503bc7e4f4462a68e2577fc50e1cadaab106456293bb",
+        "provider-response.body": "e1fe565a100f08e5b94d29c69f36e7dfe64b3917008c0ac4b71377643e64c0ba",
+        "provider-response.json": "89a967e7e92c0ca8cd43454230365435d6f6f2bae2aafb7152dea817ea81e3d1",
+        "provider-result.json": "f606d9a55d65e94aad8a463f0e8bfe379d2fdfa087d87fba94e854dbba9c631a",
+        "request.json": "85af62eb27c8e09702cfe29762cb8ef95827236666574fc400b19dfae067e47b"
+      }
+    },
+    {
+      "campaign": "quillmd-v1-standing-api-testing-20261004-2",
+      "attempt": 16,
+      "manifest_sha256": "ef698f1fadf45b58489ef981d2259e0bab25888f3cec7cd2f36de645f6006b5b",
+      "source": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "send": {
+        "case": "N01",
+        "form": "r1-11",
+        "group": "relations_last",
+        "id": "notes:N01:field_relations",
+        "index": 15,
+        "kind": "generation",
+        "path": "field_relations",
+        "pricing_key": "ordinary_notes_field_relations"
+      },
+      "settings": {
+        "ai_mode": "live",
+        "data_mode": "synthetic",
+        "database": {
+          "host": "127.0.0.1",
+          "name": "quillmd_qa_standing_20261004_2",
+          "port": "55731"
+        },
+        "effort": "medium",
+        "inference_geo": "",
+        "layout_socket": "",
+        "mapping_assistance": false,
+        "model": "claude-sonnet-5-5",
+        "price_settings": {
+          "QUILLMD_DEEPGRAM_RATE_PER_MINUTE": "0.0043",
+          "QUILLMD_DEEPGRAM_RATE_PER_SECOND": "",
+          "QUILLMD_PROVIDER_DISCOUNT_RATE": "0"
+        },
+        "pricing_version": "configured-v1:d15bca4a92a0869453c9fd5fd98d1a38321f21ae0d5f6f2b06b4a01332758ff2",
+        "provider": "anthropic",
+        "rates": {
+          "cached": "0.20",
+          "input": "2",
+          "output": "10"
+        },
+        "request_profile": {
+          "effort": "medium",
+          "max_output_tokens": 8000,
+          "profile": "claude-sonnet-5-5-v1",
+          "thinking": {
+            "type": "between_tools"
+          },
+          "timeout_seconds": 120
+        },
+        "stage_flags": {
+          "QUILLMD_LAYOUT_SERVICE_UID": "",
+          "QUILLMD_LAYOUT_SOCKET": "",
+          "QUILLMD_MAPPING_ASSISTANCE": "0",
+          "QUILLMD_MAPPING_ASSISTANCE_LIVE": "0",
+          "QUILLMD_V3_FIELD_RELATIONS": "0",
+          "QUILLMD_V3_GENERATION_BATCHES": "0",
+          "QUILLMD_V3_HISTORY_CONTEXT": "0",
+          "QUILLMD_WM_NARRATIVE": "0",
+          "QUILLMD_WORD_ENGINE": "v3"
+        },
+        "state_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004-2/qa-state",
+        "thinking": "between_tools",
+        "word_engine": "v3"
+      },
+      "watched_count": 21,
+      "actual_model": "claude-sonnet-5-5",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 5305,
+        "output_tokens": 856,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": null,
+        "service_tier": "standard"
+      },
+      "stop": "end_turn",
+      "receipt_request_id": "req_011Cfh9BPZoRb5JmvLQZjAcL",
+      "paid_cost": "0.019170000000",
+      "QA_retail_charge": "0.028755000000",
+      "customer_limit": "0.371676000000",
+      "checks": {
+        "durable_receipt_matches": true,
+        "exact_1_5_multiplier": true,
+        "ledger_debit_matches": true,
+        "no_held_reservation": true,
+        "over_limit_absorbed_exactly": true,
+        "payer_matches_authorized_snapshot": true,
+        "recomputed_defined_cost_matches": true,
+        "recorded_list_cost_matches": true,
+        "stored_result_hash_matches": true,
+        "usage_scope_matches_job": true
+      },
+      "audit_all_checks": true,
+      "wallets": [
+        {
+          "kind": "paid",
+          "balance": "0E-12",
+          "reserved": "0E-12",
+          "checks": {
+            "balance_equals_ledger": true,
+            "reserved_equals_holds": true
+          }
+        },
+        {
+          "kind": "promo",
+          "balance": "9.872461000000",
+          "reserved": "0E-12",
+          "checks": {
+            "balance_equals_ledger": true,
+            "reserved_equals_holds": true
+          }
+        }
+      ],
+      "invoice_reconciled": false,
+      "captured_file_hashes": {
+        "answers-adopted.json": "d5988ee92b2b21928491cbcf2f7e9661e9637592de3e4368b9ea206edb4a29c5",
+        "answers-reviewed.json": "fd67ce5d25633068e46abd4aa4adf8941a89729e393afb4cda32127a92e2c4d9",
+        "audit-billing.json": "d74573a5df0737c859577fda8d8c549f5ed6ecb5602e88f50de3d86cdccf7314",
+        "case/form.docx": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+        "case/mapping.json": "30ee28ccf480063e8753bc1254a3642d47d17fa474c33c5e2bde5be9ca6b037b",
+        "case/notes.txt": "5cd8b1700109f2187c5ab494cc71ef66c3a13a9c60d258ceb0181322f7e80dc8",
+        "classification.json": "0757c1037c92eac3cf6b0b6cd51bf63b1e4127831493e27d48a24bbbe904ad7a",
+        "export.docx": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+        "export.json": "096e22b2fe31ef012454e358667c2fa17e83938fc29d9d6665c11a05faec073d",
+        "provider-response.body": "500dc3b32a916796a159f176ec50690b629192a61f6ba1a3d457b6b4f1037473",
+        "provider-response.json": "728535e92664cc366942f3ee21fda2b03a775d2ef4135e885d44abd572523ddb",
+        "provider-result.json": "94bae3853c27995dd6b3d12bdb6d0f3b5e1a363b31cc42da295ffe5082ad9333",
+        "raw-selection.json": "11e8c6a6a7c287abdd3159d7d53f4fbd60ff19278774bb316973def5e4fe4db3",
+        "replay-input.json": "10b07d8a04b33de8db628cb4286b3c1811758d62b06a6f6d9d7261a489e77e6e",
+        "replay.json": "a52f486e5d40ca84c12ac10fa9149c05356081647ab6d119eaa838bd48f324eb",
+        "request.json": "58c635f99edc3a0d469c549ee79516b9c9698bfd970ef0db602ea5121601d15c"
+      }
+    }
+  ],
+  "source_equivalence": [
+    {
+      "module": "core/v3_field_relations.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_field_relations.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/generation_batch.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/generation_batch.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/batch_jobs.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/batch_jobs.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/generation.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/generation.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/ordinary_source_scope.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/ordinary_source_scope.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/reviewed_source.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/reviewed_source.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/reviewed_procedure_source.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/reviewed_procedure_source.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/source_scope.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/source_scope.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_actors.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_actors.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_syntax.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_syntax.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_literal_facts.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_literal_facts.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/reviewed_speaker.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/reviewed_speaker.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/transcript_context.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/transcript_context.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_destination.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_destination.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_mapping.py",
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    },
+    {
+      "module": "core/v3_mapping.py",
+      "paid_revision": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+      "byte_equal": true,
+      "whole_AST_equal": true
+    }
+  ],
+  "request_wire_checks": [
+    {
+      "campaign": "quillmd-v1-standing-api-testing-20261004-3",
+      "attempt": 2,
+      "request_evidence_sha256": "c29b77b1916c899dfde6838797bb46674232ac3b82718a0c7d387a5526e796d8",
+      "SDK_body_sha256": "8abfb702033a6bdcc5d7fa102ea6c70a3e512aaad82496d93efba78eb83fbe81",
+      "SDK_body_bytes": 42977,
+      "actual_model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "thinking": {
+        "type": "between_tools"
+      },
+      "output_config": {
+        "effort": "medium",
+        "format": {
+          "schema": {
+            "$defs": {
+              "Answer": {
+                "additionalProperties": false,
+                "properties": {
+                  "conflict": {
+                    "type": "boolean"
+                  },
+                  "context": {
+                    "$ref": "#/$defs/Partition"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/FieldKey"
+                  },
+                  "unit_ids": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "key",
+                  "unit_ids",
+                  "conflict",
+                  "context"
+                ],
+                "type": "object"
+              },
+              "FieldKey": {
+                "enum": [
+                  "v3_1",
+                  "v3_2",
+                  "v3_3",
+                  "v3_4",
+                  "v3_5",
+                  "v3_6",
+                  "v3_7",
+                  "v3_8",
+                  "v3_9",
+                  "v3_10",
+                  "v3_11",
+                  "v3_12",
+                  "v3_13",
+                  "v3_14",
+                  "v3_15",
+                  "v3_16",
+                  "v3_17",
+                  "v3_18",
+                  "v3_19",
+                  "v3_20",
+                  "v3_21",
+                  "v3_22",
+                  "v3_23",
+                  "v3_24",
+                  "v3_25",
+                  "v3_26",
+                  "v3_27",
+                  "v3_28",
+                  "v3_29",
+                  "v3_30",
+                  "v3_31",
+                  "v3_32",
+                  "v3_33",
+                  "v3_34",
+                  "v3_35",
+                  "v3_36",
+                  "v3_37",
+                  "v3_38",
+                  "v3_39",
+                  "v3_40",
+                  "v3_41",
+                  "v3_42",
+                  "v3_43",
+                  "v3_44",
+                  "v3_45",
+                  "v3_46",
+                  "v3_47",
+                  "v3_48",
+                  "v3_49",
+                  "v3_50",
+                  "v3_51",
+                  "v3_52",
+                  "v3_53",
+                  "v3_54",
+                  "v3_55",
+                  "v3_56",
+                  "v3_57",
+                  "v3_58",
+                  "v3_59",
+                  "v3_60",
+                  "v3_61",
+                  "v3_62",
+                  "v3_63",
+                  "v3_64",
+                  "v3_65",
+                  "v3_66",
+                  "v3_67",
+                  "v3_68",
+                  "v3_69",
+                  "v3_70",
+                  "v3_71",
+                  "v3_72",
+                  "v3_73",
+                  "v3_74",
+                  "v3_75",
+                  "v3_76",
+                  "v3_77",
+                  "v3_78",
+                  "v3_79",
+                  "v3_80",
+                  "v3_81",
+                  "v3_82",
+                  "v3_83",
+                  "v3_84",
+                  "v3_85",
+                  "v3_86",
+                  "v3_87",
+                  "v3_88",
+                  "v3_89",
+                  "v3_90",
+                  "v3_91",
+                  "v3_92",
+                  "v3_93",
+                  "v3_94",
+                  "v3_95",
+                  "v3_96",
+                  "v3_97",
+                  "v3_98",
+                  "v3_99",
+                  "v3_100"
+                ],
+                "type": "string"
+              },
+              "Partition": {
+                "additionalProperties": false,
+                "properties": {
+                  "answer": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "contrary": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "independent": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "qualifier": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "unresolved": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "answer",
+                  "qualifier",
+                  "contrary",
+                  "unresolved",
+                  "independent"
+                ],
+                "type": "object"
+              },
+              "UnitId": {
+                "enum": [
+                  1,
+                  2
+                ],
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "fields": {
+                "items": {
+                  "$ref": "#/$defs/Answer"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "type": "object"
+          },
+          "type": "json_schema"
+        }
+      },
+      "all_copied_evidence_hashes_reverified": true,
+      "actual_receipt_usage_and_audit": true,
+      "invoice_reconciled": false
+    },
+    {
+      "campaign": "quillmd-v1-standing-api-testing-20261004-3",
+      "attempt": 3,
+      "request_evidence_sha256": "85af62eb27c8e09702cfe29762cb8ef95827236666574fc400b19dfae067e47b",
+      "SDK_body_sha256": "0ac040c3aaf73eb0f9b3efdaeaa50b50a2711e9b2b585c4d7acc6464ab8c7640",
+      "SDK_body_bytes": 41114,
+      "actual_model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "thinking": {
+        "type": "between_tools"
+      },
+      "output_config": {
+        "effort": "medium",
+        "format": {
+          "schema": {
+            "$defs": {
+              "Answer": {
+                "additionalProperties": false,
+                "properties": {
+                  "conflict": {
+                    "type": "boolean"
+                  },
+                  "context": {
+                    "$ref": "#/$defs/Partition"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/FieldKey"
+                  },
+                  "unit_ids": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "key",
+                  "unit_ids",
+                  "conflict",
+                  "context"
+                ],
+                "type": "object"
+              },
+              "FieldKey": {
+                "enum": [
+                  "v3_101"
+                ],
+                "type": "string"
+              },
+              "Partition": {
+                "additionalProperties": false,
+                "properties": {
+                  "answer": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "contrary": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "independent": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "qualifier": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "unresolved": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "answer",
+                  "qualifier",
+                  "contrary",
+                  "unresolved",
+                  "independent"
+                ],
+                "type": "object"
+              },
+              "UnitId": {
+                "enum": [
+                  1,
+                  2
+                ],
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "fields": {
+                "items": {
+                  "$ref": "#/$defs/Answer"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "type": "object"
+          },
+          "type": "json_schema"
+        }
+      },
+      "all_copied_evidence_hashes_reverified": true,
+      "actual_receipt_usage_and_audit": true,
+      "invoice_reconciled": false
+    },
+    {
+      "campaign": "quillmd-v1-standing-api-testing-20261004-2",
+      "attempt": 16,
+      "request_evidence_sha256": "58c635f99edc3a0d469c549ee79516b9c9698bfd970ef0db602ea5121601d15c",
+      "SDK_body_sha256": "f9494c886cd556fc10d6df54de5f67e57543381200b7124db3e76e97184ac51a",
+      "SDK_body_bytes": 11750,
+      "actual_model": "claude-sonnet-5-5",
+      "max_tokens": 20000,
+      "thinking": {
+        "type": "between_tools"
+      },
+      "output_config": {
+        "effort": "medium",
+        "format": {
+          "schema": {
+            "$defs": {
+              "Answer": {
+                "additionalProperties": false,
+                "properties": {
+                  "conflict": {
+                    "type": "boolean"
+                  },
+                  "context": {
+                    "$ref": "#/$defs/Partition"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/FieldKey"
+                  },
+                  "option_ids": {
+                    "items": {
+                      "$ref": "#/$defs/OptionId"
+                    },
+                    "type": "array"
+                  },
+                  "unit_ids": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "key",
+                  "unit_ids",
+                  "conflict",
+                  "option_ids",
+                  "context"
+                ],
+                "type": "object"
+              },
+              "FieldKey": {
+                "enum": [
+                  "v3_1",
+                  "v3_2",
+                  "v3_3",
+                  "v3_4",
+                  "v3_5",
+                  "v3_6",
+                  "v3_7",
+                  "v3_8",
+                  "v3_9"
+                ],
+                "type": "string"
+              },
+              "OptionId": {
+                "enum": [
+                  "v3_6:0",
+                  "v3_6:1"
+                ],
+                "type": "string"
+              },
+              "Partition": {
+                "additionalProperties": false,
+                "properties": {
+                  "answer": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "contrary": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "independent": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "qualifier": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  },
+                  "unresolved": {
+                    "items": {
+                      "$ref": "#/$defs/UnitId"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "answer",
+                  "qualifier",
+                  "contrary",
+                  "unresolved",
+                  "independent"
+                ],
+                "type": "object"
+              },
+              "UnitId": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10
+                ],
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "fields": {
+                "items": {
+                  "$ref": "#/$defs/Answer"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "type": "object"
+          },
+          "type": "json_schema"
+        }
+      },
+      "all_copied_evidence_hashes_reverified": true,
+      "actual_receipt_usage_and_audit": true,
+      "invoice_reconciled": false
+    }
+  ],
+  "offline_paid_batch_witness": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/financial-paid3-04fb/result.json",
+    "sha256": "748e83e5138df400c306e09e87fa07cc18ff837029514909fc84eac3ee69f7d8",
+    "actual_exit": 0,
+    "elapsed_seconds": 3.328557,
+    "paid_rows": 2,
+    "pure_geo_context_variants": 8,
+    "extra_live_calls": 0,
+    "runner_equals_source_required": true,
+    "SDK_object_equivalence": true,
+    "SDK_raw_key_order_reconstructed": false
+  }
+}

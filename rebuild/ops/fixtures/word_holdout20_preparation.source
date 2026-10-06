@@ -1,0 +1,268 @@
+"""Metadata-only H20 derivative of the unchanged mounted-route V3 driver.
+
+Default invocation reads nothing. Binding writes sealed, unexecuted packets;
+no database, renderer, original content, provider or application is invoked.
+"""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import re
+import types
+
+MANIFEST_SHA = '3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33'
+THRESHOLDS = {'overall_required': 54, 'overall_denominator': 60,
+              'holdout_required': 18, 'holdout_denominator': 20, 'family_fraction': .75}
+PROFILES = ['empty', 'ordinary', 'long']
+IDS = ['H%02d' % n for n in range(1, 21)]
+VERSION = 'original-holdout20-application-prepared-v1'
+CORPUS = Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus')
+LITERALS = 'docs/rebuild/v1/word-eval/dev33-supported-layout-preparation-v3-20261004'
+PARENT = {
+    'run_dev_application_gate_v2.py.source': 'a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7',
+    'dev_application_gate_v2.py.source': 'fbf37994963d6a39ba546eb35e5bec7a3967e545a707ab253c746be9f45ab918',
+    'fixed_render_checker.py.source': 'a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e',
+}
+SOURCE_HELPER = 'rebuild/ops/fixtures/word_dev33_mixed_consolidation.source'
+PREPARED = 'docs/rebuild/v1/word-holdout20-application-plan-prepared-20261004.json'
+PREPARED_SHA = '8008d18b5405227c373b6e0d6a0220877ff6a845387c531c291827f2c08a57f0'
+SOURCE_HELPER_SHA = '66e7791f2b8b964563278e548981c5c5ae0273ad48f2b97d10ff1a08bca5eccf'
+OWNED = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations')
+DECISION_ROOTS = (CORPUS / 'custodian-20260927/metadata', CORPUS / 'holdout/rights')
+TRIAGE_NAME = '015-original60-supplement-gap-triage.json'
+
+
+def require(condition, reason):
+    if not condition:
+        raise ValueError(reason)
+
+
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def hash_value(value):
+    return isinstance(value, str) and re.fullmatch('[0-9a-f]{64}', value) is not None
+
+
+def rows_by_id(rows, key):
+    require(isinstance(rows, list) and len(rows) == 20, 'Original twenty members are required.')
+    require(all(isinstance(r, dict) and r.get(key) in IDS for r in rows), 'Foreign original identity.')
+    by_id = {r[key]: r for r in rows}
+    require(set(by_id) == set(IDS), 'Missing or duplicate original member.')
+    return by_id
+
+
+def validate_plan(plan, manifest):
+    require(plan.get('version') == VERSION and plan.get('state') == 'PREPARED_ONLY', 'Not the prepared H20 plan.')
+    require(plan.get('final_source_commit') is None and plan.get('execution_authorized') is False,
+            'Preparation cannot invent a source freeze or execution grant.')
+    require(plan.get('manifest_sha256') == MANIFEST_SHA and plan.get('thresholds') == THRESHOLDS,
+            'Original manifest or acceptance protocol changed.')
+    require(plan.get('provider_calls') == 0 and plan.get('originals_previously_exposed') is True
+            and plan.get('new_independence_claim') is False and plan.get('gate_pass') is False,
+            'Provider, exposure or readiness scope changed.')
+    require(plan.get('parent_driver_sha256') == PARENT, 'Mounted-route/scorer parent changed.')
+    require(len(manifest['sets']['dev']) == 40 and len(manifest['sets']['holdout']) == 20,
+            'Overall or holdout denominator changed.')
+    original = {Path(r['corpus_file']).name.split('-')[0]: r for r in manifest['sets']['holdout']}
+    require(len(original) == 20 and set(original) == set(IDS), 'Manifest original membership changed.')
+    records = rows_by_id(plan.get('records'), 'holdout_id')
+    for identity, row in records.items():
+        fixed = original[identity]
+        require(row.get('original_sha256') == fixed['sha256'] and row.get('corpus_file') == fixed['corpus_file']
+                and row.get('families') == fixed['families_declared'] and row.get('format') == fixed['format'],
+                'Original, family or physical format changed: ' + identity)
+        gt = Path(row.get('groundtruth', ''))
+        require(gt.parent == CORPUS / 'holdout/groundtruth' and gt.name == Path(fixed['corpus_file']).stem + '.json'
+                and hash_value(row.get('groundtruth_sha256')), 'Missing or foreign fixed GT binding.')
+        require(row.get('fixed_profiles') == PROFILES and row.get('previously_exposed') is True
+                and row.get('automatic_credit') is False, 'Profiles or exposure changed.')
+    require(plan.get('unsupported_originals') == ['H03', 'H20'], 'Unsupported originals changed.')
+    require([identity for identity in IDS if records[identity]['format'] != 'docx'] == ['H03', 'H20'],
+            'Original DOC format was silently replaced.')
+    packets = plan.get('packets', [])
+    require(len(packets) == 7 and all(p.get('packet') == 'H%02d' % (n + 1)
+            and 1 <= len(p.get('identities', [])) <= 3 for n, p in enumerate(packets)), 'Invalid bounded packet plan.')
+    require([i for p in packets for i in p['identities']] == IDS, 'Packet members changed or disappeared.')
+    return records
+
+
+def validate_rights(plan, ledger):
+    require(isinstance(ledger, dict) and ledger.get('version') == 'original-holdout20-offline-rights-v1'
+            and ledger.get('manifest_sha256') == MANIFEST_SHA, 'Missing exact current H20 rights ledger.')
+    require(ledger.get('scope') == 'offline-synthetic-filled-copy-of-immutable-original'
+            and ledger.get('provider_upload_authorized') is False, 'Rights scope changed.')
+    require(isinstance(ledger.get('adjudicated_by'), str) and len(ledger['adjudicated_by'].strip()) >= 3
+            and re.fullmatch(r'20[0-9]{2}-[0-9]{2}-[0-9]{2}', ledger.get('adjudicated_at', '')),
+            'Missing current decision provenance.')
+    declared = rows_by_id(plan['records'], 'holdout_id')
+    decisions = rows_by_id(ledger.get('records'), 'holdout_id')
+    for identity, row in decisions.items():
+        require(row.get('original_sha256') == declared[identity]['original_sha256'], 'Rights concern another original.')
+        require(row.get('decision') in ('allowed', 'held') and type(row.get('offline_filled_copy_replay_supported')) is bool
+                and row['offline_filled_copy_replay_supported'] == (row['decision'] == 'allowed'),
+                'Missing, uncertain or inconsistent permission decision.')
+        require(isinstance(row.get('decision_basis'), str) and len(row['decision_basis'].strip()) >= 12,
+                'Missing exact permission/hold basis.')
+        evidence = row.get('evidence')
+        require(isinstance(evidence, list) and evidence and all(isinstance(e, dict)
+                and isinstance(e.get('path'), str) and e['path'] and hash_value(e.get('sha256')) for e in evidence),
+                'Missing retained exact decision evidence.')
+        require(row['decision'] != 'allowed' or any(Path(e['path']).name != TRIAGE_NAME for e in evidence),
+                'Old non-adjudicated triage is not permission.')
+    return decisions
+
+
+def read_decision_raw(path):
+    require(path.is_absolute() and '..' not in path.parts and any(path.is_relative_to(root) for root in DECISION_ROOTS),
+            'Permission evidence is outside the exact corpus metadata/rights namespace.')
+    require(path.suffix in ('.json', '.md', '.html', '.txt', '.pdf') and path.is_file()
+            and not any(parent.is_symlink() for parent in (path, *path.parents)),
+            'Missing, foreign or symlinked retained permission evidence.')
+    return path.read_bytes()
+
+
+def verify_rights_evidence(ledger):
+    for record in ledger['records']:
+        for evidence in record['evidence']:
+            require(sha(read_decision_raw(Path(evidence['path']))) == evidence['sha256'],
+                    'Retained permission evidence bytes changed.')
+
+
+def validate_freeze(plan, ledger, freeze, source_inventory, plan_sha, ledger_sha):
+    require(plan_sha == PREPARED_SHA, 'Original GT/profile/membership preparation bytes changed.')
+    require(re.fullmatch('[0-9a-f]{40}', freeze.get('source_commit', '')) is not None
+            and freeze.get('frozen_for_word_acceptance') is True and freeze.get('sealed_before_execution') is True,
+            'Missing prospective final candidate freeze.')
+    require(freeze.get('thresholds') == THRESHOLDS and freeze.get('provider_calls') == 0,
+            'Frozen acceptance or provider scope changed.')
+    require(freeze.get('manifest_sha256') == MANIFEST_SHA and freeze.get('holdout_plan_sha256') == plan_sha
+            and freeze.get('holdout_rights_sha256') == ledger_sha and freeze.get('holdout_rights_reviewed') is True,
+            'Rights or plan bytes were not bound by the reviewed source freeze.')
+    require(freeze.get('parent_driver_sha256') == PARENT and freeze.get('source_hashes') == source_inventory
+            and bool(source_inventory), 'Source or mounted-route parent changed.')
+    require(freeze.get('originals_previously_exposed') is True and freeze.get('new_independence_claim') is False,
+            'Exposure was relabelled.')
+
+
+def replace_once(text, old, new):
+    require(text.count(old) == 1, 'Parent metadata replacement is missing or ambiguous.')
+    return text.replace(old, new)
+
+
+def derive(literals, plan, ledger, plan_sha, ledger_sha):
+    """Change only corpus/rights/task identities and add exact GT byte checks."""
+    require(set(literals) == set(PARENT) and all(sha(literals[n]) == h for n, h in PARENT.items()),
+            'Original mounted-route helpers changed.')
+    require(plan_sha == PREPARED_SHA, 'Original GT/profile/membership preparation bytes changed.')
+    outer = literals['run_dev_application_gate_v2.py.source'].decode()
+    outer = replace_once(outer, "LEDGER=CORPUS/'custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json'",
+                         "LEDGER=BASE/'holdout-rights.json'")
+    outer = replace_once(outer, "LEDGER_SHA='5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7'",
+                         'LEDGER_SHA=' + repr(ledger_sha))
+    old = "manifest=json.loads(manifest_path.read_text());rights=json.loads(LEDGER.read_text())['records']\n by_id={row['development_id']:row for row in rights}\n ids=args.ids.split(',');assert len(ids)==len(set(ids)) and 1<=len(ids)<=3\n assert all(identity in by_id and by_id[identity]['offline_filled_copy_replay_supported'] for identity in ids)\n families={row['sha256']:row['families_declared'] for row in manifest['sets']['dev']}\n records=[dict(by_id[identity],families=families[by_id[identity]['sha256']]) for identity in ids]"
+    new = "manifest=json.loads(manifest_path.read_text());rights=json.loads(LEDGER.read_text())['records']\n metadata_raw=(BASE/'prepared-plan.json').read_bytes();assert digest(metadata_raw)==" + repr(plan_sha) + "\n metadata=json.loads(metadata_raw);by_id={row['holdout_id']:row for row in metadata['records']}\n rights_by_id={row['holdout_id']:row for row in rights}\n ids=args.ids.split(',');assert len(ids)==len(set(ids)) and 1<=len(ids)<=3\n assert all(identity in by_id and by_id[identity]['format']=='docx' and rights_by_id[identity]['offline_filled_copy_replay_supported'] is True for identity in ids)\n assert freeze.get('holdout_plan_sha256')==" + repr(plan_sha) + " and freeze.get('holdout_rights_sha256')==LEDGER_SHA and freeze.get('holdout_rights_reviewed') is True\n records=[dict(by_id[identity],development_id=identity,sha256=by_id[identity]['original_sha256'],prior_expected_map_path=by_id[identity]['groundtruth']) for identity in ids]"
+    outer = replace_once(outer, old, new)
+    outer = replace_once(outer, "'set':'dev'", "'set':'holdout'")
+    outer = outer.replace('run_dev_application_gate_v2.py', 'run_holdout_application.py')
+    outer = outer.replace('dev_application_gate_v2.py', 'holdout_application.py')
+    outer = outer.replace('dev-application-', 'holdout-application-').replace('quillmd-dev-gate-', 'quillmd-h20-gate-')
+    outer = outer.replace('quillmd_qa_sol_ops_dev33', 'quillmd_qa_sol_ops_h20')
+    inner = literals['dev_application_gate_v2.py.source'].decode()
+    inner = replace_once(inner, "plan['set'] == 'dev'", "plan['set'] == 'holdout'")
+    inner = replace_once(inner, "C/'dev/originals'", "C/'holdout/originals'")
+    inner = replace_once(inner, "C/'dev/groundtruth'", "C/'holdout/groundtruth'")
+    inner = replace_once(inner, "groundtruth_raw=expected.read_bytes();gt=json.loads(groundtruth_raw)",
+                         "groundtruth_raw=expected.read_bytes();assert digest(groundtruth_raw)==record['groundtruth_sha256'];gt=json.loads(groundtruth_raw)")
+    inner = inner.replace('sol_word_original_dev_gate', 'sol_word_original_holdout_gate')
+    return {'run_holdout_application.py': outer.encode(), 'holdout_application.py': inner.encode(),
+            'fixed_render_checker.py': literals['fixed_render_checker.py.source']}
+
+
+def bind(source, freeze_path, rights_path, output):
+    """Only emit unexecuted packet bytes after all fail-closed metadata checks."""
+    require(not output.exists(), 'Evidence output already exists.')
+    require(output.is_relative_to(OWNED), 'Preparation output is outside the task-owned evidence root.')
+    for p in (source, freeze_path, rights_path):
+        require(not p.is_symlink(), 'Symlinked source or authority evidence.')
+    plan_raw = (source / PREPARED).read_bytes()
+    require(sha(plan_raw) == PREPARED_SHA, 'Original fixed holdout preparation bytes changed.')
+    manifest_raw = (source / 'docs/rebuild/v1/word-corpus-manifest.json').read_bytes()
+    require(sha(manifest_raw) == MANIFEST_SHA, 'Frozen corpus manifest bytes changed.')
+    plan = json.loads(plan_raw); records = validate_plan(plan, json.loads(manifest_raw))
+    protocol = plan['protocol']
+    require(sha((source / protocol['path']).read_bytes()) == protocol['sha256'], 'Acceptance protocol bytes changed.')
+    for name, expected in plan['unchanged_helpers'].items():
+        require(sha((source / 'docs/rebuild/v1/word-eval' / name).read_bytes()) == expected,
+                'Scorer or profile helper bytes changed.')
+    ledger_raw = rights_path.read_bytes(); ledger = json.loads(ledger_raw)
+    decisions = validate_rights(plan, ledger)
+    verify_rights_evidence(ledger)
+    freeze = json.loads(freeze_path.read_bytes())
+    module = types.ModuleType('unchanged_full_source_binding')
+    module.__file__ = str(source / SOURCE_HELPER)
+    source_helper_raw = (source / SOURCE_HELPER).read_bytes()
+    require(sha(source_helper_raw) == SOURCE_HELPER_SHA, 'Full source verification helper changed.')
+    exec(compile(source_helper_raw, module.__file__, 'exec'), module.__dict__)
+    source_inventory = module.verified_source(source, freeze.get('source_commit'))
+    validate_freeze(plan, ledger, freeze, source_inventory, sha(plan_raw), sha(ledger_raw))
+    literals = {name: (source / LITERALS / name).read_bytes() for name in PARENT}
+    derived = derive(literals, plan, ledger, sha(plan_raw), sha(ledger_raw))
+    # Hash fixed project-authored GT only after decisions. Original bytes remain
+    # unopened until the unchanged actual upload primitive in a granted run.
+    for row in records.values():
+        gt = Path(row['groundtruth'])
+        require(gt.is_file() and not gt.is_symlink() and sha(gt.read_bytes()) == row['groundtruth_sha256'],
+                'Fixed ground-truth bytes changed.')
+    output.mkdir(mode=0o700, parents=True)
+    for name, raw in {**derived, 'prepared-plan.json': plan_raw, 'holdout-rights.json': ledger_raw}.items():
+        with (output / name).open('xb') as stream:
+            stream.write(raw)
+        (output / name).chmod(0o600)
+    packets = []
+    unsupported, held = {}, {}
+    for identity in IDS:
+        if records[identity]['format'] != 'docx':
+            unsupported[identity] = {'state': 'unsupported_original_format', 'automatic_success': False,
+                                     'original_preserved': True, 'actual_upload_executed': False}
+        elif decisions[identity]['decision'] != 'allowed':
+            held[identity] = {'state': 'permission_held', 'automatic_success': False, 'actual_upload_executed': False}
+    for packet in plan['packets']:
+        runnable = [i for i in packet['identities'] if i not in unsupported and i not in held]
+        packets.append({**packet, 'runnable_identities': runnable, 'state': 'PREPARED_NOT_RUN',
+            'command': ['timeout', '1260', 'python3', '-B', str(output / 'run_holdout_application.py'),
+                        str(source), freeze['source_commit'], '--freeze', str(freeze_path),
+                        '--ids', ','.join(runnable)] if runnable else None,
+            'actual_child_exit': None, 'actual_outer_exit': None})
+    receipt = {'state': 'BOUND_PREPARED_NOT_RUN', 'source_commit': freeze['source_commit'],
+               'plan_sha256': sha(plan_raw), 'rights_sha256': sha(ledger_raw),
+               'derived_sha256': {name: sha(raw) for name, raw in derived.items()},
+               'packets': packets, 'unsupported_originals': unsupported, 'permission_held': held,
+               'holdout_denominator': 20, 'overall_denominator': 60, 'gate_pass': False,
+               'provider_calls': 0, 'new_independence_claim': False,
+               'ordinary_selected_processor': 'unchanged auto; native selection is recorded as uncompleted by this V3 adapter',
+               'actual_application_run_requires_root_resource_handoff': True}
+    with (output / 'bound-packets.json').open('x') as stream:
+        json.dump(receipt, stream, indent=2); stream.write('\n')
+    (output / 'bound-packets.json').chmod(0o600)
+    return receipt
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--bind', action='store_true')
+    parser.add_argument('--source', type=Path); parser.add_argument('--freeze', type=Path)
+    parser.add_argument('--rights', type=Path); parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    if not args.bind:
+        print(json.dumps({'state': 'PREPARED_ONLY', 'application_runs': 0, 'gate_pass': False}))
+        return
+    require(all((args.source, args.freeze, args.rights, args.output)), 'Incomplete prospective binding.')
+    require(not any(p.is_symlink() for p in (args.source, args.freeze, args.rights, args.output)),
+            'Symlinked binding argument.')
+    bind(args.source.resolve(), args.freeze.resolve(), args.rights.resolve(), args.output.resolve())
+
+
+if __name__ == '__main__':
+    main()

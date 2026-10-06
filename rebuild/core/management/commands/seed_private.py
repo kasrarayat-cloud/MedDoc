@@ -46,7 +46,13 @@ class Command(BaseCommand):
         doc.save(path);path.chmod(0o600)
         info=inspect_template(path)
         template=Template.objects.create(department=xray,name='Clinical assessment',format=info['format'],original_name='synthetic-assessment.docx',original_path=relative,sha256=info['sha256'],warnings=info['warnings'],created_by=doctor)
-        version=TemplateVersion.objects.create(template=template,number=1,fields=info['fields'],created_by=doctor)
-        Encounter.objects.create(department=xray,patient=Patient.objects.get(department=xray),template_version=version,created_by=doctor,service_date=timezone.localdate(),notes='History: Synthetic patient reports left wrist discomfort after a fall.\nFindings: No deformity documented.\nPlan: Follow-up assessment documented.')
+        from core.views import document_backend
+        version=TemplateVersion.objects.create(template=template,number=1,fields=info['fields'],created_by=doctor,
+            import_manifest=info.get('import_manifest',{}),contract=info.get('contract',''),
+            document_backend=document_backend(info),review_requirements=info.get('review_requirements',[]))
+        if version.contract!='v3':
+            Encounter.objects.create(department=xray,patient=Patient.objects.get(department=xray),template_version=version,created_by=doctor,service_date=timezone.localdate(),notes='History: Synthetic patient reports left wrist discomfort after a fall.\nFindings: No deformity documented.\nPlan: Follow-up assessment documented.')
+        else:
+            self.stdout.write('Synthetic v3 template is ready for clinician mapping review; no confirmation was fabricated.')
         dest.parent.mkdir(exist_ok=True,mode=0o700);dest.write_text(json.dumps(accounts,indent=2));dest.chmod(0o600)
         self.stdout.write(f'Synthetic accounts and blank template ready. Private credentials: {dest}')

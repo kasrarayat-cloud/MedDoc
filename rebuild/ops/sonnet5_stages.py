@@ -74,6 +74,7 @@ no longer describe the request) and each, and their sum, must fit the stage and 
 keeps the declared version and its frozen maximum.
 """
 import dataclasses
+import datetime
 import hashlib
 import html as htmlmod
 import json
@@ -425,6 +426,8 @@ def _answered(saved):
 def _set_by_export(field, saved):
     """Whether the export sets this field at all (the product's stated rule): an answered field, and a checkbox the
     clinician reviewed and left blank (exported unticked). Anything else keeps what the blank form prints."""
+    if field.get('write_protected'):
+        return False
     saved = saved or {}
     return _answered(saved) or (field.get('kind') == 'checkbox'
                                 and (saved.get('reviewed') is True or saved.get('status') == 'left_blank'))
@@ -438,6 +441,10 @@ def expected_option_states(field, saved, printed):
     printed option (the engine's one option reader, word_v3.option_position)."""
     from documents import word_v3 as w
     count, kind = len(printed), field['kind']
+    if field.get('write_protected'):
+        # Empty review preserves a human-owned original. A proposed automatic
+        # answer on it cannot pass the independent read-back.
+        return None if _answered(saved) else list(printed)
     if not _set_by_export(field, saved):
         return list(printed)
     if not _answered(saved):
@@ -501,6 +508,28 @@ def export_read_back(original, exported, fields, answers):
         problem('export', f'the export cannot be opened for reading back ({type(error).__name__})')
         return {'passed': False, 'problems': problems, 'fields': {}, 'outside_written_fields': {}}
     written, owned = set(), {}              # (written destination slot ids; box paragraph id -> owned glyph ordinals)
+    visibility = w.Detector(after.package)
+    visibility_cache = {}
+
+    def visible_destination(ref):
+        identity = f'{ref.get("part")}#{ref.get("slot")}'
+        if identity.endswith('/glyphs'):
+            identity = identity.rsplit('/', 1)[0]
+        if identity in visibility_cache:
+            return visibility_cache[identity]
+        anchor = after.by_id.get(identity)
+        if anchor is None:
+            visibility_cache[identity] = False
+            return False
+        # Inline controls inherit their containing run/paragraph formatting.
+        # For cells/SDTs, inspect each descendant paragraph's own style chain.
+        while anchor.parent is not None and anchor.kind not in ('p', 'tc'):
+            anchor = anchor.parent
+        descendants = [slot for slot in after.slots
+                       if slot.id == anchor.id or slot.id.startswith(anchor.id + '/') and slot.kind == 'p']
+        result = bool(descendants) and all(visibility.tab_source_visible(slot) for slot in descendants)
+        visibility_cache[identity] = result
+        return result
 
     def ident(ref):
         return f'{ref.get("part")}#{ref.get("slot")}'
@@ -512,7 +541,13 @@ def export_read_back(original, exported, fields, answers):
         target = loc.get('target') or {}
         refs = [loc] + list(loc.get('extra') or []) + list(target.get('copies') or [])
         record = readings[key] = {'answered': answered, 'set_by_export': sets}
+        if f.get('write_protected') and answered:
+            problem(key, 'a human-owned destination cannot have an automatic saved answer')
         try:
+            if sets:
+                targets = refs + list(target.get('boxes') or [])
+                if not all(visible_destination(ref) for ref in targets):
+                    problem(key, 'the written destination has hidden or unresolved visibility')
             if kind in OPTION_KINDS:
                 for box in target.get('boxes') or []:
                     paragraph = f'{box.get("part")}#{str(box.get("slot") or "").rsplit("/", 1)[0]}'
@@ -534,20 +569,26 @@ def export_read_back(original, exported, fields, answers):
                 elif shown != expected or (sets and any(state is None for state in shown)):
                     problem(key, f"the export shows the marks {shown}, not the saved answer's {expected}")
             elif kind in SCALAR_KINDS:
-                if answered:
+                if sets:
                     written.update(ident(ref) for ref in refs)
-                shown = w.constrained_scalar_value(before, after, f, answered)
-                expected = (str(saved.get('text') or '') if answered
+                shown = w.constrained_scalar_value(before, after, f, sets)
+                expected = (str(saved.get('text') or '') if sets
                             else w.constrained_scalar_value(before, before, f, False))
+                if sets and kind == 'date' and target.get('shape') == 'temporal_band':
+                    # Only this source-appointed divided date changes its text
+                    # representation. The reader still verifies the original
+                    # caption, guide, exact character positions and calendar.
+                    expected = w.temporal_band_printed_value(expected, target['format'])
                 record.update(expected=expected, read=shown)
-                if answered and (shown is None or _flat(shown) != _flat(expected)):
+                if sets and (shown is None or _flat(shown) != _flat(expected)):
                     problem(key, 'the export shows ' + (repr(shown[:80]) if shown is not None else 'no readable value')
                             + ' where the saved answer is ' + repr(expected[:80]))
-                elif not answered and shown != expected:
+                elif not sets and shown != expected:
                     problem(key, f'the export shows {shown!r:.80} where the blank form shows {expected!r:.80} and '
                                  'nothing was saved')
             elif answered:
-                written.update(ident(ref) for ref in refs)
+                if sets:
+                    written.update(ident(ref) for ref in refs)
                 problem(key, f'a saved {kind} answer cannot be read back')
         except Exception as error:                          # (what cannot be read back is a failure, never a pass)
             problem(key, f'the field cannot be read back ({type(error).__name__})')
@@ -570,6 +611,88 @@ def export_read_back(original, exported, fields, answers):
         problem(OUTSIDE, 'printed content outside the written fields changed: '
                 + '; '.join(f'{name} {", ".join(ids[:6])}' for name, ids in outside.items() if ids))
     return {'passed': not problems, 'problems': problems, 'fields': readings, 'outside_written_fields': outside}
+
+
+def calendar_from_divided_date(value, pattern):
+    """Independent calendar reading under the source-appointed component order.
+
+    ISO is explicit. A different numeric order is admissible only when one
+    calendar interpretation remains. This does not call the writer formatter.
+    """
+    orders = {'ddmmmyyyy': ('day', 'named', 'year'), 'ddmmyyyy': ('day', 'month', 'year'),
+              'mmddyyyy': ('month', 'day', 'year'), 'yyyymmdd': ('year', 'month', 'day')}
+    months = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+    if not isinstance(value, str) or pattern not in orders:return None
+    text = value.strip()
+    try:
+        if re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', text):
+            return datetime.date.fromisoformat(text).isoformat()
+        widths = {'day': r'[0-9]{2}', 'month': r'[0-9]{2}', 'named': r'[A-Za-z]{3}', 'year': r'[0-9]{4}'}
+        matched = re.fullmatch(r'\s*/\s*'.join('(' + widths[part] + ')' for part in orders[pattern]), text)
+        if matched:
+            parts = dict(zip(orders[pattern], matched.groups()))
+            month = (next(i for i, name in enumerate(months, 1) if name.casefold() == parts['named'].casefold())
+                     if 'named' in parts else int(parts['month']))
+            try:return datetime.date(int(parts['year']), month, int(parts['day'])).isoformat()
+            except ValueError:pass
+        numeric = re.fullmatch(r'([0-9]{2})\s*/\s*([0-9]{2})\s*/\s*([0-9]{4})', text)
+        candidates = set()
+        if numeric:
+            first, second, year = map(int, numeric.groups())
+            for day, month in ((first, second), (second, first)):
+                try:candidates.add(datetime.date(year, month, day).isoformat())
+                except ValueError:pass
+        return next(iter(candidates)) if len(candidates) == 1 else None
+    except (ValueError, StopIteration):return None
+
+
+def saved_export_verification(original, exported, fields, saved, *, reviewed_answers=None):
+    """Keep the frozen check and require complete independent readback.
+
+    The frozen text_of reader concatenates w:t and discards visible breaks.
+    Its multiline false negative is corrected only when the destination's
+    independent scalar reader shows the EXACT saved value, including breaks.
+    Missing/reordered text, wrong fields and changed neighbors still refuse.
+    Frozen diagnostic bytes and their original result remain unchanged.
+    """
+    frozen = steps.export_verification(original, exported, fields, saved)
+    read_back = export_read_back(original, exported, fields,
+                                 saved if reviewed_answers is None else reviewed_answers)
+    written = dict(frozen['supported_answers_in_their_fields'])
+    corrections = {}
+    calendar_corrections = {}
+    if read_back['passed']:
+        for field in fields:
+            key = field['key']
+            value = saved.get(key) or {}
+            text = value.get('text') or ''
+            reading = read_back['fields'].get(key) or {}
+            if (written.get(key) is False and field.get('kind') in SCALAR_KINDS
+                    and not field.get('write_protected') and value.get('status') == 'supported'
+                    and ('\n' in text or '\t' in text)
+                    and reading.get('answered') is True and reading.get('set_by_export') is True
+                    and reading.get('expected') == text and reading.get('read') == text):
+                written[key] = True
+                corrections[key] = 'Exact saved visible breaks read in the physical destination.'
+            target = (field.get('locator') or {}).get('target') or {}
+            if (written.get(key) is False and field.get('kind') == 'date'
+                    and target.get('shape') == 'temporal_band' and not field.get('write_protected')
+                    and value.get('status') == 'supported' and reading.get('answered') is True
+                    and reading.get('set_by_export') is True):
+                wanted = calendar_from_divided_date(text, target.get('format'))
+                shown = calendar_from_divided_date(reading.get('read'), target.get('format'))
+                if wanted is not None and wanted == shown:
+                    written[key] = True
+                    calendar_corrections[key] = {'calendar': wanted, 'physical_read': reading['read'],
+                        'source_format': target['format'], 'reason': 'Exact divided date read in its physical destination.'}
+    result = {**frozen, 'supported_answers_in_their_fields': written,
+              'frozen_export_verification': frozen,
+              'visible_break_readback_corrections': corrections,
+              'divided_calendar_readback_corrections': calendar_corrections,
+              'workflow_success': (frozen['zip_members_unchanged']
+                                   and set(frozen['changed_parts']) <= {'word/document.xml'}
+                                   and all(written.values()) and read_back['passed'])}
+    return result, read_back
 
 
 def stop_decision(verdict, path):
@@ -1274,14 +1397,26 @@ class Run:
             template, version = self.upload(self.forms[case['form']],
                                             f'SYNTHETIC SONNET5 NOTES {case["id"]} {send.path} attempt {number}',
                                             'intake.docx')
+            review_digest = self.inputs.get('notes_mapping_review_manifest_sha256', '')
+            mapping_review = None
             if version.fields != form['fields']:
-                raise StageStop(f'{send.id}: the stored mapping differs from the frozen cases.json fields (nothing sent)')
+                raise StageStop(f'{send.id}: the stored mapping differs from the declared fields (nothing sent)')
+            if review_digest:
+                try:
+                    from . import standing_qa_notes_review as nr
+                except ImportError:
+                    import standing_qa_notes_review as nr
+                row = nr.frozen(review_digest)
+                if case['form'] == row['form']:
+                    version, mapping_review = nr.review_mapping(self.world.client, template, version, row, form['fields'])
             page = self.world.client.get(f'/templates/{template.pk}/')
             require(page.status_code == 200, f'The mapping review page failed ({page.status_code}).')
             response = steps.confirm_mapping(self.world.client, template.pk, version.pk)
             version.refresh_from_db()
             require(response.status_code == 302 and version.confirmed, 'The mapping confirmation was refused.')
-            return self.generation_send(send, template, version, case['notes'], extra={'case': case['id']},
+            return self.generation_send(send, template, version, case['notes'], extra={
+                'case': case['id'], **({'notes_mapping_review_manifest_sha256':review_digest,
+                    'mapping_review':mapping_review} if review_digest else {})},
                                         judge=self.judge_notes(case))
 
     def judge_notes(self, case):
@@ -1437,14 +1572,14 @@ class Run:
             # (the frozen check, on what the clinician SAVED: an edited answer must be in its field as edited)
             saved = {k: {**v, 'status': 'supported' if v.get('status') in ('supported', 'edited') and v.get('text')
                                         else v.get('status')} for k, v in reviewed.items()}
-            verified = steps.export_verification(original, exported, version.fields, saved)
+            verified, read_back = saved_export_verification(original, exported, version.fields, saved,
+                                                            reviewed_answers=encounter.answers)
             record.update(verified)
             if not verified['workflow_success']:
                 findings.append({'code': 'export_verification_failed',
                                  'why': 'the export does not preserve the form or an answer is outside its field'})
             # (and the stage's own read-back, which the frozen check is not: every field's mark or value as SAVED, and
             # nothing printed changed outside the written fields — refutation EXPORT-CHECK-DOES-NOT-READ)
-            read_back = export_read_back(original, exported, version.fields, encounter.answers)
             record['read_back'] = read_back
             if not read_back['passed']:
                 findings.append({'code': 'export_verification_failed',

@@ -1,0 +1,507 @@
+{
+  "stage": "word_structure_qualification",
+  "provider_upload_allowed": true,
+  "independently_authored": true,
+  "corpus_qualification": false,
+  "scope": "3 new synthetic Word structure cases only; source exclusions remain partial coverage; no original corpus or real voice credit",
+  "forms": {
+    "synthetic-divided-date-v1": {
+      "sha256": "cb3adddfc17fd56862a52ffb4939647d07a1cd834bf766e9c608723d3242e97c",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Visit date",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "shape": "temporal_band",
+              "start": 0,
+              "end": 39,
+              "parts": [
+                [
+                  0,
+                  3
+                ],
+                [
+                  4,
+                  7
+                ],
+                [
+                  10,
+                  13
+                ],
+                [
+                  14,
+                  17
+                ],
+                [
+                  18,
+                  21
+                ],
+                [
+                  24,
+                  27
+                ],
+                [
+                  28,
+                  31
+                ],
+                [
+                  32,
+                  35
+                ],
+                [
+                  36,
+                  39
+                ]
+              ],
+              "format": "ddmmmyyyy",
+              "caption": {
+                "part": "word/document.xml",
+                "slot": "b/p[0]",
+                "fingerprint": "8eea1ae530126fb2542128d4179085d034b73bfcdbbb746a411d68835bbf3c46"
+              },
+              "guide": {
+                "part": "word/document.xml",
+                "slot": "b/p[2]",
+                "fingerprint": "15168dac29f2e991524751c00b95d2ece8765b8be979e8e2c1ced11bdf558155"
+              }
+            },
+            "fingerprint": "6f6f7c68db258700898aacb5a0a55fce471abb8017d4de19d76910decffbb973"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[3]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 18,
+              "shape": "blank"
+            },
+            "fingerprint": "b5bd088e1cc70d138951a495539bc82dd53fc39b556020ec421788031f459b2f"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 11,
+              "end": 23,
+              "shape": "blank"
+            },
+            "fingerprint": "05934fbb6ec46f80fc87bab8860307cf4404bc652b0eeb4f85c701edc0578b43"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Physician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 21,
+              "end": 33,
+              "shape": "blank"
+            },
+            "fingerprint": "d25917945e471362d2c1a7cff80efdcbb6129841764d0ac583a49afa6e728c24"
+          }
+        }
+      ],
+      "source_issues": []
+    },
+    "synthetic-nominal-insertion-v1": {
+      "sha256": "e1ff3a2edb15907cae7c627c19cbcd8ba5d4f38cd95ba086d2b0f84174948c19",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "category",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 45,
+              "end": 62,
+              "shape": "insertion"
+            },
+            "fingerprint": "2198a9d26efa633787b7e3c5d02cae6dbc6ac40c4801fb9771912dfe036aef38"
+          },
+          "source_questions": [
+            {
+              "relation": "explicit_insertion",
+              "question": "We assessed the case and determined that the {insert category} treatment should end.",
+              "request": "{insert category}",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/p[0]",
+                "fingerprint": "2198a9d26efa633787b7e3c5d02cae6dbc6ac40c4801fb9771912dfe036aef38"
+              }
+            }
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 18,
+              "shape": "blank"
+            },
+            "fingerprint": "b5bd088e1cc70d138951a495539bc82dd53fc39b556020ec421788031f459b2f"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[2]",
+            "target": {
+              "type": "span",
+              "start": 11,
+              "end": 23,
+              "shape": "blank"
+            },
+            "fingerprint": "05934fbb6ec46f80fc87bab8860307cf4404bc652b0eeb4f85c701edc0578b43"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Physician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[3]",
+            "target": {
+              "type": "span",
+              "start": 21,
+              "end": 33,
+              "shape": "blank"
+            },
+            "fingerprint": "d25917945e471362d2c1a7cff80efdcbb6129841764d0ac583a49afa6e728c24"
+          }
+        }
+      ],
+      "source_issues": []
+    },
+    "synthetic-caption-catalogue-v1": {
+      "sha256": "271bc61bdfd216f53a8dab82703b44b165f770aecc089efcf7b465a233bababf",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Patient name",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "1017752110a4dc3a5793210d0e08d158220923d47780b9faa5480558d5f52df5"
+          },
+          "source_questions": [
+            {
+              "relation": "caption_below_cell",
+              "question": "Patient name",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[1]/tc[0]/p[0]",
+                "fingerprint": "ac6b4f58f591b927ec2c035d65343c2df19a9f31112dce93d0fdea8b2e53f42b"
+              }
+            }
+          ]
+        },
+        {
+          "key": "v3_2",
+          "label": "Visit date",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "1017752110a4dc3a5793210d0e08d158220923d47780b9faa5480558d5f52df5"
+          },
+          "source_questions": [
+            {
+              "relation": "caption_below_cell",
+              "question": "Visit date",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[1]/tc[1]/p[0]",
+                "fingerprint": "5d34a66185279da89c4b2fff83d42655976cb5b9c15efc0e2157934f4dd5e58e"
+              }
+            }
+          ]
+        },
+        {
+          "key": "v3_3",
+          "label": "Clinical notes",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[2]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "1017752110a4dc3a5793210d0e08d158220923d47780b9faa5480558d5f52df5"
+          },
+          "source_questions": [
+            {
+              "relation": "caption_below_cell",
+              "question": "Clinical notes",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[1]/tc[2]/p[0]",
+                "fingerprint": "0559c530e61b3a39ebe14c7210ffe5635a0fd9956263ad55241872c469d75a68"
+              }
+            }
+          ]
+        },
+        {
+          "key": "v3_4",
+          "label": "Witness name",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[0]/tc[0]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "1017752110a4dc3a5793210d0e08d158220923d47780b9faa5480558d5f52df5"
+          },
+          "write_protected": true,
+          "review_reason": "This name, signature or date belongs to the same printed signing event. Ordinary notes cannot establish its signer identity or that event; complete the block through the human signing workflow.",
+          "source_questions": [
+            {
+              "relation": "caption_below_cell",
+              "question": "Witness name",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[1]/tr[1]/tc[0]/p[0]",
+                "fingerprint": "222b5c7a471bd6c766271ae12a50b9072d559291f40b862b08fbf13e491f9667"
+              }
+            }
+          ]
+        },
+        {
+          "key": "v3_5",
+          "label": "Signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "1017752110a4dc3a5793210d0e08d158220923d47780b9faa5480558d5f52df5"
+          },
+          "write_protected": true,
+          "review_reason": "This name, signature or date belongs to the same printed signing event. Ordinary notes cannot establish its signer identity or that event; complete the block through the human signing workflow.",
+          "source_questions": [
+            {
+              "relation": "caption_below_cell",
+              "question": "Signature",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[1]/tr[1]/tc[1]/p[0]",
+                "fingerprint": "cd3646b1a4576973b0b86a3d14b3b8c8f6d01f79b9d860de41a4ed91067b0039"
+              }
+            }
+          ]
+        },
+        {
+          "key": "v3_6",
+          "label": "Date",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[1]/tr[0]/tc[2]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "1017752110a4dc3a5793210d0e08d158220923d47780b9faa5480558d5f52df5"
+          },
+          "write_protected": true,
+          "review_reason": "This name, signature or date belongs to the same printed signing event. Ordinary notes cannot establish its signer identity or that event; complete the block through the human signing workflow.",
+          "source_questions": [
+            {
+              "relation": "caption_below_cell",
+              "question": "Date",
+              "source": {
+                "part": "word/document.xml",
+                "slot": "b/tbl[1]/tr[1]/tc[2]/p[0]",
+                "fingerprint": "3307ba69d09e996612ad0e412c84388521196cc61a21b4e2754433a073997a2e"
+              }
+            }
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 11,
+              "end": 23,
+              "shape": "blank"
+            },
+            "fingerprint": "05934fbb6ec46f80fc87bab8860307cf4404bc652b0eeb4f85c701edc0578b43"
+          }
+        }
+      ],
+      "source_issues": [
+        {
+          "code": "human_signing_event",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[0]/tc[0]"
+        },
+        {
+          "code": "human_signing_event",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[0]/tc[1]"
+        },
+        {
+          "code": "human_signing_event",
+          "part": "word/document.xml",
+          "slot": "b/tbl[1]/tr[0]/tc[2]"
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "WQ01",
+      "form": "synthetic-divided-date-v1",
+      "notes": "Visit date: 03/14/2026\nPlan: Follow-up assessment.\nAllergies: not documented.\nPhysician signature: Synthetic Clinician.",
+      "notes_sha256": "0552b22743ff312987ddb5fc6f61b62c8abeb6ac1952652ae6c8be48e2eafb91",
+      "desired_supported": {
+        "Visit date": "03/14/2026",
+        "Plan": "Follow-up assessment."
+      },
+      "required_holds": [
+        "Allergies",
+        "Physician signature"
+      ],
+      "physical_expected": {
+        "Visit date": "14/Mar/2026",
+        "Plan": "Follow-up assessment."
+      },
+      "accepted_date_values": {
+        "Visit date": [
+          "03/14/2026",
+          "2026-03-14",
+          "14/Mar/2026",
+          "14/03/2026"
+        ]
+      }
+    },
+    {
+      "id": "WQ02",
+      "form": "synthetic-nominal-insertion-v1",
+      "notes": "Category: skilled nursing\nPlan: Follow-up assessment.\nAllergies: not documented.\nPhysician signature: Synthetic Clinician.",
+      "notes_sha256": "a7e0f845aa8f02388589be05114e219678985a0fce3eace65e52c46f059f85f0",
+      "desired_supported": {
+        "category": "skilled nursing",
+        "Plan": "Follow-up assessment."
+      },
+      "required_holds": [
+        "Allergies",
+        "Physician signature"
+      ],
+      "physical_expected": {
+        "category": "skilled nursing",
+        "Plan": "Follow-up assessment."
+      }
+    },
+    {
+      "id": "WQ03",
+      "form": "synthetic-caption-catalogue-v1",
+      "notes": "Patient name: Synthetic Morgan\nVisit date: 2026-03-14\nClinical notes: No deformity.\nAllergies: not documented.\nWitness name: Synthetic Witness",
+      "notes_sha256": "9a7fc27bbdb3ad840aab3f88d4ea80f3208496633eadcd8b96e495fbbe34f758",
+      "desired_supported": {
+        "Patient name": "Synthetic Morgan",
+        "Visit date": "2026-03-14",
+        "Clinical notes": "No deformity."
+      },
+      "required_holds": [
+        "Witness name",
+        "Signature",
+        "Date",
+        "Allergies"
+      ],
+      "physical_expected": {
+        "Patient name": "Synthetic Morgan",
+        "Visit date": "2026-03-14",
+        "Clinical notes": "No deformity."
+      },
+      "accepted_date_values": {
+        "Visit date": [
+          "03/14/2026",
+          "2026-03-14",
+          "14/Mar/2026",
+          "14/03/2026"
+        ]
+      }
+    }
+  ],
+  "prospective_revision": 2,
+  "previous_manifest_sha256": "a6886adaaee377acf6365ff6a4bb04cd2b6639c8fdc7cdc7430346a2ad5bb0fb",
+  "revision_reason": "Bind the normal EncounterForm CharField persisted source exactly; only each final LF is removed before any provider attempt. Old v1/failed run remain preserved."
+}

@@ -1,0 +1,395 @@
+{
+  "commit": "09644640759200813c40c3246b92299999a64aca",
+  "elapsed_seconds": 11.792,
+  "cases": [
+    {
+      "name": "ordinary_split_runs",
+      "source": [
+        "Role: [patient/carer]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "block_generation": true,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "punctuation_split_runs",
+      "source": [
+        "Role: [patient's/carer's]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "block_generation": true,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "newline_inside_alternative",
+      "source": [
+        "Role: [patient/\ncarer]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "tab_inside_alternative",
+      "source": [
+        "Role: [patient/\tcarer]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "block_generation": true,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "trailing_empty_alternative",
+      "source": [
+        "Role: [patient/carer/]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Role patient/carer/",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "middle_empty_alternative",
+      "source": [
+        "Role: [patient//carer]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Role patient//carer",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "type_label_alternatives",
+      "source": [
+        "Procedure type: [type A/type B]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Procedure type type A/type B",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": [
+        "Procedure type: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "state_label_alternatives",
+      "source": [
+        "Jurisdiction: [state/local]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Jurisdiction state/local",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": [
+        "Jurisdiction: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "action_alternatives",
+      "source": [
+        "Action: [add/remove]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Action add/remove",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": [
+        "Action: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "directive_positive",
+      "source": [
+        "Plan: [enter left/right]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Plan enter left/right",
+          "long_text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": [
+        "Plan: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "date_positive",
+      "source": [
+        "Date: [dd/mm/yyyy]",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Date dd/mm/yyyy",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": [
+        "Date: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null,
+      "inspect_refusal": null
+    },
+    {
+      "name": "signature_forged",
+      "source": [
+        "Patient signature: ______",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Patient signature",
+          "signature"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "protected_signing_area",
+        "message": "This place is a signing, initials or consent area of the original form. It never takes a typed or generated answer: only a Signature or Initials field may sit there, and it is completed by hand."
+      },
+      "inspect_refusal": null
+    },
+    {
+      "name": "witness_forged",
+      "source": [
+        "Witness signature: ______",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Witness signature",
+          "signature"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "protected_signing_area",
+        "message": "This place is a signing, initials or consent area of the original form. It never takes a typed or generated answer: only a Signature or Initials field may sit there, and it is completed by hand."
+      },
+      "inspect_refusal": null
+    },
+    {
+      "name": "initials_forged",
+      "source": [
+        "Nurse initials: ______",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Nurse initials",
+          "initials"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "protected_signing_area",
+        "message": "This place is a signing, initials or consent area of the original form. It never takes a typed or generated answer: only a Signature or Initials field may sit there, and it is completed by hand."
+      },
+      "inspect_refusal": null
+    },
+    {
+      "name": "patient_policy_forged",
+      "source": [
+        "Completed by the patient:",
+        "Comments: ______",
+        "Clinician",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Completed by the patient",
+          "text"
+        ],
+        [
+          "Comments",
+          "long_text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "mapping_mismatch",
+        "message": "This place carries a printed authorship or review requirement on the original form, and the field there does not carry that same requirement. Review the mapping again."
+      },
+      "inspect_refusal": null
+    },
+    {
+      "name": "ordinary_initial",
+      "source": [
+        "Initial assessment: ______",
+        "Reason: ______"
+      ],
+      "fields": [
+        [
+          "Initial assessment",
+          "initials"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "invalid_answer",
+        "message": "Signature and initials areas are signed by the clinician; they are never filled automatically."
+      },
+      "inspect_refusal": null
+    }
+  ]
+}

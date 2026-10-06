@@ -1,0 +1,156 @@
+{
+  "status": "FINISHED_SOURCE_REPAIR_PENDING_INDEPENDENT_REFUTATION_AND_ACTUAL_APPLICATION_REPLAY",
+  "source_word_sha256": "4074fd489d676c11b2a36ed66e3af354665fea1a9711cb0d9e61533d3c2d5a94",
+  "source_tests_sha256": "c4ab49f90d6a69573a8f1d4a68363cd5a220552ad83090091bb01857c3f493a7",
+  "synthetic_packet": {
+    "tests": 5,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 12.198860906999471,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "4074fd489d676c11b2a36ed66e3af354665fea1a9711cb0d9e61533d3c2d5a94",
+      "rebuild/documents/test_question_boxes.py": "c4ab49f90d6a69573a8f1d4a68363cd5a220552ad83090091bb01857c3f493a7"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 28,
+    "refused": 14,
+    "exports": 14,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "affected_nested_cardinality_packet": {
+    "methods": 30,
+    "passed": 30,
+    "seconds": 24.162,
+    "exit": 0,
+    "log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-final2-nested-cardinality-20261004.log"
+  },
+  "original_source_proof": {
+    "source_word_sha256": "4074fd489d676c11b2a36ed66e3af354665fea1a9711cb0d9e61533d3c2d5a94",
+    "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+    "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+    "export_sha256": "acdd7f57e341df306dc2410f35210e2f7a02ba076d9f2751ef046ab4baed54e5",
+    "mapping_score": {
+      "n": 28,
+      "ok": 14,
+      "missed": 8,
+      "wrong": 6,
+      "extras": 4,
+      "dup_bad": 0,
+      "strict": false,
+      "tolerant": false
+    },
+    "choices": [
+      {
+        "key": "v3_6",
+        "label": "1. Delivered:",
+        "kind": "choice",
+        "options": [
+          "Yes",
+          "No (skip to #12)",
+          "Unknown (skip to end)"
+        ],
+        "context": "Required items"
+      },
+      {
+        "key": "v3_7",
+        "label": "2. How researcher determined intervention was delivered:",
+        "kind": "choice",
+        "options": [
+          "Extracted from medical record",
+          "Reported by participant",
+          "Reported by caregiver/family member(s)",
+          "Action performed by research team"
+        ],
+        "context": "Required items"
+      }
+    ],
+    "dates": [
+      {
+        "key": "v3_8",
+        "label": "Start date",
+        "kind": "date"
+      },
+      {
+        "key": "v3_9",
+        "label": "End date",
+        "kind": "date"
+      }
+    ],
+    "precise_nested_exclusions": [
+      {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[1]/tc[0]/p[1]",
+        "code": "nested_options",
+        "detail": "Nested option grid at word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]: The grid contains separate option groups whose ownership is unresolved. Printed source: Required items Options: 1. Delivered: Yes  No (skip to #12) Unknown (skip to end)2. How researcher determined intervention was delivered: Extracted from medical record Reported by participant Reported by caregiver/family member(s) Action performed by research team3. Start date: Or Unknown4. End date: Or UnknownInstruction: Same as start date if only one encounter/visit",
+        "id": "2104adc7bb6f9bca8802b37385268fd164cd52e20e871ac817141967926fccc5"
+      },
+      {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[0]/tr[1]/tc[1]/p[1]",
+        "code": "nested_options",
+        "detail": "Nested option grid at word/document.xml#b/tbl[1]/tr[1]/tc[0]/tbl[0]: The grid contains separate option groups whose ownership is unresolved. Printed source: Required items Options: 1. Delivered: Yes  No (skip to #12) Unknown (skip to end)2. How researcher determined intervention was delivered: Extracted from medical record Reported by participant Reported by caregiver/family member(s) Action performed by research team3. Start date: Or Unknown4. End date: Or UnknownInstruction: Same as start date if only one encounter/visit",
+        "id": "0f4f05676cccee1e5c1add683ab70eb56a7c980693c894a1d5d8429cd08bf156"
+      }
+    ],
+    "mapped_writer_exclusion_overlaps": [],
+    "caption_raw_unchanged": true,
+    "held_alternatives_raw_unchanged": true,
+    "all_untargeted_zip_parts_raw_unchanged": true,
+    "choice_readback": [
+      [
+        true,
+        false,
+        false
+      ],
+      [
+        true,
+        false,
+        false,
+        false
+      ]
+    ],
+    "date_readback": [
+      "2026-10-01",
+      "2026-10-01"
+    ],
+    "empty_export_exact_original": true,
+    "claim": "Offline source-only affected repair, not new upload-to-export acceptance, no provider, original28 denominator and strict failure retained"
+  },
+  "full_word_thresholds": {
+    "overall": {
+      "required": 54,
+      "denominator": 60
+    },
+    "holdout": {
+      "required": 18,
+      "denominator": 20
+    },
+    "family_minimum": 0.75
+  },
+  "original_d07_actual_result": {
+    "mapping": {
+      "n": 28,
+      "ok": 13,
+      "missed": 10,
+      "wrong": 5,
+      "extras": 6,
+      "strict": false
+    },
+    "actual_coverage_post": 400,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/dev-application-7907ae5aa38c-1791089432236314904/D07/result.json"
+  },
+  "intermediate_broad_packet": {
+    "exit": 124,
+    "bound_seconds": 180,
+    "claim": "Incomplete, no whole-packet pass claimed; started193 methods, no emitted failure/error blocks. The remaining cardinality class was checked in the finished30-method packet.",
+    "log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-finished-affected-20261004.log"
+  },
+  "all_original_failures_preserved": true,
+  "provider_calls": 0,
+  "db_calls": 0,
+  "renderer_calls": 0,
+  "native_word": "unverified"
+}

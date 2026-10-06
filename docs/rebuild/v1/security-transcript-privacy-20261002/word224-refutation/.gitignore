@@ -1,0 +1,2 @@
+# Protected synthetic DOCX evidence remains outside Git; canonical paths/hashes in manifest.json.
+*.docx

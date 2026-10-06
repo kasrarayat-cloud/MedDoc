@@ -23,7 +23,7 @@ SIGNING_KINDS = ('signature', 'initials')
 #: Never generated from notes: the clinician enters table rows; signature and initials are signed by hand.
 NEVER_GENERATED = ('table_rows',) + SIGNING_KINDS
 #: What a clinician may add by hand (the engine's manual kinds).
-MANUAL_KINDS = ('text', 'long_text', 'date', 'time', 'choice', 'checkbox', 'signature', 'initials')
+MANUAL_KINDS = ('text', 'long_text', 'date', 'time', 'choice', 'multi_choice', 'checkbox', 'signature', 'initials')
 KIND_NAMES = {'text': 'Text', 'long_text': 'Long text', 'date': 'Date', 'time': 'Time', 'choice': 'One printed option',
               'multi_choice': 'Printed options (several)', 'checkbox': 'Checkbox', 'table_rows': 'Table rows',
               'signature': 'Signature', 'initials': 'Initials'}
@@ -32,8 +32,19 @@ KIND_NAMES = {'text': 'Text', 'long_text': 'Long text', 'date': 'Date', 'time': 
 GENERATION_FIELD_LIMIT = 100
 
 def field_limit():
-    from .generation_batch import enabled, MAX_PARTS
-    return GENERATION_FIELD_LIMIT * MAX_PARTS if enabled() else GENERATION_FIELD_LIMIT
+    from .generation_batch import enabled, MAX_PARTS, relations_parts, require_config
+    if enabled():return GENERATION_FIELD_LIMIT * MAX_PARTS
+    # The qualified ordinary contract already has bounded complete-form parts;
+    # import must not require a separate generic-batch grant to reach that route.
+    from .generation import configuration
+    try:
+        config=configuration()
+        if relations_parts(config):
+            require_config(config)
+            return GENERATION_FIELD_LIMIT * MAX_PARTS
+    except ValidationError:
+        pass
+    return GENERATION_FIELD_LIMIT
 CHECKED = 'checked'
 #: The only source values that tick a checkbox automatically.
 CHECKBOX_YES = frozenset(('yes', 'checked', 'present'))
@@ -122,6 +133,14 @@ def admission_refusals(version):
     request runs as before: a verifier lost later costs the true cost and keeps the draft, and export asks the verifier
     itself (word_v3.fill), so the draft can be exported when it answers again.
     """
+    # Legacy also needs import coverage/processor verification before any job
+    # or reservation; its source-role path otherwise returns before this gate.
+    from .import_binding import verify
+    verify(version)
+    from . import destination_roles
+    if (not is_v3_version(version) and destination_roles.applies(version)
+            and version.template.format == 'docx'):
+        destination_roles.report(version)
     refusal, inspection = _source_refusal(version)
     if refusal or not counted_tab_column(inspection):
         return refusal, ''
@@ -338,6 +357,10 @@ def fill_answers(fields, answers):
     for field in fields:
         record = answers.get(field['key']) or {}
         text = normalize(field, record.get('text', ''))
+        if field.get('write_protected'):
+            # Empty review preserves a human-owned control's printed state.
+            # normalize above still refuses any proposed text or tick.
+            continue
         kind = field.get('kind')
         if kind == 'checkbox':
             if text:
@@ -481,7 +504,16 @@ def open_places(outline_rows, fields, query=''):
     wanted = ' '.join(str(query or '').split()).casefold()
     rows = []
     for row in outline_rows or []:
-        if is_mapped(row['slot'], mapped):
+        numeric_open = False
+        if row.get('numeric_parts'):
+            related = [field for field in fields if is_mapped(row['slot'], mapped_slots([field]))]
+            numbers = {field.get('locator', {}).get('target', {}).get('number') for field in related}
+            numeric_open = bool(related and all(
+                field.get('locator', {}).get('part', '') + '#' + field.get('locator', {}).get('slot', '') == row['slot']
+                and field.get('locator', {}).get('target', {}).get('shape') == 'numeric_part'
+                and field.get('locator', {}).get('target', {}).get('type') == 'span'
+                for field in related) and len(numbers) < len(row['numeric_parts']))
+        if is_mapped(row['slot'], mapped) and not numeric_open:
             continue
         if wanted and wanted not in ' '.join((row.get('preview') or '', row.get('context') or '')).casefold():
             continue

@@ -1,0 +1,59 @@
+{
+  "commit": "acdd1f2f06e9776f7993098d7473189f5a1bc53c",
+  "source_components": 20,
+  "source_hashes_and_head_unchanged": true,
+  "source_released": true,
+  "primary_cases": 133,
+  "primary_seconds": 27.853,
+  "narrow_cases": 21,
+  "narrow_seconds": 8.129,
+  "exit_codes": [
+    0,
+    0
+  ],
+  "provider_requests": 0,
+  "database_connections": 0,
+  "new_definite_unsafe_unique_condition": "mixed explicit patient medication cessation under foreign-root clause",
+  "primary_slot_controls_wrong": 2,
+  "narrow_unsafe_outputs": 5,
+  "new_definite_unnecessary_hold_outputs": 1,
+  "unknown_substance_accuracy_claim": "not asserted; substance is not proven medication",
+  "prior_family_body_pronoun_time_baseline_holds": "retained conservative residuals; not newly certified accuracy failures",
+  "files": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-acdd1f2f-source/manifest.json",
+      "sha256": "fb85aa96efedfd9c91c86cb4c753c1cfc3b1011482440b5185df623f33700054",
+      "bytes": 3728
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_acdd1f2f.py",
+      "sha256": "b0e042e57899dc5a0fb44c8cdb2587b71401834b1ff4938e51ce598f6928ba67",
+      "bytes": 22074
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-acdd1f2f.json",
+      "sha256": "050cb6e11bbabc72b1d30dcba7679491f138688f2ea47075c4a3684b1683ab01",
+      "bytes": 103329
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-acdd1f2f.log",
+      "sha256": "eb458136756fd72b0ca8e4a289c05b922f509712ee89cee07e808cda52c4f026",
+      "bytes": 1316
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_acdd1f2f_root_controls_v2.py",
+      "sha256": "4f35bfa1a0494f73d90fd746a029ada6b61da6f5bf488081fcc3c73f834a4a37",
+      "bytes": 9236
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-acdd1f2f-root-controls.json",
+      "sha256": "e4cf59157ffd862320b9774259ac1a84e684baba8d5edbb4c4ebe36955602b7b",
+      "bytes": 137118
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-acdd1f2f-root-controls.log",
+      "sha256": "4d78e2d7c1c9c72d0765f402219dd737b0be8e8bdbc636e01d960c9301d40909",
+      "bytes": 1110
+    }
+  ]
+}

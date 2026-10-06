@@ -1,0 +1,13 @@
+[
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-auth-789c-fifth-20261003/result.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/served-auth-789c-fifth/result.json",
+    "sha256": "a143d4a95d615f4bd61b14291b9bf71549c7fbd91adff281acc962025044975d",
+    "bytes": 47266
+  },
+  {
+    "harness_commit": "af15b80da74e934dbff2414fb341c60cbdd74a37",
+    "harness_sha256": "4f302009fcef6590faa8e0dca7c05e19f06c496b92a1ea6ed48a1cd75ca7b2e2",
+    "application_commit": "789c0372127d89b1750a2f790c561e68c19f1654"
+  }
+]

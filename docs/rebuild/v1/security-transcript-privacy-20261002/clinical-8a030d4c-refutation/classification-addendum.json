@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-03T02:54:22.538080+00:00",
+  "source_commit": "8a030d4c8f0027dc962554b8d8df0d4a5207d21d",
+  "prior_manifest_sha256": "4379a108e0a18cc60e16178c556522aa3a1e285c0434401c9e7b4b2926f03490",
+  "raw_result_sha256": "e15b32ec8a9453c5a986ff46a7132c2db0ad48a4c6021b6b66291b782b10c8d1",
+  "raw_unsafe_flags": 4,
+  "qualified_unsafe_failures_after_lead_refutation": 3,
+  "withdrawn_case": "ninth_negative_same_exclusive_lack",
+  "input": "The patient takes no warfarin. Only her father lacks warfarin.",
+  "reason": "Medication use and medication possession are different predicates. A patient may possess a medication without taking it; the actual sources do not prove the released negative-use answer wrong. No expanded hold is requested for this observation.",
+  "classification": "distinct-predicate or ambiguous-policy residual; not demonstrated accuracy failure",
+  "raw_evidence_changed": false,
+  "clinical_qualification": "still FAILED on three other independently accepted concrete counterexamples"
+}

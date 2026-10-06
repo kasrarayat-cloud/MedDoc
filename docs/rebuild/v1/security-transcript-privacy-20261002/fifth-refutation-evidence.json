@@ -1,0 +1,54 @@
+{
+  "files": [
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_notes_repaired_governance_7.py",
+      "retained_file": "fifth-refute_notes_repaired_governance_7.py",
+      "sha256": "42cacf59c88872faed0f78b4815dfbbc782f327bea3c3f362d8cd176d1293e06",
+      "bytes": 3647
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-governance-7.json",
+      "retained_file": "fifth-refute-notes-repaired-governance-7.json",
+      "sha256": "3aae7bc542d1c8dd258b498adf980025e686650092dfa22f7a4e52e65a0ebeeb",
+      "bytes": 5461
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-governance-7.log",
+      "retained_file": "fifth-refute-notes-repaired-governance-7.log",
+      "sha256": "c7b92198ecc12c5f684c2bf9a2a17f24fff7ecdb00a3bb196a5619fd881c5302",
+      "bytes": 5462
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-sixth-source-freeze-refused.json",
+      "retained_file": "fifth-refute-sixth-source-freeze-refused.json",
+      "sha256": "819fe9dfd54c7c83da0ed57ccdfb07841f44bebea4aaaf1f86808e442c1ef4b9",
+      "bytes": 621
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/served-harness-prepared-refutation.json",
+      "retained_file": "fifth-served-harness-prepared-refutation.json",
+      "sha256": "38c6a6d3b40b33c1ea7fa051392032e331175af55f1f97a71f8c2cbd343aeee1",
+      "bytes": 722
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-5-source/source_scope.py",
+      "retained_file": "fifth-notes-repaired-refutation-5-source--source_scope.py",
+      "sha256": "169f2144383d66a1a8818c731db6b03d8ca837cbb0ac35b9c0c46ea570946f5d",
+      "bytes": 13087
+    },
+    {
+      "source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-5-source/manifest.json",
+      "retained_file": "fifth-notes-repaired-refutation-5-source--manifest.json",
+      "sha256": "5772aa38c7b5ae898610fa876d1d66b5fa4be43fc74f346816849a62028bc8b9",
+      "bytes": 457
+    }
+  ],
+  "probes": 16,
+  "exit_code": 0,
+  "provider_requests": 0,
+  "database_connections": 0,
+  "generation_source_sha256": "77e123ba8407cb82a660c5769b483b55673f3ac16b650b7eb692ce7ea53bd1c1",
+  "context_source_sha256": "3b925017fb157d864e9a4941c8c01d3e9086c19107c43a22b59fa96d9da40454",
+  "generation_and_context_witness": "Byte-identical to retained fourth source files; no redundant copies required",
+  "sixth_status": "Source hash mismatch refused before sourcecopy or clinicalprobes"
+}

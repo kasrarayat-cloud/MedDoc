@@ -1,0 +1,300 @@
+{
+  "status": "read-only final clinical source recommendations; financial renewal not performed",
+  "source_commit": "d7f4ebf7759cecf3d9517d208d6c2d8d7c40e3fc",
+  "source_tree": "c8d0071244caba145cb1ac9a8deb3c75d11cdd96",
+  "baseline": "7907ae5aa38c2a6c9e27eab1b09a758df315125b",
+  "inventory_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/financial-clinical-inventory-d7f4ebf7/inventory.json",
+  "inventory_sha256": "0d6206e40bbc21589b66508a3905a293ac3d76d2430f6023c2d0b1bb745410c0",
+  "price_path_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/financial-clinical-inventory-d7f4ebf7/price-path-static-comparison.json",
+  "price_path_sha256": "a172021bc79294916c45814a03ea437a8c6e58453a300924438387c31e8e02c0",
+  "full_static_project_import_closure_count": 75,
+  "primary_sources": {
+    "rebuild/core/generation.py": {
+      "byte_sha256": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "whole_module_normalized_ast_sha256": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "changed_bytes": true,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/v3_field_relations.py": {
+      "byte_sha256": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "whole_module_normalized_ast_sha256": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+      "changed_bytes": true,
+      "new_direct_project_imports": [
+        "rebuild/core/ordinary_source_scope.py"
+      ]
+    },
+    "rebuild/core/ordinary_source_scope.py": {
+      "byte_sha256": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "whole_module_normalized_ast_sha256": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+      "changed_bytes": true,
+      "new_direct_project_imports": [
+        "rebuild/core/generation.py",
+        "rebuild/core/v3_actors.py",
+        "rebuild/core/v3_syntax.py"
+      ]
+    },
+    "rebuild/core/reviewed_source.py": {
+      "byte_sha256": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "whole_module_normalized_ast_sha256": "8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157",
+      "changed_bytes": true,
+      "new_direct_project_imports": [
+        "rebuild/core/reviewed_procedure_source.py",
+        "rebuild/core/source_scope.py"
+      ]
+    },
+    "rebuild/core/reviewed_procedure_source.py": {
+      "byte_sha256": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "whole_module_normalized_ast_sha256": "aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0",
+      "changed_bytes": true,
+      "new_direct_project_imports": [
+        "rebuild/core/generation.py",
+        "rebuild/core/v3_actors.py",
+        "rebuild/core/v3_literal_facts.py",
+        "rebuild/core/v3_syntax.py"
+      ]
+    },
+    "rebuild/core/reviewed_speaker.py": {
+      "byte_sha256": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "whole_module_normalized_ast_sha256": "4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/source_scope.py": {
+      "byte_sha256": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "whole_module_normalized_ast_sha256": "5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1",
+      "changed_bytes": true,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/v3_actors.py": {
+      "byte_sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "whole_module_normalized_ast_sha256": "bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/v3_syntax.py": {
+      "byte_sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "whole_module_normalized_ast_sha256": "d38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/v3_literal_facts.py": {
+      "byte_sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "whole_module_normalized_ast_sha256": "5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/transcript_context.py": {
+      "byte_sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "whole_module_normalized_ast_sha256": "e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/v3_destination.py": {
+      "byte_sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "whole_module_normalized_ast_sha256": "b8ff1dff5825ef66c86c43d3db21fd9e7b9b8468179205ebac01899e347809ef",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/core/destination_roles.py": {
+      "byte_sha256": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418",
+      "whole_module_normalized_ast_sha256": "8801420ab168ec78ba952d01bd70cb4fe68f3014ac36c0d4bb38f420ec4fbe9a",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/documents/word_v3.py": {
+      "byte_sha256": "d17d08d2e11e0b0a6674e91e8e280938097064405d648294ecf829d3cf534603",
+      "whole_module_normalized_ast_sha256": "cd77074faaf7e3cd3fd14a7b8e89b664fb711c4aee315077c529e93871963fff",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/documents/source_policy.py": {
+      "byte_sha256": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890",
+      "whole_module_normalized_ast_sha256": "95fd5fcfb07dce6dacda6452072f6fb98d6a0c9a4880f29131bb22515f06587d",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    },
+    "rebuild/documents/mapping_limits.py": {
+      "byte_sha256": "bdebe9b5f9ec8268164177600176404917af22537e60ef7b971f065b8d396802",
+      "whole_module_normalized_ast_sha256": "d76e420104c4a4d50556470569263058018a51f9d20e5777ba5713905b0f78c7",
+      "changed_bytes": false,
+      "new_direct_project_imports": []
+    }
+  },
+  "all_static_project_dependency_paths": [
+    "rebuild/core/admin_authority.py",
+    "rebuild/core/admin_console.py",
+    "rebuild/core/admin_queries.py",
+    "rebuild/core/audio.py",
+    "rebuild/core/batch_jobs.py",
+    "rebuild/core/billing.py",
+    "rebuild/core/coding.py",
+    "rebuild/core/context.py",
+    "rebuild/core/destination_roles.py",
+    "rebuild/core/disposition.py",
+    "rebuild/core/disposition_catalog.py",
+    "rebuild/core/disposition_execution.py",
+    "rebuild/core/disposition_journal.py",
+    "rebuild/core/disposition_policy.py",
+    "rebuild/core/doctor_status.py",
+    "rebuild/core/email_backend.py",
+    "rebuild/core/email_delivery.py",
+    "rebuild/core/field_location.py",
+    "rebuild/core/forms.py",
+    "rebuild/core/generation.py",
+    "rebuild/core/generation_batch.py",
+    "rebuild/core/import_binding.py",
+    "rebuild/core/jobs.py",
+    "rebuild/core/management/commands/bootstrap_first_admin.py",
+    "rebuild/core/mapping_assistance.py",
+    "rebuild/core/mapping_jobs.py",
+    "rebuild/core/mapping_wire.py",
+    "rebuild/core/media.py",
+    "rebuild/core/middleware.py",
+    "rebuild/core/models.py",
+    "rebuild/core/ordinary_source_scope.py",
+    "rebuild/core/readiness.py",
+    "rebuild/core/redaction.py",
+    "rebuild/core/relations_fixture.py",
+    "rebuild/core/retention.py",
+    "rebuild/core/reviewed_procedure_source.py",
+    "rebuild/core/reviewed_source.py",
+    "rebuild/core/reviewed_speaker.py",
+    "rebuild/core/security.py",
+    "rebuild/core/source_scope.py",
+    "rebuild/core/stripe_validation.py",
+    "rebuild/core/tab_review.py",
+    "rebuild/core/transcript_context.py",
+    "rebuild/core/v3_actors.py",
+    "rebuild/core/v3_destination.py",
+    "rebuild/core/v3_field_relations.py",
+    "rebuild/core/v3_history_context.py",
+    "rebuild/core/v3_literal_facts.py",
+    "rebuild/core/v3_mapping.py",
+    "rebuild/core/v3_nonsmoker.py",
+    "rebuild/core/v3_patient_topics.py",
+    "rebuild/core/v3_syntax.py",
+    "rebuild/core/views.py",
+    "rebuild/core/wm_conflicts.py",
+    "rebuild/core/wm_narrative.py",
+    "rebuild/core/wm_review.py",
+    "rebuild/core/worker_lock.py",
+    "rebuild/documents/__init__.py",
+    "rebuild/documents/assistance.py",
+    "rebuild/documents/engine.py",
+    "rebuild/documents/import_selection.py",
+    "rebuild/documents/layout.py",
+    "rebuild/documents/layout_source.py",
+    "rebuild/documents/layout_transport.py",
+    "rebuild/documents/mapping_limits.py",
+    "rebuild/documents/sdk_service.py",
+    "rebuild/documents/service.py",
+    "rebuild/documents/source_policy.py",
+    "rebuild/documents/tab_form.py",
+    "rebuild/documents/word_v3.py",
+    "rebuild/ops/__init__.py",
+    "rebuild/ops/deployment_profile.py",
+    "rebuild/ops/production_operator.py",
+    "rebuild/ops/service_launcher.py",
+    "rebuild/quillmd/application_profile.py"
+  ],
+  "helper_dependency_paths": [
+    "rebuild/core/destination_roles.py",
+    "rebuild/core/disposition.py",
+    "rebuild/core/disposition_catalog.py",
+    "rebuild/core/disposition_execution.py",
+    "rebuild/core/disposition_journal.py",
+    "rebuild/core/disposition_policy.py",
+    "rebuild/core/generation_batch.py",
+    "rebuild/core/import_binding.py",
+    "rebuild/core/models.py",
+    "rebuild/core/ordinary_source_scope.py",
+    "rebuild/core/redaction.py",
+    "rebuild/core/relations_fixture.py",
+    "rebuild/core/retention.py",
+    "rebuild/core/reviewed_procedure_source.py",
+    "rebuild/core/reviewed_source.py",
+    "rebuild/core/reviewed_speaker.py",
+    "rebuild/core/security.py",
+    "rebuild/core/source_scope.py",
+    "rebuild/core/tab_review.py",
+    "rebuild/core/transcript_context.py",
+    "rebuild/core/v3_actors.py",
+    "rebuild/core/v3_destination.py",
+    "rebuild/core/v3_field_relations.py",
+    "rebuild/core/v3_history_context.py",
+    "rebuild/core/v3_literal_facts.py",
+    "rebuild/core/v3_mapping.py",
+    "rebuild/core/v3_syntax.py",
+    "rebuild/documents/__init__.py",
+    "rebuild/documents/assistance.py",
+    "rebuild/documents/engine.py",
+    "rebuild/documents/import_selection.py",
+    "rebuild/documents/layout.py",
+    "rebuild/documents/layout_source.py",
+    "rebuild/documents/layout_transport.py",
+    "rebuild/documents/mapping_limits.py",
+    "rebuild/documents/sdk_service.py",
+    "rebuild/documents/service.py",
+    "rebuild/documents/source_policy.py",
+    "rebuild/documents/tab_form.py",
+    "rebuild/documents/word_v3.py",
+    "rebuild/ops/__init__.py"
+  ],
+  "data_dependencies": {
+    "rebuild/core/v3_syntax_model.json": {
+      "byte_sha256": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+      "baseline_byte_sha256": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+      "changed": false
+    },
+    "rebuild/requirements.txt": {
+      "byte_sha256": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+      "baseline_byte_sha256": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+      "changed": false
+    },
+    "rebuild/requirements-production.lock": {
+      "byte_sha256": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+      "baseline_byte_sha256": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+      "changed": false
+    },
+    "rebuild/requirements-production.manifest.json": {
+      "byte_sha256": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade",
+      "baseline_byte_sha256": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade",
+      "changed": false
+    }
+  },
+  "parser": {
+    "MODEL": "en_core_web_sm",
+    "MODEL_VERSION": "3.8.0",
+    "LIBRARY_VERSION": "3.8.16"
+  },
+  "existing_named_price_nodes_compared": 22,
+  "existing_named_price_nodes_all_equal": true,
+  "nonexistent_exploratory_name_excluded": "generation.ordinary_enabled: absent in both baseline/current, explicitly excluded from equality proof; complete module imports/globals remain inventory-bound.",
+  "source_call_edges": [
+    "v3_field_relations.read -> ordinary_source_scope.apply -> source reading for complete ordinary-v4 relation",
+    "v3_field_relations.sole_independent -> ordinary_source_scope.effective -> per-answer operator ownership",
+    "v3_field_relations.read -> reviewed_source.complete_ids -> explicit immutable transcript ownership",
+    "reviewed_source.complete_ids -> reviewed_procedure_source.caption/complete/destination -> complete procedural source",
+    "reviewed_source.complete_ids -> reviewed_speaker.frames -> complete explicit clinician speaker complement",
+    "reviewed_source.complete_ids -> source_scope._date_scope_backward_dependency -> prior source invalidation retained",
+    "reviewed_source.complete_ids -> v3_literal_facts._patient_object/_simple_fact -> bounded existing source semantics",
+    "reviewed_source.backward_attribution -> generation record references + v3_actors grammar -> annotation bearer/time ownership"
+  ],
+  "recommendations": [
+    "Bind whole-module normalized AST and exact bytes for ordinary_source_scope.py, reviewed_procedure_source.py and reviewed_source.py through the ordinary proof, plus existing reviewed_speaker/source_scope/v3_actors/v3_syntax/v3_literal_facts/transcript_context/source-destination/Word dependency inventory; unchanged caller imports cannot prove unchanged helper bodies.",
+    "Use this exact final-source inventory as an input, never a refreshed fingerprint as evidence. Keep current unresolved pins until independent clinical refutation, final source identity, prospective current wire/receipt/settlement and affected financial checks are complete.",
+    "Extend current_wire_price_witness source-byte before/after evidence beyond its existing six modules to include every final ordinary source/output dependency; do not treat single wire equality as output or live batch/context qualification.",
+    "Preserve the old proof/hashes/diffs and add finite helper-body/import mutations proving fail-closed source binding without altering files or clinical expectations.",
+    "Rebind the full current integrated tree after Word/import/batch changes; this clinical d7 snapshot is not a release or financial eligibility declaration.",
+    "Verify pinned parser manifest and external wheel/SDK requirements in the qualified execution environment; this static inventory does not claim installed-byte verification."
+  ],
+  "boundary": [
+    "Static import closure is a conservative source inventory, not proof that every branch executes in one workflow.",
+    "This performs no application import, source mutation, AST-pin renewal, environment/credential access, runtime creation, DB, provider request or financial test."
+  ],
+  "provider_calls": 0,
+  "database_calls": 0,
+  "financial_tests_run": 0,
+  "pins_changed": false,
+  "new_2_started": false
+}

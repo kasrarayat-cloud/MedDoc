@@ -55,6 +55,7 @@ CATALOG={
  'clinical_records_other_status':('core.Encounter',{'exclude_status':['draft','finalized']},('created_at',),False),
  'final_export_references':('core.Encounter',{'export_path__gt':''},('finalized_at',),True),
  'jobs':('core.Job',{},('created_at','finished_at'),True),
+ 'reviewed_transcripts':('core.TranscriptReview',{},('created_at',),True),
  'generation_batches':('core.GenerationBatch',{},('created_at','finished_at'),True),
  'generation_parts':('core.GenerationBatchPart',{},('created_at',),True),
  'generation_attempt_events':('core.GenerationBatchEvent',{},('created_at',),True),

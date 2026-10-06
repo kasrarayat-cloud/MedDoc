@@ -1,0 +1,72 @@
+{
+  "actual_test_methods": 26,
+  "finished_focused_result": {
+    "actual_catalog_receipt_valid_for_unchanged_bound_sources": true,
+    "catalog_sha256": "d2163c5fb2b35d5caf6355f7500772a50c1d818e742339f662ad383a2f1bf0b6",
+    "database_actions": 0,
+    "elapsed_seconds": 0.6868291090031562,
+    "exit_code": 0,
+    "host_actions": 0,
+    "provider_calls": 0,
+    "qualification_limit": "Pure adapter/gates and actual-source inert fault controls only; no installed transition or full product CI qualification.",
+    "raw_log_sha256": "c6e0470e6f1efeb263248c7d29d3d821d81261dc691464d3ac083742543b721d",
+    "source_commit": "e10ba561a352a579e997ef70d8dd4833ba40ffb6",
+    "source_sha256_after": {
+      "rebuild/core/models.py": "7d28a39627e51cba320f5d11c502aac827a19dca1fd41f4218eb4ba8dc7baaec",
+      "rebuild/ops/capture_v1_install_schema.py": "47b9aeada99974cc056f305f8f9ec8ed33477b0cf8ab50dc0394f03aa64115ae",
+      "rebuild/ops/database_roles.py": "685f589ef0f1e085824369057e3bfd207591eaf743f3a4688b0a16f6d64ee8fe",
+      "rebuild/ops/integrity_contract.py": "493821a60d963c531f794bcdbd2d2dfa70b01eab7afd553f39ef23e99b7090c3",
+      "rebuild/ops/tests/test_v1_private_install_adapter.py": "a042a149881138d3380e9f9a2d6e6a6500f9ccc5ce8021128841931a98620d8b",
+      "rebuild/ops/v1_install_catalog.py": "6974c3a200ab496439026a98e314ced7184aa529ebcf6cbbf8b814889184f92a",
+      "rebuild/ops/v1_install_participants.py": "99b4dd640c5d47cbff10f6699393ff9aa761afc02c9c33760be0858b0d095426",
+      "rebuild/ops/v1_private_install_adapter.py": "7cab290b2036c39d914b1e4f7fd13700b6bc48042e6d7981a9cb8a6bf1c01377",
+      "rebuild/ops/v1_private_install_runtime.py": "76ecfa6729132ff35d2d1fcb02a8c8242f0f1d9df1173c8e8b7a1e9d04973a52",
+      "scripts/activate-v1-private-install.py": "6a5fcc8aabfcc8f7661373d847d250988c62719efcd848e40ab190f0a1048a1c"
+    },
+    "source_sha256_before": {
+      "rebuild/core/models.py": "7d28a39627e51cba320f5d11c502aac827a19dca1fd41f4218eb4ba8dc7baaec",
+      "rebuild/ops/capture_v1_install_schema.py": "47b9aeada99974cc056f305f8f9ec8ed33477b0cf8ab50dc0394f03aa64115ae",
+      "rebuild/ops/database_roles.py": "685f589ef0f1e085824369057e3bfd207591eaf743f3a4688b0a16f6d64ee8fe",
+      "rebuild/ops/integrity_contract.py": "493821a60d963c531f794bcdbd2d2dfa70b01eab7afd553f39ef23e99b7090c3",
+      "rebuild/ops/tests/test_v1_private_install_adapter.py": "a042a149881138d3380e9f9a2d6e6a6500f9ccc5ce8021128841931a98620d8b",
+      "rebuild/ops/v1_install_catalog.py": "6974c3a200ab496439026a98e314ced7184aa529ebcf6cbbf8b814889184f92a",
+      "rebuild/ops/v1_install_participants.py": "99b4dd640c5d47cbff10f6699393ff9aa761afc02c9c33760be0858b0d095426",
+      "rebuild/ops/v1_private_install_adapter.py": "7cab290b2036c39d914b1e4f7fd13700b6bc48042e6d7981a9cb8a6bf1c01377",
+      "rebuild/ops/v1_private_install_runtime.py": "76ecfa6729132ff35d2d1fcb02a8c8242f0f1d9df1173c8e8b7a1e9d04973a52",
+      "scripts/activate-v1-private-install.py": "6a5fcc8aabfcc8f7661373d847d250988c62719efcd848e40ab190f0a1048a1c"
+    },
+    "source_unchanged": true,
+    "technical_deadline_seconds": 180
+  },
+  "finished_source_commit": "e10ba561a352a579e997ef70d8dd4833ba40ffb6",
+  "first_repair_packet": {
+    "additional_module_import_errors": 1,
+    "applicable_methods_passed": 20,
+    "cause": "Runner requested ops.tests.test_ordinary_generation_activation; actual module is ops.test_ordinary_generation_activation. Original log/result retained; corrected selector used only in separately identified finished packet.",
+    "child_exit_code": 1,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-install-refutation-repair-first-20261004/result.json",
+    "sha256": "29e68009449e7bb0cd1b3b9fa7f3381177d2c178fedf047ab4a8c045b8a2e962"
+  },
+  "format": "quillmd-private-install-adapter-refutation-repair-v1",
+  "limits": [
+    "No installed environment, credential, service, timer or database access; zero provider/payment calls.",
+    "Adapter remains prepared/inactive: exact merged source/CI, B-W1, live usefulness, static/recovery/final declaration bindings must pass before normal execution.",
+    "Actual synthetic empty-schema PG capture and earlier populated preservation rehearsal supplement each other; neither proves an installed transition."
+  ],
+  "original_confirmed_findings": {
+    "controls": 5,
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-install-adapter-refutation-65295532/result.json",
+    "preserved_unchanged": true,
+    "sha256": "d2be1d4c58c91bf9a4383ac903ff39b534f6d10214e8f33c9f032da9a1db090b",
+    "source_commit": "6529553296997429902443691fbeb902a6ad4c4f",
+    "wrong_results": 2
+  },
+  "raw_log": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-install-refutation-repair-e10ba561-20261004/tests.log",
+  "raw_result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/private-install-refutation-repair-e10ba561-20261004/result.json",
+  "repaired_claims": [
+    "Original cause/traceback and available child exit/stdout/stderr retained in protected hash-linked artifacts before generic user error. Separate stop errors cannot replace the first cause. Summary never includes exception text/argv/credential values.",
+    "Publisher active/enabled precondition refuses before pausing any timer. All partial marker/spawn/pause calls have synchronous cleanup; each prior timer is restored independently and exact active/inactive states verified while owner remains alive.",
+    "Partial restoration cannot emit a completed timer marker or completed activation; original and secondary failures remain separately retained.",
+    "Raw PostgreSQL catalog remains outside repository, read only by hash identity at a fixed owner-only evidence root; missing/stale/redirected evidence refuses before backend."
+  ]
+}

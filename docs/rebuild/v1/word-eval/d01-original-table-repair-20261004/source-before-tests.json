@@ -1,0 +1,8 @@
+{
+  "base": "19d1e2695d2da270ff911f9f445a574e1eea489e",
+  "files": {
+    "rebuild/documents/layout.py": "400998e21476dd9725c18eb75570bb3495910dc44308be835cb4867fba1a7bd5",
+    "rebuild/documents/test_layout.py": "f1dda34244fb1b3b87834c24daeb142ef0125cc69ee768b7f9cd2000a80cd453"
+  },
+  "scope": "Affected pure layout module only; optional nontracked filled FRESH excluded, immutable tracked blank original remains mandatory. No DB/provider/network/render."
+}

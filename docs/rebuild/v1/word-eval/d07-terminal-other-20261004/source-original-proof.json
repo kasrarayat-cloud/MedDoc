@@ -1,0 +1,78 @@
+{
+  "source_word_sha256": "11d14673fc955a93891d745ccccbdf7c5013e97267bec7a7097d7f83fd484eaf",
+  "original_sha256": "f43d08e3b4361ea7161572917a8839beea7f79ba2497a14dca7493ddf6e67cc3",
+  "groundtruth_sha256": "27f3a8d356c15311f815cd8943bfae26cefd073fe92512ded0c6a4be6aab91e6",
+  "export_sha256": "0c823a07062f58ea4f9b1832eaf214255ebe0f7d523c6bfcf768218cbcd4a589",
+  "mapping_summary": {
+    "n": 28,
+    "ok": 16,
+    "missed": 6,
+    "wrong": 6,
+    "extras": 4,
+    "strict": false
+  },
+  "manual_mapping_corrections": 0,
+  "full_application_route": false,
+  "provider_calls": 0,
+  "db_calls": 0,
+  "render_calls": 0,
+  "other_write_ins": [
+    {
+      "label": "Other, specify:",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]",
+        "target": {
+          "type": "span",
+          "start": 207,
+          "end": 207,
+          "shape": "after_label"
+        },
+        "fingerprint": "5b6017731335e4ee0a03483c7719b5861641c9cc3ffb8965a5ca4118dc562d85"
+      },
+      "value": "Synthetic complete detail. Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text;",
+      "complete_raw_tail": true,
+      "matched": true,
+      "control_states": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ]
+    },
+    {
+      "label": "Other known:",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/tbl[1]/tr[6]/tc[0]/p[1]",
+        "target": {
+          "type": "span",
+          "start": 89,
+          "end": 89,
+          "shape": "after_label"
+        },
+        "fingerprint": "88c5eaa4408a64bdcf404a5e0079fb21cfd2d067a6a4278a148e435e12dce6be"
+      },
+      "value": "Synthetic complete detail. Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text; Retained long text;",
+      "complete_raw_tail": true,
+      "matched": true,
+      "control_states": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false
+      ]
+    }
+  ],
+  "untargeted_parts_raw_unchanged": true,
+  "no_answer_bytes_unchanged": true
+}

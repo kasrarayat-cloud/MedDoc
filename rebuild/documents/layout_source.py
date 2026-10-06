@@ -27,22 +27,98 @@ def digest(value):
     return hashlib.sha256(value).hexdigest()
 
 
+FORM_METADATA_NS = "http://schemas.microsoft.com/sharepoint/v3/contenttype/forms"
+
+
+def default_form_metadata_pi(root, part, data):
+    """Only the empty marker on complete default SharePoint form metadata.
+
+    mso-contentType also accompanies document-information-panel resource URLs;
+    its target alone is not evidence of inert content. This exact schema holds
+    only SharePoint's default Display/Edit/New form names, outside Word content.
+    Nothing is removed or rewritten before the renderer receives the package.
+    """
+    if (not re.fullmatch(r"customXml/item[1-9][0-9]*\.xml", part)
+            or not data.startswith(b"<?mso-contentType?>")
+            or root.getroottree().docinfo.doctype
+            or root.tag != "{" + FORM_METADATA_NS + "}FormTemplates"
+            or root.nsmap != {None: FORM_METADATA_NS}
+            or root.attrib or root.text or root.tail or root.getnext() is not None):
+        return None
+    marker = root.getprevious()
+    if (not isinstance(marker, w.etree._ProcessingInstruction)
+            or marker.target != "mso-contentType" or marker.text
+            or marker.tail or marker.getprevious() is not None
+            or marker.getparent() is not None or marker.getnext() is not root):
+        return None
+    children = list(root)
+    if len(children) != 3:
+        return None
+    for child, name in zip(children, ("Display", "Edit", "New")):
+        if (child.tag != "{" + FORM_METADATA_NS + "}" + name or child.attrib
+                or len(child) or child.text != "DocumentLibraryForm" or child.tail
+                or child.nsmap != {None: FORM_METADATA_NS}):
+            return None
+    return marker
+
+
+def source_elements(root, *, part="", data=b""):
+    """Element nodes after checking the complete parsed XML document."""
+    inert_marker = default_form_metadata_pi(root, part, data)
+    first = root
+    while first.getprevious() is not None:
+        first = first.getprevious()
+    while first is not None:
+        # iter() alone excludes a root's prolog and epilog siblings.
+        for node in first.iter():
+            if isinstance(node.tag, str):
+                yield node
+            elif node is not inert_marker and not isinstance(node, w.etree._Comment):
+                w.fail("XML processing instructions and unknown node types cannot use layout verification.",
+                       "layout_unsafe_source")
+        first = first.getnext()
+
+
+UPDATING_RESOURCE_FIELD = re.compile(r"\b(?:INCLUDETEXT|INCLUDEPICTURE|DDE|DDEAUTO|LINK|DATABASE)\b", re.I)
+
+
+def check_field_instruction(text):
+    if UPDATING_RESOURCE_FIELD.search(text):
+        w.fail("An updating resource field cannot be rendered safely.", "layout_unsafe_source")
+
+
 def safety(package):
     """Rendering has a narrower active-resource boundary than ordinary inspection."""
     fonts = set()
     for name in package.names:
         if name.endswith(".rels"):
-            for rel in package.tree(name):
+            for rel in source_elements(package.tree(name)):
                 kind = (rel.get("Type") or "").lower()
                 if kind.endswith("/attachedtemplate"):
                     w.fail("Attached templates cannot be used for layout verification.", "layout_unsafe_source")
                 if (rel.get("TargetMode") or "").lower() == "external" and not kind.endswith("/hyperlink"):
                     w.fail("Linked resources cannot be used for layout verification.", "layout_unsafe_source")
         if name.endswith(".xml"):
-            for node in package.tree(name).iter():
-                if node.tag == w.q("w:instrText") and re.search(
-                        r"\b(?:INCLUDETEXT|INCLUDEPICTURE|DDE|DDEAUTO|LINK|DATABASE)\b", node.text or "", re.I):
-                    w.fail("An updating resource field cannot be rendered safely.", "layout_unsafe_source")
+            instructions = []
+            for node in source_elements(package.tree(name), part=name, data=package.zip.read(name)):
+                if node.tag == w.q("w:fldSimple"):
+                    check_field_instruction(node.get(w.q("w:instr")) or "")
+                if node.tag == w.q("w:fldChar"):
+                    kind = node.get(w.q("w:fldCharType"))
+                    if kind == "begin":
+                        instructions.append({"parts": [], "reading": True})
+                    elif kind in ("separate", "end") and instructions:
+                        check_field_instruction("".join(instructions[-1]["parts"]))
+                        if kind == "end":
+                            instructions.pop()
+                        else:
+                            instructions[-1]["reading"] = False
+                if node.tag == w.q("w:instrText"):
+                    # Comments do not contribute characters; their tails do.
+                    text = "".join(node.itertext())
+                    check_field_instruction(text)
+                    if instructions and instructions[-1]["reading"]:
+                        instructions[-1]["parts"].append(text)
                 if node.tag == w.q("w:rFonts"):
                     fonts.update(node.get(w.q("w:" + key)) for key in ("ascii", "hAnsi", "eastAsia", "cs")
                                  if node.get(w.q("w:" + key)))
@@ -53,6 +129,8 @@ def safety(package):
                 if node.tag.startswith("{http://schemas.openxmlformats.org/drawingml/2006/main}"):
                     if node.get("typeface"):
                         fonts.add(node.get("typeface"))
+            for instruction in instructions:
+                check_field_instruction("".join(instruction["parts"]))
     if len(fonts) > 200 or any(len(font) > 200 or any(ord(c) < 32 for c in font) for font in fonts):
         w.fail("The source font profile exceeds its bounded format.", "layout_unsafe_source")
     return sorted(fonts)
@@ -236,6 +314,36 @@ def occurrences(stream, paragraphs):
     return sum(1 for i in range(len(stream) - len(keys) + 1) if stream[i:i + len(keys)] == keys)
 
 
+def distinct_cell_sequence(stream, nodes, model):
+    """A duplicate coded row needs its own preceding printed cell source.
+
+    Keep the stored destination unchanged. Add only the physical prefix of the
+    same already validated coded cell; the PDF must still prove its complete,
+    unique, contiguous rendering. A duplicate complete cell remains ambiguous.
+    """
+    short_occurrences = occurrences(stream, nodes)
+    if short_occurrences <= 1 or not nodes:
+        return nodes, model
+    parent = nodes[0].getparent()
+    if parent is None or parent.tag != w.q('w:tc') or any(node.getparent() is not parent for node in nodes):
+        return nodes, model
+    children = list(parent); at = children.index(nodes[0])
+    prefix = children[:at]
+    if any(node.tag not in (w.q('w:tcPr'), w.q('w:p')) for node in prefix):
+        return nodes, model
+    prefix = [p for p in prefix if p.tag == w.q('w:p') and w.paragraph_text(p)[0].strip()]
+    if not prefix or len(prefix) + len(nodes) > 100:
+        return nodes, model
+    # These paragraphs belong to the detector's complete coded-cell source,
+    # not to a neighbouring cell or a title inferred from a mutable field.
+    additions = [{'segments': rendered_columns(p, [0]),
+                  'dot_leaders': any(n.get(w.q('w:leader')) == 'dot'
+                      for n in p.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))} for p in prefix]
+    result = dict(model, sequence=additions + model['sequence'], header_index=len(prefix) + model['header_index'],
+                  short_source_occurrences=short_occurrences)
+    return prefix + nodes, result
+
+
 def rendered_characters(paragraph):
     """The characters a paragraph renders, as the witness reads them: a native checkbox is one vector
     control, a checkbox content control its state glyph; spaces are removed."""
@@ -362,7 +470,10 @@ def prepare(data, *, mapping=None, answers=None):
                         description['source'][k]['fingerprint']) for k in ('header', 'row')]
         if len(model['header']) != len(description['source']['options']) + 1 or len(model['row']) != len(model['header']):
             w.fail('A complete printed tab relation changed.', 'layout_unresolved')
-        # The witness measures only a sequence printed once; any other place printing it is ambiguous.
+        # A repeated short coded row can be identified only by its complete
+        # own-cell printed prefix. Neither source nor PDF uniqueness is waived.
+        if relation:
+            nodes, model = distinct_cell_sequence(stream, nodes, model)
         model['source_occurrences'] = occurrences(stream, nodes)
         model['neighbours'] = neighbours(nodes[-1])
         description['rendered_source'] = model
@@ -391,4 +502,5 @@ def prepare(data, *, mapping=None, answers=None):
         states = w.effective_values(data, constrained, {k: v for k, v in answers.items() if k in keys},
                                    _written=actual) if constrained else {}
     return {"manifest": manifest, "fields": fields, "warnings": notes, "states": states,
+            "coverage_issues": detector.coverage_issues,
             "manifest_sha256": digest(canonical(manifest))}, actual, instrumented

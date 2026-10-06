@@ -1,0 +1,9 @@
+{
+  "recorded_utc": "2026-10-03T22:01:53.055138+00:00",
+  "error": "AttributeError",
+  "authorized_test": {
+    "error": "AttributeError"
+  },
+  "external_heartbeat_receipt_present": false,
+  "external_monitor_configuration_present": false
+}

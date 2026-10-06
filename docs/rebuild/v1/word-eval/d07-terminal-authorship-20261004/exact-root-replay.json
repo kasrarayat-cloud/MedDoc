@@ -1,0 +1,32 @@
+[
+  {
+    "control": 0,
+    "original_sha256": "dc4efc0adc8c0dce57ccfb77cab6375e8403571bb758f2fa6baf08d07d9f5df5",
+    "writers": 0,
+    "no_answer_identity": true,
+    "refused": true,
+    "code": "protected_signing_area",
+    "error": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+  },
+  {
+    "control": 1,
+    "original_sha256": "f71f377f6444528aa538b4875885551946cf73e0b9d7a80f87f6b51deb5f3e92",
+    "writers": 0,
+    "no_answer_identity": true,
+    "refused": true,
+    "code": "protected_signing_area",
+    "error": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+  },
+  {
+    "control": 2,
+    "original_sha256": "354c5a55d5f016bd1dd706b3348603a8b6ded0eb03089418ff11d7b1b1d00453",
+    "writers": 0,
+    "no_answer_identity": true
+  },
+  {
+    "control": 3,
+    "original_sha256": "d10f290f0beb2828327b672c86cc8334899e7eb1c2dd520afc58c61274a6ad10",
+    "writers": 0,
+    "no_answer_identity": true
+  }
+]

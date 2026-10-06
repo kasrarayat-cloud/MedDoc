@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "id": "builtin-soap-voice-v1",
+  "sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+  "audio_id": "soap-ankle-speech",
+  "audio_sha256": "3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7",
+  "script_sha256": "c113b5d8c8970f565fe440612b51dd43a913d788b1ebdcd65761ca8fc5b1447a",
+  "independently_authored": true,
+  "provider_upload_allowed": true,
+  "corpus_qualification": false,
+  "rights_basis": "Deterministic blank original authored for the application. No development or owner original was copied. Existing project-authored synthetic machine speech is unchanged.",
+  "qualification_scope": "Supplemental actual built-in SOAP original; historical r1-11 voice zero-answer outcomes and all Word corpus denominators are unchanged.",
+  "reference_source": "Existing synthesized SOAP script, previously exposed; never described as unseen or human microphone input.",
+  "engine": "v3",
+  "fields": [
+    {
+      "key": "v3_1",
+      "label": "Subjective",
+      "kind": "text",
+      "context": "SOAP note > Subjective",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_2",
+      "label": "Objective",
+      "kind": "text",
+      "context": "SOAP note > Objective",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_3",
+      "label": "Assessment",
+      "kind": "text",
+      "context": "SOAP note > Assessment",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_4",
+      "label": "Plan",
+      "kind": "long_text",
+      "context": "SOAP note > Plan",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    }
+  ],
+  "expectations": [
+    {
+      "label": "Subjective",
+      "expected_status": "conflict",
+      "source_units": [
+        [
+          "twisting the left ankle yesterday"
+        ],
+        [
+          "Denies fever, numbness, and right ankle pain"
+        ],
+        [
+          "Correction"
+        ],
+        [
+          "three out of ten"
+        ]
+      ],
+      "accepted_answers": [],
+      "reason": "The retained dictation contains a pain-score correction. Keep source correction review separate from automatic adoption and never credit the earlier six score. Independent semantic review still decides whether an actual hold is necessary.",
+      "key": "v3_1",
+      "destination": "b/tbl[0]/tr[0]/tc[1]"
+    },
+    {
+      "label": "Objective",
+      "expected_status": "supported",
+      "source_units": [
+        [
+          "Mild swelling over the left lateral ankle"
+        ],
+        [
+          "No open wound"
+        ]
+      ],
+      "accepted_answers": [
+        "Mild swelling over the left lateral ankle. No open wound.",
+        "Examination: Mild swelling over the left lateral ankle. No open wound."
+      ],
+      "reason": "Preserve the documented side, swelling and explicit absence of an open wound.",
+      "key": "v3_2",
+      "destination": "b/tbl[0]/tr[1]/tc[1]"
+    },
+    {
+      "label": "Assessment",
+      "expected_status": "supported",
+      "source_units": [
+        [
+          "The clinician explicitly documents a left ankle sprain"
+        ]
+      ],
+      "accepted_answers": [
+        "The clinician explicitly documents a left ankle sprain."
+      ],
+      "reason": "Only the assessment explicitly documented by the clinician is available.",
+      "key": "v3_3",
+      "destination": "b/tbl[0]/tr[2]/tc[1]"
+    },
+    {
+      "label": "Plan",
+      "expected_status": "supported",
+      "source_units": [
+        [
+          "rest"
+        ],
+        [
+          "ice wrapped in cloth for fifteen minutes at a time",
+          "ice wrapped in cloth for 15 minutes at a time"
+        ],
+        [
+          "follow-up in three days",
+          "follow up in three days",
+          "follow-up in 3 days",
+          "follow up in 3 days"
+        ],
+        [
+          "No medication is prescribed"
+        ]
+      ],
+      "accepted_answers": [
+        "The clinician explicitly directs rest, ice wrapped in cloth for fifteen minutes at a time, and follow-up in three days. No medication is prescribed.",
+        "The clinician explicitly directs rest, ice wrapped in cloth for 15 minutes at a time, and follow-up in three days. No medication is prescribed."
+      ],
+      "reason": "Retain the complete documented plan and the absence of prescribed medication; do not invent a medication.",
+      "key": "v3_4",
+      "destination": "b/tbl[0]/tr[3]/tc[1]"
+    }
+  ]
+}

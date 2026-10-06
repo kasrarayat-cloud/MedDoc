@@ -1,0 +1,226 @@
+{
+  "base": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-proof-63460193",
+  "modules": [
+    {
+      "path": "core/v3_field_relations.py",
+      "base_bytes": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+      "new_bytes": "60e25bd9afdfc2d335bb09a4cf53279a26f8d0b711d3cd7982883691c890db8b",
+      "base_ast": "6f6a3a0ef2c970316b57e309d311ffb7e8765bc0f8536010362f0a46bb0afe55",
+      "new_ast": "9420bc6b9d5a1006f21f324d02541cd7bf67bdd5144b260a4e2a31f76d516027",
+      "changed_definitions": [
+        {
+          "name": "read",
+          "base_line": 571,
+          "new_line": 571,
+          "base_ast": "6c6a034e8d4f378f56861a90535e11da77b24698e645711a058fb3b4785285a9",
+          "new_ast": "3f484409a53172a39a462930297043345557cac9cec9997f65280d5b843e5e6b"
+        }
+      ],
+      "module_ast_equal": false
+    },
+    {
+      "path": "core/generation.py",
+      "base_bytes": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+      "new_bytes": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+      "base_ast": "c14b6644d54da017165f825698412d45e8a5fccf3d04efd0d88df87e253777b4",
+      "new_ast": "840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227",
+      "changed_definitions": [
+        {
+          "name": "v3_added_causes",
+          "base_line": 3437,
+          "new_line": 3438,
+          "base_ast": "c9f119db0fde46fcbaf0a6d1caf9480774a5294b7da427df90d46cc08cc6bde2",
+          "new_ast": "8abf74c49e8fdfa10cdfebdb56863ed5c88bb37bab856cb70bbc4c3d909d04a8"
+        },
+        {
+          "name": "v3_preceding_warnings",
+          "base_line": 3331,
+          "new_line": 3331,
+          "base_ast": "1dd37a32cbfa9a4a8668a0c32acc3ae8e5c2cda79dcb826e0d8d888a39ce710b",
+          "new_ast": "ddef1f46fdedfabcc52d9c635045d6bd34811a562f239186a79feea83c42d900"
+        },
+        {
+          "name": "v3_relation_causes",
+          "base_line": 3795,
+          "new_line": 3797,
+          "base_ast": "f520dc5a8687b7a6b4794add11d286d0b0a23aa01385a0f76c58c1eadcc79ecd",
+          "new_ast": "d07a857fc2c8a73417a58b95c0abd46e7e71813a4811dfb7fa3d1ac1038d5484"
+        }
+      ],
+      "module_ast_equal": false
+    },
+    {
+      "path": "core/ordinary_source_scope.py",
+      "base_bytes": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "new_bytes": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "base_ast": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+      "new_ast": "259211c1f8de25e5d10e4c5cc794fd771d052bb30205e1c5f4a0824556a5525e",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/reviewed_source.py",
+      "base_bytes": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "new_bytes": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "base_ast": "8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157",
+      "new_ast": "8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/reviewed_procedure_source.py",
+      "base_bytes": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "new_bytes": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+      "base_ast": "aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0",
+      "new_ast": "aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/source_scope.py",
+      "base_bytes": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "new_bytes": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+      "base_ast": "5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1",
+      "new_ast": "5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/v3_actors.py",
+      "base_bytes": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "new_bytes": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+      "base_ast": "bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275",
+      "new_ast": "bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/v3_syntax.py",
+      "base_bytes": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "new_bytes": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+      "base_ast": "d38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96",
+      "new_ast": "d38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/v3_literal_facts.py",
+      "base_bytes": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "new_bytes": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+      "base_ast": "5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034",
+      "new_ast": "5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/reviewed_speaker.py",
+      "base_bytes": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "new_bytes": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+      "base_ast": "4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91",
+      "new_ast": "4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/transcript_context.py",
+      "base_bytes": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "new_bytes": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+      "base_ast": "e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff",
+      "new_ast": "e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/v3_destination.py",
+      "base_bytes": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "new_bytes": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+      "base_ast": "b8ff1dff5825ef66c86c43d3db21fd9e7b9b8468179205ebac01899e347809ef",
+      "new_ast": "b8ff1dff5825ef66c86c43d3db21fd9e7b9b8468179205ebac01899e347809ef",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/v3_mapping.py",
+      "base_bytes": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "new_bytes": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "base_ast": "34cae0324aa323299cea26e035c560d32a5aeda23fc25e435234ab73c2e5c87c",
+      "new_ast": "34cae0324aa323299cea26e035c560d32a5aeda23fc25e435234ab73c2e5c87c",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/generation_batch.py",
+      "base_bytes": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+      "new_bytes": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+      "base_ast": "3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152",
+      "new_ast": "3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    },
+    {
+      "path": "core/batch_jobs.py",
+      "base_bytes": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+      "new_bytes": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+      "base_ast": "b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74",
+      "new_ast": "b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74",
+      "changed_definitions": [],
+      "module_ast_equal": true
+    }
+  ],
+  "byte_inputs": [
+    {
+      "path": "core/v3_syntax_model.json",
+      "base": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+      "new": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc"
+    },
+    {
+      "path": "requirements.txt",
+      "base": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+      "new": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b"
+    },
+    {
+      "path": "requirements-production.lock",
+      "base": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+      "new": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473"
+    },
+    {
+      "path": "requirements-production.manifest.json",
+      "base": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade",
+      "new": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade"
+    }
+  ],
+  "unmodified_pin_checks": [
+    {
+      "tree": "base",
+      "proof": "ordinary_module_proof",
+      "accepted": true
+    },
+    {
+      "tree": "base",
+      "proof": "ordinary_dependency_proof",
+      "accepted": true
+    },
+    {
+      "tree": "repaired",
+      "proof": "ordinary_module_proof",
+      "accepted": false,
+      "reason": "elicited proof inventory: complete ordinary compiler/binding/price proof needs review"
+    },
+    {
+      "tree": "repaired",
+      "proof": "ordinary_dependency_proof",
+      "accepted": false,
+      "reason": "elicited proof inventory: core/generation.py changed or is unreviewed; its complete ordinary proof needs review"
+    }
+  ],
+  "original_accepted_three_fingerprints": {
+    "ORDINARY_PRICED_SHA256": "efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb",
+    "BATCH_PRICED_MODULES": {
+      "core/generation_batch.py": "c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02",
+      "core/batch_jobs.py": "0e5dc19bda55a29a3b07691dca2a256da1e5198d85d2ef130a7545d1e0bffeda"
+    }
+  },
+  "accepted_pin_file_unchanged": true,
+  "scope": "Source/AST inventory and fixed guard refusal; no accepted renewal or paid-source transfer."
+}

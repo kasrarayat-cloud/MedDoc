@@ -18,13 +18,11 @@ _ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|d
 #: signature", because `Signature date` and `Date of signature` are DATE questions — refusing to
 #: finalize them unless they equal the clinician's name would be a false rejection, and this
 #: file has already shipped one of those.
-#: ⚠️ ANY PARENTHETICAL KEEPS A SIGNATURE LINE THE FINALIZER'S, UNLESS IT NAMES SOMEBODY ELSE (`NOT_THE_CLINICIAN`,
-#: below) OR A DATE (`QUALIFIER`). The identity check FAILS CLOSED: a parenthetical that names no one it knows is read
-#: as the finalizer's. A narrowing to parentheticals naming a clinician-role word (2026-09-30) was refuted the same day:
-#: `Signed (Consultant)`, `Signature (GP)`, `Signed (print name)`, `Electronically signed by (print name)` all stopped
-#: being identity rows - generation filled a consultant's signature line from the notes and finalization accepted
-#: another clinician's name. The persons that are NOT the finalizer are the exclusion list, and a miss there costs a
-#: signature line left for the hand (never a name written that the finalizer did not sign).
+#: A parenthetical is a signer qualification. An unknown qualification never
+#: defaults to the authenticated finalizer; it remains a human signing line.
+#: Only an explicit clinician role enters the existing electronic identity
+#: workflow. The general signing reading remains separate and holds every
+#: unknown/person-specific role out of generation and one-click suggestions.
 SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
     r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
     rf"{_ROLE}'?s? sign(?:ature|ed)(?: by)?",
@@ -44,6 +42,8 @@ SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
 #: dd/mm/yyyy)' be renamed away from its signature label and generated. Telling the signer from a person merely named
 #: needs a new wording reader, so the widening is dropped: `Signature (participant)` demands the finalizer's own name
 #: again, exactly as on 43fcf214 (declared residual, design matrix L04 LEAVE); it is never generated.
+#: October 3 supersedes the historical fallback above: unknown qualifiers
+#: now stay human-owned. The retained exclusion list does not appoint anybody.
 NOT_THE_CLINICIAN = re.compile(
     r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
 
@@ -63,32 +63,39 @@ def _normal(label):
 
 
 def signature_line(label):
-    """Whether a label prints a SIGNATURE LINE, whoever signs it: SIGNATURE_PATTERNS with the date-qualifier exclusion,
-    BEFORE the not-the-clinician exclusion. `signature_label` is this reading less `NOT_THE_CLINICIAN`, unchanged."""
+    """A signature destination, independently of whether its signer is known.
+
+    A date-headed question or a date-only parenthetical asks for information;
+    a signer qualification containing a date still names a human signing area.
+    """
     text = _normal(label)
-    inner = QUALIFIER.search(text)
-    if inner and DATE_QUESTION.search(inner.group(1)):
+    if DATE_QUESTION.match(text):
         return False
-    return any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
+    inner = QUALIFIER.search(text)
+    if inner and re.fullmatch(r'(?:(?:date|dated|time|day)\s*(?:and|&|/|,)?\s*)+', inner.group(1)):
+        return False
+    return (any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
+            or bool(re.fullmatch(r'[^:?!()]+?\s+signature(?:\s+by)?', text)))
 
 
 def signature_label(label):
     if NOT_THE_CLINICIAN.search(_normal(label)):
         return False
-    return signature_line(label)
+    qualifier = QUALIFIER.search(_normal(label))
+    if qualifier and not re.fullmatch(rf'(?:the |your )?{_ROLE}', qualifier[1].strip()):
+        return False
+    return signature_line(label) and any(pattern.fullmatch(_normal(label)) for pattern in SIGNATURE_PATTERNS)
 
 
 def another_signers_line(field):
-    """A signature line the label names as somebody else's (`NOT_THE_CLINICIAN`): not the finalizer's identity row, and
-    never generated from notes either - it is signed by hand by the person it names.
+    """A signature whose printed role does not establish the finalizer.
 
-    ⚠️ THE EXCLUSION LIST DECIDES WHOSE SIGNATURE IT IS, NEVER WHETHER IT IS ONE (refutation of a32243eb, RR1-10). It
-    reads the SAME patterns as identity - no new wording - so identity and this together hold exactly the lines
-    SIGNATURE_PATTERNS reads, whoever signs them: 'Signature (patient, dd/mm/yyyy)' or 'Signed by (witness, DOB)' (a
-    date word the role reader treats as a date question) is never generated; a clinician's typed value still exports.
-    'Signature (participant, dd/mm/yyyy)' and 'Signed (mother, DOB)' are identity rows again (43fcf214's hold)."""
+    Unknown and qualified signer roles remain human-owned without enumerating
+    family relationships or guessing who signs. A date-only question is not a
+    signing line. The two readings together retain every true signing hold.
+    """
     label = (field or {}).get('label')
-    return bool(NOT_THE_CLINICIAN.search(_normal(label))) and signature_line(label)
+    return signature_line(label) and not signature_label(label)
 
 
 def clinician_identity(field):
@@ -110,7 +117,21 @@ def clinician_identity(field):
     There is no short-circuit now. Policy OR label, for every field, so the protection travels
     with the QUESTION rather than with the importer that happened to produce it.
     """
+    if another_signers_line(field):
+        return False  # even an old/mapped policy cannot change the printed signer
     return field.get('answer_policy') == 'clinician_identity' or signature_label(field.get('label'))
+
+
+
+def electronic_identity(field):
+    """Review authority for the established electronic clinician workflow.
+
+    A contract-v3 signing area is completed by hand. Its original physical
+    roles still guard generation/fill, but an old policy or renamed label
+    cannot appoint the electronic finalizer in that workflow. The separate
+    generation identity hold remains unchanged for malformed field controls.
+    """
+    return (field.get('locator') or {}).get('contract') != 'v3' and clinician_identity(field)
 
 
 def validate_identity(fields, answers, actor):

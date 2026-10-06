@@ -180,3 +180,17 @@ class RetentionPublishedPolicy(SimpleTestCase):
         schema=retention.policy_schema()
         self.assertEqual(set(schema['properties']['classes']['required']),set(retention.CATALOG))
         self.assertFalse(schema['properties']['classes']['additionalProperties'])
+
+    def test_published_reviewed_transcripts_have_no_aging_or_deletion_authority(self):
+        root=Path(__file__).resolve().parents[2]/'ops'/'retention'
+        body=json.loads((root/'policy.unset.json').read_text())
+        policy=retention.parse_policy(json.dumps(body).encode())
+        self.assertEqual(policy.classes['reviewed_transcripts'].mode,'unresolved')
+        self.assertIsNone(policy.classes['reviewed_transcripts'].days)
+        self.assertIsNone(policy.schedule_document_sha256)
+        # A forged review window on immutable clinical reviews cannot become
+        # accepted merely because the published catalog now names their class.
+        body['schedule_document_sha256']='a'*64
+        body['classes']['reviewed_transcripts']={'mode':'review_window','anchor':'created_at','days':30}
+        with self.assertRaises(retention.PolicyError):
+            retention.parse_policy(json.dumps(body).encode())

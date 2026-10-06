@@ -1,0 +1,968 @@
+{
+  "source_manifest": {
+    "commit": "09644640759200813c40c3246b92299999a64aca",
+    "files": [
+      {
+        "path": "rebuild/documents/word_v3.py",
+        "sha256": "345f44a0984a0f59126b9323a83af3301f3583d2f1adac39587e7e6526799623"
+      },
+      {
+        "path": "rebuild/documents/service.py",
+        "sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5"
+      },
+      {
+        "path": "rebuild/documents/import_selection.py",
+        "sha256": "06df2620f8d52891511f9f6e20785c52ee215012cece0d3180a582449fed4128"
+      },
+      {
+        "path": "rebuild/documents/source_policy.py",
+        "sha256": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+      },
+      {
+        "path": "rebuild/documents/test_source_coverage.py",
+        "sha256": "739fd77dc0fdea1f024ad71eaefca4f53a390772566711e6805aa204d5cf1e6a"
+      },
+      {
+        "path": "rebuild/core/v3_mapping.py",
+        "sha256": "950834131edbb89c4c3c83a600502b592e816e9ce4d8067823696704c0d11ae9"
+      },
+      {
+        "path": "rebuild/core/import_binding.py",
+        "sha256": "73eea4c1e6ac219c82fc51574071e9d8b1a28051ace126e3ecb0e8a92175647b"
+      },
+      {
+        "path": "rebuild/core/destination_roles.py",
+        "sha256": "46f4955a7662a4d8d0847d1641f4d61ddd25276fc652035a2ba5a0122a2a3834"
+      }
+    ],
+    "rights": "author source commit; self-authored synthetic structural probe documents; no provider upload"
+  },
+  "cases": [
+    {
+      "name": "ordinary_split_runs",
+      "source_paragraphs": [
+        "Role: [patient/carer]",
+        "Reason: ______"
+      ],
+      "source_sha256": "342bcbfb5a0d5b58c9e807af477df2f23a5d69fd6865267b3af363d1044c8797",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": true,
+        "selected_engine_issues": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "code": "printed_bracket_alternatives",
+            "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [patient/carer]",
+            "start": 6,
+            "end": 21,
+            "id": "50255765731806e1b868bfcfc423f1e00860f8051a9f3f13f01881dfc1f31730"
+          }
+        ]
+      }
+    },
+    {
+      "name": "punctuation_split_runs",
+      "source_paragraphs": [
+        "Role: [patient's/carer's]",
+        "Reason: ______"
+      ],
+      "source_sha256": "597b1273d3f74536194bbdff29e99c37dbef594fa7e9fbba4b39590f145f3d71",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": true,
+        "selected_engine_issues": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "code": "printed_bracket_alternatives",
+            "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [patient's/carer's]",
+            "start": 6,
+            "end": 25,
+            "id": "3cccb0cff61719e18b54d9ef2b920c2ada7e9ec942b40cab43bcabbf2e297608"
+          }
+        ]
+      }
+    },
+    {
+      "name": "newline_inside_alternative",
+      "source_paragraphs": [
+        "Role: [patient/\ncarer]",
+        "Reason: ______"
+      ],
+      "source_sha256": "c8b401b170453a030f4f8ca59ce72595dfe746a75326eefd1515f2fac22403f6",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      }
+    },
+    {
+      "name": "tab_inside_alternative",
+      "source_paragraphs": [
+        "Role: [patient/\tcarer]",
+        "Reason: ______"
+      ],
+      "source_sha256": "0b94c2f258e535770458ac869dc3d19c109ca595d9613a636b59a9788eb8990d",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": true,
+        "selected_engine_issues": [
+          {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "code": "printed_bracket_alternatives",
+            "detail": "Bracketed printed alternatives cannot take arbitrary generated text. Their role and exact choice interpretation need review; this source range remains unchanged: [patient/\tcarer]",
+            "start": 6,
+            "end": 22,
+            "id": "65aceaa89829156a48c2b311256563ad4c8321aecb2cd307bd374782530b7e2e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_empty_alternative",
+      "source_paragraphs": [
+        "Role: [patient/carer/]",
+        "Reason: ______"
+      ],
+      "source_sha256": "dbf42e87f41402783ebd16d6348e7c1ece6db07164704952db7390d555da3ebb",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Role patient/carer/",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 22,
+              "shape": "bracket"
+            },
+            "fingerprint": "47e9308192ce3ea7862a18bbf14cbf5e62d31cfc70dcdef67ed47a398724c7fc"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "04b3a9b7d7b95783d7dfe8150d72e5c85385bb9adebc41b2ed609cffa260bd98"
+    },
+    {
+      "name": "middle_empty_alternative",
+      "source_paragraphs": [
+        "Role: [patient//carer]",
+        "Reason: ______"
+      ],
+      "source_sha256": "c9a2e97c4ac9bf8c3a2e2ad758a4f1b465c3f944fd7fdc2fecdcd5679cbf427a",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Role patient//carer",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 22,
+              "shape": "bracket"
+            },
+            "fingerprint": "98cbd409df0d4be52f0805eef7ad4c3bf92d21503c5c83df87fbae46275f3e90"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "04b3a9b7d7b95783d7dfe8150d72e5c85385bb9adebc41b2ed609cffa260bd98"
+    },
+    {
+      "name": "type_label_alternatives",
+      "source_paragraphs": [
+        "Procedure type: [type A/type B]",
+        "Reason: ______"
+      ],
+      "source_sha256": "6bde00fe9f8d2897427d3e11de6b2d587a414b586b13818eec01e7035dcd7065",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Procedure type type A/type B",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 16,
+              "end": 31,
+              "shape": "bracket"
+            },
+            "fingerprint": "33149aabc4657496294ed38bb3032bbf041b0799c35ff6639a0437cb42906678"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Procedure type: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "1a61650c97c7156cf6e46c15b1c4907a647081b86948c9df5a59f73474a2b3cf"
+    },
+    {
+      "name": "state_label_alternatives",
+      "source_paragraphs": [
+        "Jurisdiction: [state/local]",
+        "Reason: ______"
+      ],
+      "source_sha256": "62814dadc2b2318cc9270c7a20ec0d19d0022a929febbe6d7335079bc830f6ac",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Jurisdiction state/local",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 14,
+              "end": 27,
+              "shape": "bracket"
+            },
+            "fingerprint": "d1d9ddb178ec115764443cfcd802ab0edc5449f14a7b195d39490d7c611d63dc"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Jurisdiction: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "2eb296db46ce2a7cdc47f66a02833bfe2e32953df57c720bd91576dbdc156af3"
+    },
+    {
+      "name": "action_alternatives",
+      "source_paragraphs": [
+        "Action: [add/remove]",
+        "Reason: ______"
+      ],
+      "source_sha256": "d4885b76dabd0e99956563272619b13740acdc0c7e3ef7c5528060d6c53dbfa3",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Action add/remove",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 20,
+              "shape": "bracket"
+            },
+            "fingerprint": "559c395b7404d6a794617d93946d5933b50776649d92fe508b2a4a432ce9bf3d"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Action: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "37b4723c3d989defed5c85170250dcf4361a6d85a30889b8d1ed7b3c25b16a01"
+    },
+    {
+      "name": "directive_positive",
+      "source_paragraphs": [
+        "Plan: [enter left/right]",
+        "Reason: ______"
+      ],
+      "source_sha256": "f8704074d8445fc911bcc576856697355e4f5d38c9c7a0ebc7119a1abe12f306",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Plan enter left/right",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 24,
+              "shape": "bracket"
+            },
+            "fingerprint": "94f9937cd532a62658f7e239e45ae5f97b7aa0ba646437096332bee16680d206"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Plan: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "b3d69760ac9ffb5c0e77d57cd0e1a87b60f0aa7c39c92ca334e2c8bf666949d6"
+    },
+    {
+      "name": "date_positive",
+      "source_paragraphs": [
+        "Date: [dd/mm/yyyy]",
+        "Reason: ______"
+      ],
+      "source_sha256": "2125a27ffeea372b5fa2be772817d51dc6b2a4d2f62cc113a2624afae6788cfd",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Date dd/mm/yyyy",
+          "kind": "date",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 6,
+              "end": 18,
+              "shape": "bracket"
+            },
+            "fingerprint": "5861be8eda89629fe51d288b359133f62880eef509d18461885e20fc10323690"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "actual_written_paragraphs": [
+        "Date: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "export_sha256": "9fc3333af35aa0063c2be4297c7b593f1ed6cac0023a410b9c33287fb27e977d"
+    },
+    {
+      "name": "signature_forged",
+      "source_paragraphs": [
+        "Patient signature: ______",
+        "Reason: ______"
+      ],
+      "source_sha256": "b3a5b09d6a9984a9031297760916a48d685e08feda2cb1c1757763ad08204f0f",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Patient signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 19,
+              "end": 25,
+              "shape": "blank"
+            },
+            "fingerprint": "df5b2de3d90b23b3031241f726abab8e9af328e55e8f1103da6b7c214e65e26f"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "protected_signing_area",
+        "message": "This place is a signing, initials or consent area of the original form. It never takes a typed or generated answer: only a Signature or Initials field may sit there, and it is completed by hand."
+      }
+    },
+    {
+      "name": "witness_forged",
+      "source_paragraphs": [
+        "Witness signature: ______",
+        "Reason: ______"
+      ],
+      "source_sha256": "962e7dac8c30941e463201ab77054e54096db5055fdb759ee9c319acf7704832",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Witness signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 19,
+              "end": 25,
+              "shape": "blank"
+            },
+            "fingerprint": "2af45de2e886aaa5dec5ef9de393a05bda8ae477261a6a26d6712997f4a6d84a"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "protected_signing_area",
+        "message": "This place is a signing, initials or consent area of the original form. It never takes a typed or generated answer: only a Signature or Initials field may sit there, and it is completed by hand."
+      }
+    },
+    {
+      "name": "initials_forged",
+      "source_paragraphs": [
+        "Nurse initials: ______",
+        "Reason: ______"
+      ],
+      "source_sha256": "2d8df52cd2174be8c8714fab6b3691d3604db31c7265198353c9fe083bea4599",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Nurse initials",
+          "kind": "initials",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 16,
+              "end": 22,
+              "shape": "blank"
+            },
+            "fingerprint": "824dc26ad54e147df3d2688d756a7de60c6027272248a1fdfffdd7f87a941da4"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "protected_signing_area",
+        "message": "This place is a signing, initials or consent area of the original form. It never takes a typed or generated answer: only a Signature or Initials field may sit there, and it is completed by hand."
+      }
+    },
+    {
+      "name": "patient_policy_forged",
+      "source_paragraphs": [
+        "Completed by the patient:",
+        "Comments: ______",
+        "Clinician",
+        "Reason: ______"
+      ],
+      "source_sha256": "019b89a5fcd30ddfc29cc31508d95334156a97f9c0f2c06a9f1be72288c2d297",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Completed by the patient",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 25,
+              "end": 25,
+              "shape": "after_label"
+            },
+            "fingerprint": "fb96a6711946942f6793fb20a33c466f67748cab804f9d198c61e78e813d3718"
+          },
+          "answer_policy": {
+            "source_author": "patient",
+            "source": {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "fingerprint": "fb96a6711946942f6793fb20a33c466f67748cab804f9d198c61e78e813d3718",
+              "text": "Completed by the patient:"
+            }
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Comments",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 10,
+              "end": 16,
+              "shape": "blank"
+            },
+            "fingerprint": "0b33d9a76c7f7dd9f065372722798be38b34ff368b5538c088249ce7eeea79fe"
+          },
+          "answer_policy": {
+            "source_author": "patient",
+            "source": {
+              "part": "word/document.xml",
+              "slot": "b/p[0]",
+              "fingerprint": "fb96a6711946942f6793fb20a33c466f67748cab804f9d198c61e78e813d3718",
+              "text": "Completed by the patient:"
+            }
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "Clinician",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[3]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "mapping_mismatch",
+        "message": "This place carries a printed authorship or review requirement on the original form, and the field there does not carry that same requirement. Review the mapping again."
+      }
+    },
+    {
+      "name": "ordinary_initial",
+      "source_paragraphs": [
+        "Initial assessment: ______",
+        "Reason: ______"
+      ],
+      "source_sha256": "11e4dc896dca5823fc2c54c0fc4b6f11d91488a338828ec5a903386dc3224c0d",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Initial assessment",
+          "kind": "initials",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "target": {
+              "type": "span",
+              "start": 20,
+              "end": 26,
+              "shape": "blank"
+            },
+            "fingerprint": "877b0c0e564f7d5ec06658a58b8b3513f472bcd35a1bbcefd76a52659a8746f0"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Reason",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[1]",
+            "target": {
+              "type": "span",
+              "start": 8,
+              "end": 14,
+              "shape": "blank"
+            },
+            "fingerprint": "6d851d61dc92ef5f11bdbe57995127e1df14164ab93abcdffc06db2b2ae85ed5"
+          }
+        }
+      ],
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3",
+        "block_generation": false
+      },
+      "fill_refusal": {
+        "type": "V3Failure",
+        "code": "invalid_answer",
+        "message": "Signature and initials areas are signed by the clinician; they are never filled automatically."
+      }
+    }
+  ],
+  "provider_requests": 0,
+  "database_connections": 0,
+  "elapsed_seconds": 11.792
+}

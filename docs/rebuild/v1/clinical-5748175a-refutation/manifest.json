@@ -1,0 +1,62 @@
+{
+  "scope": "Finished source REFUTED through whole validation/current governance/final decision checks. Diagnostic probes are overlapping exposed controls; not a new independent accuracy denominator or provider qualification.",
+  "source_commit": "5748175ad2b0dccfa364eb0257cc25e0540d8764",
+  "source_components": 20,
+  "primary": {
+    "cases": 57,
+    "exit_code": 0,
+    "body_seconds": 14.756
+  },
+  "narrow": {
+    "cases": 13,
+    "exit_code": 0,
+    "body_seconds": 6.706
+  },
+  "source_released": true,
+  "provider_calls": 0,
+  "database_connections": 0,
+  "artifacts": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_5748175a.py",
+      "sha256": "f5f5223d3a4fffb4824c0c2a04e6c84b7197a809c839d10317235153f933e219",
+      "bytes": 16103,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-5748175a.json",
+      "sha256": "bb6e22591ec21977faab41e46e4d79ddbf6ead85f99d1c91a9c4b37768472e80",
+      "bytes": 78965,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-5748175a.log",
+      "sha256": "d1206d5e79a649dcb14ad0ddd7b80d62521b6c835ad1659a38dea3cd3e82c57b",
+      "bytes": 1099,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_5748175a_witness.py",
+      "sha256": "fd7654d5a01e5e97620b8b1ca107b056065cd086e4905c61d83fad67ed99a36a",
+      "bytes": 8335,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-5748175a-witness.json",
+      "sha256": "9d0d372e6aca4eda800d678de872d32f3bcb906bb183bdc26bb38d5f1d2879d8",
+      "bytes": 107046,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-5748175a-witness.log",
+      "sha256": "48db92997ccfb9fcd4cdaed6a31892bae54850c0c657e0d87c62950ef0747552",
+      "bytes": 1090,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-5748175a-source/manifest.json",
+      "sha256": "027c948a406d218837be93c8e1b653f517d96ba9f243097e0cb171c519df04b7",
+      "bytes": 4598,
+      "mode": "0600"
+    }
+  ]
+}

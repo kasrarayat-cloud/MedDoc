@@ -1,0 +1,203 @@
+{
+  "format": "canonical4-independent-evidence-manifest-v1",
+  "source": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+  "docs_base": "e0cd3b14d64f2404abea141a0caf45aeab0af5ac",
+  "files": {
+    "qualified14-independent.json": "30290ce3aa2e3f59087946298c1e07abf4d3c42604d7ec5514ffe3f8d52e69ab",
+    "soap-pair-independent.json": "af63605969d6174c762dd7b69c67ca201f9fee19b4a2b36562771855d79ea9d4",
+    "procedure-pair-independent.json": "248170f822a2fda4753be4ad29e8d80fa60ac943a688e8a29f80ccea5589d8b7",
+    "final19-independent.json": "8d3dfd1973a52829fe222106e6320e6bcb4e87ad46bda97d2e9c148e70012865",
+    "future-C-transfer-requirements.json": "d1b95cc389591b098d4f15c2830a51a26ed38497de7c6f5299da7718fefd88b0",
+    "INDEPENDENT-RESULTS.md": "b9217c640b0f62d19db0d5acbb26f32f2ad9065425451f99d530938f23ae1152"
+  },
+  "task_evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/new4-accounting-5bf30245",
+  "analysis_scripts": {
+    "aggregate-notes.py": "96de238c53484ba812fe79456d4f81b4e24ee4263bb6fa4a6a11da1ead86dfc8",
+    "check-soap.py": "cdd9e4ba512702a5f971a0107448486954b4ec17625c47538210eb2751598b9c",
+    "check-procedure.py": "84f2ba0ec1b6582b9e96a42bfea717d181d102b0a8a2eee4679861e6738aa776",
+    "finalize-aggregate.py": "a59e3478a272baa178bf30fe3e2e97aced675fb98650c3f1f849db012d43e382"
+  },
+  "instrument_failures_preserved": [
+    "notes-review-shape-instrument-failure.json",
+    "notes-readback-shape-instrument-failure.json",
+    "notes-first-instrument-failure.json",
+    "soap-first-instrument-failure.json",
+    "final-wallet-schema-instrument-failure.json"
+  ],
+  "API_calls_by_this_reader": 0,
+  "DB_queries_by_this_reader": 0,
+  "accepted_pins_mutations": 0,
+  "future_candidate_transfer_claimed": false,
+  "actual_model_and_profile_records": [
+    {
+      "attempt": 1,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 8000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 2,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 3,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 4,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 5,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 6,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 7,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 8,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 9,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 10,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 11,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 12,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 13,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 14,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 15,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 17,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    },
+    {
+      "attempt": 19,
+      "actual_model": "claude-sonnet-5-5",
+      "actual_max_tokens": 20000,
+      "actual_thinking": {
+        "type": "between_tools"
+      },
+      "actual_effort": "medium",
+      "stored_timeout_seconds": 120
+    }
+  ]
+}

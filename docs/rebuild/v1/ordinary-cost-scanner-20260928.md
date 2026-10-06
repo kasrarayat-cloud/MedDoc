@@ -143,3 +143,84 @@ only `enqueue`, `resolve_view` and `recover_recorded` differ; every other top-le
 cannot be read), the whole-catalogue plan is refused rather than narrowed. `run_one`, the send boundary, is
 unchanged; no request, price, hold amount or send changed. `core/generation_batch.py` is unchanged (`1da9f91b…`).
 
+### Addendum 2026-10-05 — divided-calendar uniqueness admission only
+
+The final Word work adds one two-line refusal inside `generation_batch.constraints()`:
+`unique_values` rules involving a `temporal_band` destination refuse before a plan
+can be priced or sent. Different source-appointed date formats can display the
+same calendar date as different strings, so the existing string uniqueness
+reader cannot establish this constraint safely.
+
+The complete normalized C6 module identity was
+`3dab6c7c7157b3149fdd35d5091af15e19a28a7a3aef4ab0a703eedab6848152`.
+Removing exactly this new refusal restores that entire AST. All other top-level
+statements, imports, constants and definitions remain identical. In particular,
+`plan_for` calls `plan_constraints` before constructing or pricing parts; its
+per-part serialized request size plus 12,000, actual wire output cap, rates, US
+multiplier, ceiling, retail multiplier and complete charge sum are unchanged.
+`request`, `require_config`, partitions, ordinary request compilation and
+`batch_jobs.run_one` are unchanged. No model, request, retry, price or hold changes.
+
+Reviewed replacement normalized identity:
+`core/generation_batch.py`:
+`57718cc78ecca95a1b2987bd779373febf836a71883270ffd7b0d9d00fba808f`.
+
+The actual divided-date/ordinary-priority controls remain in
+`documents.test_temporal_band.TemporalBandOwnershipTests`; scanner controls
+reject removing the refusal, bypassing its admission call and the existing
+request/price/global-dependency undercharge mutations. Previous provider
+receipts retain their original source provenance; this addendum supplies no
+new paid witness or provider qualification.
+
+### Addendum 2026-10-05 — WQ01 complete omission-state hold
+
+The completed normal campaign-3 attempt 001 on
+`7116193a56654a26299140219fdd12a6af20214b` selected the complete source unit
+`Allergies: not documented.` and adopted `not documented.` as a supported
+allergy value. Its original unsafe classification, raw response, metering and
+export remain unchanged. A complete labelled omission value now holds through
+the existing `v3_shape_holds` floor, retaining its candidate and exact evidence.
+The anchored whole-value predicate does not match actual clinical negatives
+such as `No known drug allergies.` or `not taking warfarin.`
+
+Only the new `MISSING_RECORD_VALUE` assignment and this one shape-floor operand
+change in `core/generation.py`. Removing them restores its entire earlier
+normalized AST `840bf7af85ccdbe0cec7f8cf84a3c58819ec6267f51867c17ab61745f2812227`.
+Every other statement, including source-unit construction, configuration,
+compiler inputs, request schema, model settings, request construction, quote
+formulas and rates, is unchanged. The complete reviewed replacement identity is
+`9cdefe21964894589b2db8b9b23db8fc933d926997446d9880a87da3d8c2e207`.
+The ordinary compiler module and every other priced dependency/input stay fixed.
+
+A source-only reconstruction of that genuine captured SDK request is exact,
+including its 20,000-token between-tools medium profile. The current maximum
+cost is `0.23732800000`; its `1.5` customer bound is `0.355992000000`, exactly
+the original recorded reservation. This is applicability of the original
+unsafe attempt's financial evidence, with its invoice still unreconciled;
+it is neither a new provider result nor clinical qualification. The original
+global profile remains 8,000 tokens; this specific ordinary wire is 20,000.
+The scanner's omission-floor mutation, imported-compiler mutation and original
+request/undercharge controls remain fail-closed. Clinical application/export
+replay on the new integrated source is required separately.
+
+#### Corrective addendum — complete omission grammar and safety readings
+
+Independent finished-diff refutation demonstrated six complete-value bypasses:
+`not yet documented.`, `not documented in the chart.`, `not documented!`,
+an invisible character before the stop or inside `documented`, and a fullwidth
+stop. The original failed probes and the first repair stay preserved. The
+complete-value grammar now admits the missing-record qualifier/order and
+closing punctuation, and withholding reads every existing `safety_readings`
+interpretation. That established hold-only reader applies NFKC and invisible
+character removal without changing evidence, candidate text or offsets. The
+guard remains a full match, never an unrestricted substring check.
+
+The reviewed replacement complete generation AST is now
+`80624fb45d82a6795e4450f12dff4135be0c9f7961fe55942e82aaf4bc8f9456`;
+the previous `9cdefe…` pin is superseded only for this correction. Removing the
+same new assignment and shape-floor operand still restores the entire original
+`840bf7…` AST. Every compiler/quote/request definition stays unchanged. Repeating
+the actual captured WQ01 SDK reconstruction remains exact, with wire SHA256
+`e7ac48563b5e9ebab93f41b007a892e2c00e344852d774e11102f618e9114ea2`,
+maximum cost `0.23732800000` and original customer bound `0.355992000000`.
+The original unsafe outcome, metering and unreconciled invoice are untouched.

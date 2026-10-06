@@ -1,0 +1,25 @@
+{
+  "source_commit": "713da110fb5773d774e9ae883583c81e375d4523",
+  "actual_exit": 0,
+  "pid": 3074747,
+  "reaped": true,
+  "timed_out": false,
+  "source_before": {
+    "rebuild/ops/standing_qa.py": "54dc4c73fd42e28d212b3196893cd040741240f6f9619527f079127a06c80ff7",
+    "rebuild/ops/standing_qa_elicited.py": "7e9bf4eb7351d68fdba8f0263817f4a8d645d336732c4dd3fa267868e043a3aa",
+    "rebuild/ops/fixtures/elicited-qualification-v1.json": "73b118daa070b5ae65d150e3c4e394982caccc18b771fc3533de748a85706111",
+    "rebuild/ops/tests/test_standing_qa_elicited.py": "d9358128bb110b32ef3eb87813174f8be04278f0af5ae7879cc38eff5f50804d",
+    "docs/foundation/mutations/20261004-quillmd-v1-standing-api-testing-5.md": "21c3fdbc4610a700fac2505ad5668d5abcb9b59ba2f2bb809cc17058fbbabb99",
+    "docs/rebuild/v1/elicited-provider-preparation-20261004/pending-standing_qa.source": "3b5c1d2866be9d592aa6ba5bece03f5d5780448b5e7e24f5d1c8e65b20168583"
+  },
+  "source_after": {
+    "rebuild/ops/standing_qa.py": "54dc4c73fd42e28d212b3196893cd040741240f6f9619527f079127a06c80ff7",
+    "rebuild/ops/standing_qa_elicited.py": "7e9bf4eb7351d68fdba8f0263817f4a8d645d336732c4dd3fa267868e043a3aa",
+    "rebuild/ops/fixtures/elicited-qualification-v1.json": "73b118daa070b5ae65d150e3c4e394982caccc18b771fc3533de748a85706111",
+    "rebuild/ops/tests/test_standing_qa_elicited.py": "d9358128bb110b32ef3eb87813174f8be04278f0af5ae7879cc38eff5f50804d",
+    "docs/foundation/mutations/20261004-quillmd-v1-standing-api-testing-5.md": "21c3fdbc4610a700fac2505ad5668d5abcb9b59ba2f2bb809cc17058fbbabb99",
+    "docs/rebuild/v1/elicited-provider-preparation-20261004/pending-standing_qa.source": "3b5c1d2866be9d592aa6ba5bece03f5d5780448b5e7e24f5d1c8e65b20168583"
+  },
+  "source_unchanged": true,
+  "elapsed_seconds": 9.85319743299624
+}

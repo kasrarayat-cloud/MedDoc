@@ -236,15 +236,20 @@ class PilotSafeguards(SyntheticFixture, TestCase):
         self.assertEqual(self.client.get(f'/encounters/{self.encounter.pk}/export/').status_code, 409)
 
     def test_the_qualified_form_never_offers_or_accepts_leave_blank(self):
+        from core.import_binding import for_mapping
         version = TemplateVersion.objects.create(template=self.template, number=2, fields=self.encounter.template_version.fields,
-                                                 document_backend={'backend': 'synthetic-qualified'}, review_requirements=[], created_by=self.user)
+                                                 document_backend={'backend': 'synthetic-qualified'}, review_requirements=[],
+                                                 import_manifest=for_mapping(self.encounter.template_version.import_manifest,
+                                                                             self.encounter.template_version.fields),
+                                                 created_by=self.user)
         self.encounter.template_version = version; self.encounter.answers = {}
         self.encounter.save(update_fields=['template_version', 'answers'])
         with patch('core.views.wm_resolve', side_effect=DocumentError('Synthetic boundary; no Word runtime.')):
             page = self.client.get(f'/encounters/{self.encounter.pk}/')
             self.assertNotContains(page, 'name="blank_')
             revision = self.encounter.revision
-            response = self.client.post(f'/encounters/{self.encounter.pk}/save/', {'revision': revision, 'answer_symptoms': '', 'blank_symptoms': 'on'})
+            key = self.encounter.template_version.fields[0]['key']
+            response = self.client.post(f'/encounters/{self.encounter.pk}/save/', {'revision': revision, 'answer_'+key: '', 'blank_'+key: 'on'})
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'cannot be marked', status_code=400)
         self.encounter.refresh_from_db()
@@ -324,7 +329,8 @@ class PilotVoice(BoundaryFixture, TestCase):
     def test_a_document_change_is_named_as_the_reason_not_an_expired_price(self):
         quote = self.quote_signed_ago(0)
         # Answers saved in another window move the revision without touching the notes.
-        saved = self.client.post(self.url + 'save/', {'revision': self.encounter.revision, 'answer_symptoms': 'Fictional answer only'})
+        key = self.encounter.template_version.fields[0]['key']
+        saved = self.client.post(self.url + 'save/', {'revision': self.encounter.revision, 'answer_'+key: 'Fictional answer only'})
         self.assertEqual(saved.status_code, 302)
         self.encounter.refresh_from_db()
         response = self.send(quote)

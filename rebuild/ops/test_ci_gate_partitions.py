@@ -12,18 +12,20 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CIGatePartitions(unittest.TestCase):
-    def invoke(self, mode, fail_at=''):
+    def invoke(self, mode, fail_at='', require_support_settings=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fake = root / 'python'
             fake.write_text('#!' + sys.executable + '\n' +
                             'import json,os,sys\n'
                             'with open(os.environ["CI_PROBE_LOG"],"a") as f: f.write(json.dumps(sys.argv[1:])+"\\n")\n'
+                            'if os.environ.get("CI_REQUIRE_SETTINGS")=="1" and sys.argv[1:3]==["-m","unittest"] and os.environ.get("DJANGO_SETTINGS_MODULE")!="quillmd.settings": sys.exit(24)\n'
                             'sys.exit(23 if os.environ.get("CI_PROBE_FAIL") in sys.argv[1:] else 0)\n')
             fake.chmod(0o700)
             log = root / 'calls.jsonl'
             env = dict(os.environ, QUILLMD_CI_PYTHON=str(fake), CI_PROBE_LOG=str(log),
-                       CI_PROBE_FAIL=fail_at, QUILLMD_SECRET_KEY='synthetic', QUILLMD_DB_PASSWORD='synthetic')
+                       CI_PROBE_FAIL=fail_at, CI_REQUIRE_SETTINGS=str(int(require_support_settings)),
+                       QUILLMD_SECRET_KEY='synthetic', QUILLMD_DB_PASSWORD='synthetic')
             result = subprocess.run(['bash', str(ROOT/'scripts/ci/verify-fresh.sh'), mode],
                                     env=env, capture_output=True, text=True, timeout=10)
             return result.returncode, [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -45,7 +47,17 @@ class CIGatePartitions(unittest.TestCase):
             'documents.test_word_v3', 'documents.test_signing_areas', 'documents.test_question_boxes',
             'documents.test_composite_kind', 'documents.test_hyperlink_destinations', 'documents.test_document_relations', 'documents.test_paragraph_list_boxes',
             'documents.test_source_policy', 'documents.test_layout_verification', 'documents.test_layout_containment', 'documents.test_guidance_preservation', 'documents.test_checkbox_history', 'documents.test_structural_columns',
-            'documents.test_destination_roles'])
+            'documents.test_destination_roles', 'documents.test_import_selection', 'documents.test_source_coverage',
+            'documents.test_destination_regressions', 'documents.test_paragraph_option_recovery',
+            'documents.test_ruled_paragraph_recovery', 'documents.test_numeric_part_recovery',
+            'documents.test_temporal_format_pairs', 'documents.test_paired_colon_gaps',
+            'documents.test_layout_source_nodes', 'documents.test_named_single_scope',
+            'documents.test_layout_stream_reuse', 'documents.test_empty_corner_matrix',
+            'documents.test_underlined_subheadings', 'documents.test_source_style_cache',
+            'documents.test_captioned_blank_rows', 'documents.test_captioned_signing_band',
+            'documents.test_explicit_insertion', 'documents.test_nominal_insertion_role',
+            'documents.test_table_selection_source', 'documents.test_temporal_band',
+            'documents.test_drawn_signing_and_bands', 'documents.test_signing_holds_and_source_claims'])
         self.assertEqual(support[0][-1], '-v')
         self.assertEqual(support[1], ['-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_*.py', '-v'])
 
@@ -56,6 +68,13 @@ class CIGatePartitions(unittest.TestCase):
         expected = {'documents.' + path.stem for path in (ROOT/'rebuild/documents').glob('test*.py')}
         self.assertEqual(set(modules), expected)
         self.assertEqual(len(modules), len(set(modules)))
+
+    def test_standalone_document_controls_receive_application_settings(self):
+        for mode in ('python-support', 'python'):
+            with self.subTest(mode=mode):
+                code, calls = self.invoke(mode, require_support_settings=True)
+                self.assertEqual(code, 0)
+                self.assertEqual(len([call for call in calls if call[:2] == ['-m', 'unittest']]), 2)
 
     def test_core_shards_keep_checks_and_use_the_same_full_discovery_label(self):
         for shard in (1, 2):
@@ -101,5 +120,7 @@ class CIGatePartitions(unittest.TestCase):
                 self.assertEqual(check.returncode == 0, result == 'success')
         self.assertIn('fail-fast: false', workflow)
         self.assertIn('lane: [core-1, core-2, support]', workflow)
-        # 30 since 2026-10-01: the count-balanced core-1 lane measured 18m20s and then 20m18s (cancelled at 20).
-        self.assertIn('timeout-minutes: 30', workflow.split('\n  python:\n', 1)[0])
+        # The full core-1 workload still had at least 372 selected methods unfinished
+        # at the former 30-minute bound; retain the recorded bounded 60-minute job.
+        python_checks = workflow.split('\n  python-checks:\n', 1)[1].split('\n  python:\n', 1)[0]
+        self.assertIn('timeout-minutes: 60', python_checks)

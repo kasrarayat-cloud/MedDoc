@@ -117,18 +117,42 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
 
     # ---- what the repair must NOT do ------------------------------------------------------------
 
-    def test_each_limb_has_its_own_table_with_its_own_repeated_units(self):
+    def test_the_original_single_table_and_both_physical_section_headings_survive(self):
+        """The uploaded source appoints table/row destinations. A layout repair
+        cannot split that table just to synthesize per-limb repetition."""
         target, _ = self.repaired(ORIGINAL)
         tables = layout.TABLE.findall(document(target))
-        self.assertEqual(len(tables), 2)
-        for table, limb in zip(tables, layout.WM_LIMBS):
-            rows = ROW.findall(table)
-            self.assertEqual(len(rows), 14)
-            self.assertEqual(layout._columns(rows[0]), [limb, *layout.WM_CAPTIONS])
-            self.assertEqual([i for i, row in enumerate(rows) if '<w:tblHeader' in row], [0])
-            other_limb = next(value for value in layout.WM_LIMBS if value != limb)
-            self.assertNotIn(other_limb, ''.join(rows[1:]))
-        self.assertIn('</w:tbl>' + layout.TABLE_SEPARATOR + '<w:tbl>', document(target))
+        self.assertEqual(len(tables), 1)
+        rows = ROW.findall(tables[0])
+        self.assertEqual(len(rows), 28)
+        for index, limb in ((0, layout.WM_LIMBS[0]), (14, layout.WM_LIMBS[1])):
+            self.assertEqual(layout._columns(rows[index]), [limb, *layout.WM_CAPTIONS])
+            self.assertIn('<w:keepNext', rows[index])
+        self.assertNotIn('<w:tblHeader', tables[0], 'the original appoints no repeating first-row header')
+
+    def test_existing_header_properties_on_the_single_table_are_retained(self):
+        original = document(ORIGINAL)
+        rows = ROW.findall(original)
+        marked = layout._with_row_property(rows[0], '<w:tblHeader w:val="0"/>')
+        source = original.replace(rows[0], marked, 1)
+        exported, _ = layout.apply_table_continuation(source)
+        self.assertEqual(len(layout.TABLE.findall(exported)), 1)
+        self.assertIn('<w:tblHeader w:val="0"/>', ROW.findall(exported)[0])
+        self.assertEqual(exported.count('<w:tblHeader'), 1)
+
+    def test_an_original_fourteen_row_table_retains_its_existing_header_behavior(self):
+        original = document(ORIGINAL)
+        table = layout.TABLE.findall(original)[0]
+        rows = ROW.findall(table)
+        for start in (0, 14):
+            with self.subTest(limb=start):
+                standalone = table[:table.index(rows[0])] + ''.join(rows[start:start + 14]) + table[table.rindex(rows[-1]) + len(rows[-1]):]
+                source = original.replace(table, standalone, 1)
+                exported, _ = layout.apply_table_continuation(source)
+                fixed = layout.TABLE.findall(exported)
+                self.assertEqual(len(fixed), 1)
+                self.assertEqual(len(ROW.findall(fixed[0])), 14)
+                self.assertEqual([i for i, row in enumerate(ROW.findall(fixed[0])) if '<w:tblHeader' in row], [0])
 
     def test_not_one_visible_character_changes(self):
         for source in self.documents_under_test():
@@ -141,8 +165,8 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
             target, _ = self.repaired(source)
             before, after = document(source), document(target)
             self.assertEqual(len(re.findall(r'<w:p(?:\s[^>]*)?>', after)),
-                             len(re.findall(r'<w:p(?:\s[^>]*)?>', before)) + 1,
-                             'exactly one empty separator paragraph is required')
+                             len(re.findall(r'<w:p(?:\s[^>]*)?>', before)),
+                             'no synthetic separator paragraph may change the original structure')
             for pattern in (r'<w:sdt>', r'<w:tr(?:\s[^>]*)?>', r'<w:tc>'):
                 self.assertEqual(len(re.findall(pattern, before)), len(re.findall(pattern, after)),
                                  '%s changed %s' % (source.name, pattern))
@@ -155,6 +179,24 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
             self.assertEqual(sorted(a.namelist()), sorted(b.namelist()), source.name)
             changed = [n for n in a.namelist() if n != 'word/document.xml' and a.read(n) != b.read(n)]
             self.assertEqual(changed, [], '%s: %s' % (source.name, changed))
+
+    def test_original_archive_comment_is_retained_on_changed_exports(self):
+        for number, comment in enumerate((b'', b'Original customer archive comment', b'\x00\xff\x80')):
+            with self.subTest(comment=comment):
+                target = self.work / ('archive-comment-%d.docx' % number)
+                with zipfile.ZipFile(ORIGINAL) as original, zipfile.ZipFile(target, 'w') as output:
+                    output.comment = comment
+                    for item in original.infolist():
+                        output.writestr(item, original.read(item.filename))
+                before = target.read_bytes()
+                self.assertEqual(layout.repair_export(target), {'tables': 1, 'heading_rows': 2})
+                with zipfile.ZipFile(target) as exported:
+                    self.assertEqual(exported.comment, comment)
+                # Re-entering the corrected export is a byte-identical no-op.
+                corrected = target.read_bytes()
+                layout.repair_export(target)
+                self.assertEqual(target.read_bytes(), corrected)
+                self.assertNotEqual(before, corrected)
 
     def test_the_uploaded_original_on_disk_is_never_modified(self):
         """The repair runs on the EXPORT. The customer's original keeps its own bytes and its own hash."""
@@ -204,13 +246,53 @@ class TheMeasurementTableKeepsItsHeadingsWithItsValues(unittest.TestCase):
         self.assertEqual(repaired, other)
         self.assertEqual(summary, {'tables': 0, 'heading_rows': 0})
 
-    def test_the_split_does_not_bind_a_previous_tables_last_cells_on_reentry(self):
+    def test_the_original_last_cells_are_not_bound_to_unrelated_following_text_on_reentry(self):
         target, _ = self.repaired(ORIGINAL)
         xml = document(target)
         first = layout.TABLE.findall(xml)[0]
         self.assertNotIn('<w:keepNext', ROW.findall(first)[-1])
         fixed, _ = layout.apply_table_continuation(xml)
         self.assertEqual(fixed, xml)
+
+    def test_all_native_answer_cells_keep_original_table_and_row_destinations(self):
+        from lxml import etree
+        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+        original = etree.fromstring(document(ORIGINAL).encode())
+        table = original.find('w:body/w:tbl', ns)
+        rows = table.findall('w:tr', ns)
+        answers = {}
+        for section in (0, 14):
+            for offset in range(1, 14):
+                for column in (range(3) if offset >= 11 else (1, 2)):
+                    # A source-shaped synthetic processor output, before the
+                    # layout seam. Location captions remain in their own cell.
+                    cell = rows[section + offset].findall('w:tc', ns)[column]
+                    paragraph = cell.find('w:p', ns)
+                    run = etree.SubElement(paragraph, '{%s}r' % ns['w'])
+                    value = ('location %d/%d ' % (section + offset, column) + 'long answer; ' * 500
+                             if offset >= 11 else '%d.%d' % (section + offset, column))
+                    etree.SubElement(run, '{%s}t' % ns['w']).text = value
+                    answers[(section + offset, column)] = value
+        self.assertEqual(len(answers), 58)
+        source = etree.tostring(original).decode()
+        exported, summary = layout.apply_table_continuation(source)
+        self.assertEqual(summary, {'tables': 1, 'heading_rows': 2})
+        result = etree.fromstring(exported.encode())
+        tables = result.findall('w:body/w:tbl', ns)
+        self.assertEqual(len(tables), 1)
+        final_rows = tables[0].findall('w:tr', ns)
+        self.assertEqual(len(final_rows), 28)
+        for index, row in enumerate(rows):
+            for column, cell in enumerate(row.findall('w:tc', ns)):
+                current = final_rows[index].findall('w:tc', ns)[column]
+                self.assertEqual(cell.xpath('.//w:t/text()', namespaces=ns),
+                                 current.xpath('.//w:t/text()', namespaces=ns), (index, column))
+                if (index, column) in answers:
+                    self.assertIn(answers[(index, column)], ''.join(current.xpath('.//w:t/text()', namespaces=ns)))
+        # The retained native reader uses these source row indices directly.
+        self.assertEqual(layout._columns(ROW.findall(exported)[14]), [layout.WM_LIMBS[1], *layout.WM_CAPTIONS])
+        self.assertIn(answers[(15, 1)], ''.join(final_rows[15].findall('w:tc', ns)[1].xpath('.//w:t/text()', namespaces=ns)))
+        self.assertEqual(len(original.findall('.//w:sdt', ns)), len(result.findall('.//w:sdt', ns)))
 
     def test_long_location_text_and_numeric_cells_are_unchanged(self):
         original = document(ORIGINAL)

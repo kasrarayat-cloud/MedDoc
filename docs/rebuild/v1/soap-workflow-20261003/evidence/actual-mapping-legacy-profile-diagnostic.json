@@ -1,0 +1,630 @@
+{
+  "scope": "offline-validator-diagnostic-not-a-qualification",
+  "provider_requests": 0,
+  "fields": [
+    {
+      "key": "v3_1",
+      "label": "Subjective",
+      "kind": "text",
+      "context": "SOAP note > Subjective",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_2",
+      "label": "Objective",
+      "kind": "text",
+      "context": "SOAP note > Objective",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_3",
+      "label": "Assessment",
+      "kind": "text",
+      "context": "SOAP note > Assessment",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_4",
+      "label": "Plan",
+      "kind": "long_text",
+      "context": "SOAP note > Plan",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    }
+  ],
+  "configuration": {
+    "mode": "fixture",
+    "provider": "anthropic",
+    "model": "gpt-4.1-mini",
+    "input_rate": "",
+    "output_rate": "",
+    "cached_rate": "",
+    "voice_rate_minute": "",
+    "voice_rate_second": "",
+    "voice_max_cost": "0.20",
+    "prompt_version": "extractive-v7-question-context",
+    "v3_evidence_contract": "natural-v1",
+    "discount_rate": "0",
+    "request_profile": {
+      "invalid": "QUILLMD_AI_MODEL has no request profile: with QUILLMD_AI_PROVIDER=anthropic QuillMD sends requests only to claude-sonnet-5, claude-sonnet-5-5 and claude-haiku-4-5, claude-sonnet-4-5-20250929, claude-sonnet-4-6, each spelled exactly so; any other model needs its own profile first."
+    },
+    "pricing_version": "configured-v1:ec2b7086d5d69fbdca4210882994206d62181fcf364791f33cd0ee11a5c27033"
+  },
+  "inspection": {
+    "format": "docx",
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "Subjective",
+        "kind": "text",
+        "context": "SOAP note > Subjective",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        }
+      },
+      {
+        "key": "v3_2",
+        "label": "Objective",
+        "kind": "text",
+        "context": "SOAP note > Objective",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[1]/tc[1]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        }
+      },
+      {
+        "key": "v3_3",
+        "label": "Assessment",
+        "kind": "text",
+        "context": "SOAP note > Assessment",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[2]/tc[1]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        }
+      },
+      {
+        "key": "v3_4",
+        "label": "Plan",
+        "kind": "long_text",
+        "context": "SOAP note > Plan",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[3]/tc[1]",
+          "target": {
+            "type": "cell"
+          },
+          "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+        }
+      }
+    ],
+    "warnings": [
+      "QuillMD found these answer areas automatically. Check every field against the form before using it: add any area it missed, remove anything that is not an answer, and correct kinds and options. Your corrections are recorded as manual mapping.",
+      "Answers expand and can change pagination. Review the exported document's layout."
+    ],
+    "coverage_issues": [],
+    "layout_quarantine": null,
+    "layout_pending": 0,
+    "contract": "v3",
+    "adapter": "word-v3",
+    "sandbox": "landlock+seccomp",
+    "import_manifest": {
+      "strategy": "physical-coverage-v1",
+      "engine": "v3",
+      "engine_version": "word-v3-ec3-v1",
+      "mapping_sha256": "df56139ae96a56ed59b926952a4430409421b9fc780a54d1f5a8bf598fcc5282",
+      "initial_mapping_sha256": "df56139ae96a56ed59b926952a4430409421b9fc780a54d1f5a8bf598fcc5282",
+      "coverage": {
+        "legacy_omissions": [],
+        "legacy_unmapped": [],
+        "v3_uncovered_legacy_places": [],
+        "block_generation": false,
+        "automatic_complete": false,
+        "review_required": true,
+        "requested_engine": "v3"
+      },
+      "legacy_refusal": "",
+      "v3_refusal": "",
+      "source_sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa",
+      "engine_code_sha256": "3fb4138f61fb625a0b7a7ae30b408a91ecf94e4d591bfadeaf67a3ef558e929a"
+    },
+    "sha256": "d92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa"
+  },
+  "cases": [
+    {
+      "id": "original",
+      "notes": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: clinician assessed a viral upper respiratory infection.\nPlan: rest, hydration and review if symptoms worsen.",
+      "answers": {
+        "v3_1": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: clinician assessed a viral upper respiratory infection.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 176
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Subjective: cough for two days.",
+              "start": 0,
+              "end": 31
+            }
+          ],
+          "held_candidate": {
+            "text": "cough for two days.",
+            "evidence": [
+              {
+                "quote": "Subjective: cough for two days.",
+                "start": 0,
+                "end": 31
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 124,
+                "end": 176,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Assessment: clinician assessed a viral upper respiratory infection.",
+                "start": 56,
+                "end": 123,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: clinician assessed a viral upper respiratory infection.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 176
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Objective: lungs clear.",
+              "start": 32,
+              "end": 55
+            }
+          ],
+          "held_candidate": {
+            "text": "lungs clear.",
+            "evidence": [
+              {
+                "quote": "Objective: lungs clear.",
+                "start": 32,
+                "end": 55
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 124,
+                "end": 176,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Assessment: clinician assessed a viral upper respiratory infection.",
+                "start": 56,
+                "end": 123,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_3": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: clinician assessed a viral upper respiratory infection.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 176
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Assessment: clinician assessed a viral upper respiratory infection.",
+              "start": 56,
+              "end": 123
+            }
+          ],
+          "held_candidate": {
+            "text": "clinician assessed a viral upper respiratory infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: clinician assessed a viral upper respiratory infection.",
+                "start": 56,
+                "end": 123
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 124,
+                "end": 176,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_4": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: clinician assessed a viral upper respiratory infection.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 176
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: rest, hydration and review if symptoms worsen.",
+              "start": 124,
+              "end": 176
+            }
+          ],
+          "held_candidate": {
+            "text": "rest, hydration and review if symptoms worsen.",
+            "evidence": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 124,
+                "end": 176
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 124,
+                "end": 176,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true
+              }
+            ],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      }
+    },
+    {
+      "id": "remove_only_if",
+      "notes": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: clinician assessed a viral upper respiratory infection.\nPlan: rest, hydration and review.",
+      "answers": {
+        "v3_1": {
+          "text": "cough for two days.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.",
+              "start": 0,
+              "end": 31
+            }
+          ],
+          "reviewed": false
+        },
+        "v3_2": {
+          "text": "lungs clear.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Objective: lungs clear.",
+              "start": 32,
+              "end": 55
+            }
+          ],
+          "reviewed": false
+        },
+        "v3_3": {
+          "text": "clinician assessed a viral upper respiratory infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: clinician assessed a viral upper respiratory infection.",
+              "start": 56,
+              "end": 123
+            }
+          ],
+          "reviewed": false
+        },
+        "v3_4": {
+          "text": "rest, hydration and review.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: rest, hydration and review.",
+              "start": 124,
+              "end": 157
+            }
+          ],
+          "reviewed": false
+        }
+      }
+    },
+    {
+      "id": "terse_assessment",
+      "notes": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: viral illness.\nPlan: rest, hydration and review if symptoms worsen.",
+      "answers": {
+        "v3_1": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: viral illness.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 135
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Subjective: cough for two days.",
+              "start": 0,
+              "end": 31
+            }
+          ],
+          "held_candidate": {
+            "text": "cough for two days.",
+            "evidence": [
+              {
+                "quote": "Subjective: cough for two days.",
+                "start": 0,
+                "end": 31
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 83,
+                "end": 135,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_2": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: viral illness.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 135
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Objective: lungs clear.",
+              "start": 32,
+              "end": 55
+            }
+          ],
+          "held_candidate": {
+            "text": "lungs clear.",
+            "evidence": [
+              {
+                "quote": "Objective: lungs clear.",
+                "start": 32,
+                "end": 55
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 83,
+                "end": 135,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_3": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: viral illness.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 135
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Assessment: viral illness.",
+              "start": 56,
+              "end": 82
+            }
+          ],
+          "held_candidate": {
+            "text": "viral illness.",
+            "evidence": [
+              {
+                "quote": "Assessment: viral illness.",
+                "start": 56,
+                "end": 82
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 83,
+                "end": 135,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "v3_4": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: viral illness.\nPlan: rest, hydration and review if symptoms worsen.",
+              "start": 0,
+              "end": 135
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: rest, hydration and review if symptoms worsen.",
+              "start": 83,
+              "end": 135
+            }
+          ],
+          "held_candidate": {
+            "text": "rest, hydration and review if symptoms worsen.",
+            "evidence": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 83,
+                "end": 135
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: rest, hydration and review if symptoms worsen.",
+                "start": 83,
+                "end": 135,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true
+              }
+            ],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      }
+    },
+    {
+      "id": "terse_plan",
+      "notes": "Subjective: cough for two days.\nObjective: lungs clear.\nAssessment: clinician assessed a viral upper respiratory infection.\nPlan: review.",
+      "answers": {
+        "v3_1": {
+          "text": "cough for two days.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Subjective: cough for two days.",
+              "start": 0,
+              "end": 31
+            }
+          ],
+          "reviewed": false
+        },
+        "v3_2": {
+          "text": "lungs clear.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Objective: lungs clear.",
+              "start": 32,
+              "end": 55
+            }
+          ],
+          "reviewed": false
+        },
+        "v3_3": {
+          "text": "clinician assessed a viral upper respiratory infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: clinician assessed a viral upper respiratory infection.",
+              "start": 56,
+              "end": 123
+            }
+          ],
+          "reviewed": false
+        },
+        "v3_4": {
+          "text": "review.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: review.",
+              "start": 124,
+              "end": 137
+            }
+          ],
+          "reviewed": false
+        }
+      }
+    }
+  ]
+}

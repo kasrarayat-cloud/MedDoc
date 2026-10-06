@@ -182,6 +182,7 @@ class BatchFixture(V3Fixture):
         deny=patch('socket.socket.connect',side_effect=AssertionError('Network denied'));deny.start();self.addCleanup(deny.stop)
         self.template,first=self.uploaded(data=build_questionnaire(101),name='Synthetic large batch')
         self.version=TemplateVersion.objects.create(template=self.template,number=2,fields=first.fields,contract='v3',
+            document_backend=first.document_backend,import_manifest=first.import_manifest,
             generation_constraints=manifest(first.fields,self.template.sha256),created_by=self.user)
         self.confirm(self.template,self.version)
         self.notes='\n'.join(f"{f['label']}: documented {i:03d}." for i,f in enumerate(self.version.fields))
@@ -392,6 +393,7 @@ class BatchWorkflow(BatchFixture,TestCase):
         m['rules']=[{'kind':'max_active_groups','source_id':'rule','maximum':1,
             'groups':[[{'key':fs[0]['key'],'values':['selected']}],[{'key':fs[-1]['key'],'values':['selected']}]]}]
         version=TemplateVersion.objects.create(template=self.template,number=3,fields=fs,contract='v3',
+            document_backend=self.version.document_backend,import_manifest=self.version.import_manifest,
             generation_constraints=m,created_by=self.user);self.confirm(self.template,version)
         self.encounter.template_version=version;self.encounter.save(update_fields=['template_version'])
         batch=self.admit();calls,call=self.fake(batch)

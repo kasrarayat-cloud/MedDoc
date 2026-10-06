@@ -1,0 +1,25 @@
+{
+  "contract": "prospective-ordinary-batch-101-v1",
+  "id": "ordinary-batch-101-v1",
+  "author": "QuillMD project-authored synthetic QA original",
+  "provider_upload_allowed": true,
+  "original_sha256": "a1d10b321d523a0932070003e4ffaf1020515efaf0a919392c4e6f195a1ad59a",
+  "notes": "Current symptoms: The patient reports left knee pain for three days.\nPlan: Continue rest and arrange review in one week.",
+  "notes_sha256": "de970e31aebb017775b8d2678f1b1e3871a4f622ade997c436f6195693cc8ba5",
+  "fields": 101,
+  "parts": [
+    100,
+    1
+  ],
+  "desired_supported": {
+    "Current symptoms": "The patient reports left knee pain for three days.",
+    "Plan": "Continue rest and arrange review in one week."
+  },
+  "desired_missing_count": 99,
+  "automatic_mapping_corrections": 0,
+  "generic_batch_flag": false,
+  "model": "claude-sonnet-5-5",
+  "ordinary_contract": "ordinary-field-relations-v4",
+  "max_tokens": 20000,
+  "final_source_refreeze_required": true
+}

@@ -1,0 +1,1984 @@
+{
+  "D01": {
+    "fields": 90,
+    "source_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+    "projection": [
+      {
+        "key": "sdt_1519045110",
+        "kind": "choice",
+        "label": "Practice address",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "250 E. Yale Loop, Suite E, Irvine, CA 92604",
+          "9220 Haven Avenue, Suite 320, Rancho Cucamonga, CA 91730",
+          "2572 Atlantic Avenue, Long Beach, CA 90806",
+          "17609 Ventura Blvd, Suite 106, Encino, CA 91316",
+          "17609 Ventura Blvd, Suite LL08, Encino, CA 91316"
+        ]
+      },
+      {
+        "key": "sdt_1475334564",
+        "kind": "choice",
+        "label": "Exam side",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[8]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Bilateral Detailed",
+          "Unilateral - Right Leg Detailed; Left Leg Screening",
+          "Unilateral - Left Leg Detailed; Right Leg Screening",
+          "Bilateral Screening",
+          "Bilateral Limited",
+          "Unilateral - Right Leg Limited; Left Leg Screening",
+          "Unilateral - Left Leg Limited; Right Leg Screening"
+        ]
+      },
+      {
+        "key": "sdt_469715844",
+        "kind": "choice",
+        "label": "Referring physician",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[10]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Maged S. Mikhail, MD, RPVI, RVT",
+          "Khashayar Sarabi, MD, RPVI",
+          "Hooman Shabatian, MD, MS",
+          "Shahram Salimitari, MD",
+          "Momoka Nishino, NP-C"
+        ]
+      },
+      {
+        "key": "sdt_-1477830258",
+        "kind": "choice",
+        "label": "Ultrasound technologist",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[12]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Yana Bennett, RVT, RDMS",
+          "Beatriz Tena, RVS",
+          "Jennifer Martinez, RVT, RDMS",
+          "Judy De La Torre, RVT",
+          "Uyen Phan, RVT",
+          "Tiffany Le, RVT",
+          "Roxanne Garcera, RVS"
+        ]
+      },
+      {
+        "key": "sdt_-388341802",
+        "kind": "choice",
+        "label": "Ultrasound machine",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[13]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "GE Logiq V2, 6-12 MHz Transducer",
+          "Mindray M7, L12-4s MHz Transducer",
+          "Mindray M8, L12-4s MHz Transducer",
+          "GE Versana, L6-12 MHz Transducer",
+          "GE Logiq e, L4-20t MHz Transducer"
+        ]
+      },
+      {
+        "key": "sdt_143014188",
+        "kind": "choice",
+        "label": "Exam location",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[14]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Irvine, CA",
+          "Long Beach, CA",
+          "Encino, CA",
+          "Rancho Cucamonga, CA"
+        ]
+      },
+      {
+        "key": "sdt_-1124008635",
+        "kind": "choice",
+        "label": "Clinical indication: leg pain",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[15]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Leg pain"
+        ]
+      },
+      {
+        "key": "sdt_269290727",
+        "kind": "choice",
+        "label": "Clinical indication: swelling",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[15]/sdt[1]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Swelling",
+          "Leg edema"
+        ]
+      },
+      {
+        "key": "sdt_722175654",
+        "kind": "choice",
+        "label": "Clinical indication: heaviness",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[15]/sdt[2]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Heaviness"
+        ]
+      },
+      {
+        "key": "sdt_-770853925",
+        "kind": "choice",
+        "label": "Clinical indication: history or skin changes",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[15]/sdt[3]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Previous vein treatment",
+          "Leg ulcer",
+          "Vein rupture",
+          "Skin changes or dermatitis",
+          "Thrombophlebitis"
+        ]
+      },
+      {
+        "key": "sdt_-49312682",
+        "kind": "choice",
+        "label": "Clinical indication: sensory symptoms",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[15]/sdt[4]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Numbness in leg",
+          "Cramping",
+          "Restless Legs"
+        ]
+      },
+      {
+        "key": "sdt_2005853103",
+        "kind": "choice",
+        "label": "Clinical indication: asymptomatic or itching",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[15]/sdt[5]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Asymptomatic",
+          "Itching"
+        ]
+      },
+      {
+        "key": "sdt_-1316494373",
+        "kind": "choice",
+        "label": "Diagnosis",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[16]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "Chronic venous hypertension with other complications of right lower extremity",
+          "Chronic venous hypertension with other complications of left lower extremity",
+          "Chronic venous hypertension with other complications of bilateral lower extremities",
+          "Varicose veins of lower extremity with other complications of right lower extremity",
+          "Varicose veins of lower extremity with other complications of left lower extremity",
+          "Varicose veins of lower extremity with other complications of bilateral lower extremities"
+        ]
+      },
+      {
+        "key": "sdt_429781496",
+        "kind": "choice",
+        "label": "Technique: venous systems",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[19]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "deep and superficial",
+          "superficial"
+        ]
+      },
+      {
+        "key": "sdt_-1287346867",
+        "kind": "choice",
+        "label": "Right previous treatment: vein",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[23]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "great saphenous vein",
+          "anterior accessory great saphenous vein",
+          "posterior accessory great saphenous vein",
+          "small saphenous vein"
+        ]
+      },
+      {
+        "key": "sdt_-346030703",
+        "kind": "choice",
+        "label": "Right previous treatment: start",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[23]/sdt[1]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "saphenofemoral junction",
+          "proximal thigh",
+          "mid thigh",
+          "distal thigh",
+          "knee",
+          "saphenopopliteal junction",
+          "proximal calf",
+          "mid calf"
+        ]
+      },
+      {
+        "key": "sdt_599910328",
+        "kind": "choice",
+        "label": "Right previous treatment: end",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[23]/sdt[2]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "mid thigh",
+          "distal thigh",
+          "knee",
+          "proximal calf",
+          "mid calf",
+          "distal calf"
+        ]
+      },
+      {
+        "key": "sdt_1706206184",
+        "kind": "choice",
+        "label": "Right previous treatment: outcome",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[23]/sdt[3]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "and is absent.",
+          ", however, there has been a recurrence."
+        ]
+      },
+      {
+        "key": "sdt_1093284141",
+        "kind": "choice",
+        "label": "Left previous treatment: vein",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[27]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "great saphenous vein",
+          "anterior accessory great saphenous vein",
+          "posterior accessory great saphenous vein",
+          "small saphenous vein"
+        ]
+      },
+      {
+        "key": "sdt_-505521617",
+        "kind": "choice",
+        "label": "Left previous treatment: start",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[27]/sdt[1]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "saphenofemoral junction",
+          "proximal thigh",
+          "mid thigh",
+          "distal thigh",
+          "knee",
+          "saphenopopliteal junction",
+          "proximal calf",
+          "mid calf"
+        ]
+      },
+      {
+        "key": "sdt_519430350",
+        "kind": "choice",
+        "label": "Left previous treatment: end",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[27]/sdt[2]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "mid thigh",
+          "distal thigh",
+          "knee",
+          "proximal calf",
+          "mid calf",
+          "distal calf"
+        ]
+      },
+      {
+        "key": "sdt_-1268837810",
+        "kind": "choice",
+        "label": "Left previous treatment: outcome",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[27]/sdt[3]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "and is absent.",
+          ", however, there has been a recurrence."
+        ]
+      },
+      {
+        "key": "sdt_-892962961",
+        "kind": "choice",
+        "label": "Right impression: vein",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[30]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "great saphenous vein",
+          "anterior accessory great saphenous vein",
+          "posterior accessory great saphenous vein",
+          "small saphenous vein",
+          "retained great saphenous vein",
+          "retained anterior accessory great saphenous vein",
+          "retained posterior accessory great saphenous vein",
+          "retained small saphenous vein",
+          "duplicate great saphenous vein",
+          "duplicate small saphenous vein"
+        ]
+      },
+      {
+        "key": "sdt_-213273323",
+        "kind": "choice",
+        "label": "Right impression: reflux or absence",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[30]/sdt[1]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "reflux positive.",
+          "is absent."
+        ]
+      },
+      {
+        "key": "sdt_-170105994",
+        "kind": "choice",
+        "label": "Right deep venous system",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[31]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "without evidence of obstruction or insufficiency.",
+          "with evidence of an acute DVT of CFV, FV, POP V, PTV.",
+          "with evidence of a chronic DVT of CFV, FV, POP V, PTV."
+        ]
+      },
+      {
+        "key": "sdt_2001841928",
+        "kind": "choice",
+        "label": "Left impression: vein",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[34]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "great saphenous vein",
+          "anterior accessory great saphenous vein",
+          "posterior accessory great saphenous vein",
+          "small saphenous vein",
+          "retained great saphenous vein",
+          "retained anterior accessory great saphenous vein",
+          "retained posterior accessory great saphenous vein",
+          "retained small saphenous vein",
+          "duplicate great saphenous vein",
+          "duplicate small saphenous vein"
+        ]
+      },
+      {
+        "key": "sdt_605543147",
+        "kind": "choice",
+        "label": "Left impression: reflux or absence",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[34]/sdt[1]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "reflux positive.",
+          "is absent."
+        ]
+      },
+      {
+        "key": "sdt_-1029175652",
+        "kind": "choice",
+        "label": "Left deep venous system",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[35]/sdt[0]",
+          "target": {
+            "type": "sdt_choice"
+          },
+          "extra": []
+        },
+        "options": [
+          "without evidence of obstruction or insufficiency.",
+          "with evidence of an acute DVT of CFV, FV, POP V, PTV.",
+          "with evidence of a chronic DVT of CFV, FV, POP V, PTV."
+        ]
+      },
+      {
+        "key": "date_of_service",
+        "kind": "text",
+        "label": "Date of service",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[4]",
+          "target": {
+            "type": "span",
+            "start": 16,
+            "end": 16
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "patient_id",
+        "kind": "text",
+        "label": "Patient ID",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[5]",
+          "target": {
+            "type": "span",
+            "start": 11,
+            "end": 11
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "patient_name",
+        "kind": "text",
+        "label": "Patient name",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[6]",
+          "target": {
+            "type": "span",
+            "start": 13,
+            "end": 13
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "date_of_birth",
+        "kind": "text",
+        "label": "Date of birth",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[7]",
+          "target": {
+            "type": "span",
+            "start": 14,
+            "end": 14
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_1_1",
+        "kind": "measurement",
+        "label": "Right GSV at the SFJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[1]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_1_2",
+        "kind": "measurement",
+        "label": "Right GSV at the SFJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[1]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_2_1",
+        "kind": "measurement",
+        "label": "Right GSV at the Proximal Thigh: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[2]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_2_2",
+        "kind": "measurement",
+        "label": "Right GSV at the Proximal Thigh: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[2]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_3_1",
+        "kind": "measurement",
+        "label": "Right GSV at the Knee: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[3]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_3_2",
+        "kind": "measurement",
+        "label": "Right GSV at the Knee: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[3]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_4_1",
+        "kind": "measurement",
+        "label": "Right GSV Below Knee: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[4]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_4_2",
+        "kind": "measurement",
+        "label": "Right GSV Below Knee: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[4]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_5_1",
+        "kind": "measurement",
+        "label": "Right SSV at the SPJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[5]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_5_2",
+        "kind": "measurement",
+        "label": "Right SSV at the SPJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[5]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_6_1",
+        "kind": "measurement",
+        "label": "Right SSV at the Proximal Calf: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[6]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_6_2",
+        "kind": "measurement",
+        "label": "Right SSV at the Proximal Calf: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[6]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_7_1",
+        "kind": "measurement",
+        "label": "Right AAGSV at the SFJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[7]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_7_2",
+        "kind": "measurement",
+        "label": "Right AAGSV at the SFJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[7]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_8_1",
+        "kind": "measurement",
+        "label": "Right AAGSV at the Proximal Thigh: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[8]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_8_2",
+        "kind": "measurement",
+        "label": "Right AAGSV at the Proximal Thigh: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[8]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_9_1",
+        "kind": "measurement",
+        "label": "Right PAGSV at the SFJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_9_2",
+        "kind": "measurement",
+        "label": "Right PAGSV at the SFJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_10_1",
+        "kind": "measurement",
+        "label": "Right PAGSV at the Proximal Thigh: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[10]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_10_2",
+        "kind": "measurement",
+        "label": "Right PAGSV at the Proximal Thigh: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[10]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_11_1",
+        "kind": "measurement",
+        "label": "Right tributary row 11: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[11]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_11_2",
+        "kind": "measurement",
+        "label": "Right tributary row 11: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[11]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "location_11",
+        "kind": "text",
+        "label": "Right tributary row 11: anatomical location",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[11]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 25,
+            "end": 44
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_12_1",
+        "kind": "measurement",
+        "label": "Right tributary row 12: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[12]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_12_2",
+        "kind": "measurement",
+        "label": "Right tributary row 12: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[12]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "location_12",
+        "kind": "text",
+        "label": "Right tributary row 12: anatomical location",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[12]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 25,
+            "end": 44
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_13_1",
+        "kind": "measurement",
+        "label": "Right tributary row 13: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[13]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_13_2",
+        "kind": "measurement",
+        "label": "Right tributary row 13: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[13]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "location_13",
+        "kind": "text",
+        "label": "Right tributary row 13: anatomical location",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[13]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 25,
+            "end": 44
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_15_1",
+        "kind": "measurement",
+        "label": "Left GSV at the SFJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[15]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_15_2",
+        "kind": "measurement",
+        "label": "Left GSV at the SFJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[15]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_16_1",
+        "kind": "measurement",
+        "label": "Left GSV at the Proximal Thigh: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[16]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_16_2",
+        "kind": "measurement",
+        "label": "Left GSV at the Proximal Thigh: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[16]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_17_1",
+        "kind": "measurement",
+        "label": "Left GSV at the Knee: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_17_2",
+        "kind": "measurement",
+        "label": "Left GSV at the Knee: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[17]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_18_1",
+        "kind": "measurement",
+        "label": "Left GSV Below Knee: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[18]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_18_2",
+        "kind": "measurement",
+        "label": "Left GSV Below Knee: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[18]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_19_1",
+        "kind": "measurement",
+        "label": "Left SSV at the SPJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[19]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_19_2",
+        "kind": "measurement",
+        "label": "Left SSV at the SPJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[19]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_20_1",
+        "kind": "measurement",
+        "label": "Left SSV at the Proximal Calf: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[20]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_20_2",
+        "kind": "measurement",
+        "label": "Left SSV at the Proximal Calf: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[20]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_21_1",
+        "kind": "measurement",
+        "label": "Left AAGSV at the SFJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[21]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_21_2",
+        "kind": "measurement",
+        "label": "Left AAGSV at the SFJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[21]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_22_1",
+        "kind": "measurement",
+        "label": "Left AAGSV at the Proximal Thigh: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[22]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_22_2",
+        "kind": "measurement",
+        "label": "Left AAGSV at the Proximal Thigh: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[22]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_23_1",
+        "kind": "measurement",
+        "label": "Left PAGSV at the SFJ: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[23]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_23_2",
+        "kind": "measurement",
+        "label": "Left PAGSV at the SFJ: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[23]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_24_1",
+        "kind": "measurement",
+        "label": "Left PAGSV at the Proximal Thigh: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[24]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_24_2",
+        "kind": "measurement",
+        "label": "Left PAGSV at the Proximal Thigh: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[24]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_25_1",
+        "kind": "measurement",
+        "label": "Left tributary row 25: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[25]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_25_2",
+        "kind": "measurement",
+        "label": "Left tributary row 25: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[25]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "location_25",
+        "kind": "text",
+        "label": "Left tributary row 25: anatomical location",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[25]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 25,
+            "end": 44
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_26_1",
+        "kind": "measurement",
+        "label": "Left tributary row 26: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[26]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_26_2",
+        "kind": "measurement",
+        "label": "Left tributary row 26: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[26]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "location_26",
+        "kind": "text",
+        "label": "Left tributary row 26: anatomical location",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[26]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 25,
+            "end": 44
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_27_1",
+        "kind": "measurement",
+        "label": "Left tributary row 27: diameter (mm)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[27]/tc[1]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "measurement_27_2",
+        "kind": "measurement",
+        "label": "Left tributary row 27: reflux time (ms)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[27]/tc[2]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 0
+          },
+          "extra": []
+        },
+        "options": []
+      },
+      {
+        "key": "location_27",
+        "kind": "text",
+        "label": "Left tributary row 27: anatomical location",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[27]/tc[0]/p[0]",
+          "target": {
+            "type": "span",
+            "start": 25,
+            "end": 44
+          },
+          "extra": []
+        },
+        "options": []
+      }
+    ],
+    "only_coordinates_proved": true,
+    "gt_scoring_performed": false,
+    "native_mapping_unchanged": true
+  },
+  "D02": {
+    "fields": 24,
+    "source_sha256": "8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a",
+    "projection": [
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_2_1",
+        "kind": "text",
+        "label": "PATIENT NAME",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[2]",
+          "target": {
+            "type": "span",
+            "start": 14,
+            "end": 15
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_2_4",
+        "kind": "text",
+        "label": "PATIENT DOB",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[2]",
+          "target": {
+            "type": "span",
+            "start": 29,
+            "end": 30
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_3_1",
+        "kind": "text",
+        "label": "PATIENT ID #",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[3]",
+          "target": {
+            "type": "span",
+            "start": 14,
+            "end": 15
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_3_4",
+        "kind": "text",
+        "label": "DATE OF PROCEDURE",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[3]",
+          "target": {
+            "type": "span",
+            "start": 35,
+            "end": 36
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_4_1",
+        "kind": "text",
+        "label": "SURGEON / ENDOSCOPIST",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[4]",
+          "target": {
+            "type": "span",
+            "start": 23,
+            "end": 24
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_5_1",
+        "kind": "text",
+        "label": "PROCEDURE",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[5]",
+          "target": {
+            "type": "span",
+            "start": 11,
+            "end": 12
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_6_1",
+        "kind": "text",
+        "label": "ANESTHESIA",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[6]",
+          "target": {
+            "type": "span",
+            "start": 12,
+            "end": 13
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_6_4",
+        "kind": "text",
+        "label": "BOWEL PREPARATION / BBPS",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[6]",
+          "target": {
+            "type": "span",
+            "start": 40,
+            "end": 41
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_7_1",
+        "kind": "text",
+        "label": "EXTENT OF EXAMINATION",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[7]",
+          "target": {
+            "type": "span",
+            "start": 23,
+            "end": 24
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_9_0",
+        "kind": "text",
+        "label": "PREOPERATIVE DIAGNOSIS / INDICATION",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[9]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 1
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Confirm the section label and whether its consecutive answer lines belong together."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_11_1",
+        "kind": "text",
+        "label": "POSTOPERATIVE FINDINGS \u2014 1",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[11]",
+          "target": {
+            "type": "span",
+            "start": 3,
+            "end": 4
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Confirm the numbered item belongs to this section."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_12_1",
+        "kind": "text",
+        "label": "POSTOPERATIVE FINDINGS \u2014 2",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[12]",
+          "target": {
+            "type": "span",
+            "start": 3,
+            "end": 4
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Confirm the numbered item belongs to this section."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_13_1",
+        "kind": "text",
+        "label": "POSTOPERATIVE FINDINGS \u2014 3",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[13]",
+          "target": {
+            "type": "span",
+            "start": 3,
+            "end": 4
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Confirm the numbered item belongs to this section."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_15_0",
+        "kind": "text",
+        "label": "CONSENT",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[15]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 1
+          },
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[16]"
+            }
+          ]
+        },
+        "review_notes": [
+          "Confirm that these consecutive answer lines belong to one question."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_18_0",
+        "kind": "text",
+        "label": "DESCRIPTION OF PROCEDURE",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[18]",
+          "target": {
+            "type": "span",
+            "start": 0,
+            "end": 1
+          },
+          "extra": [
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[19]"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[20]"
+            },
+            {
+              "part": "word/document.xml",
+              "slot": "b/p[21]"
+            }
+          ]
+        },
+        "review_notes": [
+          "Confirm that these consecutive answer lines belong to one question."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_22_1",
+        "kind": "text",
+        "label": "SPECIMENS",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[22]",
+          "target": {
+            "type": "span",
+            "start": 11,
+            "end": 12
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_23_1",
+        "kind": "text",
+        "label": "ESTIMATED BLOOD LOSS",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[23]",
+          "target": {
+            "type": "span",
+            "start": 22,
+            "end": 23
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_23_4",
+        "kind": "text",
+        "label": "COMPLICATIONS",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[23]",
+          "target": {
+            "type": "span",
+            "start": 39,
+            "end": 40
+          },
+          "extra": []
+        },
+        "review_notes": []
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_25_1",
+        "kind": "text",
+        "label": "RECOMMENDATIONS \u2014 1",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[25]",
+          "target": {
+            "type": "span",
+            "start": 3,
+            "end": 4
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Confirm the numbered item belongs to this section."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_26_1",
+        "kind": "text",
+        "label": "RECOMMENDATIONS \u2014 2",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[26]",
+          "target": {
+            "type": "span",
+            "start": 3,
+            "end": 4
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Confirm the numbered item belongs to this section."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_27_1",
+        "kind": "text",
+        "label": "RECOMMENDATIONS \u2014 3",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[27]",
+          "target": {
+            "type": "span",
+            "start": 3,
+            "end": 4
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Confirm the numbered item belongs to this section."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_29_1",
+        "kind": "text",
+        "label": "Electronically signed by",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[29]",
+          "target": {
+            "type": "span",
+            "start": 26,
+            "end": 27
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Optional clinician identity: review explicitly; this does not create a digital signature."
+        ],
+        "answer_policy": "clinician_identity"
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_30_1",
+        "kind": "text",
+        "label": "DD (dictated)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[30]",
+          "target": {
+            "type": "span",
+            "start": 15,
+            "end": 16
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Use only a date explicitly supplied in the notes; no date is filled automatically."
+        ]
+      },
+      {
+        "key": "tab_v1_8ae1e2b0ebeec317_0_30_4",
+        "kind": "text",
+        "label": "DT (transcribed)",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/p[30]",
+          "target": {
+            "type": "span",
+            "start": 35,
+            "end": 36
+          },
+          "extra": []
+        },
+        "review_notes": [
+          "Use only a date explicitly supplied in the notes; no date is filled automatically."
+        ]
+      }
+    ],
+    "only_coordinates_proved": true,
+    "gt_scoring_performed": false,
+    "native_mapping_unchanged": true
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "original_failure": {
+    "source": "680044abf2fcc59dc334a30b8309e097e13a7e9a",
+    "method": "documents.test_destination_regressions.LegacyPhysicalSources.test_retained_ambiguous_consent_and_manager_statements_are_bound_to_original_extent",
+    "exact_caption": "This section is for the line manager to add comments",
+    "physical_target": "word/document.xml#b/tbl[0]/tr[0]/tc[1]",
+    "observed": "legacy_unresolved_actions was empty",
+    "original_first_synthetic_DOCX": "Not retained at the first pure failure; do not infer raw byte provenance from later regenerated control."
+  },
+  "repair": {
+    "source_commit": "30219d9ddf6c3413e7ade00546666440a76839ee",
+    "integration_commit": "7c10e3d6ccb651273f6aae09489b055f52e95abb",
+    "mechanism": "Fresh physical section assignment and prospective passive ownership, not role-name/fill-label keywords; retained manager destinations are write-protected and legacy unresolved actions block old-engine generation."
+  },
+  "six_confirmed_pre_repair_wrong_exports": {
+    "source": "2de63efe7311e3d3ef72055393c0d648050a04b6",
+    "evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-verified-manager-writes-2de63efe/result.json",
+    "unsafe_writes": 6
+  },
+  "independent_fixed_refutation": {
+    "source": "fc37cd8dc4111fd0f526f54b4e5ef4feab4b13ea",
+    "controls": 32,
+    "findings": [],
+    "evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-word-refutation-fc37cd8d/result.json"
+  },
+  "separate_ordinary_Plan_hold": {
+    "retained_2de_route": "Manager missing correctly; unchanged Plan: Rest. was also held. Clinical source/global-action scope repaired separately; first fail retained."
+  },
+  "affected_actual_route": {
+    "source": "9c15c45952f95db0a1a57b2a90ea27f7d70992d2",
+    "exact_methods": [
+      "core.tests.test_destination_roles.MappingReviewCoverage.test_reserved_manager_statement_is_not_asked_or_written_through_upload_and_export",
+      "core.tests.test_destination_roles.MappingReviewCoverage.test_rf08_mapping_review_reads_bound_roles_before_exclusions_but_admission_stays_held"
+    ],
+    "both_exact_methods": "PASS, tests.log lines100\u2013101",
+    "packet": "49 methods:45 pass,3 fail,1 error overall (not a green packet)",
+    "qualified_fixture": "anthropic/claude-sonnet-5-5 ordinary-v4; zero provider calls",
+    "manager_result": "Manager missing/empty; Plan Rest. supported; actual clinician review/finalized export asserts untouched manager cell and complete ordinary Plan. Immutable original assertion passes.",
+    "RF08_result": "Source roles available during mapping review before exclusions, tampered source/engine/code/mapping identities refuse, unreviewed generation refuses with no jobs/reservations, explicit source-bound coverage review reaches final/export with blank consultant cell and complete Plan.",
+    "archive_limitation": "That test captured original, mapping, notes, config and answers, but did not durably retain its final export bytes. The actual export assertions are preserved in the passing method/log; no export-byte hash is claimed for that route."
+  },
+  "current_S2_exact_original_pure_control": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/final-word-source-lenses-20261004/manager-retained-S2/result.json",
+  "evidence_hashes": {
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/word/rf08-and-legacy-first/checkpoint-disk-block-20261003.json": "505edc42851277dc68f7a92fe5e6c08f98c2ebd543ccfa97ce9e81386cdc0f84",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/manager-physical-first.json": "b1c80248ee937063b30f9447c6d2ae5e1d4dc88d44ac4c4c3ea0e19f8d1ed008",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/manager-frozen30219-result.json": "b3786643ce84109745ebf881c56035f663ede06db05fba100db74e48220cbe42",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/affected-db-second/second.stderr.log": "4dc33877ca768a22a4638187b3a4be32ca21fd2db5848e577fd8aef08744258e",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-verified-manager-writes-2de63efe/result.json": "7d3c832f2f7e0ec64e5507f4b6ee5895e81b4764002833af849b00ce2a9769eb",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-word-refutation-fc37cd8d/result.json": "f6219be02b91075b0d0b202dfdb018ff74e6cfb570d08d2bb4f4f173147dd986",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/core-word-9c15c45952f9-1791076014635128282/tests.log": "74c76304463d69834b13eef1d5e112dbc22627078c26b8172248f5b7a19d393a",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/core-word-9c15c45952f9-1791076014635128282/result.json": "569d8baa96d652a8dd7aa6b4be9d4399b0dba2ae3940bc21edde0b0be02b5b3f",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/core-word-9c15c45952f9-1791076014635128282/db-teardown-confirmed.json": "2755be8ac7650f46c9ac4ffcc21e432afa967ff68bf1d051f1a2edb12621b752",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/core-word-9c15c45952f9-1791076014635128282/qa/word-artifacts/manager-reserved-statement/original.docx": "a4119ea0d08f90172602621c16494ad7291130fcd85ba88f4700ff74d81ff0c8",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/core-word-9c15c45952f9-1791076014635128282/qa/word-artifacts/manager-reserved-statement/first.json": "3e8acd3b81c7b5f94e8bcec9a01d1226667a2cfc12401da6ab0003a71a03c73c"
+  },
+  "scope": "Retained failure close-out. Automatic whole-document success, full60/20, live provider and native Word remain separate.",
+  "new_DB_render_provider_calls": 0
+}

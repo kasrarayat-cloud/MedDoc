@@ -1,0 +1,51 @@
+{
+  "source_commit": "8a030d4c8f0027dc962554b8d8df0d4a5207d21d",
+  "cases": 60,
+  "elapsed_seconds": 15.226,
+  "unsafe": [
+    "ninth_no_evidence",
+    "ninth_embedded_denial_patient",
+    "ninth_negative_same_exclusive_lack",
+    "ninth_negative_nominal_exclusive_absence"
+  ],
+  "unnecessary_holds": [
+    "modifier_cancelled",
+    "fresh_selected_absence_other_side",
+    "baseline_selected_absence"
+  ],
+  "errors": [],
+  "original_replay": [
+    {
+      "patient_context": false,
+      "supported": [],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    },
+    {
+      "patient_context": true,
+      "supported": [
+        "v3_7"
+      ],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    }
+  ]
+}

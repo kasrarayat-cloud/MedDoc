@@ -1,0 +1,45 @@
+{
+  "first_failed_run": "5a-first-20261003",
+  "read_only": true,
+  "all9financialfingerprints_unchanged": true,
+  "ownseededaccounts": 0,
+  "financial": {
+    "Job": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Wallet": {
+      "count": 10,
+      "sha256": "63fd7a253fa70fe75ce264244f45c92a5cd0706d1d930e71b55f4206816f7a8c"
+    },
+    "Reservation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Usage": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "LedgerEntry": {
+      "count": 5,
+      "sha256": "59ee6534794a205981e74fa6cbdabb2e39341da7358a3221d78174258e91560b"
+    },
+    "ProviderReceipt": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "Payment": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "PlatformCost": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "CostReconciliation": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "provider_requests": 0
+}

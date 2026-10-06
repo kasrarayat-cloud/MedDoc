@@ -1,0 +1,9 @@
+{
+  "source_directory": "/opt/meddoc-pro/.worktrees/v1-sol-notes-voice/rebuild/core",
+  "sha256": {
+    "source_scope.py": "169f2144383d66a1a8818c731db6b03d8ca837cbb0ac35b9c0c46ea570946f5d",
+    "generation.py": "77e123ba8407cb82a660c5769b483b55673f3ac16b650b7eb692ce7ea53bd1c1",
+    "transcript_context.py": "3b925017fb157d864e9a4941c8c01d3e9086c19107c43a22b59fa96d9da40454"
+  },
+  "classification": "Fifth frozen source before read-only clinical probes"
+}

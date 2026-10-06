@@ -1,0 +1,6 @@
+{
+  "exit_status": 1,
+  "cause": "Aggregation compared decimal zero as string 0; persisted Decimal is correctly serialized 0E-12. Correct monetary comparison is Decimal(value)==0. Application tests remain14/14 passed.",
+  "source_changes": 0,
+  "DB_provider_calls": 0
+}

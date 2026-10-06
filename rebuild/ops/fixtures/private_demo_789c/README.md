@@ -1,0 +1,3 @@
+# Retained fixture launcher sources
+
+These are exact nonsecret 789c private QA helper bytes, copied only to make focused offline preparation controls reproducible in CI. The factory pins each original SHA-256 and reads the retained protected originals at execution time. No helper is executed by discovery. The QA password and secret-key paths are references; no credential or private runtime content is included. The factory adapts only a new isolated fixture identity and explicit synthetic/invite/model settings. These sources grant no host, installed, database-drop, provider or cleanup authority.

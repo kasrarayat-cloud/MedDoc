@@ -1,0 +1,376 @@
+{
+  "source_commit": "d7f4ebf7759cecf3d9517d208d6c2d8d7c40e3fc",
+  "summary_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/summary.json",
+  "summary_sha256": "3cdea8d9795bd1d4f4ca22c5fa5ab039f608cfa285055601afeff417b82048e8",
+  "actual_exit": 0,
+  "child_reaped": true,
+  "source_and_historical_inputs_unchanged": true,
+  "elapsed_seconds": 24.679832002002513,
+  "denominators": {
+    "cases": 14,
+    "fields": 76,
+    "desired_supported": 36,
+    "desired_held_or_missing": 40
+  },
+  "original_live": {
+    "supported_correct": 27,
+    "held_correct": 40,
+    "over_held": 9
+  },
+  "retrospective_projected": {
+    "supported_correct": 35,
+    "held_correct": 40,
+    "over_held": 1
+  },
+  "unsafe": [],
+  "remaining_desired_holds": [
+    {
+      "case": "N01",
+      "field": "v3_2",
+      "desired": "supported",
+      "desired_texts": [
+        "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness."
+      ],
+      "verdict": "over_held",
+      "original_verdict": "over_held",
+      "original_status": "conflict",
+      "status": "conflict",
+      "text": "",
+      "label": "History of present illness"
+    }
+  ],
+  "claim_boundary": "Retrospective exposed full provider responses only; no new provider, HTTP, database or DOCX export qualification. No altered model selection, relation, raw source or transcript proof.",
+  "artifacts": {
+    "N01": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/016-N01.json",
+      "sha256": "d83b5f4628f89a232ce032c1b819ea3bf875b27a5753fe83621175d128c959ff"
+    },
+    "N02": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/017-N02.json",
+      "sha256": "77b4cbaf31c1b7ebbefbeaba02873610944d09ff571c18c8abd72229a59a1c7d"
+    },
+    "N03": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/018-N03.json",
+      "sha256": "84609e37edb9bd6f4eb447033c12d7e26c19a78e99ac659d56d65e7f86b885da"
+    },
+    "N04": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/019-N04.json",
+      "sha256": "ae26e1934c6c95d3a56cc23a6993cafd4580321d4969fcc9c69a7ebf03529c49"
+    },
+    "N05": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/020-N05.json",
+      "sha256": "a0d99de4b31b7bdfe57cb84b876aca0dc14ddbaa9ff82d79cbb12a31daf35a30"
+    },
+    "N06": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/021-N06.json",
+      "sha256": "a4ee74c18e9ae6be95af0ee836d8c172ecf9e3faf381a74da2fbb764df4e90f5"
+    },
+    "N07": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/022-N07.json",
+      "sha256": "b4ce1547fc02b6adda8a4470fdabd09c84a5fda70df6e70072ae30caf436303c"
+    },
+    "N08": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/023-N08.json",
+      "sha256": "c86abdeeaa799ae7c4b1c4c3dbe52d29429af84f6298cd73dc5ff060faca446d"
+    },
+    "N09": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/024-N09.json",
+      "sha256": "40ba8cde5ab7f520003ab709db42dff641572cd1f93f4380f3389501cda8fa45"
+    },
+    "N10": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/025-N10.json",
+      "sha256": "9e74a915272405f4d140f69102567e4492481f5aba4d899a72874ba568ff9a22"
+    },
+    "N11": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/026-N11.json",
+      "sha256": "7c1bb83e9f5eee8260248b65e3dae821be2f80e2abc29fec97a0cb2e62240177"
+    },
+    "N12": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/027-N12.json",
+      "sha256": "49a48cfc7eedf5d9d6910c84fde0cec68664496d16898e5e2d97b9fe6d8d2bf2"
+    },
+    "N13": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/028-N13.json",
+      "sha256": "6828f0c7743c2b545fcb3fb21269d4dcbe620b8786b82fc8e222637da6c9428a"
+    },
+    "N16": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/retained-qualified14-d7f4ebf7/029-N16.json",
+      "sha256": "6cb5ba35bdb69607d5b53463b08e6ba316aa1ea81d60d0653c244e90e8c274f1"
+    }
+  },
+  "n01_diagnosis": {
+    "physical_label": "History of present illness",
+    "original_context": "Clinic visit record",
+    "selected_ids": [
+      2,
+      3
+    ],
+    "provider_relation": [
+      "answer",
+      "qualifier"
+    ],
+    "qualifier_missing": false,
+    "complete_relation": true,
+    "current_return": "v3_field_relations.py:682",
+    "sole_ids": [
+      2
+    ],
+    "lacking_ownership_id": 3,
+    "retained_exact_sole_trace": {
+      "function": "sole_independent",
+      "line": 516,
+      "label": "history of present illness",
+      "field_key": null,
+      "result": false,
+      "ordinary": null,
+      "detail": null,
+      "sole_detail": {
+        "unit": {
+          "id": 3,
+          "quote": "She denies visual changes, nausea, or weakness.",
+          "start": 116,
+          "end": 163,
+          "correction_value": null
+        },
+        "other": {
+          "id": 1,
+          "quote": "This is a 30-year-old female seen for headaches.",
+          "start": 0,
+          "end": 48,
+          "correction_value": null
+        },
+        "u": null,
+        "current": null,
+        "scope": null,
+        "released": null,
+        "chosen": [
+          2,
+          3
+        ],
+        "mine": {
+          "nouns_ok": true,
+          "genders": [
+            "Fem"
+          ],
+          "bad_pronoun": false,
+          "fronted": false,
+          "classes": [
+            "symptom"
+          ],
+          "reach": [
+            "class"
+          ],
+          "unknown": false,
+          "descriptive": true,
+          "doubt_only": false,
+          "negation_only": true,
+          "multi_topic": false,
+          "self_contained": false,
+          "keys": [
+            "weak",
+            "weakness",
+            "nausea",
+            "change",
+            "deny",
+            "chang"
+          ],
+          "sides": [],
+          "uncertain": false,
+          "anchor": null,
+          "anchor_gender": null,
+          "current": true,
+          "advcl": [],
+          "presenting": false
+        },
+        "theirs": {
+          "nouns_ok": true,
+          "genders": [],
+          "bad_pronoun": false,
+          "fronted": false,
+          "classes": [
+            "symptom"
+          ],
+          "reach": [],
+          "unknown": false,
+          "descriptive": false,
+          "doubt_only": false,
+          "negation_only": true,
+          "multi_topic": false,
+          "self_contained": false,
+          "keys": [
+            "headache",
+            "headach",
+            "female",
+            "femal"
+          ],
+          "sides": [],
+          "uncertain": false,
+          "anchor": "age",
+          "anchor_gender": "Fem",
+          "current": false,
+          "advcl": [],
+          "presenting": true
+        },
+        "bears": [
+          "medication",
+          "finding",
+          "allergy",
+          "injury",
+          "test",
+          "therapy",
+          "condition",
+          "symptom"
+        ],
+        "owner": null,
+        "topics": [
+          [
+            "condition",
+            "finding",
+            "symptom",
+            "injury"
+          ],
+          [
+            "condition",
+            "finding",
+            "symptom",
+            "injury"
+          ]
+        ]
+      },
+      "selected_reading": null
+    },
+    "retained_trace_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/oct4-016-frozen-ordinary-procedure-9b5d55e0.json",
+    "retained_trace_sha256": "959070c31949242d23994c7b96185f3ec02ca924ae68612e868de2968ff24279",
+    "trace_source_modules_unchanged": {
+      "v3_field_relations.py": true,
+      "v3_actors.py": true
+    },
+    "cause": "The explicit nausea/weakness/visual-change denial has symptom-class reach; the conservative class-wide clinical opposition floor sees the distinct headache presenting unit as potentially opposed. The provided qualifier remains selected, so it is not missing evidence.",
+    "decision": "Keep this residual hold; no synonym ontology or new patient inference introduced to force an eighth support."
+  },
+  "retained_opposition_controls": [
+    {
+      "case": "N08",
+      "attempt": 23,
+      "notes": "The patient has left knee pain.",
+      "score": {
+        "v3_1": {
+          "desired": "missing",
+          "desired_texts": null,
+          "verdict": "held_correct",
+          "original_verdict": "held_correct",
+          "original_status": "missing",
+          "status": "missing",
+          "text": "",
+          "label": "Right knee"
+        },
+        "v3_2": {
+          "desired": "supported",
+          "desired_texts": [
+            "The patient has left knee pain."
+          ],
+          "verdict": "supported_correct",
+          "original_verdict": "supported_correct",
+          "original_status": "supported",
+          "status": "supported",
+          "text": "The patient has left knee pain.",
+          "label": "Clinical findings"
+        }
+      },
+      "artifact_sha256": "c86abdeeaa799ae7c4b1c4c3dbe52d29429af84f6298cd73dc5ff060faca446d"
+    },
+    {
+      "case": "N09",
+      "attempt": 24,
+      "notes": "The patient has right knee pain.",
+      "score": {
+        "v3_1": {
+          "desired": "supported",
+          "desired_texts": [
+            "The patient has right knee pain."
+          ],
+          "verdict": "supported_correct",
+          "original_verdict": "supported_correct",
+          "original_status": "supported",
+          "status": "supported",
+          "text": "The patient has right knee pain.",
+          "label": "Right knee"
+        },
+        "v3_2": {
+          "desired": "missing",
+          "desired_texts": null,
+          "verdict": "held_correct",
+          "original_verdict": "held_correct",
+          "original_status": "missing",
+          "status": "missing",
+          "text": "",
+          "label": "Left knee"
+        }
+      },
+      "artifact_sha256": "40ba8cde5ab7f520003ab709db42dff641572cd1f93f4380f3389501cda8fa45"
+    },
+    {
+      "case": "N13",
+      "attempt": 28,
+      "notes": "The patient is suicidal.\nSuicidal ideation: none.\n\nThe patient is on methadone.\nThe patient is not on diazepam or methadone.",
+      "score": {
+        "v3_1": {
+          "desired": "held",
+          "desired_texts": null,
+          "verdict": "held_correct",
+          "original_verdict": "held_correct",
+          "original_status": "conflict",
+          "status": "conflict",
+          "text": "",
+          "label": "Suicidal ideation"
+        },
+        "v3_2": {
+          "desired": "held",
+          "desired_texts": null,
+          "verdict": "held_correct",
+          "original_verdict": "held_correct",
+          "original_status": "conflict",
+          "status": "conflict",
+          "text": "",
+          "label": "Medication"
+        }
+      },
+      "artifact_sha256": "6828f0c7743c2b545fcb3fb21269d4dcbe620b8786b82fc8e222637da6c9428a"
+    },
+    {
+      "case": "N16",
+      "attempt": 29,
+      "notes": "The patient is not depressed.\nHer mood is depressed.\n\nThe patient is allergic to penicillin.\nAllergies: none.",
+      "score": {
+        "v3_1": {
+          "desired": "held",
+          "desired_texts": null,
+          "verdict": "held_correct",
+          "original_verdict": "held_correct",
+          "original_status": "conflict",
+          "status": "conflict",
+          "text": "",
+          "label": "Mental state"
+        },
+        "v3_2": {
+          "desired": "held",
+          "desired_texts": null,
+          "verdict": "held_correct",
+          "original_verdict": "held_correct",
+          "original_status": "conflict",
+          "status": "conflict",
+          "text": "",
+          "label": "Allergies"
+        }
+      },
+      "artifact_sha256": "6cb5ba35bdb69607d5b53463b08e6ba316aa1ea81d60d0653c244e90e8c274f1"
+    }
+  ],
+  "historical_attempts": 157,
+  "historical_calculated_exposure_usd": "1.717575505200",
+  "invoice_reconciliation": false,
+  "provider_sends": 0,
+  "DB_calls": 0,
+  "new_2_started": false,
+  "cleanup_bytes": 0
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/result.json",
+    "sha256": "fec849149c775104013dd5fb2bb8f7cc164719ae046aaf639d372e94bac11f0d",
+    "bytes": 11749,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224.log",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/instrument.log",
+    "sha256": "e04925ce03f3baa3642709b20a73f49120d70b111dbd861c6c0229fb79dfa9f6",
+    "bytes": 3423,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_word224.py",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/instrument.py",
+    "sha256": "edd8a602629b189c188e68cf887615f0b43a95d09a657768dbd5de576863afb0",
+    "bytes": 4078,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-source/manifest.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/source-manifest.json",
+    "sha256": "992bb7cc39f0079830e2684fe14e5988fadd4f452dd35985e208f26613cc30d4",
+    "bytes": 1096,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/apostrophe_alternatives-actual-export.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/apostrophe_alternatives-actual-export.docx",
+    "sha256": "1943438fe5012940d6a2919d604e26186b665d1aeb21e30a58feb49d39f0c409",
+    "bytes": 36670,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/apostrophe_alternatives-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/apostrophe_alternatives-original.docx",
+    "sha256": "e94559d4672aff0495d63e500b9e7cf7a070a87a6155a0caf8bb467d0ba755a9",
+    "bytes": 36609,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/digit_alternatives-actual-export.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/digit_alternatives-actual-export.docx",
+    "sha256": "5c2391abed4461987fc2a688c03776d8a4b27b8d85447b8e498a136ef3bd11cf",
+    "bytes": 36671,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/digit_alternatives-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/digit_alternatives-original.docx",
+    "sha256": "afaff5d4b55530622d0a7d8db0b63b9d32ce5251136962b42db24422b7ed8959",
+    "bytes": 36616,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/parenthesized_alternatives-actual-export.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/parenthesized_alternatives-actual-export.docx",
+    "sha256": "5bbeeb05ecf616e1f9c71d731d13c4ae3028755d82562f5478047e4a3431341d",
+    "bytes": 36670,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/parenthesized_alternatives-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/parenthesized_alternatives-original.docx",
+    "sha256": "386eecb85f9f042f70d468bc7c8c5f26bfee9433b520d90deaae2006127de4ac",
+    "bytes": 36615,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/positive_date-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/positive_date-original.docx",
+    "sha256": "395c3532e134a35361296c0c69d19455dfa2cd67883a7aed251bc8d1d8e3f2f0",
+    "bytes": 36605,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/punctuated_alternatives-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/punctuated_alternatives-original.docx",
+    "sha256": "fd49daf5e6169a8092b523a7fb6d20316072d057dfc5784351f3745c0f9ea00c",
+    "bytes": 36606,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/source_list_instruction-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/source_list_instruction-original.docx",
+    "sha256": "1db642b7c888afdbc051773e7e63e8531c6bacb4b1c7c49e7c2622cc7452ff9b",
+    "bytes": 36633,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/source_list_nocolon-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/source_list_nocolon-original.docx",
+    "sha256": "e5164666c4f0a51904225e0414353c848ce28be9830450e03f2cb26e6f61c977",
+    "bytes": 36613,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-word224-cases/source_list_period-original.docx",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/word224-refutation/source_list_period-original.docx",
+    "sha256": "e658861f38e1688a805e902b181e46da81d583f6e8b11a33f0ac6e39d4367447",
+    "bytes": 36614,
+    "rights": "self-authored synthetic structural fixture or diagnostic output; no provider upload made"
+  }
+]

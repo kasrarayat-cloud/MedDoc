@@ -1,0 +1,76 @@
+# Retained core CI failure inventory — 2026-10-04
+
+All **95 original failure/subtest blocks** from run 37158506012 collapse to **69 unique original methods**. The two official core shards retain 1,712 and 1,711 executed methods, 47 + 35 failures and 10 + 3 errors. The tested merge tree equals 15f87bb2; no denominator is replaced. `inventory.json` records every original selector, block identity, header, source line, cause, raw-block hash, current safety-control mapping and evidence.
+
+The read-only classification binds source c8578742. The sole independent operations fixture gap found was the large ordinary import's unset-switch expectation; exact original failure and repaired same-selector result are separately retained in commit 7268ff02. Thirty-eight original methods have affected repair/control evidence covering 60 original blocks. This count includes explicitly named stronger human-role replacements and historical source-bound packets; it is **not 38 current-source CI passes**.
+
+Thirty-one original methods, covering 35 original blocks, still need their relevant gate evidence:
+
+- 27 denial-heading workflow methods: only one actual no-job failure diagnostic ran. Word's ordinary ROS admission repair does not prove the complete 27 workflows pass.
+- 1 R1-05 ambiguous-signing recovery method: source ownership stays protected, but ordinary Plan/finalization was over-held; clinical owns that repair.
+- 1 print-name signature-policy method: two original cell/tab failures remain; its older finalizer-identity assertion conflicts with the newer passed unknown-signer control. No guard relaxation or inferred pass.
+- 2 other original Word-role workflow methods, with five failed subcases: Word confirms no newer actual result for RepairLegacyUsefulness/R1-04 and SalvageV3/RR1-10. Neighboring document controls are not substitutes.
+
+The checkbox recovery's later five-method pass is separate from the retained 49-method Word packet's 45 pass / 3 fail / 1 error outcome. The historical 124 served checks remain unchanged; current active-route intrusion and authorized-positive controls have separate counts. Original unsafe assertions explicitly superseded by stronger signing ownership controls remain mapped to their originals, never erased.
+
+This inventory performs no database, provider, deployment, external-message or cleanup action. Exact coherent CI, whole-document 54/60 and 18/20 acceptance, actual served private demonstration, live model/voice usefulness and external patient-data release requirements remain separate evidence.
+
+## Subsequent actual route evidence
+
+The clean integrated 1684c2b8 affected packet runs 32 methods in 135.638
+seconds, exit 1. Thirty pass: all 27 retained denial methods, R104 and both
+numeric-part workflows. Two methods still fail, with three subfailure blocks:
+the unchanged R105 automatic Plan path cannot finalize, and RR1-10 has two
+exact held-message assertions. The original expectations and failures remain
+retained. No full-green claim follows from this packet.
+
+The separate clean 34e58835 policy class runs four methods, exit 0, preserving
+established finalizer positives and unknown/patient/witness/manager negatives.
+Both synthetic test databases were destroyed and independently absent from
+the PostgreSQL catalog. Source stayed clean and unchanged; no provider call.
+The append-only packet receipts and hashes are in inventory.json.
+
+## R105 profile and complete-wire diagnosis
+
+The unchanged actual route remains held both on the historical default
+GPT-4.1-mini/natural-v1 fixture and on the correctly stored qualified
+Sonnet 5.5/ordinary-v4 fixture. The configuration difference is not a complete
+explanation. An initial suspicion that missing answer_text caused rejection is
+also withdrawn: the reader permits None. The qualified capture establishes
+the narrower fixture-wire cause: the unmapped completed Consent metadata is
+classified unresolved, invalidating Plan's relation. The offline positive used
+an independent metadata relation and therefore missed that assembled wire.
+
+The proposed correction is limited to fixture classification using the existing
+structural completed-document-status proof. Evidence validators and the
+no-relation, question, foreign-person and ambiguous-source holds stay intact.
+Neither manual Plan replacement nor an expectation change is accepted. The
+exact notes, immutable form, first answer, saved decisions, messages and
+failed finalization from both actual captures remain retained.
+
+- `clinical/r105-actual-1684-diagnosis/captures.json`: `b4b85de8d1b30e73bd7a5af4bd30428b61439c1414829ff5511949efb30fbe5e`
+- `clinical/r105-qualified-1684-capture/captures.json`: `6991be394a360210963ea10e962de28bcf5b9322bf0abb7128af65ddc112a20f`
+
+## Repaired persisted route and export result — 2026-10-04
+
+Clean c9f5ff8e executes the original R105 and RR110 routes plus six fixture-wire
+controls: eight methods pass in 34.072 seconds, real exit 0. R105's unchanged
+form and notes run with the application's qualified Sonnet 5.5 ordinary-v4
+configuration. Its first automatic Plan is supported `Rest.` with exact source
+evidence; no manual answer replacement occurs. The human Consent destination
+stays protected and unchanged. Both RR110 participant signing paragraphs also
+stay unchanged. Three actual final exports were archived by the POST callback
+before assertions and test teardown; the database is independently absent.
+
+The retained default-profile failure and qualified before-repair wire failure
+remain historical evidence. The fixture classification repair changes neither
+validators nor signing ownership. Twenty-one independent actual-fixture wire
+controls on finished 444443e6 pass with zero unsafe releases or false holds.
+
+The outer receipt's selector annotation was copied from an older wrapper. Its
+executed command, capture script, actual eight-method log and exit agree; a
+separate adjudication corrects the annotation without rewriting that original
+receipt. This affected packet closes these route failures, not full CI or the
+whole-document 54/60 and 18/20 acceptance gates.
+
+- `root-remaining-route-c9f5ff8e/adjudication.json`: `035e7698d3c139086b6b8424af3a1747f570a36f2624886119adbcacbdfc7973`

@@ -9,6 +9,8 @@ Writes (new files only, mode 0600, directory 0700):
                                         rows that must stay untouched, and the original's sha256
 Known failure L01 (legacy default path): 'Patient signature' and 'Initials' are ordinary text fields for the
 legacy inspector, so the labelled note lines fill them. The browser script asserts they are NOT filled.
+The original eight-row case is retained as a refused, incomplete human-consent mapping. A separately
+named seven-row control omits only that consent row and exercises the original signing/export assertions.
 """
 import hashlib
 import json
@@ -28,34 +30,52 @@ NOTES = {'Patient name': 'Synthetic Example', 'Chief complaint': 'Cough for thre
          'Consent form signed': 'Yes', 'Initial assessment': 'Stable.', 'Date of visit': '2026-09-30'}
 SIGNING = ['Patient signature', 'Initials']
 
-os.umask(0o077)
-OUT.mkdir(mode=0o700, exist_ok=True)
-form = OUT / 'word-authority-form.docx'
-document = Document()
-document.core_properties.author = 'QuillMD synthetic fixture'
-document.core_properties.title = 'Synthetic legacy signing-row form'
-document.add_heading(HEADING, level=1)
-document.add_paragraph(INSTRUCTION)
-table = document.add_table(rows=0, cols=2)
-table.style = 'Table Grid'
-for label in ROWS:
-    cells = table.add_row().cells
-    cells[0].text = label
-    cells[1].text = ''
-with open(form, 'xb') as stream:      # never replace an existing fixture
-    document.save(stream)
-digest = hashlib.sha256(form.read_bytes()).hexdigest()
-data = {
-    'synthetic_only': True,
-    'form': form.name,
-    'original_sha256': digest,
-    'heading': HEADING,
-    'instruction': INSTRUCTION,
-    'rows': ROWS,
-    'notes': '\n'.join(f'{label}: {NOTES[label]}' for label in ROWS),
-    'ordinary': {label: NOTES[label] for label in ROWS if label not in SIGNING},
-    'signing': {label: NOTES[label] for label in SIGNING},
-}
-with open(OUT / 'word-authority-input.json', 'x') as stream:
-    json.dump(data, stream, indent=2)
-print(f'Prepared a blank synthetic legacy form with {len(ROWS)} rows ({len(SIGNING)} signing rows).')
+def prepare_case(out, stem, rows, purpose):
+    """Create a new blank original and hash-bound manifest, never replace either."""
+    form = out / (stem + '-form.docx')
+    manifest = out / (stem + '-input.json')
+    if form.exists() or manifest.exists():
+        raise FileExistsError('Refusing to replace a prepared Word authority case.')
+    document = Document()
+    document.core_properties.author = 'QuillMD synthetic fixture'
+    document.core_properties.title = 'Synthetic legacy signing-row form'
+    document.add_heading(HEADING, level=1)
+    document.add_paragraph(INSTRUCTION)
+    table = document.add_table(rows=0, cols=2)
+    table.style = 'Table Grid'
+    for label in rows:
+        cells = table.add_row().cells
+        cells[0].text = label
+        cells[1].text = ''
+    with open(form, 'xb') as stream:
+        document.save(stream)
+    data = {
+        'synthetic_only': True, 'purpose': purpose, 'form': form.name,
+        'original_sha256': hashlib.sha256(form.read_bytes()).hexdigest(),
+        'heading': HEADING, 'instruction': INSTRUCTION, 'rows': rows,
+        'notes': '\n'.join(f'{label}: {NOTES[label]}' for label in rows),
+        'ordinary': {label: NOTES[label] for label in rows if label not in SIGNING},
+        'signing': {label: NOTES[label] for label in SIGNING},
+    }
+    with open(manifest, 'x') as stream:
+        json.dump(data, stream, indent=2)
+    return data
+
+
+def prepare(out=OUT):
+    os.umask(0o077)
+    out.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stems = ('word-authority', 'word-authority-usable-control')
+    # Check the entire output set before creating anything, including retained old eight-row cases.
+    if any((out / (stem + suffix)).exists() for stem in stems
+           for suffix in ('-form.docx', '-input.json')):
+        raise FileExistsError('Refusing to replace prepared Word authority evidence.')
+    original = prepare_case(out, stems[0], ROWS, 'retained-eight-row-human-consent-refusal')
+    control = prepare_case(out, stems[1], [row for row in ROWS if row != 'Consent form signed'],
+                           'separate-seven-row-signing-export-positive-control')
+    return original, control
+
+
+if __name__ == '__main__':
+    prepare()
+    print('Prepared retained eight-row refusal and separate seven-row signing/export control.')

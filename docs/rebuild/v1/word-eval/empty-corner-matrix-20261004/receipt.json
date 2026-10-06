@@ -1,0 +1,82 @@
+{
+  "source_commit": "c5dfe703cee0cbbe77827cc8bc903b4a5b83f555",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-matrix-header-quarantine-20261004",
+  "source_clean": true,
+  "word_sha256": "cea8a6deebc817d60c29338c283dd89170da9a9fccc44c6a3b63b874167269f2",
+  "test_sha256": "304f41532650a6e13262010b7b05487604c737ee9ea22433926b8283f009efca",
+  "evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d28-row-matrix-cause-20261004",
+  "artifact_seal_sha256": "5900d08c0f48fc3a1a671adb716b0a003b09a4cdc1ad7d06ae2425873dbbbad4",
+  "artifact_files": 86,
+  "artifact_bytes": 6400285,
+  "original_d28": "479946b2185f8d259b3de72375aa6ba941841f67ba2d676f61d714ddb9fc9786",
+  "source_only_fixed_score": {
+    "n": 227,
+    "ok": 204,
+    "missed": 16,
+    "wrong": 7,
+    "extras": 57,
+    "strict": false
+  },
+  "original_c_application_score": {
+    "n": 227,
+    "ok": 192,
+    "missed": 28,
+    "wrong": 7,
+    "extras": 59,
+    "strict": false
+  },
+  "manual_corrections": 0,
+  "actual_current_application_pending": true,
+  "initial_source": "4ae0c3507a45e58b95a4e7df7d5067b9e41d2ed1",
+  "held_corrective_source": "22e6e409e5bbe30aa33d96c5e6d6aa3b2df60376",
+  "first_wrong_header_sha256": "56832cb396f07de3d7dacff23534a1bec6943c4b4cac65845be6a195051d908a",
+  "held_root_wrong_header_sha256": "22ccede3191cc643c4cd860983ade3a5354d217bb1f29059a3e179d822ca87a7",
+  "affected_original_methods": 18,
+  "focused_final_methods": 7,
+  "exact_final_replay": {
+    "source_commit": "c5dfe703cee0cbbe77827cc8bc903b4a5b83f555",
+    "word_sha256": "cea8a6deebc817d60c29338c283dd89170da9a9fccc44c6a3b63b874167269f2",
+    "negatives": [
+      {
+        "identity": "author",
+        "original_sha256": "ed6164c61ac80298c210351c96aa0bab0adf0dabf21f1eea874a56216d97e495",
+        "fresh_header_fields": [],
+        "precise_unmapped": true,
+        "refused": true,
+        "code": "mapping_mismatch",
+        "message": "This mapping writes into fixed response-column header spacing, not an answer. Reinspect the original and review the row's checkbox choices before exporting.",
+        "empty_historical_original_identity": true
+      },
+      {
+        "identity": "root",
+        "original_sha256": "e51ed17c581308a1c66fc5e51b880814c982d78697c237d38f357fa4f6f65732",
+        "fresh_header_fields": [],
+        "precise_unmapped": true,
+        "refused": true,
+        "code": "mapping_mismatch",
+        "message": "This mapping writes into fixed response-column header spacing, not an answer. Reinspect the original and review the row's checkbox choices before exporting.",
+        "empty_historical_original_identity": true
+      }
+    ],
+    "original_d28_complete_mapping_identical": true,
+    "original_d28_complete_export_byte_identical": true,
+    "export_sha256": "4a062c2d632c01d7d1f324ee3758db7bd20411e851b180f9002032c5ffbfff9a",
+    "provider": 0,
+    "database": 0,
+    "renderer": 0,
+    "whole_gate": false
+  },
+  "independent_controls": 14,
+  "independent_wrong": 0,
+  "independent_result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-word-matrix-c5-refute-20261004/result.json",
+  "independent_result_sha256": "6756f0a4e8f99af59d821b1dc5e4981188343abec6071ef67201953708f59048",
+  "independent_process": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-word-matrix-c5-envelope/process.json",
+  "independent_process_sha256": "352aed37915633d1de86be60aa96b62d705f3d493a40798da9f92d4b2d980eb4",
+  "children_reaped": true,
+  "provider": 0,
+  "database": 0,
+  "renderer": 0,
+  "whole_word_gates_met": false,
+  "native_word_verified": false,
+  "checkpoint_sha256": "d94b555910a5e67edd8a2d827a925de4605bb938e00a7ea05286714ebed80994"
+}

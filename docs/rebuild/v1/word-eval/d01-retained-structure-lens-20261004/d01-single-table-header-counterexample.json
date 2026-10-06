@@ -1,0 +1,20 @@
+{
+  "input_export": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev33-final-plan-prepared-20261004/dev-native-application-481b65adb8ff-1791113822219658957/D01/native-ordinary-export.docx",
+  "input_export_sha256": "368cc103e724f4a75d364957a112ba70e74891281e5491ae39abca4e1c90e1f2",
+  "projection": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/final-word-source-lenses-20261004/D01-UNVERIFIED-single-table-projection.docx",
+  "projection_sha256": "8afb98a9b541464f10185e7b528c6e01c8d84225baa211e6cdc674e715f9d92f",
+  "single_table_rows": 28,
+  "all_original_export_row_bytes_equal_after_partition": true,
+  "header_rows_declared": [
+    0,
+    14
+  ],
+  "noncontiguous_header_rows_ignored_by_OpenXML": [
+    14
+  ],
+  "normative_primary_source": "https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.tableheader?view=openxml-3.0.1",
+  "result": "The minimal merge preserves all28 exported rows but cannot repeat the Left Leg header using its current noncontiguous tblHeader declaration. No safe production repair established; this is an unverified counterexample projection, not a delivered export.",
+  "preserved_safety_contract": "Existing layout.py splits each limb to give it its own first-row repeated caption/units and permits long location rows to span pages. Blind merge/removal of safeguard is not authorized as a fix.",
+  "renderer_native_Word": "not performed",
+  "DB_provider_calls": 0
+}

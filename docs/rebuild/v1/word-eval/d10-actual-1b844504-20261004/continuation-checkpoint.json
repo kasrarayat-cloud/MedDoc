@@ -1,0 +1,112 @@
+{
+  "created_utc": "2026-10-04T03:55:22.726468+00:00",
+  "actual_candidate": "1b844504a42e02232df9151b6015990a27ace77a",
+  "readonly_source": "/opt/meddoc-pro/.worktrees/v1-word-archived-1b844504",
+  "writer_source_commit": "c95d0f0f5c5f1be91fef83b22d0983d978cfa0e7",
+  "writer_evidence_commit": "565533c73fbd5de6a294068c0190990a013e06d7",
+  "actual_result": {
+    "candidate": "1b844504a42e02232df9151b6015990a27ace77a",
+    "exit_code": 0,
+    "timed_out": false,
+    "elapsed_seconds": 328.912,
+    "provider_calls": 0,
+    "scope": "Original eligible offline D10; actual fixture HTTP/worker/review/finalization/export; explicit manual corrections, no broad, live-model or native Word acceptance."
+  },
+  "method_passes": 1,
+  "method_seconds": 314.105,
+  "actual_export": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/numeric-archived-original-word-1b844504a42e-1791085573809471200/development-renderer-1b844504a42e-20261004T034619861680Z/D10/final-export-before-readback.docx",
+  "actual_export_sha256": "52b9ff085392b3bac348225f86a094164ef8801d785c7a2bd39fb3d0cde50c90",
+  "archive_before_fidelity_assertions": true,
+  "download_matches_export": true,
+  "original_immutable": true,
+  "fidelity_checks": [
+    "Complete19sentenceA198manualruledanswer",
+    "Four reviewed numeric values/captions/slashes/neighborparagraphs",
+    "ThreeOther full answer readbacks/exact source-childprefix/captions/neighborcells",
+    "TwoPalpable nativeoption selections",
+    "Protecteduntouchedbodyparagraphs/allnon-documentXMLpackageparts"
+  ],
+  "automatic_gt198": {
+    "correct": 183,
+    "denominator": 198,
+    "missed": 15,
+    "wrong": 0,
+    "extras": 4,
+    "strict": false
+  },
+  "manual_gt198": {
+    "correct": 186,
+    "denominator": 198,
+    "missed": 12,
+    "wrong": 0,
+    "extras": 4,
+    "strict": false
+  },
+  "first_fixture_answers": {
+    "conflict": 190,
+    "supported": 0,
+    "parts": 2,
+    "batch": "succeeded",
+    "live_provider": false
+  },
+  "actual_cost": "0",
+  "Usage_simulated": true,
+  "own_provider_calls": 0,
+  "worker_journals": 27,
+  "worker_max_cpu_seconds": 11.241832,
+  "worker_nonzero_exits": [],
+  "unchanged_limits": {
+    "sandboxCPU": 12,
+    "workerWall": 20,
+    "overall": "54/60",
+    "holdout": "18/20"
+  },
+  "source_before_after_equal": true,
+  "database_catalog": {
+    "verified": true,
+    "requested_database": "quillmd_qa_sol_word_cpu1004",
+    "checked_names": [
+      "quillmd_qa_sol_word_cpu1004",
+      "test_quillmd_qa_sol_word_cpu1004"
+    ],
+    "present": [],
+    "all_absent": true,
+    "provider_calls": 0
+  },
+  "renderer": {
+    "returncode": -2,
+    "socket_removed": true
+  },
+  "containers": {
+    "scope": "Serializedownedlayoutcampaign namespace; readonly activecontainerquery, no pruning or deletion",
+    "actual_exit": 0,
+    "active_layout_containers": [],
+    "all_absent": true
+  },
+  "evidence_manifest": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/numeric-archived-original-word-1b844504a42e-1791085573809471200/durable-evidence-hashes.json",
+  "evidence_manifest_sha256": "e755850c2b9de7a5aee73dfd47e0d524dcd1490f481e7634f62e76ddffe5c783",
+  "evidence_files": 230,
+  "prior_failures_preserved": [
+    "ce071 original lost finaldownload limitation; retained candidate cannot replace missingactualdownload",
+    "d132 exact finalization refusal and originalchildcauseunknown",
+    "old12.017CPU SIGKILL sameinput proof"
+  ],
+  "remaining_D10_manual_missing_count": 12,
+  "whole_D10_automatic_gate": false,
+  "DEV_adapter_seal_sha256": "6b4c6e58aa119874d25a0332cd038b201f99ea46d16a3f78c182ca5622e749ab",
+  "DEV_gate_actual_evaluated_members": 0,
+  "DEV_requires_root_clinical_source_freeze": true,
+  "DEV_fixed_denominators": {
+    "development": 40,
+    "eligible": 33,
+    "rightsheld": 7,
+    "overall": 60,
+    "holdout": 20,
+    "overall_upper_bound": 53
+  },
+  "new_unseen_or_native_Word_claim": false,
+  "QA_slot_released": true,
+  "own_active_processes": 0,
+  "cleanup_bytes": 0,
+  "next": "Root coherentclinical source freeze; original33eligible DEV automatic mechanical profiles through actual app in11serialized<=3member batches; no manualcorrection accepted asautomatic, no restricted originals/providerupload."
+}

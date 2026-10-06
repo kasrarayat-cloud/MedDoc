@@ -1,0 +1,146 @@
+{
+  "contract": "d30-a20-original-source-diagnosis-v1",
+  "source_revision": "9412736a107c481707a146c9ed122c6394f36e36",
+  "word_revision": "e76de10ed4d8e0ec2157c88221c4e279cf967267",
+  "reader_bytes_equal_between_revisions": true,
+  "actual_exit": 0,
+  "inner_elapsed_seconds": 2.95701098000427,
+  "technical_bound_seconds": 60,
+  "kill_grace_seconds": 10,
+  "child_finished": true,
+  "source_before": {
+    "word_v3.py": "32cd48b7000da4f2da154b9400781d8dc1ddee1d0160ff44e1797db007fd7651",
+    "mapping_limits.py": "bdebe9b5f9ec8268164177600176404917af22537e60ef7b971f065b8d396802",
+    "source_policy.py": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+  },
+  "source_after": {
+    "word_v3.py": "32cd48b7000da4f2da154b9400781d8dc1ddee1d0160ff44e1797db007fd7651",
+    "mapping_limits.py": "bdebe9b5f9ec8268164177600176404917af22537e60ef7b971f065b8d396802",
+    "source_policy.py": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+  },
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "groundtruth_sha256": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+  "groundtruth_areas": 62,
+  "actual_fields": 61,
+  "retained_automatic_score": {
+    "n": 62,
+    "ok": 61,
+    "missed": 1,
+    "wrong": 0,
+    "extras": 0,
+    "dup_bad": 0,
+    "strict": false,
+    "tolerant": false,
+    "extra_fields": [],
+    "dup_rows": []
+  },
+  "retained_manual_score": {
+    "n": 62,
+    "ok": 62,
+    "missed": 0,
+    "wrong": 0,
+    "extras": 0,
+    "dup_bad": 0,
+    "strict": true,
+    "tolerant": true,
+    "extra_fields": [],
+    "dup_rows": []
+  },
+  "automatic_a20_selection_detected": false,
+  "answer_box_detected": true,
+  "automatic_selection_authority_established": false,
+  "source_cause": {
+    "list_format": "bullet",
+    "list_marker": "o",
+    "font": "Courier New",
+    "numIds": [
+      "23",
+      "24"
+    ],
+    "source_question": "word/document.xml#b/p[72]",
+    "descriptor_sources": [
+      "word/document.xml#b/p[73]",
+      "word/document.xml#b/p[74]",
+      "word/document.xml#b/p[75]",
+      "word/document.xml#b/p[76]",
+      "word/document.xml#b/p[77]",
+      "word/document.xml#b/p[78]",
+      "word/document.xml#b/p[79]",
+      "word/document.xml#b/p[80]"
+    ],
+    "answer_box": "word/document.xml#b/tbl[4]/tr[0]/tc[0]",
+    "cardinality": "unspecified",
+    "printed_selection_rule": false
+  },
+  "controls_total": 6,
+  "controls_passed": 6,
+  "scope": {
+    "database_calls": 0,
+    "provider_calls": 0,
+    "renderer_calls": 0,
+    "original_edits": 0,
+    "source_edits": 0,
+    "groundtruth_edits": 0,
+    "corpus_rescoring": false,
+    "manual_credit_counted_automatic": false
+  },
+  "preserved_instrument_failure": {
+    "script": "probe-first.py",
+    "log": "first.log",
+    "actual_exit": 1,
+    "cause": "instrument assumed GT key areas; actual key answer_areas",
+    "product_failure": false
+  },
+  "artifacts": {
+    "second/result.json": "6df304fcd643ddff6a7426cd52754773a4773cbef1b69afedd3e7b94a5aa48f4",
+    "probe-first.py": "5776233c0185222cd7d3d3f8bae97fa6af3ef000d8ed369a9ee5c8abf10a4285",
+    "probe-second.py": "d31301bd4a128adc694e5f7b1e77ef7a90266765b4d899e3b2e6a34f8bc6303b",
+    "first.log": "f9a9e16b56b0b23b9a0f1d2b254280ab7e9b3f66fc01d0b6b1b61afb71b5f954",
+    "second.log": "b1c228db471fadecfbe3abed276ce52ab66e23b75fa4a9192a56174b066ed2ae",
+    "second/original.docx": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+    "second/fixed-groundtruth.json": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+    "second/actual-inspection.json": "28cc1b507b93a52c63d1895d4f4f9f3d116864404f31488cae44d3771551a17d",
+    "second/manual-source-bound-recovery.json": "9a3072a1b245a7c5e62e6cc3162ae18176f833ca639f3b845c06d9bff8064dfc"
+  },
+  "execution_limitations": [
+    "Pure source inspection/control qualification only; no new HTTP, worker, finalization, export, renderer or native Word claim.",
+    "No safe automatic multi-choice inference from plain bullets alone; fixed A20 miss remains.",
+    "The archived automatic_complete false is from separate human attestation admission; no actual complete-success misrepresentation demonstrated."
+  ],
+  "mapping_review": {
+    "application_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+    "result_sha256": "dc2771df1c35d5a13630bb4bbfd6ef309892824203ac642eb3bdab40e3141038",
+    "script_sha256": "42fb0744111806067d4d283ce4dbeaa5bff951cdfe8e9f97d849e2296ec912b8",
+    "log_sha256": "ca2be967945de8d40e1d50b8cc4addcc2b76f51ddda4cef1d638ac89a616a622",
+    "rendered_html_sha256": "15c1e22bca1de744aff61feaf4f2548d3f6097589dffacfbc3674708c78a084b",
+    "source_before": {
+      "rebuild/core/views.py": "35143326a5827f8c287067b0dae0e110249477c359dfe0e72113ad0a4622bb42",
+      "rebuild/core/v3_mapping.py": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "rebuild/templates/template_detail_v3.html": "e6571b35d4c6eb01ca02e7449a6d7e0c99113437b230503c3f7b15c30a0533c5"
+    },
+    "source_after": {
+      "rebuild/core/views.py": "35143326a5827f8c287067b0dae0e110249477c359dfe0e72113ad0a4622bb42",
+      "rebuild/core/v3_mapping.py": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+      "rebuild/templates/template_detail_v3.html": "e6571b35d4c6eb01ca02e7449a6d7e0c99113437b230503c3f7b15c30a0533c5"
+    },
+    "actual_exit": 0,
+    "elapsed_seconds": 0.524720889996388,
+    "checks": {
+      "d30_question_available_before_pagination": true,
+      "d30_first_option_available_before_pagination": true,
+      "source_search_finds_d30_question": true,
+      "actual_kind_choices_are_one_and_many": true,
+      "existing_visible_plain_list_direction": true,
+      "existing_visible_marker_and_preservation_explanation": true,
+      "immutable_correction_and_confirmation_copy": true,
+      "exact_question_and_first_option_rendered": true
+    },
+    "passed": 8,
+    "total": 8,
+    "question_open_index": 136,
+    "first_option_open_index": 137,
+    "decision": "Existing action and explanation are concrete and source-bound; no application copy change needed. Preserve original automatic A20 miss and existing manual recovery separation.",
+    "application_changes": 0,
+    "actual_http_or_persistence_claim": false
+  }
+}

@@ -1,0 +1,310 @@
+{
+  "parent_commit": "bbbc7a0e813f5d50fd17c7352dde77e60f689e8b",
+  "finished_source_hashes": {
+    "rebuild/documents/word_v3.py": "4c51ad1331da0ceace4424c79be9ad5ed775a426809347e0f38125ca68889995",
+    "rebuild/documents/test_source_coverage.py": "1d2ad792e88130ac5058930083c533d0ad9f8e7ff558c9b561fe07648e67125e"
+  },
+  "final_affected_actual_exit": 0,
+  "final_affected_result": {
+    "tests": 19,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 98.06913053400058,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "4c51ad1331da0ceace4424c79be9ad5ed775a426809347e0f38125ca68889995",
+      "rebuild/documents/test_source_coverage.py": "1d2ad792e88130ac5058930083c533d0ad9f8e7ff558c9b561fe07648e67125e"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 217,
+    "refused": 87,
+    "exports": 130,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "original_export_actual_exit": 0,
+  "original_export_result": {
+    "source_before": {
+      "rebuild/documents/word_v3.py": "4c51ad1331da0ceace4424c79be9ad5ed775a426809347e0f38125ca68889995",
+      "rebuild/documents/test_source_coverage.py": "1d2ad792e88130ac5058930083c533d0ad9f8e7ff558c9b561fe07648e67125e"
+    },
+    "source_unchanged": true,
+    "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+    "groundtruth_sha256": "6c89ff905ede4e25ec132569e9280663859b9d93ce06a31f0885f34d362b09f5",
+    "mapping_summary": {
+      "n": 41,
+      "ok": 39,
+      "missed": 2,
+      "wrong": 0,
+      "extras": 5,
+      "strict": false
+    },
+    "attempts": [
+      {
+        "id": "peer-parent",
+        "expected_refusal": false,
+        "refused": false,
+        "export_sha256": "7663d25180b5286c70d2110055a5cf84522c8749a62cca63d1d8b0423215c1c7",
+        "states": [
+          {
+            "root": [
+              false,
+              true
+            ],
+            "child": [
+              false,
+              false,
+              false
+            ]
+          },
+          {
+            "root": [
+              false,
+              false
+            ],
+            "child": [
+              false,
+              false,
+              false
+            ]
+          },
+          {
+            "root": [
+              false,
+              false
+            ],
+            "child": [
+              false,
+              false,
+              false
+            ]
+          },
+          {
+            "root": [
+              false,
+              false
+            ],
+            "child": [
+              false,
+              false,
+              false
+            ]
+          },
+          {
+            "root": [
+              false,
+              false
+            ],
+            "child": [
+              false,
+              false,
+              false
+            ]
+          }
+        ],
+        "q7": [
+          true,
+          false
+        ],
+        "untargeted_paragraphs_exact": true,
+        "untargeted_parts_raw_exact": true
+      },
+      {
+        "id": "five-valid-parent-subtypes",
+        "expected_refusal": false,
+        "refused": false,
+        "export_sha256": "268f66f84da443d5609e3e879a6e3a400b44010e30966f0310e81dbe7c211039",
+        "states": [
+          {
+            "root": [
+              true,
+              false
+            ],
+            "child": [
+              false,
+              true,
+              false
+            ]
+          },
+          {
+            "root": [
+              true,
+              false
+            ],
+            "child": [
+              false,
+              true,
+              false
+            ]
+          },
+          {
+            "root": [
+              true,
+              false
+            ],
+            "child": [
+              false,
+              true,
+              false
+            ]
+          },
+          {
+            "root": [
+              true,
+              false
+            ],
+            "child": [
+              false,
+              true,
+              false
+            ]
+          },
+          {
+            "root": [
+              true,
+              false
+            ],
+            "child": [
+              false,
+              true,
+              false
+            ]
+          }
+        ],
+        "q7": [
+          true,
+          false
+        ],
+        "untargeted_paragraphs_exact": true,
+        "untargeted_parts_raw_exact": true
+      },
+      {
+        "id": "unchanged-profile-incompatible-hierarchy",
+        "expected_refusal": true,
+        "refused": true,
+        "code": "conditional_answer_unselected",
+        "message": "This subgroup has a selected answer while its own printed parent is unselected. Review the parent and child answers; no selection was inferred."
+      },
+      {
+        "id": "child-without-parent",
+        "expected_refusal": true,
+        "refused": true,
+        "code": "conditional_answer_unselected",
+        "message": "This subgroup has a selected answer while its own printed parent is unselected. Review the parent and child answers; no selection was inferred."
+      },
+      {
+        "id": "historical-flat-mapping",
+        "expected_refusal": true,
+        "refused": true,
+        "code": "mapping_mismatch",
+        "message": "This printed parent/subgroup hierarchy requires its exact original question and controls. Review the separate groups; a former flat mapping cannot authorize these destinations."
+      }
+    ],
+    "no_answer_original_bytes": true,
+    "elapsed_seconds": 7.515510284996708,
+    "full_application_route": false,
+    "global_q7_condition_enforcement_claimed": false,
+    "manual_corrections": 0,
+    "provider_calls": 0,
+    "DB_calls": 0,
+    "renderer_calls": 0
+  },
+  "prior_failed_packets": [
+    {
+      "path": "d08-hierarchy-first-controls-20261004",
+      "actual_exit": 1,
+      "cause": "Checked glyph/SDT Child one falsely read as check-one count; two fixture shapes did not create their stated wider merge/leading tab."
+    },
+    {
+      "path": "d08-hierarchy-second-controls-20261004",
+      "actual_exit": 1,
+      "cause": "A complete select-exactly-two header was ignored; fixed through the established cardinality reader."
+    },
+    {
+      "path": "d08-hierarchy-third-controls-20261004",
+      "actual_exit": 1,
+      "cause": "Low-level checkbox writer accepts a nonempty label; test wrongly asserted the separate canonical HTTP checked/empty input contract through the low-level writer."
+    },
+    {
+      "path": "d08-hierarchy-fourth-controls-20261004",
+      "actual_exit": 1,
+      "cause": "New coverage assertion looked for a nonexistent coverage.issues.reason object; actual inspector uses coverage_issues.code."
+    }
+  ],
+  "preliminary_original_mapping": [
+    {
+      "source_word_sha256": "a7ecb467ff5af429b9a5d8bca4e15e02e563620128def6372df32b5933a2866e",
+      "source_unchanged": true,
+      "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+      "groundtruth_sha256": "6c89ff905ede4e25ec132569e9280663859b9d93ce06a31f0885f34d362b09f5",
+      "mapping_summary": {
+        "n": 41,
+        "ok": 29,
+        "missed": 12,
+        "wrong": 0,
+        "extras": 5,
+        "strict": false
+      },
+      "elapsed_seconds": 1.6878571990018827,
+      "provider": 0,
+      "DB": 0,
+      "render": 0
+    },
+    {
+      "source_word_sha256": "6e09ce9a1512d9aece0a175c3e60d6d2e7a6d0e32693cd3023a7e1b0b0bd6467",
+      "source_unchanged": true,
+      "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+      "groundtruth_sha256": "6c89ff905ede4e25ec132569e9280663859b9d93ce06a31f0885f34d362b09f5",
+      "mapping_summary": {
+        "n": 41,
+        "ok": 29,
+        "missed": 12,
+        "wrong": 0,
+        "extras": 5,
+        "strict": false
+      },
+      "elapsed_seconds": 1.5534161489995313,
+      "provider": 0,
+      "DB": 0,
+      "render": 0
+    },
+    {
+      "source_word_sha256": "b3686ceb409a9c06b5d57ea9c2d8f6e9289a4582b6d633ad7fd8deaa311e7071",
+      "source_unchanged": true,
+      "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+      "groundtruth_sha256": "6c89ff905ede4e25ec132569e9280663859b9d93ce06a31f0885f34d362b09f5",
+      "mapping_summary": {
+        "n": 41,
+        "ok": 39,
+        "missed": 2,
+        "wrong": 0,
+        "extras": 5,
+        "strict": false
+      },
+      "elapsed_seconds": 2.095561729001929,
+      "provider": 0,
+      "DB": 0,
+      "render": 0
+    }
+  ],
+  "limitations": [
+    "Third preliminary source mapping retains exact Word hash/trace/maps; its separate source file was not archived before later edits. Final finished source bytes are archived.",
+    "No full application route, visual overflow/native Word, global Q7 condition enforcement or automatic whole-document pass is claimed.",
+    "Existing fixed SDU plus pediatric ICU subtype profile remains contradictory and refused; no profile or GT edit.",
+    "A5 and A9 remain missed; five automatic extras remain."
+  ],
+  "thresholds": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20
+  },
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "manual_corrections": 0,
+  "active_children": [],
+  "seal_sha256": "93dda97825aa71b8079e83a93c58d04d59d9fed59ef6bda8dbef3560d4f8275b",
+  "sealed_files": 786
+}

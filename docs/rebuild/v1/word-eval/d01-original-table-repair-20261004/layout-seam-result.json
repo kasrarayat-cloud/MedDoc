@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "case": "blank",
+      "source_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+      "export_sha256": "f6ebd8b9f92fc4a67b1025da3704b7b47ce25053cdefc333bc9d3237f912cfe6",
+      "tables": 1,
+      "rows": 28,
+      "unchanged_cell_texts": 84,
+      "unchanged_SDTS": 28,
+      "original_table_properties_and_grid_unchanged": true,
+      "retained_source_table0_row15_available": true,
+      "heading_keep_next_rows": [
+        0,
+        14
+      ],
+      "flowing_location_rows": [
+        11,
+        12,
+        13,
+        25,
+        26,
+        27
+      ],
+      "synthesized_repeated_headers": 0,
+      "read_back_answers": 0,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "layout_summary": {
+        "tables": 1,
+        "heading_rows": 2
+      },
+      "source_original_immutable": true
+    },
+    {
+      "case": "synthetic-58-answer-layout-input",
+      "source_sha256": "a4fea9d2f8069578ea4d806f570140b9ad7f60ddf5511c979ca37a0b0be8daaa",
+      "export_sha256": "fed6f7beae04818bf8703aff250a0ca4532e0eb8ebb3f854683ccca3acd210e3",
+      "tables": 1,
+      "rows": 28,
+      "unchanged_cell_texts": 84,
+      "unchanged_SDTS": 28,
+      "original_table_properties_and_grid_unchanged": true,
+      "retained_source_table0_row15_available": true,
+      "heading_keep_next_rows": [
+        0,
+        14
+      ],
+      "flowing_location_rows": [
+        11,
+        12,
+        13,
+        25,
+        26,
+        27
+      ],
+      "synthesized_repeated_headers": 0,
+      "read_back_answers": 58,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "layout_summary": {
+        "tables": 1,
+        "heading_rows": 2
+      },
+      "source_original_immutable": true
+    }
+  ],
+  "network_DB_render_provider_calls": 0,
+  "claims": "Exact qualified layout seam preserves source table/row identity and original header properties; no native processor/application or visible renderer acceptance claimed.",
+  "layout_sha256": "400998e21476dd9725c18eb75570bb3495910dc44308be835cb4867fba1a7bd5",
+  "source_base": "19d1e2695d2da270ff911f9f445a574e1eea489e"
+}

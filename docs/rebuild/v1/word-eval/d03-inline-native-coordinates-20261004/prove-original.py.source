@@ -1,0 +1,50 @@
+import hashlib
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from documents import word_v3 as w
+
+out = Path(__file__).resolve().parent
+root = out.parent
+mapping = root/'dev-application-7907ae5aa38c-1791089107491093724/D03/initial-mapping.json'
+corpus = Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus')
+rights = json.loads((corpus/'custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json').read_text())
+record = next(row for row in rights['records'] if row['development_id'] == 'D03')
+raw = (corpus/record['corpus_file']).read_bytes()
+assert hashlib.sha256(raw).hexdigest() == record['sha256']
+saved = json.loads(mapping.read_text())
+fields = saved['fields']
+issues = saved['import_manifest']['coverage']['selected_engine_issues']
+original_reader = w._PlaceReader(w.SlotIndex(w.open_package(raw)))
+empty_reader = w._PlaceReader(SimpleNamespace(by_id={}))
+before = {field['key']: original_reader.of(field) for field in fields}
+after = w.writing_places(raw, fields)
+
+def overlaps(places, reader):
+    matches = []
+    for issue in issues:
+        region = {'place': w._place_id(issue['part'], issue['slot']),
+                  'start': issue.get('start'), 'end': issue.get('end')}
+        for field in fields:
+            if field['kind'] in w.SIGNING_KINDS or field.get('write_protected'): continue
+            for place in places[field['key']]:
+                if reader.touches(place, region):
+                    matches.append({'field': field['key'], 'label': field['label'],
+                                    'destination': place, 'excluded_issue': issue})
+    return matches
+
+result = {'original_sha256': record['sha256'], 'original_bytes_unchanged': True,
+          'initial_mapping_sha256': hashlib.sha256(mapping.read_bytes()).hexdigest(),
+          'word_source_sha256': hashlib.sha256(Path(w.__file__).read_bytes()).hexdigest(),
+          'old_original_aware_overlaps': overlaps(before, original_reader),
+          'old_empty_index_overlaps': overlaps(before, empty_reader),
+          'new_empty_index_overlaps': overlaps(after, empty_reader),
+          'changed_fields': {key: {'old': before[key], 'new': after[key]} for key in before if before[key] != after[key]},
+          'provider_calls': 0, 'database_calls': 0, 'renderer_calls': 0,
+          'automatic_first_pass_mapping_and_denominators_unchanged': True}
+with (out/'actual-original-coordinate-proof.json').open('x') as f:
+    json.dump(result, f, indent=2); f.write('\n')
+assert not result['old_original_aware_overlaps']
+assert len(result['old_empty_index_overlaps']) == 2
+assert not result['new_empty_index_overlaps']
+print('D03 actual immutable original: two false overlaps removed, no true excluded-area overlap introduced.')

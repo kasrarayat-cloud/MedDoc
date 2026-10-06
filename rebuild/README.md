@@ -30,7 +30,7 @@ Generation is intentionally conservative: only complete, verbatim documented evi
 
 Department memberships govern patients, templates, encounters, searches, files, exports and queued jobs. A same-department X-ray employee can share that department's patient; ultrasound and other organizations are separately scoped. Owners create departments, invite individual accounts and manage memberships.
 
-The Coding tab recognizes documented ICD-10-CM/CPT tokens against an effective dated code set, displays descriptions and source evidence, and records clinician acceptance. It does not infer undocumented diagnoses or replace coding review. The imported official ICD-10-CM set expires 2026-09-30 and must be refreshed for October. CPT is disabled without a licensed dataset and current entitlement.
+The Coding tab recognizes documented ICD-10-CM/CPT tokens against an effective dated code set, displays descriptions and source evidence, and records clinician acceptance. It does not infer undocumented diagnoses or replace coding review. The September18 installation evidence records three official ICD-10-CM releases covering 2025-10-01 through 2027-09-30, including FY2027 (74,879 codes); historical releases stay intact and the encounter's date of service selects the version. The integrations panel reports current persisted release metadata and warns when today's date has no coverage; this display does not verify code-file integrity. CPT is disabled without a licensed dataset and current entitlement.
 
 ## Billing and integrations
 

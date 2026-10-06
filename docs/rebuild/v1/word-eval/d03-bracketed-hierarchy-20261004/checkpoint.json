@@ -1,0 +1,15 @@
+{
+  "state": "D03 finished source-only proof sealed before separate temporal guard union",
+  "source_tree": "/opt/meddoc-pro/.worktrees/v1-word-d03-parent-subgroups-20261004",
+  "source_snapshot": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d03-hierarchy-finished-source-20261004",
+  "active_children": [],
+  "pending": [
+    "Commit D03",
+    "Union bc7 temporal signing source on clean writer",
+    "Recheck six immutable signing originals",
+    "Independent root refutation",
+    "D08 parent/subtype hierarchy",
+    "Actual coherent affected application replay"
+  ],
+  "receipt_sha256": "abfa2f1370c3a31b9e7f173ba1e8e8651443b1d61bf5878c417760ec435e8a93"
+}

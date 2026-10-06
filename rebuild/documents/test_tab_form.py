@@ -218,6 +218,23 @@ class UnderlinedTabFormTests(unittest.TestCase):
             self.assertLess(text.index(answers[fields[left]["key"]]), text.index(EXPECTED[right][0]))
             self.assertLess(text.index(EXPECTED[right][0]), text.index(answers[fields[right]["key"]]))
         self.assert_original_and_parts_preserved(output)
+        for index in (2, 3, 6, 23, 30):
+            old = body_paragraphs(ORIGINAL)[index].findall('w:r', NS)[2]
+            new = paragraphs[index].findall('w:r', NS)[2]
+            self.assertEqual(etree.tostring(old), etree.tostring(new),
+                             'A printed separator is outside either answer destination.')
+
+    def test_long_second_answer_preserves_the_unanswered_neighbor_and_printed_separator(self):
+        fields = self.fields()
+        answer = 'Complete synthetic second answer. ' * 40
+        output = self.directory / 'long-second.docx'
+        fill_template(ORIGINAL, fields, {fields[1]['key']: answer}, output)
+        before, after = body_paragraphs(ORIGINAL)[2], body_paragraphs(output)[2]
+        old, new = before.findall('w:r', NS), after.findall('w:r', NS)
+        self.assertEqual(etree.tostring(old[1]), etree.tostring(new[1]))
+        self.assertEqual(etree.tostring(old[2]), etree.tostring(new[2]))
+        self.assertEqual(visible_text(after).count(answer), 1)
+        self.assert_original_and_parts_preserved(output)
 
     def test_mapping_change_and_same_locations_with_changed_source_are_refused(self):
         fields = self.fields()

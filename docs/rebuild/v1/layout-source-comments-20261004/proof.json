@@ -1,0 +1,45 @@
+{
+  "base_commit": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "layout_source_sha256": "fd5b322a3e1c8c40e3349375e257eed8a3ce0f3dff5a4dad5ef662b8abcd2928",
+  "test_sha256": "1963d547328334eb796582d07c9857f9a0e364649794d9473b9fe4a0a46a46be",
+  "methods": 8,
+  "actual_exit": {
+    "actual_child_exit": 0,
+    "timed_out": false,
+    "reaped": true,
+    "elapsed_seconds": 0.9681197099998826,
+    "stdout_sha256": "982a43036b8e1c575d8ab1159f53b73c501d11a573fdb0203e93caf2986505b5",
+    "stderr_sha256": "ad6dcb7114ff306fa6aceddb41fa7609ab811c2b141d20406434604b7ac4dfca"
+  },
+  "artifact_manifest": {
+    "original-baseline.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/original-baseline.json",
+      "sha256": "2188b6839d1cbe7e6941ff9c055632047e828a3d235164a22d2b576857565f74"
+    },
+    "corrected-result.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/corrected-result.json",
+      "sha256": "6dd0f99429c364fd68134bf29d08c3aa256ad0067922e8b783bd8c449ef2fc46"
+    },
+    "verify.py": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/verify.py",
+      "sha256": "8fc659da3c6b31a55f92a3515f3ceb28e245cd078a0aff65c5ea4d4e84801068"
+    },
+    "pure-exit.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/pure-exit.json",
+      "sha256": "2ebce602d59de3bb8ad9a4a16edcc04af22d25417213f915b11faacc34e400e0"
+    },
+    "pure.stdout.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/pure.stdout.log",
+      "sha256": "982a43036b8e1c575d8ab1159f53b73c501d11a573fdb0203e93caf2986505b5"
+    },
+    "pure.stderr.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/layout-source-nodes-63460193/pure.stderr.log",
+      "sha256": "ad6dcb7114ff306fa6aceddb41fa7609ab811c2b141d20406434604b7ac4dfca"
+    }
+  },
+  "source_changes": [
+    "rebuild/documents/layout_source.py"
+  ],
+  "guards": "Only actual lxml comments bypass element-tag scanning; PI and other non-string-tag nodes are controlled layout_unsafe_source. Resource, attached-template, active instruction, embedded-font and font bounds remain active.",
+  "scope": "Pure reproduction and safety repair; no renderer/database/provider/service invocation or fresh native Word/presentation result."
+}

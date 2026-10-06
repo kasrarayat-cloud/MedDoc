@@ -27,10 +27,14 @@ class EncounterSnapshotTests(SyntheticFixture, TransactionTestCase):
         override = override_settings(MEDIA_ROOT=Path(directory.name))
         override.enable(); self.addCleanup(override.disable)
         self.user, _, _, _, template, self.encounter, _ = self.make_scope('snapshot')
+        from core.import_binding import for_mapping
         self.encounter.template_version = TemplateVersion.objects.create(
             template=template, number=2, fields=self.encounter.template_version.fields,
             document_backend={'backend': 'synthetic-resolution-boundary'},
-            review_requirements=[], created_by=self.user)
+            review_requirements=[],
+            import_manifest=for_mapping(self.encounter.template_version.import_manifest,
+                                        self.encounter.template_version.fields), created_by=self.user)
+        self.key = self.encounter.template_version.fields[0]['key']
         self.encounter.answers = {}
         self.encounter.save(update_fields=['template_version', 'answers'])
         self.client.force_login(self.user)
@@ -55,7 +59,7 @@ class EncounterSnapshotTests(SyntheticFixture, TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         job.refresh_from_db(); self.encounter.refresh_from_db()
         self.assertEqual(job.state, 'succeeded')
-        self.assertEqual(self.encounter.answers['symptoms']['text'], 'no chest pain')
+        self.assertEqual(self.encounter.answers[self.key]['text'], 'no chest pain')
         self.assertEqual(response.context['encounter'].answers, {})
         self.assertEqual(response.context['answer_rows'][0]['text'], '')
         self.assertEqual([row.state for row in response.context['jobs']], ['queued'])

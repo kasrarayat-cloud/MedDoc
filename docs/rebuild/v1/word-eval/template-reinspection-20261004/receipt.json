@@ -1,0 +1,59 @@
+{
+  "source_commit": "1f68ed8f012383a0966f58289f1a985eda92e072",
+  "source_path": "/opt/meddoc-pro/.worktrees/v1-word-template-upgrade-20261004",
+  "source_clean": true,
+  "source_hashes": {
+    "rebuild/core/import_binding.py": "a15ec50c86260b0b8b6464fc04e9a735a23db6d79638163903a5344861ec3d02",
+    "rebuild/core/models.py": "95f1a6e01e8d356ebfb473919e62b205eba0db8b1f4b170e3665d9b230ec2bb8",
+    "rebuild/core/views.py": "813af8f16749e0e611d15cc3319315bada12f7ce53625e00c6c9709713f9b627",
+    "rebuild/core/tests/test_template_reinspection.py": "7546f855f39fb650afaf76522e6b5f3ba23f5fe2a14e4017712540ddcb86b919",
+    "rebuild/templates/template_reinspection.html": "bdb580bf22119e61252787b2f8a9f57b7c01b376e69b88527d7c25b852f0b7c4",
+    "rebuild/templates/template_detail.html": "093ed55a5cfdb5c0a94756be804c39dc0bdbde2e1d4fd1a54d3556b44a50ba18",
+    "rebuild/templates/encounter_detail.html": "57f6d456c310ca277de150069451cd43224e95721c2daae1ee4de94b69022336"
+  },
+  "artifact_seal_sha256": "44ac8ad8592f6465f78ac1d5c12abe41ce1d97baba4f206a75712a006b5e8aba",
+  "controls": {
+    "core_and_existing_confirmation": {
+      "path": "after-2442427b",
+      "methods": 20,
+      "pass": 20,
+      "actual_exit": 0
+    },
+    "additional_mixed_boxes_and_cells": {
+      "path": "final-a564b315-controls",
+      "methods": 4,
+      "pass": 3,
+      "constructor_error": 1,
+      "actual_exit": 1
+    },
+    "corrected_legacy_field_positive": {
+      "path": "final-1f68ed8f-ff",
+      "methods": 1,
+      "pass": 1,
+      "actual_exit": 0
+    }
+  },
+  "originals_preserved": [
+    "before-actual.log: erroneous v2 provenance fixture rejected by0035",
+    "before-v2-actual.log: real stale confirmation400 + unsupported recheck400",
+    "after-8e926720/actual.log:6 wrong Path-as-bytes errors",
+    "after-ca5ba6f0/actual.log: unused target.slot fixture expectation withdrawn",
+    "invalid-slot-ec2e278f/actual.log: confirmed nonexistent REAL locator.slot actual302, repaired",
+    "final-a564b315-controls/actual.log: wrong FF constructor producedcheckbox, corrected separately"
+  ],
+  "database_names_checked_absent": [
+    "quillmd_qa_sol_word_upgrade_20261004_b",
+    "quillmd_qa_sol_word_upgrade_20261004_b2",
+    "quillmd_qa_sol_word_upgrade_20261004_a",
+    "quillmd_qa_sol_word_upgrade_20261004_a2",
+    "quillmd_qa_sol_word_upgrade_20261004_c",
+    "quillmd_qa_sol_word_upgrade_20261004_d",
+    "quillmd_qa_sol_word_upgrade_20261004_e",
+    "quillmd_qa_sol_word_upgrade_20261004_f"
+  ],
+  "provider_calls": 0,
+  "renderer_calls": 0,
+  "historical_download_evidence": "Actual persisted current-engine predecessor finalized/downloaded; after linked reinspection stored download readback remains byteidentical even if current fingerprint/inspector unavailable. No fabricated historicalold-fingerprint export bytes.",
+  "rollback_limit": "New legacy review currently enforced by app/form/import admission;0031 DB trigger checks onlycontractv3. Root notified; no rollback-to-unaware-image parity claim.",
+  "gate": "Finished diff requires independent root REFUTE; not integrated/installed/wholecorpus acceptance."
+}

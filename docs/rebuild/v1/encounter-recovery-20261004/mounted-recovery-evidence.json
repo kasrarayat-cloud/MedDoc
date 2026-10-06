@@ -1,0 +1,174 @@
+{
+  "format": "quillmd-explicit-note-only-recovery-evidence-v1",
+  "implementation_commit": "95daa92a69a61c63d105aa3157b417377afaec2e",
+  "test_corrective_commit": "ea728a4feca9f82ee4c970320b46b49b8f08f85a",
+  "hook_commit": "23a4e6bfefe4e9b0d74dfcc7a0ccff0cac6cf3f7",
+  "actual_affected_revision": "07079a699f5ba68473d1b3b9b6fa65cb0381ab24",
+  "source_sha256": {
+    "rebuild/core/encounter_recovery.py": "6a46203df4ed43fe34aefd914b940212fbd6aaad547a34e8a7f7a6287a21ca0c",
+    "rebuild/core/tests/test_encounter_recovery.py": "171c496181549ef4ed6ef848b4a38995dc6c149487bc05bb99a9292f5054417d",
+    "rebuild/templates/encounter_recovery.html": "489c3245b720f8b61b825e621864aed8cc34855fff4dc696ba8e474694b35634",
+    "rebuild/core/views.py": "de7ddbfaa6d96cd61e7c6013d5aaf3cba76defab47c4a09ddc7a89fe083c55a7",
+    "rebuild/quillmd/urls.py": "8b18cfea37098a2a38ffc1ff347495af676b93b03331f1a30c3e97656c5c38c5",
+    "rebuild/templates/encounter_detail.html": "2d14929857eb8c512968c60bcb543ca30478ff943737b49abd30c4e441d486c6"
+  },
+  "actual_affected_method_result": {
+    "methods": 2,
+    "passed": 2,
+    "django_seconds": 17.406,
+    "outer_seconds": 27.54319338100322,
+    "actual_exit_status": 0,
+    "parent_reaped": true,
+    "catalog_before": [],
+    "catalog_after": [],
+    "source_unchanged": true
+  },
+  "prior_four_methods": {
+    "test_retry_reopens_same_new_draft_without_overwriting_later_work": true,
+    "test_acknowledgement_revision_and_current_confirmed_linked_map_are_required": true,
+    "test_pending_unknown_and_finalized_source_are_not_duplicated": true,
+    "test_current_original_and_physical_admission_refusal_leave_old_history_intact": true
+  },
+  "prior_evidence": {
+    "six_method_run": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/encounter-recovery-856b/mounted-six-23a4-first/result.json",
+    "six_method_result_sha256": "b09b8bb604e9c37a954034c3c6ef7101ba10bca3f2587bbc521b0c0305a4673d",
+    "result": "Five actual application methods passed; role/admin method had a fixture-only class AttributeError before its admin-host assertion. Original failure retained, repaired using actual confirmed TOTP device/session plus authorized console control. Four unmodified successful methods were not rerun."
+  },
+  "current_http_controls": [
+    {
+      "sequence": "001",
+      "method": "GET",
+      "path": "/encounters/ed095091-06a9-4ac6-a843-ddc23672ff96/",
+      "status": 200,
+      "sha256": "07fa1bc66c4db275ee3a2bd2ae3b6ca14a465db206258a8e29e27ae3c9edd7ae",
+      "response_html_sha256": "26309b02efc54d98363471c72f4e53e111e44444bfc24709875ceb552ad6c20c",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "002",
+      "method": "GET",
+      "path": "/encounters/ed095091-06a9-4ac6-a843-ddc23672ff96/recover/",
+      "status": 200,
+      "sha256": "7106ebdfcbbf8e7578f04000aed52c7d9e7f9303c1577c40e84537999572aee4",
+      "response_html_sha256": "c17ba04ce17cb8d1e1ec0b24e91a57396cd473233bbc59e68d2ea5f847f3beda",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "003",
+      "method": "POST",
+      "path": "/encounters/ed095091-06a9-4ac6-a843-ddc23672ff96/recover/",
+      "status": 302,
+      "sha256": "486064a839e166366f44501ce8df8b4527a1573dc17116646d96c513856e996a",
+      "response_html_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "004",
+      "method": "GET",
+      "path": "/encounters/4eff718e-4383-44ac-a5ec-9c76d8ccc6a4/",
+      "status": 200,
+      "sha256": "b25747650f59b8114f819755f8ef3a962713692416813e1bb75e37031c2bded9",
+      "response_html_sha256": "b979f79affb86472d26e3b142ad668f87abdc15f4bdb55ef683fe281981f15e7",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "005",
+      "method": "GET",
+      "path": "/encounters/b581bcb4-4448-49d0-a5c4-e512906c4f79/recover/",
+      "status": 403,
+      "sha256": "545f91831d8ef281fdd8b1c569b07d03d0328ffa9eb56401b36c03f33bda353a",
+      "response_html_sha256": "dc10719a8376fc6c6df1566708fdfe696ebc52fd5778862804eb2b8239e7b729",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "006",
+      "method": "POST",
+      "path": "/encounters/b581bcb4-4448-49d0-a5c4-e512906c4f79/recover/",
+      "status": 403,
+      "sha256": "f47169afd2b4fde374e61cb93baddd3d4156daab84466edb49360a03b5bd3d44",
+      "response_html_sha256": "dc10719a8376fc6c6df1566708fdfe696ebc52fd5778862804eb2b8239e7b729",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "007",
+      "method": "GET",
+      "path": "/encounters/b581bcb4-4448-49d0-a5c4-e512906c4f79/recover/",
+      "status": 403,
+      "sha256": "545f91831d8ef281fdd8b1c569b07d03d0328ffa9eb56401b36c03f33bda353a",
+      "response_html_sha256": "dc10719a8376fc6c6df1566708fdfe696ebc52fd5778862804eb2b8239e7b729",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "008",
+      "method": "POST",
+      "path": "/encounters/b581bcb4-4448-49d0-a5c4-e512906c4f79/recover/",
+      "status": 403,
+      "sha256": "f47169afd2b4fde374e61cb93baddd3d4156daab84466edb49360a03b5bd3d44",
+      "response_html_sha256": "dc10719a8376fc6c6df1566708fdfe696ebc52fd5778862804eb2b8239e7b729",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "009",
+      "method": "GET",
+      "path": "/encounters/b581bcb4-4448-49d0-a5c4-e512906c4f79/recover/",
+      "status": 404,
+      "sha256": "4eadbbb70b2a5226fb383a3bf521c7f05278fc6b104561e2bfab877c67233a20",
+      "response_html_sha256": "6bbd536776e28e5b93f4f71cdf14a2c560c9010a6fc0629843e88bd4f77783e4",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "010",
+      "method": "GET",
+      "path": "/console/",
+      "status": 200,
+      "sha256": "7fc4926e2314aebda229110df1eab6269a4ba891bc56ea054a90aac8047c8469",
+      "response_html_sha256": "6a2dbaee7bb309a90aaaf675bf4b7832861b815dd43f9d3767ec1a092534c4ab",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    },
+    {
+      "sequence": "011",
+      "method": "GET",
+      "path": "/encounters/b581bcb4-4448-49d0-a5c4-e512906c4f79/recover/",
+      "status": 404,
+      "sha256": "0577d5fe1a26c774d5a1a336b622f47f677e72813b79c91bf6f8d9fb315b6a68",
+      "response_html_sha256": "6bbd536776e28e5b93f4f71cdf14a2c560c9010a6fc0629843e88bd4f77783e4",
+      "job_count": 0,
+      "reservation_count": 0,
+      "transcript_review_count": 0
+    }
+  ],
+  "actual_artifact_root": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/encounter-recovery-856b/mounted-two-07079-first",
+  "result_sha256": "583178840f8421a2a041bd185f32b1362179cb07e5eeed3f3c542602456b8687",
+  "provider_calls": 0,
+  "renderer_calls": 0,
+  "claim": "Explicit clinician/owner action creates or reopens a separate note-only draft on the current confirmed linked reinspection, preserving old work. New detail warns that answers, code acceptance and reviewed transcript context are not copied. It does not launch generation or infer human signing.",
+  "limitations": [
+    "Synthetic application QA; no native Word or human microphone acceptance.",
+    "No automatic Word correctness credit or clinical-generation guarantee from note-only recovery.",
+    "Current original/mapping/physical admission of all sixteen previously provider-qualified fixtures remains a separate transfer gate."
+  ],
+  "instrument_failures_preserved": [
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/encounter-recovery-856b/mounted-two-instrument-first.json",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/finalC-transfer-07079/N01-first.stderr.log"
+  ]
+}

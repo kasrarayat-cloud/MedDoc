@@ -1,0 +1,13 @@
+[
+  {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security",
+    "uid": 1000,
+    "mode_before": "0o775",
+    "mode_after": "0o700"
+  },
+  {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002",
+    "uid": 1000,
+    "mode_before": "0o700"
+  }
+]

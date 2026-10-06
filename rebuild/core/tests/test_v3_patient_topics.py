@@ -14,7 +14,8 @@ from core.models import Encounter
 from core.security import private_path
 from .test_v3_ordinary_notes import LIVE, run, unit_response
 from .test_v3_ordinary_input import ordinary_input_form
-from .test_word_v3_workflow import V3EncounterFixture, part_text
+from .test_word_v3_workflow import V3EncounterFixture, V3Fixture, part_text
+from .consent_coverage_fixture import assert_unreviewed_consent_refused, review_protected_consent
 
 
 def retained(name='r1-note4'):
@@ -147,7 +148,22 @@ class PatientSourceTopics(SimpleTestCase):
 
 
 @override_settings(**LIVE)
+class PatientTopicImportCoverage(V3Fixture, TestCase):
+    def test_unchanged_original_consent_requires_review_without_a_job_or_charge(self):
+        case = retained()
+        path = Path(self.directory.name) / 'retained-patient-topic.docx'
+        source = ordinary_input_form(path, [f['label'] for f in case['fields']])
+        template, version = self.uploaded(data=source)
+        assert_unreviewed_consent_refused(self, template, version, 'b/tbl[0]/tr[8]/tc[1]')
+
+
+@override_settings(**LIVE)
 class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
+    def confirm(self, template, version=None):
+        version = review_protected_consent(self, template, version or self.latest(template),
+                                           'b/tbl[0]/tr[8]/tc[1]')
+        return super().confirm(template, version)
+
     def setUp(self):
         case = retained()
         labels = [f['label'] for f in case['fields']]
@@ -170,6 +186,7 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         job.refresh_from_db(); self.assertEqual(job.state, 'succeeded', job.error)
         self.encounter.refresh_from_db()
         automatic = copy.deepcopy(self.encounter.answers)
+        self.assertFalse(automatic[self.key('Consent obtained')]['text'])
         page = self.client.get(f'/encounters/{self.encounter.pk}/')
         rows = {row['label']: row for row in page.context['answer_rows']}
         for label in case['unchanged_picks']:
@@ -203,12 +220,22 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         self.assertIn('Smoker  ☐ Yes  ☒ No', body)
         self.assertEqual(hashlib.sha256(exported).hexdigest(), self.encounter.export_sha256)
         self.assertEqual(private_path(self.template.original_path).read_bytes(), self.original)
+        from documents import word_v3
+        from lxml import etree
+        consent = self.by['Consent obtained']['locator']
+        slot = consent['part'] + '#' + consent['slot']
+        original_slots = word_v3.SlotIndex(word_v3.open_package(self.original))
+        exported_slots = word_v3.SlotIndex(word_v3.open_package(exported))
+        self.assertEqual(etree.tostring(exported_slots.by_id[slot].el),
+                         etree.tostring(original_slots.by_id[slot].el))
         if (capture := os.environ.get('QUILLMD_PATIENT_ARTIFACTS')):
             path = Path(capture); path.mkdir(parents=True, exist_ok=True)
             (path / 'synthetic-original.docx').write_bytes(self.original)
             (path / 'synthetic-final.docx').write_bytes(exported)
             (path / 'workflow.json').write_text(json.dumps({'notes': case['notes'], 'automatic_answers': automatic,
                 'manual_decisions': manual, 'final_answers': self.encounter.answers,
+                'coverage_review': self.version.corrections['coverage_review'],
+                'automatic_complete': self.version.import_manifest['coverage']['automatic_complete'],
                 'original_sha256': hashlib.sha256(self.original).hexdigest(),
                 'final_sha256': self.encounter.export_sha256}, indent=2) + '\n')
 

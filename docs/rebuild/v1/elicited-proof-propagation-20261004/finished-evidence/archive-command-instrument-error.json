@@ -1,0 +1,9 @@
+{
+  "action": "Archive evidence only",
+  "command": "python heredoc",
+  "exit": 127,
+  "error": "/bin/bash: line 1: python: command not found",
+  "files_written_before_error": 0,
+  "product_failure": false,
+  "corrective_action": "Use existing qualified Python with -B; no test/provider retry."
+}

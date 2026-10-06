@@ -1,0 +1,155 @@
+{
+  "commit": "2c11e951cc2e864fc387d77ff784ea33b21f2d14",
+  "attempt": 16,
+  "baseline_paid_export_sha256": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+  "wrong_export_sha256": "3921318552f2618302ef2fed0163d4af433b97aeabb67a599f378e043e46e129",
+  "original_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+  "runs_hidden": 2,
+  "target": {
+    "contract": "v3",
+    "extra": [
+      {
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+        "part": "word/document.xml",
+        "slot": "b/tbl[8]/tr[0]/tc[0]/p[2]"
+      }
+    ],
+    "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+    "part": "word/document.xml",
+    "slot": "b/tbl[8]/tr[0]/tc[0]/p[1]",
+    "target": {
+      "type": "paragraph"
+    }
+  },
+  "frozen_false": true,
+  "new_checker_accepted_wrong_hidden_export": true,
+  "all_read_back_pass": true,
+  "exact_saved_Plan_XML_read": true,
+  "corrections": [
+    "v3_9"
+  ],
+  "verification": {
+    "zip_members_unchanged": true,
+    "changed_parts": [
+      "word/document.xml"
+    ],
+    "supported_answers_in_their_fields": {
+      "v3_1": true,
+      "v3_4": true,
+      "v3_5": true,
+      "v3_6": true,
+      "v3_7": true,
+      "v3_8": true,
+      "v3_9": true
+    },
+    "workflow_success": true,
+    "frozen_export_verification": {
+      "zip_members_unchanged": true,
+      "changed_parts": [
+        "word/document.xml"
+      ],
+      "supported_answers_in_their_fields": {
+        "v3_1": true,
+        "v3_4": true,
+        "v3_5": true,
+        "v3_6": true,
+        "v3_7": true,
+        "v3_8": true,
+        "v3_9": false
+      },
+      "workflow_success": false
+    },
+    "visible_break_readback_corrections": {
+      "v3_9": "Exact saved visible breaks read in the physical destination."
+    }
+  },
+  "read_back": {
+    "passed": true,
+    "problems": [],
+    "fields": {
+      "v3_1": {
+        "answered": true,
+        "set_by_export": true,
+        "expected": "This is a 30-year-old female seen for headaches.",
+        "read": "This is a 30-year-old female seen for headaches."
+      },
+      "v3_2": {
+        "answered": false,
+        "set_by_export": false,
+        "expected": "",
+        "read": ""
+      },
+      "v3_3": {
+        "answered": false,
+        "set_by_export": false,
+        "expected": "",
+        "read": ""
+      },
+      "v3_4": {
+        "answered": true,
+        "set_by_export": true,
+        "expected": "She takes ibuprofen as needed.",
+        "read": "She takes ibuprofen as needed."
+      },
+      "v3_5": {
+        "answered": true,
+        "set_by_export": true,
+        "expected": "No known drug allergies.",
+        "read": "No known drug allergies."
+      },
+      "v3_6": {
+        "answered": true,
+        "set_by_export": true,
+        "expected": [
+          false,
+          true
+        ],
+        "read": [
+          false,
+          true
+        ]
+      },
+      "v3_7": {
+        "answered": true,
+        "set_by_export": true,
+        "expected": "Neurological examination is normal.",
+        "read": "Neurological examination is normal."
+      },
+      "v3_8": {
+        "answered": true,
+        "set_by_export": true,
+        "expected": "tension-type headache.",
+        "read": "tension-type headache."
+      },
+      "v3_9": {
+        "answered": true,
+        "set_by_export": true,
+        "expected": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+        "read": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks."
+      },
+      "v3_10": {
+        "answered": false,
+        "set_by_export": false,
+        "expected": [
+          false
+        ],
+        "read": [
+          false
+        ]
+      },
+      "v3_11": {
+        "answered": false,
+        "set_by_export": false
+      }
+    },
+    "outside_written_fields": {
+      "changed": [],
+      "added": [],
+      "removed": [],
+      "inseparable": []
+    }
+  },
+  "source_clean": true,
+  "network_DB_render_provider_calls": 0,
+  "native_Word": "not run; valid explicit hidden text property"
+}

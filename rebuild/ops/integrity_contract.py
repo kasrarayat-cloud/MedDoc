@@ -62,15 +62,16 @@ def assess(rows, context, declared_count):
                       and context_valid and declaration_valid}
 
 FUNCTION_SHA256 = {
+    'quillmd_import_manifest_guard': '12e845b63bcda1eea6e7beb04ccbfd43cae4a8d0be741f2be144c3781416f2a1',
     'quillmd_disposition_instruction': '0f5cb4e0ba4702422b07a889f9fd3e2f7c6b60b0c6e7e5bc2e324994e8d0e5bf',
     'quillmd_append_only': '8d5ec86a531621ac1de53c85109dfb5122f9142b1cb66dcfc377e0945d869764',
     'quillmd_batch_event_guard': 'b3ab717bf72d0b4f67ac36fb487ca491ae07b6846d78b0d216ab4b7864e7d29a',
     'quillmd_batch_guard': '46ea1e09a3598d289b5df9b114a4a4b8e74a314591a9abb6253510da78960c4f',
     'quillmd_batch_job_guard': '7c5d4fd727d326316f13c2d6b6b562fffe1144ff5cac18a016a0777d3d3608f5',
     'quillmd_batch_part_guard': '96683f9a1eec23b40f2f13b52198870c7405b1434c14daea6fb25b8a743536fb',
-    # 0031: the 0003 body plus the confirmation gate (an unconfirmed contract v3 mapping starts no document) and the
-    # hold (a document on one is never finalized).
-    'quillmd_encounter_guard': '580e426b543a237ad47fd28b427b522eae312320259793b7f3052101d33c55ae',
+    # 0038: the unchanged 0031 encounter body with its exact-version confirmation predicate also covering
+    # immutable reinspection markers, including malformed marker values. Trigger membership is unchanged.
+    'quillmd_encounter_guard': '3d174c3dcd7986a7bac9443f1e6a07a83123ad655544606ea41b409b83642d74',
     # 0032: the 0025 body plus one path, a hold or release replayed from the journal whose replay marker names this
     # exact row (its journaled custodian, or the replaying one only when that account is absent; a release only when
     # the two markers' signed entries name two custodians). Every other hold or release keeps 0025's rules.
@@ -95,9 +96,13 @@ FUNCTION_SHA256 = {
     'quillmd_redaction_guard': '06511e5c9b0d09a54fca7316aa95bcc8bef54c81a567771b9f972410b5048b73',
     # 0034: the coding ledger: frozen finalized codes, immutable suggestion identity, accepted codes never deleted.
     'quillmd_coding_guard': '28d3e14e2b8f4e21f60c4674951625e62866c242948b0ce6fcaf8ba6d8e1db71',
+    # 0036/0037: append-only clinical transcript reviews and refusal of false redaction around them.
+    'quillmd_transcript_review_guard': '4e0d9b0e69eb9f678f0d5c95bd086cd4236442a3f1da8a4edf7e531f05f6dfcd',
+    'quillmd_transcript_redaction_guard': 'f27d1b0038852f1f8e3cb207151455eeb780f0a4fc08ccb82cc91d13f75bef81',
 }
 
 GUARDS = (
+    ('core_templateversion', 'quillmd_import_manifest_guard', 'quillmd_import_manifest_guard', 7),
     ('core_auditevent', 'audit_append_only', 'quillmd_append_only', 27),
     ('core_codesuggestion', 'code_no_truncate', 'quillmd_preservation_no_truncate', 34),
     ('core_codesuggestion', 'code_preservation', 'quillmd_preserve_clinical_row', 27),
@@ -205,4 +210,7 @@ GUARDS = (
     ('core_code', 'terminology_code_append_only', 'quillmd_append_only', 27),
     ('core_code', 'terminology_code_no_truncate', 'quillmd_preservation_no_truncate', 34),
     ('core_codesuggestion', 'code_ledger', 'quillmd_coding_guard', 31),
+    ('core_transcriptreview', 'transcript_review_preservation', 'quillmd_transcript_review_guard', 31),
+    ('core_transcriptreview', 'transcript_review_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_redactiontombstone', 'redactiontombstone_transcript', 'quillmd_transcript_redaction_guard', 7),
 )

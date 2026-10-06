@@ -1,0 +1,27 @@
+{
+  "scope": "Pure isolated preparation-factory parent substitution; zero real key/campaign/database/container/provider actions. Source unchanged during measurement.",
+  "source_sha256": "1a2aec0a19664ad4bfa652d26dced1ececdf44f962811fae08960f36dc525d04",
+  "exit_code": 0,
+  "wall_seconds": 0.044,
+  "body_seconds": 0.023501,
+  "artifacts": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/prepare_demo_factory-original-1a2aec0a.py",
+      "sha256": "1a2aec0a19664ad4bfa652d26dced1ececdf44f962811fae08960f36dc525d04",
+      "bytes": 7711,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_prepare_demo_factory_parent.py",
+      "sha256": "dfba2a89e37f839b7f4ac349c8e8559bc7ae961971d2f58f85c0b4a8b76f7ee7",
+      "bytes": 4309,
+      "mode": "0600"
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-prepare-demo-factory-parent.json",
+      "sha256": "54476e92f6979d02c9c0e86e59158c3ef70a850bb982445ff09d150fbb905138",
+      "bytes": 852,
+      "mode": "0600"
+    }
+  ]
+}

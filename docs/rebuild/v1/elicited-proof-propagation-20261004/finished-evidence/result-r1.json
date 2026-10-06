@@ -1,0 +1,20 @@
+{
+  "base": "6346019377ed1a2e65763da7040c6f85da13f72c",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-proof-63460193",
+  "child_pid": 2925800,
+  "exit_code": 0,
+  "timed_out": false,
+  "reaped": true,
+  "source_before": {
+    "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+    "rebuild/core/v3_field_relations.py": "60e25bd9afdfc2d335bb09a4cf53279a26f8d0b711d3cd7982883691c890db8b",
+    "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0"
+  },
+  "source_after": {
+    "rebuild/core/generation.py": "167d2bdb3c9bb1c7f0722a027b2830530518be82c5ea38b1ae288889afd88477",
+    "rebuild/core/v3_field_relations.py": "60e25bd9afdfc2d335bb09a4cf53279a26f8d0b711d3cd7982883691c890db8b",
+    "rebuild/core/tests/test_elicited_proof_transport.py": "4b04fd2371e3ddcf73343cd442c084e041fe4f4380bf34fecc1832490ab542e0"
+  },
+  "source_unchanged": true,
+  "elapsed_seconds": 15.978907416996663
+}

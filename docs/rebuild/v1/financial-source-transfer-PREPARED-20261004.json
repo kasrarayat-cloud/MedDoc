@@ -1,0 +1,61 @@
+{
+  "format": "quillmd-paid-financial-source-transfer-v1",
+  "status": "prepared",
+  "witness_sha256": "c10dba6840c90ccbacec04c4d4a4393d70d6cf9db0f88ab4d505adce3ae6e34c",
+  "new_source": null,
+  "new_revision": null,
+  "new_source_tree": null,
+  "new_files": null,
+  "old_sources": {
+    "04fb7603282dc47eda98058c6d790f407951acba": null,
+    "5bf3024508c65d99d2e8573fd87e920a754a65e1": null
+  },
+  "old_files": {
+    "04fb7603282dc47eda98058c6d790f407951acba": null,
+    "5bf3024508c65d99d2e8573fd87e920a754a65e1": null
+  },
+  "groups": [
+    {
+      "campaign": "v1-standing-api-testing-20261004-3",
+      "attempts": [
+        "002",
+        "003"
+      ],
+      "paid_revision": "04fb7603282dc47eda98058c6d790f407951acba",
+      "kind": "ordinary_batch_child",
+      "manifests": {
+        "002": "eec0ad735501b1689c195cd2f8233fa0624a3fefe65e8fe40821a13dc6d9fb32",
+        "003": "27af2b576272a21b1e8b14b686bfb934969e2732efbd62c5932b63e914289e70"
+      }
+    },
+    {
+      "campaign": "v1-standing-api-testing-20261004-4",
+      "attempts": [
+        "002"
+      ],
+      "paid_revision": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+      "kind": "ordinary_single",
+      "manifests": {
+        "002": "31a95c1689d574a1d249f6fc81fe47cbeca22542e668c897986ab08da12d0afc"
+      }
+    }
+  ],
+  "reviewed_voice": {
+    "status": "PENDING separate reviewed-context wire proof",
+    "campaign": "v1-standing-api-testing-20261004-4",
+    "attempts": [
+      "017",
+      "019"
+    ],
+    "paid_revision": "5bf3024508c65d99d2e8573fd87e920a754a65e1",
+    "context_authorization_reconstructed": false,
+    "live_replay_qualified": false
+  },
+  "execution": "NOT RUN",
+  "new_provider_requests": 0,
+  "database_queries": 0,
+  "fingerprints_changed": false,
+  "clinical_qualification": false,
+  "invoice_reconciled": false,
+  "binding_requirement": "Integration owner prospectively seals OLD and NEW clean worktree identities and complete inventories before the normal bounded offline witness runner."
+}

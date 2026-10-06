@@ -5,6 +5,10 @@ from core import recovery
 from core import preview_access
 from core import mapping_views
 from core import retention_views
+from core import soap_views
+from core import encounter_recovery
+urlpatterns_recovery = [path('encounters/<uuid:pk>/recover/', encounter_recovery.page, name='encounter_recovery')]
+urlpatterns_soap = [path('templates/soap/', soap_views.start, name='soap_start')]
 urlpatterns_retention=[
     path('console/retention/',retention_views.page,name='retention_holds'),
     path('console/retention/holds/',retention_views.create,name='retention_hold_create'),
@@ -12,6 +16,8 @@ urlpatterns_retention=[
 ]
 urlpatterns=[path('preview/sign-in/',preview_access.sign_in,name='preview_sign_in'),path('preview/sign-out/',preview_access.sign_out,name='preview_sign_out')]
 urlpatterns+=urlpatterns_retention
+urlpatterns+=urlpatterns_soap
+urlpatterns+=urlpatterns_recovery
 urlpatterns += [path('templates/<uuid:pk>/assistance/',mapping_views.review,name='mapping_assistance')]
 urlpatterns+=[path('recovery/',recovery.recovery_request,name='recovery_request'),path('recovery/confirm/<uidb64>/<token>/',recovery.RecoveryConfirmView.as_view(),name='recovery_confirm'),path('recovery/complete/',recovery.recovery_complete,name='recovery_complete'),path('verification/resend/',recovery.verification_resend,name='verification_resend')]
 urlpatterns+=[path('health/',v.health,name='health'),path('health/ready/',v.health_ready,name='health_ready'),path('login/',v.login_view,name='login'),path('logout/',v.logout_view,name='logout'),path('register/',v.register,name='register'),path('mfa/',v.mfa_setup,name='mfa_setup'),path('verify/<str:raw>/',v.verify,name='verify'),path('invite/<str:raw>/',v.invite_accept,name='invite_accept'),path('billing/webhook/',v.webhook,name='webhook')]

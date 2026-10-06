@@ -1,0 +1,141 @@
+{
+  "runtime_archive": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/browser-authority/frozen-evidence",
+  "files": {
+    "20261003T230142Z/failure.png": {
+      "bytes": 244657,
+      "sha256": "bc409e912e8a153c7d53c5a0796397f7639f405204a6e78d3b77cd2b1ca4363f"
+    },
+    "20261003T230142Z/mapping-review.png": {
+      "bytes": 156473,
+      "sha256": "ac5e1e220e52b46034b8f75d494031725c8ff4036a49a58236cf03d673ec9926"
+    },
+    "20261003T230142Z/trace.zip": {
+      "bytes": 4963999,
+      "sha256": "ec8362c71ef91736286480bd8276f5c4123a92e1d524a3cb41c0cd944e358ccb"
+    },
+    "20261003T230239Z/export.docx": {
+      "bytes": 36963,
+      "sha256": "3dc921e2d8e8fe8d347d001956b6b43ecd47889fa495ee26c020d9811e387a0b"
+    },
+    "20261003T230239Z/finalized.png": {
+      "bytes": 213386,
+      "sha256": "4cb8525b5d4472b5e9682f0c7c4433be9243ce2876eb7e1d9bc99548aaebd136"
+    },
+    "20261003T230239Z/original.docx": {
+      "bytes": 36903,
+      "sha256": "e49d937d435a687aea04afc7759627e4de7aa78cba312afecde1c8896f928019"
+    },
+    "20261003T230239Z/retained-eight-row-mapping-review.png": {
+      "bytes": 155507,
+      "sha256": "b1e78462f3a05361c05b309af2c0e1c462500088dad3e5926aaa7cdf06e50898"
+    },
+    "20261003T230239Z/retained-eight-row-refusal.png": {
+      "bytes": 258067,
+      "sha256": "19c7d8ad468fa2dbc539c55807167fb2808a6d794feeaa2933eaeadfbde83811"
+    },
+    "20261003T230239Z/review-desktop.png": {
+      "bytes": 526994,
+      "sha256": "9b57988b6e531f16b2e1d09cd30603a7229bfc3de13b2fdb73d2b6c05c613dca"
+    },
+    "20261003T230239Z/review-initials.png": {
+      "bytes": 35916,
+      "sha256": "4d11eb1425c1eea78ce5887842943711aeb9a933f518ca02d63600189e8e3925"
+    },
+    "20261003T230239Z/review-patient-signature.png": {
+      "bytes": 38063,
+      "sha256": "50221bb2b1ccb4ed67e5c1603991a2183934efa12db019e46a2765ab7225e897"
+    },
+    "20261003T230239Z/separate-seven-row-control-mapping-review.png": {
+      "bytes": 144922,
+      "sha256": "f58f2d37e5dfb5a0df0c40a51f08ee7dbb1d621c1bf88e8d122a2a9aab272f29"
+    },
+    "20261003T230239Z/trace.zip": {
+      "bytes": 7935534,
+      "sha256": "591202e4e8118a7092715a88837e5130673551332fbdf3833e517c350f24950e"
+    },
+    "browser-bootstrap-exit1.log": {
+      "bytes": 2036,
+      "sha256": "9bc0a2ff4d74d0977f0580f1d5e0aadc011bc0a05696a1f8849f6b1eb8c26df4"
+    },
+    "browser-browser-cache-exit1.log": {
+      "bytes": 5017,
+      "sha256": "5e1c0e27f03868c24d30ae7ae16b6684c01a96b913ecac08f4749673de6651d8"
+    },
+    "browser-browser-cache-result.json": {
+      "bytes": 947,
+      "sha256": "108085d01309f512da7c932ac7758a7297098d52481fd5a578c9fe423c7e6047"
+    },
+    "browser-gate.log": {
+      "bytes": 4108,
+      "sha256": "fd012ad91073ba810d1ca433ddaa0fcf29d589c852485f31f4171c0399d737d1"
+    },
+    "browser-seed-directory-exit1.log": {
+      "bytes": 5528,
+      "sha256": "0626c110f826685f99932e436e3e9bea0f9647824e12fbac16cf3f9f19d17ed9"
+    },
+    "dual-case-browser-persisted.json": {
+      "bytes": 6567,
+      "sha256": "30b11c549f16f78645651edb2e98f3830c94ad4b4f14553190e7e26dd8082059"
+    },
+    "dual-case-browser-result.json": {
+      "bytes": 12762,
+      "sha256": "b56bf5cf88b899443054427f4fa6eaa53b6fb9406b759a5b031882a3f79bc56b"
+    },
+    "dual-case-browser.log": {
+      "bytes": 1197,
+      "sha256": "118085e9fe0f55563f6c3f8c6ee67b924762933f325b8b89c878b22698770885"
+    },
+    "http-gate.log": {
+      "bytes": 4417,
+      "sha256": "ec3422fba4e37b8965c44427440d6a1bb052cf65161a97e63787212906250e85"
+    },
+    "inspection.json": {
+      "bytes": 3155,
+      "sha256": "13974d9ef67c8ccdd6b7939ac961b46f3c8ea25b2aa32fbbef0486a472ecbfa5"
+    },
+    "original-browser-persisted-refusal.json": {
+      "bytes": 2681,
+      "sha256": "2398fac2b08514072f1e9749b9afd6c459f918cce10a1c35140047de2ce75f25"
+    },
+    "original-browser-reproduction.json": {
+      "bytes": 3789,
+      "sha256": "8df4574c0f91f254db2d42418e557912241d60e5cdd41e8122c948ae7e97018a"
+    },
+    "original-browser-reproduction.log": {
+      "bytes": 530,
+      "sha256": "793895a8f179f29bb76a8ee2bec68d7479ef50e962e33aae1d3b20b637d6a724"
+    },
+    "original-reproduction-word-authority-form.docx": {
+      "bytes": 36917,
+      "sha256": "ddb60ee161d502799940203481652b494e141b830978b3553d6c62fd9458b80a"
+    },
+    "original-reproduction-word-authority-input.json": {
+      "bytes": 1035,
+      "sha256": "d1a1349c974be46e3cef0a0c63e8e52e1e1ff65d4e713714a6fd54e6b47897f6"
+    },
+    "prepare-word-authority-browser.py": {
+      "bytes": 4181,
+      "sha256": "cda4f4023ebdb1ce01c561f2f51472de5d74b2ad04bfef7bc2bfe5caf906faaf"
+    },
+    "run_browser_probe.py": {
+      "bytes": 7185,
+      "sha256": "390ad03b1d41782e98bad1b502a328ea900cd59cb5c4445bb95b063393bbd5ec"
+    },
+    "test_word_authority_fixture.py": {
+      "bytes": 9771,
+      "sha256": "25aa97fcc34d3af10afa3c555d787bf2141315fad5e58ac777735a134f52900b"
+    },
+    "usable-control-inspection.json": {
+      "bytes": 2356,
+      "sha256": "39dc01479ff5f3d991951d1c624d20a7f8835737bfb0bc6d46312f86f92a15b6"
+    },
+    "word-authority-browser-original-repro.mjs": {
+      "bytes": 25716,
+      "sha256": "fdb08bf330f41dda9f03be50e43af2b57ceae17fac32df231fd2012d963b282c"
+    },
+    "word-authority-browser.mjs": {
+      "bytes": 28481,
+      "sha256": "939a08663b45e0dd860f4fab7572771b3916acdffb17888d19fa21c129255efd"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "label": "Current symptoms",
+    "notes": "Reports left knee pain.",
+    "pick": "Reports left knee pain.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current symptoms",
+    "notes": "Reports left knee pain. Only her father has right knee pain.",
+    "pick": "Reports left knee pain.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Takes metformin 500 mg daily. No longer a daily medication.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "supported",
+    "text": "Takes warfarin 5 mg daily.",
+    "governed_status": "supported",
+    "governed_text": "Takes warfarin 5 mg daily.",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Her father is the sole warfarin user.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  },
+  {
+    "label": "Current medications",
+    "notes": "Takes warfarin 5 mg daily. Her father is the only patient on warfarin.",
+    "pick": "Takes warfarin 5 mg daily.",
+    "context": true,
+    "status": "conflict",
+    "text": "",
+    "governed_status": "conflict",
+    "governed_text": "",
+    "review_required": []
+  }
+]

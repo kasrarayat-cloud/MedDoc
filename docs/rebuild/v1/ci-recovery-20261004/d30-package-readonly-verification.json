@@ -1,0 +1,130 @@
+{
+  "actual_elapsed_seconds": 0.225132013,
+  "actual_post_answer_and_review_requests": 59,
+  "actual_post_blank_requests": 58,
+  "actual_readonly_exit": 0,
+  "authentic_download_equals_archived_final": true,
+  "automatic_mapping": {
+    "dup_bad": 0,
+    "extras": 0,
+    "missed": 1,
+    "n": 62,
+    "ok": 61
+  },
+  "candidate": "7ccdcb6e75241685e90519774b909ecbd5b1e827",
+  "changed_body_paragraphs": [
+    77,
+    79
+  ],
+  "changed_compressed_payloads": 31,
+  "chosen_options": [
+    "own flat/house",
+    "with partner"
+  ],
+  "compressed_storage_same": false,
+  "eight_options_retained": true,
+  "final_export_sha256": "fdf4dbe9327f7d2cab8dafc4981d76d9701a69ab423e8ae9d774fe6a76bd498c",
+  "first_answer_statuses": {
+    "conflict": 57,
+    "missing": 5
+  },
+  "format": "quillmd-d30-readonly-content-preservation-receipt-v1",
+  "immutable_original_equals_initial_import": true,
+  "ledger_sha256": "5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7",
+  "manual_mapping_recovery": {
+    "dup_bad": 0,
+    "extras": 0,
+    "missed": 0,
+    "n": 62,
+    "ok": 62
+  },
+  "native_word_or_new_renderer_inspection": false,
+  "neighbor_A21_mapping_and_subtree_same": true,
+  "new_database_queries": 0,
+  "new_provider_calls": 0,
+  "new_service_actions": 0,
+  "original_paragraphs": 465,
+  "original_probe_failures": [
+    {
+      "exit_code": 1,
+      "path": "original-instrumentation-failure.json",
+      "sha256": "bcb8dcbd3da31da1fbcffdc3513217898943c5f918eb3b22b406db64efc3543b"
+    },
+    {
+      "exit_code": 1,
+      "path": "replay-02/original-instrumentation-failure.json",
+      "sha256": "958acd9eea2e1d3cf449ed489547d3fe5bb969594c7efa1c9e01f080926cbce0"
+    }
+  ],
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "original_tables": 40,
+  "original_xml_tree_retained_with_two_new_marker_runs": true,
+  "owned_runtime_evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/d30-package-adjudication-7ccd-20261004",
+  "provider_usefulness_qualified": false,
+  "pure_script_sha256": "532a57ed4140f7635e6a51ae8e3e8d575ad614bbf4e7909f0e3d7e1e5b299ee7",
+  "result_sha256": "cbe3484d5f9eadb0ef1e8ad2612fcfbe7d4cd37614c8e727f9d90ae3cdce9814",
+  "reviewed_statuses": {
+    "edited": 1,
+    "left_blank": 58,
+    "missing": 3
+  },
+  "scope": "Actual archived manual export content and original structure only; not automatic, useful generation, whole ZIP storage identity or final60/20 qualification.",
+  "source_files_checked": 558,
+  "source_route_packet_receipts": {
+    "actual-download.json": "75cedf819fcf6078effbeaccb1bc3a1eea3ab0498f2c54c25785f5b65787eca8",
+    "database-after.json": "07dd0c242394739910e374e9e913e71c2b6cb31bf576f167088c0b262e197e8c",
+    "execution-manifest.json": "e572568ea194b924c56e76ce83d1ee4d75b31255ccdb6bb8d0c08b4ba476e9e8",
+    "final-export-before-readback.json": "4fece9a2f811118d1e63fea78101b9a9ee1f1306c9862442291e4511551d3d3c",
+    "initial-import.json": "04f8d00a0a62e75d60db5513f40cbac873a83542ed65f62568a2a9338b31132d",
+    "manual-mapping.json": "5bbd4e83a4b872e953387746efc84b2bdd35b2be92a8ecbbf71aae3ca4354e62",
+    "process-teardown.json": "d6011f6788be4f6db6c2c14d1999b219fd543f7f344d736e1aac7309c86bb533",
+    "result.json": "f208353bf30b8a6f2231f1df2acf60dd0f8e3f6c0f4c1b621bd2fa07fd079507",
+    "reviewed-export.json": "6e36b6cdea450f3b5b28222e048d704ed94a85413625165d1b6c0205e35d5bdd",
+    "source-after.json": "294161f8eb54e4677ddc77c9d2ee2a791e6225cb7d6959213f0d481f63a6f63b",
+    "source-before.json": "294161f8eb54e4677ddc77c9d2ee2a791e6225cb7d6959213f0d481f63a6f63b"
+  },
+  "source_snapshot_sha256": "294161f8eb54e4677ddc77c9d2ee2a791e6225cb7d6959213f0d481f63a6f63b",
+  "three_missing_unreviewed_signing_locations": [
+    "v3_36",
+    "v3_40",
+    "v3_55"
+  ],
+  "untargeted_raw_part_bytes_equal": true,
+  "untargeted_raw_part_count": 32,
+  "whole_untouched_original_paragraphs": 463,
+  "zip_info_changed_entries": 33,
+  "zip_info_changed_fields": {
+    "create_system": {
+      "entry_count": 1,
+      "part": "word/document.xml",
+      "values": [
+        0,
+        3
+      ]
+    },
+    "create_version": {
+      "entry_count": 1,
+      "part": "word/document.xml",
+      "values": [
+        45,
+        20
+      ]
+    },
+    "external_attr": {
+      "entry_count": 33,
+      "values": [
+        0,
+        25165824
+      ]
+    },
+    "flag_bits": {
+      "entry_count": 31,
+      "values": [
+        6,
+        0
+      ]
+    }
+  },
+  "zip_info_metadata_same": false,
+  "zip_storage_detail_sha256": "8a0db0b0371c0418f00f8ff2a5d87a3a204b6591765d25cc020086d00b08ef44"
+}

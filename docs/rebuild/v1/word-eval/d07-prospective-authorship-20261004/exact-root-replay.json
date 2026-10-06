@@ -1,0 +1,51 @@
+[
+  {
+    "control": 0,
+    "original_sha256": "b91e2664e7b07c88ea879cbf4d711d8a58b76ab321ff846f558d8adbf7139c63",
+    "writers": 0,
+    "no_answer_identity": true,
+    "refused": true,
+    "code": "protected_signing_area",
+    "error": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+  },
+  {
+    "control": 1,
+    "original_sha256": "1876c47d459236e971a5a74323da4775c8b4a642caeedbc9c6051d85c91cb37f",
+    "writers": 0,
+    "no_answer_identity": true,
+    "refused": true,
+    "code": "protected_signing_area",
+    "error": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+  },
+  {
+    "control": 2,
+    "original_sha256": "90e37be1302302f9d3a3984d74b14403487157284f687b9f6da176bfa16f38e2",
+    "writers": 0,
+    "no_answer_identity": true,
+    "refused": true,
+    "code": "protected_signing_area",
+    "error": "This signing area is protected and remains unchanged. Review the original and complete it by hand."
+  },
+  {
+    "control": 3,
+    "original_sha256": "6e857c523fcb50aee2dd3f145deae0b85fe0a391d7628bbf0ac33684a16832ec",
+    "writers": 0,
+    "no_answer_identity": true
+  },
+  {
+    "control": 4,
+    "original_sha256": "132203f96e2151bfc3d3917454a761f25e7beb2d47e09a6d95a4372c0724d138",
+    "writers": 1,
+    "no_answer_identity": true,
+    "refused": false,
+    "export_sha256": "3e4ff31a6feac9e59b6927e86a64d19b07720be5810dd4b2604577335e5bbf36"
+  },
+  {
+    "control": 5,
+    "original_sha256": "ec3431a8d6af6e994ffb959eeaecfef3f5c0d8e5726af070b926e45e54b4eb12",
+    "writers": 1,
+    "no_answer_identity": true,
+    "refused": false,
+    "export_sha256": "0a58ebb416811539c63eb50f9a06b3fd4bcfe67876ca325126d3a22bee206b6b"
+  }
+]

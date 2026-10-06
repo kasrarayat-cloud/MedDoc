@@ -1,0 +1,12 @@
+{
+  "scope": "Production SOAP/library templates rendered with synthetic context; HTTP persisted controls tested separately",
+  "provider_requests": 0,
+  "complete": true,
+  "checks": [
+    "At 1280px the library action opens the labelled department select, keyboard Tab reaches the submit control and both surfaces fit without horizontal overflow.",
+    "At 390px the library action opens the labelled department select, keyboard Tab reaches the submit control and both surfaces fit without horizontal overflow.",
+    "No-membership state gives an actionable access explanation and no submit control."
+  ],
+  "started_at": "2026-10-03T22:38:20.137Z",
+  "finished_at": "2026-10-03T22:38:22.132Z"
+}

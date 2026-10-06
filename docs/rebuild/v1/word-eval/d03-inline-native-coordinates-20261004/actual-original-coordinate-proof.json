@@ -1,0 +1,168 @@
+{
+  "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "original_bytes_unchanged": true,
+  "initial_mapping_sha256": "56a79afce394892ca7e1e6fb2b8191e4145c181346a09d91cc872dfb07850236",
+  "word_source_sha256": "ec0923abe0b9ab03e502d114312b9945c857245741a7cb11f683467609e89c8a",
+  "old_original_aware_overlaps": [],
+  "old_empty_index_overlaps": [
+    {
+      "field": "v3_32",
+      "label": "Food/beverage",
+      "destination": [
+        "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[0]",
+        null,
+        null
+      ],
+      "excluded_issue": {
+        "id": "6c4233223a54553596fd9b9557497d62c2150b7156dd6660d1d5404dd287af6d",
+        "end": 114,
+        "code": "unmapped_checkbox_write_in",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]",
+        "start": 88,
+        "detail": "A separate checkbox write-in has no mapped writer at word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4] offsets 88-114. It remains unchanged; review this exact exclusion."
+      }
+    },
+    {
+      "field": "v3_32",
+      "label": "Food/beverage",
+      "destination": [
+        "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[1]",
+        null,
+        null
+      ],
+      "excluded_issue": {
+        "id": "6c4233223a54553596fd9b9557497d62c2150b7156dd6660d1d5404dd287af6d",
+        "end": 114,
+        "code": "unmapped_checkbox_write_in",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[17]/tc[0]/p[4]",
+        "start": 88,
+        "detail": "A separate checkbox write-in has no mapped writer at word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4] offsets 88-114. It remains unchanged; review this exact exclusion."
+      }
+    }
+  ],
+  "new_empty_index_overlaps": [],
+  "changed_fields": {
+    "v3_32": {
+      "old": [
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          16,
+          17
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          44,
+          45
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          59,
+          60
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          73,
+          74
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          87,
+          88
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          96,
+          97
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          31,
+          32
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          53,
+          54
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[0]",
+          null,
+          null
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]/sdt[1]",
+          null,
+          null
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          80,
+          81
+        ]
+      ],
+      "new": [
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          16,
+          17
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          44,
+          45
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          59,
+          60
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          73,
+          74
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          87,
+          88
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[3]",
+          96,
+          97
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          31,
+          32
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          53,
+          54
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          61,
+          62
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          68,
+          69
+        ],
+        [
+          "word/document.xml#b/tbl[0]/tr[17]/tc[0]/p[4]",
+          80,
+          81
+        ]
+      ]
+    }
+  },
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "automatic_first_pass_mapping_and_denominators_unchanged": true
+}

@@ -204,6 +204,7 @@
         "clinical_records_other_status",
         "final_export_references",
         "jobs",
+        "reviewed_transcripts",
         "generation_batches",
         "generation_parts",
         "generation_attempt_events",
@@ -2061,6 +2062,50 @@
           ]
         },
         "jobs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "reviewed_transcripts": {
           "oneOf": [
             {
               "type": "object",

@@ -1,0 +1,637 @@
+{
+  "controls": 52,
+  "wrong": 0,
+  "source_unchanged": true,
+  "source_hashes": {
+    "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/word_v3.py": "b186946772679acd1bbcacecba0719497c0d79d574aea5f09022f454f1ff0a1b",
+    "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z/rebuild/documents/test_source_coverage.py": "d394027e523d4c9ff2c5825a5b1b83a43c7ecb5973f29ee8bf88d40bf1351e83"
+  },
+  "rows": [
+    {
+      "original_sha256": "7816abb69eb1540046544081b49d16091a755bedcd9e821f2a6b50ac7a39ec43",
+      "export_sha256": "f1685e645e8ab199ecd9a8944594852fddcc8233e6e7af10463662001658961a",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "0",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "7816abb69eb1540046544081b49d16091a755bedcd9e821f2a6b50ac7a39ec43",
+      "export_sha256": "f1685e645e8ab199ecd9a8944594852fddcc8233e6e7af10463662001658961a",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "0",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "6403e4ed07adcc0048261eb7cd813c8d3282bb7600f5742ca0a7e90121de4564",
+      "export_sha256": "be561718686bb91b19662f6172bf0d7346595d5fd7f3c3f119148fb271f11e2e",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "1",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "6403e4ed07adcc0048261eb7cd813c8d3282bb7600f5742ca0a7e90121de4564",
+      "export_sha256": "be561718686bb91b19662f6172bf0d7346595d5fd7f3c3f119148fb271f11e2e",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "1",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "8287e3b57b96ffa327a421252e58190c89d71b16eb0a367d8f8aa18160ab524a",
+      "export_sha256": "2b8e4a890d495f5a48504145bf5a3251c90b54afe2163ce7eff99063195d7fa1",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "2",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "8287e3b57b96ffa327a421252e58190c89d71b16eb0a367d8f8aa18160ab524a",
+      "export_sha256": "2b8e4a890d495f5a48504145bf5a3251c90b54afe2163ce7eff99063195d7fa1",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "2",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "179e27cb38a6679700e5297b5143fd1f94f5c109ace591630429b3dbf82c89e2",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "3",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "179e27cb38a6679700e5297b5143fd1f94f5c109ace591630429b3dbf82c89e2",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "3",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "434de6a4df8fcf4a7c42918fcae2836dcf64cb8af948f633f5bc511d65871f8d",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "4",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "434de6a4df8fcf4a7c42918fcae2836dcf64cb8af948f633f5bc511d65871f8d",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "4",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "7ec6ea1c95d4d3109ac9255d9eeba9f05832d6bafa806c74df2c28d9b112d4ff",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "5",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "7ec6ea1c95d4d3109ac9255d9eeba9f05832d6bafa806c74df2c28d9b112d4ff",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "5",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "4b0dd7a22d72051f6136059b2fad47574b47711f6ef0774066fc64e34ce7cf97",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "6",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "4b0dd7a22d72051f6136059b2fad47574b47711f6ef0774066fc64e34ce7cf97",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "6",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "3b8d1c6962bea4e9d9e0b13828df14fb2b0e05ddc315753d8db9f73c1a150fc1",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "7",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "3b8d1c6962bea4e9d9e0b13828df14fb2b0e05ddc315753d8db9f73c1a150fc1",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "7",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "491dacc1bba2913e76956256e78a00dcb7becb15b545ec473b6b24a307211637",
+      "export_sha256": "624e664a8ae985a1c8103dcb35118d883cbee09c17429c27619fac8422e3a129",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "8",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "491dacc1bba2913e76956256e78a00dcb7becb15b545ec473b6b24a307211637",
+      "export_sha256": "624e664a8ae985a1c8103dcb35118d883cbee09c17429c27619fac8422e3a129",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "8",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "c1944a14f07378c8d93a58101e47375db2c5b46be822064d15b0dbb61d06cdd8",
+      "export_sha256": "0eb25b927a81ad0a8168b6d5425ae7a448db2f0736dcb686f491a589482bd762",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "9",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "c1944a14f07378c8d93a58101e47375db2c5b46be822064d15b0dbb61d06cdd8",
+      "export_sha256": "0eb25b927a81ad0a8168b6d5425ae7a448db2f0736dcb686f491a589482bd762",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "9",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "77727aa02fc7bce67b26c66ccd29711f8ab75bb2a404ef065604defda0166f38",
+      "export_sha256": "f4a1526f9a14c5d369bd2f8dabf4109d7ff84a7c0a93d8c68574eb08b729a898",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "10",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "77727aa02fc7bce67b26c66ccd29711f8ab75bb2a404ef065604defda0166f38",
+      "export_sha256": "f4a1526f9a14c5d369bd2f8dabf4109d7ff84a7c0a93d8c68574eb08b729a898",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "10",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "5ae562d5287aac851904824fafa5c347cc26ee57836f48c85ccbf480d36df8d1",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "11",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "5ae562d5287aac851904824fafa5c347cc26ee57836f48c85ccbf480d36df8d1",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "11",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "b91fe1f96d695609635ced0fc1e3745dc47dc87835f19afd81e6f41db0dc8229",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "12",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "b91fe1f96d695609635ced0fc1e3745dc47dc87835f19afd81e6f41db0dc8229",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "12",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "ffd0af0cedb76406a7896e60e552ff8d239949acbfd4188dba18dac17788afc4",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "13",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "ffd0af0cedb76406a7896e60e552ff8d239949acbfd4188dba18dac17788afc4",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "13",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "00265c2c6ecf5d3bdfb32d7b284985184abafc17ce786ab129c0da379cbaa2cf",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "14",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "00265c2c6ecf5d3bdfb32d7b284985184abafc17ce786ab129c0da379cbaa2cf",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "14",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "f6b752f6cbf4f10b32e172d55bc3ad9445481cfc849a9f34dcb71ab1f3ae3936",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "15",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "f6b752f6cbf4f10b32e172d55bc3ad9445481cfc849a9f34dcb71ab1f3ae3936",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "15",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "4eb94d1e8714f3e398b3ee332dbf2559642e57bd7b3c8b28d5168f6331689ab3",
+      "export_sha256": "cda4882b637ae5ed8c785757847cfe2bb3173f8db7132e86e15cb165dfd80c77",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "16",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "4eb94d1e8714f3e398b3ee332dbf2559642e57bd7b3c8b28d5168f6331689ab3",
+      "export_sha256": "cda4882b637ae5ed8c785757847cfe2bb3173f8db7132e86e15cb165dfd80c77",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "16",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "244706c1c074ed32d2dff8c49609cd3859aa3ffc87a2618e3fc75470e5942cf7",
+      "export_sha256": "7b50d13aee6bed0e5e0d482ba627086591131bdbfb0c4799eddc103731dcd6cd",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "17",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "244706c1c074ed32d2dff8c49609cd3859aa3ffc87a2618e3fc75470e5942cf7",
+      "export_sha256": "7b50d13aee6bed0e5e0d482ba627086591131bdbfb0c4799eddc103731dcd6cd",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "17",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "0f96e4fa105ba4e4a5054131c18c82d02d9dd600d4040dfb34d87f90813f93a0",
+      "export_sha256": "e883eca28bde355d9860e3f3beebf100da1a13e9a9734b278a901178426adb51",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "18",
+      "mode": "historical",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "0f96e4fa105ba4e4a5054131c18c82d02d9dd600d4040dfb34d87f90813f93a0",
+      "export_sha256": "e883eca28bde355d9860e3f3beebf100da1a13e9a9734b278a901178426adb51",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "18",
+      "mode": "fresh",
+      "human": false,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "8d4fddae4bdcb1b1e16a2e9ee771d39a4bd20ef454d5997fb9999a4b8a150079",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "19",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "8d4fddae4bdcb1b1e16a2e9ee771d39a4bd20ef454d5997fb9999a4b8a150079",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "19",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "1499171dcaf5fa2dfdf693ba29ca5319b3a2395fbb8b630613d1862be88c20ee",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "20",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "1499171dcaf5fa2dfdf693ba29ca5319b3a2395fbb8b630613d1862be88c20ee",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "20",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "5bcf6b06936117ae24268d670e37e7451aa85b126d09d10b4286baa243326734",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "21",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "5bcf6b06936117ae24268d670e37e7451aa85b126d09d10b4286baa243326734",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "21",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "1e8d6ed2b00e3c19d8ece72f1186768693f277d69c6a559584aab01ec05496df",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "22",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "1e8d6ed2b00e3c19d8ece72f1186768693f277d69c6a559584aab01ec05496df",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "22",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "ab3d2aa23ccaf35379e9e1e45958424d40ef9ef15fd562c56cdc4605783249ad",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "23",
+      "mode": "historical",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "ab3d2aa23ccaf35379e9e1e45958424d40ef9ef15fd562c56cdc4605783249ad",
+      "refused": true,
+      "code": "protected_signing_area",
+      "message": "This signing area is protected and remains unchanged. Review the original and complete it by hand.",
+      "id": "23",
+      "mode": "fresh",
+      "human": true,
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "96f302b6377a8901ad825de96a1a1754b8d65bb55d7956ee894cd2be77a94e3c",
+      "export_sha256": "5140baa76cfff8b6c4d96dac07be525c4d530a2889a9b79a61c997fe0b388ffb",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "nested-glyph",
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "96f302b6377a8901ad825de96a1a1754b8d65bb55d7956ee894cd2be77a94e3c",
+      "refused": true,
+      "code": "invalid_answer",
+      "message": "The answer is not one of the printed options.",
+      "id": "nested-glyph-short-refusal",
+      "correct": true
+    },
+    {
+      "original_sha256": "5764493e1f76a628e13d64f40d6b904ca58c2349d311f84f8c493f433d12fee0",
+      "export_sha256": "849f4b17144c324b3e0f869cc7eab211925813ddd006bdf656f14d27e94e2311",
+      "refused": false,
+      "states": [
+        false,
+        true
+      ],
+      "id": "nested-ff",
+      "correct": true,
+      "empty_exact": true
+    },
+    {
+      "original_sha256": "5764493e1f76a628e13d64f40d6b904ca58c2349d311f84f8c493f433d12fee0",
+      "refused": true,
+      "code": "invalid_answer",
+      "message": "The answer is not one of the printed options.",
+      "id": "nested-ff-short-refusal",
+      "correct": true
+    }
+  ],
+  "elapsed": 19.752280355998664,
+  "provider_calls": 0,
+  "db_calls": 0,
+  "render_calls": 0
+}

@@ -1,0 +1,151 @@
+{
+  "commit": "22476485e80dfa5ca0b0cf3f34febd876619b393",
+  "elapsed_seconds": 6.528,
+  "cases": [
+    {
+      "name": "apostrophe_alternatives",
+      "source": "Role: [patient's/carer's]",
+      "fields": [
+        [
+          "Role patient's/carer's",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null
+    },
+    {
+      "name": "parenthesized_alternatives",
+      "source": "Role: [patient/carer (specify)]",
+      "fields": [
+        [
+          "Role patient/carer (specify)",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": [
+        "Role: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null
+    },
+    {
+      "name": "digit_alternatives",
+      "source": "Severity: [mild/moderate/grade 3]",
+      "fields": [
+        [
+          "Severity mild/moderate/grade 3",
+          "text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": [
+        "Severity: SYNTHETIC UNRESTRICTED REPLACEMENT",
+        "Reason: ______"
+      ],
+      "fill_refusal": null
+    },
+    {
+      "name": "punctuated_alternatives",
+      "source": "Consent: [yes/no?]",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null
+    },
+    {
+      "name": "positive_date",
+      "source": "Date: [dd/mm/yyyy]",
+      "fields": [
+        [
+          "Date dd/mm/yyyy",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null
+    },
+    {
+      "name": "source_list_nocolon",
+      "source": "Gender\na) Male\nb) Female",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null
+    },
+    {
+      "name": "source_list_period",
+      "source": "Gender.\na) Male\nb) Female",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null
+    },
+    {
+      "name": "source_list_instruction",
+      "source": "Discharge instructions\na) Call clinic\nb) Keep wound dry",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "block_generation": false,
+      "automatic_complete": false,
+      "actual_written_paragraphs": null,
+      "fill_refusal": null
+    }
+  ]
+}

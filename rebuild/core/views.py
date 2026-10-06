@@ -437,7 +437,7 @@ def template_upload(request):
             elif len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
                 t=Template.objects.create(department=department,name=form.cleaned_data['name'],format=info['format'],original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=info['sha256'],warnings=info.get('warnings',[]),created_by=request.user)
-                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),contract=contract,created_by=request.user)
+                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),contract=contract,import_manifest=info.get('import_manifest',{}),created_by=request.user)
                 audit(request.user,'template.upload',t.pk,department=department,sha256=t.sha256,field_count=len(info['fields']),**({'contract':contract} if contract else {}))
             if contract:messages.info(request,f'QuillMD found {len(info["fields"])} answer areas automatically. Check every one against your form, correct the mapping, and confirm it before creating a document.')
             return redirect('template_detail',pk=t.pk)
@@ -513,6 +513,18 @@ def statement_guide(version):
 def template_detail(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
     version=t.versions.order_by('-number').first()
+    if request.method=='POST' and request.POST.get('action') in ('reinspect_original','confirm_reinspection'):
+        from documents import DocumentError
+        try:
+            if request.POST['action']=='reinspect_original':return reinspect_original(request,t)
+            return confirm_reinspection(request,t)
+        except (ValidationError,DocumentError,OSError) as exc:
+            error=error_message(exc) if not isinstance(exc,OSError) else 'The preserved original is unavailable. Nothing was saved.'
+            if v3_mapping.is_v3_version(version):return v3_page(request,t,version,status=400,error=error)
+            form=MappingForm(initial={'labels':{f['key']:f['label'] for f in version.fields}})
+            return render(request,'template_detail.html',{'template':t,'version':version,'form':form,
+                'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],
+                'statements':statement_guide(version),'reinspection_error':error,**reinspection_context(request,t,version)},status=400)
     if v3_mapping.is_v3_version(version):return template_detail_v3(request,t,version)
     form=MappingForm(request.POST or None,initial={'labels':{f['key']:f['label'] for f in version.fields}})
     if request.method=='POST' and form.is_valid():
@@ -538,11 +550,109 @@ def template_detail(request,pk):
                       if signature_label(f['label']) and not signature_label(labels[f['key']])]
                 if lost:raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+', '.join(sorted(lost))+'. Rename the other questions and leave this one as the form words it.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
-                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,created_by=request.user)
+                from .import_binding import for_mapping
+                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,import_manifest=for_mapping(latest.import_manifest,fields),created_by=request.user)
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version),**reinspection_context(request,t,version)})
+
+
+def reinspection_context(request,t,version):
+    """Scoped navigation between immutable old forms and their freshly inspected copies."""
+    lineage=version.import_manifest.get('reinspection')
+    source=None
+    if isinstance(lineage,dict) and lineage.get('source_template_id'):
+        try:source=scoped(Template,request.user).filter(pk=lineage['source_template_id']).first()
+        except (ValidationError,ValueError,TypeError):pass
+    children=TemplateVersion.objects.filter(template__in=scoped(Template,request.user),number=1,
+        import_manifest__reinspection__source_template_id=str(t.pk)).select_related('template').order_by('-created_at')[:10]
+    stale=False
+    if t.format=='docx' and version.import_manifest:
+        from documents.service import engine_fingerprint,DocumentError
+        try:stale=version.import_manifest.get('engine_code_sha256')!=engine_fingerprint('v3' if version.contract=='v3' else 'legacy',source_sha256=t.sha256)
+        except (DocumentError,OSError,ValueError):stale=True
+    return {'reinspection_source':source,'reinspection_forms':children,'mapping_processor_changed':stale,
+        'can_reinspect':t.format=='docx' and Membership.objects.filter(user=request.user,department=t.department,
+            active=True,role__in=['owner','clinician']).exists()}
+
+
+def reinspect_original(request,t):
+    """A new form's FIRST import is genuine inspection; old provenance and records never change."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from documents import inspect_template
+    from documents.service import word_engine
+    membership(request.user,t.department,roles=['owner','clinician'])
+    if t.format!='docx':raise ValidationError('Rechecking answer locations is available for preserved Word .docx forms.')
+    if request.POST.get('review_reinspection')!='on':raise ValidationError('Confirm that you will review the freshly detected mapping. Previous corrections and answers are not copied.')
+    relative=None
+    try:
+        with transaction.atomic():
+            Template.objects.select_for_update().get(pk=t.pk)
+            latest=t.versions.order_by('-number').first()
+            if request.POST.get('mapping_version')!=str(latest.pk):raise ValidationError('This mapping changed. Reload the form before rechecking its answer locations.')
+            original=v3_original(t).read_bytes()
+            # A repeated submitted request reopens its still-current inspection instead of
+            # allocating another private file. Code changes require a genuinely new inspection.
+            from .import_binding import verify
+            children=TemplateVersion.objects.filter(template__department=t.department,number=1,
+                import_manifest__reinspection__source_version_id=str(latest.pk)).select_related('template').order_by('-created_at')
+            for candidate in children:
+                try:
+                    verify(candidate,allow_unreviewed=True)
+                    if v3_original(candidate.template).read_bytes()==original:return redirect('template_detail',pk=candidate.template_id)
+                except (ValidationError,OSError):continue
+            relative=store_upload(SimpleUploadedFile(t.original_name,original))
+            info=inspect_template(private_path(relative),engine=word_engine())
+            if info.get('sha256')!=t.sha256 or info.get('format')!='docx':raise ValidationError('The fresh inspection did not match the preserved original. Nothing was saved.')
+            contract=v3_mapping.CONTRACT if info.get('contract')==v3_mapping.CONTRACT else ''
+            count=len(v3_mapping.answerable(info['fields'])) if contract else len(info['fields'])
+            if count>(v3_mapping.field_limit() if contract else 100):raise ValidationError(v3_mapping.too_many_fields(count) if contract else 'Templates support at most 100 answer fields. Split this template explicitly.')
+            manifest=info.get('import_manifest')
+            if not manifest:raise ValidationError('The fresh inspection has no processor identity. Nothing was saved.')
+            lineage={'source_template_id':str(t.pk),'source_version_id':str(latest.pk),'source_sha256':t.sha256,
+                'source_engine_code_sha256':latest.import_manifest.get('engine_code_sha256','')}
+            fresh=Template.objects.create(department=t.department,name=(t.name[:115]+' · rechecked'),format=t.format,
+                original_name=t.original_name,original_path=relative,sha256=t.sha256,warnings=info.get('warnings',[]),created_by=request.user)
+            version=TemplateVersion.objects.create(template=fresh,number=1,fields=info['fields'],contract=contract,
+                review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),
+                import_manifest={**manifest,'reinspection':lineage},created_by=request.user)
+            verify(version,allow_unreviewed=True)
+            audit(request.user,'template.reinspected',fresh.pk,department=t.department,**lineage,
+                mapping_version_id=str(version.pk),engine_code_sha256=manifest['engine_code_sha256'],field_count=len(version.fields))
+        messages.success(request,'The preserved original was inspected again as a linked form. Review every answer location and confirm the new mapping. Existing drafts and downloads keep their original version.')
+        return redirect('template_detail',pk=fresh.pk)
+    except Exception:
+        if relative:cleanup_file(private_path(relative))
+        raise
+
+
+def confirm_reinspection(request,t):
+    """Legacy/native copies also require explicit review, with fresh physical destinations."""
+    from documents import inspect_template
+    from documents.engine import structure
+    from . import import_binding,destination_roles
+    membership(request.user,t.department,roles=['owner','clinician'])
+    if request.POST.get('checked_every_field')!='on':raise ValidationError('Tick "I checked every field against the form" to confirm this mapping.')
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):raise ValidationError('This mapping changed. Reload before confirming it.')
+        if latest.contract=='v3' or 'reinspection' not in latest.import_manifest:raise ValidationError('Use this form\'s field-by-field mapping review.')
+        import_binding.verify(latest,reviewing_reinspection=True)
+        if not latest.fields:raise ValidationError('No supported answer locations were found. This mapping cannot be confirmed.')
+        v3_original(t)
+        info=inspect_template(private_path(t.original_path),engine='legacy')
+        if (info.get('sha256')!=t.sha256 or info.get('contract')=='v3' or structure(info['fields'])!=structure(latest.fields)
+                or document_backend(info)!=latest.document_backend or info.get('review_requirements',[])!=latest.review_requirements):
+            raise ValidationError('The fresh physical destinations differ from this mapping. Recheck the original; nothing was confirmed.')
+        report=destination_roles.report(latest,mapping_review=True)
+        if report and report.get('legacy_unresolved_actions'):raise ValidationError('This original has an unresolved human-owned answer area. Nothing was confirmed.')
+        if not latest.confirmed:
+            MappingConfirmation.objects.create(version=latest,confirmed_by=request.user)
+            audit(request.user,'template.mapping_confirmed',latest.pk,department=t.department,number=latest.number,field_count=len(latest.fields),reinspection=True)
+    messages.success(request,'Freshly inspected mapping confirmed. You can now create documents with this linked form.')
+    return redirect('template_detail',pk=t.pk)
 
 #: At most this many unmapped places are listed at once; the search narrows the rest.
 V3_PLACES_SHOWN=300
@@ -561,6 +671,9 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
     """The contract v3 mapping review: every field in document order, the places a field could still be added to,
     the corrections that made this version, and the clinician's confirmation."""
     from documents import DocumentError
+    from .import_binding import ordinary_role_fields, coverage_reviewed
+    try:ordinary_roles=ordinary_role_fields(version)
+    except (ValidationError,DocumentError,OSError):ordinary_roles=set()
     query=' '.join(request.GET.get('find','').split())[:120]
     outline_error=''
     if outline is None:
@@ -578,7 +691,12 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
     rows=[{'number':n,'key':f['key'],'field':f,'label':posted.get('label_'+f['key'],f['label']),
            'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
-           'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
+           'kind_editable':(f.get('kind') in v3_mapping.TEXT_KINDS or f['key'] in ordinary_roles)
+                           and f.get('locator',{}).get('target',{}).get('shape')!='numeric_part',
+           'ordinary_role_review':f['key'] in ordinary_roles,
+           'ordinary_role_ack':posted.get('ordinary_'+f['key'])=='on',
+           'kind_choices':([(f.get('kind'),v3_mapping.KIND_NAMES[f['kind']])] if f['key'] in ordinary_roles else [])+[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
+           'options':f.get('options') or [],
            'location':field_location.describe(f,box_keys=box_keys),'context':f.get('context') or '',
            'origin':{'manual':'Manual','model_assisted':'Model proposal'}.get(f.get('origin'),'Automatic'),'max_chars':f.get('max_chars'),
            'remove':posted.get('remove_'+f['key'])=='on',
@@ -589,16 +707,20 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'places':places[:V3_PLACES_SHOWN],'places_hidden':max(0,len(places)-V3_PLACES_SHOWN),'places_total':len(places),
         'find':query,'outline_error':outline_error,'posted_slot':posted.get('slot',''),'posted_add_label':posted.get('label',''),
         'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
+        'posted_numeric_part':posted.get('numeric_part',''),
         'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
         'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.field_limit(),
         'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
-        'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
+        'coverage_issues':version.import_manifest.get('coverage',{}).get('selected_engine_issues',[]),
+        'coverage_reviewed':coverage_reviewed(version),
+        'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False),**reinspection_context(request,t,version)},status=status)
 
 def template_detail_v3(request,t,version):
     from documents import DocumentError
     if request.method!='POST':return v3_page(request,t,version)
     action=request.POST.get('action','')
-    handler={'v3_save':v3_save_corrections,'v3_add':v3_add_field,'v3_confirm':v3_confirm}.get(action)
+    handler={'v3_save':v3_save_corrections,'v3_add':v3_add_field,'v3_confirm':v3_confirm,
+             'v3_coverage':v3_review_coverage}.get(action)
     if handler is None:
         return v3_page(request,t,version,status=400,error='This mapping is reviewed field by field on this page. Nothing was saved.')
     try:
@@ -607,17 +729,45 @@ def template_detail_v3(request,t,version):
         latest=t.versions.order_by('-number').first()
         return v3_page(request,t,latest,status=400,error=error_message(exc),posted=request.POST)
 
-def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=()):
+def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=(),ordinary_information=(),coverage_review=None):
     """A new immutable mapping version, with the corrections that made it recorded beside the fields. Added fields
     keep origin 'manual'; the new version needs its own confirmation."""
     kind_changed=kind_changed or {}
     corrections={'base_version':latest.number,'removed':list(removed),'added':list(added),'kind_changed':kind_changed,'renamed':list(renamed)}
+    if ordinary_information:corrections['ordinary_information_classified']=list(ordinary_information)
+    retained_review=latest.corrections.get('coverage_review',[]) if coverage_review is None else coverage_review
+    if retained_review:corrections['coverage_review']=retained_review
+    from .import_binding import for_mapping
     version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,
-                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,created_by=request.user,
+                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,import_manifest=for_mapping(latest.import_manifest,fields),created_by=request.user,
                                            assistance={**latest.assistance,'assisted':True} if latest.assistance else {})
     audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number,contract=version.contract,
-          removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed])
+          removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed],ordinary_information_classified=list(ordinary_information))
     return version
+
+def v3_review_coverage(request,t):
+    """A clinician's precise exclusions; no ambiguous place becomes a writable field."""
+    membership(request.user,t.department,roles=['owner','clinician'])
+    from copy import copy
+    from .import_binding import coverage_reviewed
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):
+            return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
+        issues=latest.import_manifest.get('coverage',{}).get('selected_engine_issues',[])
+        if not issues:raise ValidationError('This mapping has no recorded structural exclusions to review.')
+        if any(request.POST.get('exclude_'+issue['id'])!='on' for issue in issues):
+            raise ValidationError('Review and explicitly exclude every listed area, or upload a repaired original. Nothing was saved.')
+        reviews=[{'id':issue['id'],'disposition':'leave_unchanged','source_sha256':t.sha256,
+                  'reviewed_by':str(request.user.pk)} for issue in issues]
+        candidate=copy(latest);candidate.corrections={**latest.corrections,'coverage_review':reviews}
+        if not coverage_reviewed(candidate):
+            raise ValidationError('A mapped field writes into an excluded area. Remove that field or repair the original; no exclusion was saved.')
+        new=v3_new_version(request,t,latest,latest.fields,coverage_review=reviews)
+        audit(request.user,'template.coverage_reviewed',new.pk,department=t.department,exclusions=[row['id'] for row in reviews])
+    messages.success(request,'Exclusions saved in a new mapping version. These areas remain unchanged; this is partial coverage. Confirm the supported mapping before creating documents.')
+    return redirect('template_detail',pk=t.pk)
 
 def v3_save_corrections(request,t):
     """Rename, change a text-like kind, or remove fields that are not answers; one new version, corrections recorded."""
@@ -628,6 +778,8 @@ def v3_save_corrections(request,t):
         latest=t.versions.order_by('-number').first()
         if request.POST.get('mapping_version')!=str(latest.pk):
             return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+        from .import_binding import ordinary_role_fields
+        ordinary_roles=ordinary_role_fields(latest)
         fields=[];removed=[];renamed=[];kind_changed={}
         for number,f in enumerate(latest.fields,1):
             key=f['key']
@@ -638,8 +790,12 @@ def v3_save_corrections(request,t):
             if not label or len(supplied_label)>MAX_MAPPING_LABEL or '\n' in label:raise ValidationError(f'Give question {number} a one-line label of 1 to {MAX_MAPPING_LABEL} characters.')
             kind=request.POST.get('kind_'+key,f.get('kind'))
             if kind!=f.get('kind'):
-                if f.get('kind') not in v3_mapping.TEXT_KINDS or kind not in v3_mapping.TEXT_KINDS:
+                if f.get('locator',{}).get('target',{}).get('shape')=='numeric_part':
+                    raise ValidationError('A reviewed numeric part keeps Text and its printed digit capacity. Remove it and review another destination to change its kind. Nothing was saved.')
+                if (f.get('kind') not in v3_mapping.TEXT_KINDS and key not in ordinary_roles) or kind not in v3_mapping.TEXT_KINDS:
                     raise ValidationError(f'"{f["label"]}" keeps its kind ({v3_mapping.KIND_NAMES.get(f.get("kind"),f.get("kind"))}): only text, long text, date and time can be changed into one another. Nothing was saved.')
+                if key in ordinary_roles and request.POST.get('ordinary_'+key)!='on':
+                    raise ValidationError(f'Classify "{f["label"]}" before changing its kind: confirm that it records ordinary clinical information, not a signature, witness statement or attestation. Nothing was saved.')
                 kind_changed[key]=[f.get('kind'),kind]
             if label!=f['label']:
                 # ⚠️ The same protection as every other mapping: the identity check reads this label.
@@ -650,7 +806,8 @@ def v3_save_corrections(request,t):
         if not (removed or renamed or kind_changed):
             messages.info(request,'Nothing changed, so no new mapping version was saved.')
             return redirect('template_detail',pk=t.pk)
-        version=v3_new_version(request,t,latest,fields,removed=removed,kind_changed=kind_changed,renamed=renamed)
+        version=v3_new_version(request,t,latest,fields,removed=removed,kind_changed=kind_changed,renamed=renamed,
+                               ordinary_information=[key for key in kind_changed if key in ordinary_roles])
     messages.success(request,f'Mapping version {version.number} saved with your corrections. Confirm it before creating documents; existing documents keep their original version.')
     return redirect('template_detail',pk=t.pk)
 
@@ -668,9 +825,15 @@ def v3_add_field(request,t):
     outline=v3_outline(t)
     place=next((row for row in outline if row['slot']==slot),None)
     if place is None:raise ValidationError('That place is not in this form. Choose one from the list.')
-    if v3_mapping.is_mapped(slot,v3_mapping.mapped_slots(latest.fields)):
+    numeric_part=request.POST.get('numeric_part','').strip()
+    if v3_mapping.is_mapped(slot,v3_mapping.mapped_slots(latest.fields)) and not numeric_part:
         raise ValidationError('That place already belongs to a field. Correct that field instead of adding another.')
     target={'slot':slot,'kind':kind,'label':label}
+    if numeric_part:
+        try:number=int(numeric_part)
+        except ValueError:number=0
+        if number<1:raise ValidationError('Give the numbered numeric part, counting from 1, or leave it empty for a whole place.')
+        target['numeric_part']=number
     if kind=='checkbox' or place.get('kind')=='glyphs':
         # ⚠️ The box the clinician named, for ANY place that holds printed boxes; the engine refuses a number beyond
         # the boxes the place actually holds (a paragraph place used to take box 1 whatever was asked).
@@ -679,9 +842,27 @@ def v3_add_field(request,t):
         if box<1:raise ValidationError('Give the number of the printed box, counting from 1.')
         target['glyph']=box-1
     field=locate_fields(v3_original(t),[target])['fields'][0]
-    if field.get('kind')=='choice' and not field.get('options'):
-        raise ValidationError('A field with printed options needs a Word dropdown or a legacy dropdown field as its place. Choose the dropdown, or add this answer as text.')
     if any(f['key']==field['key'] for f in latest.fields):raise ValidationError('That place already belongs to a field with this label.')
+    if numeric_part:
+        from documents.service import writing_places
+        from documents.word_v3 import _PlaceReader
+        from types import SimpleNamespace
+        places=writing_places(v3_original(t),latest.fields+[field])
+        if places.get('sha256')!=t.sha256:raise ValidationError('The original could not be verified. Nothing was added.')
+        reader=_PlaceReader(SimpleNamespace(by_id={}))
+        destinations=places.get('places',{})
+        if field['key'] not in destinations or any(f['key'] not in destinations for f in latest.fields):
+            raise ValidationError('The existing writing destinations could not be verified. Nothing was added.')
+        if any(reader.touches(new,{'place':old[0],'start':old[1],'end':old[2]}) or new[0]==old[0]
+               and f.get('locator',{}).get('target',{}).get('shape')!='numeric_part'
+               for f in latest.fields for old in destinations[f['key']] for new in destinations[field['key']]):
+            raise ValidationError('That numeric part overlaps an existing field. Remove the whole-band field first, then add each part separately with its reviewed label.')
+    if field.get('kind') in ('choice','multi_choice') and not field.get('options'):
+        raise ValidationError('Choose a Word dropdown, a legacy dropdown, or the question or first item of a complete printed option list. Use text for a narrative answer.')
+    if field.get('locator',{}).get('target',{}).get('type') in ('paragraph_options','ruled_paragraphs'):
+        if any(v3_mapping.is_mapped(place,v3_mapping.mapped_slots(latest.fields))
+               for place in v3_mapping.mapped_slots([field])):
+            raise ValidationError('One of these answer destinations already belongs to a field. Correct that mapping before adding the complete area.')
     with transaction.atomic():
         Template.objects.select_for_update().get(pk=t.pk)
         if t.versions.order_by('-number').first().pk!=latest.pk:
@@ -717,6 +898,8 @@ def v3_confirm(request,t):
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
         off_box=v3_mapping.checkboxes_off_box(latest.fields)
         if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
+        from .import_binding import verify_review_places
+        verify_review_places(latest)
         # ⚠️ READ FROM THE ORIGINAL, NEVER FROM THIS MAPPING: a field on a signing, initials, consent or protected place
         # (or without the place's printed authorship/review requirement) can never be answered there, whoever put it
         # there - a removed engine field re-added by hand, a model proposal, or a version stored before this check.
@@ -792,7 +975,7 @@ def encounter_detail(request,pk):
     # `accept_code`, in this same template, has named its accepter all along.
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
-    from .tab_review import clinician_identity
+    from .tab_review import electronic_identity as clinician_identity
     from .destination_roles import ROLE_NOT_GENERATED as role_not_generated
     printed_roles={}
     if not is_wm and not is_v3 and e.status!='finalized':
@@ -954,7 +1137,9 @@ def encounter_detail(request,pk):
         if generation_batch.needed(e.template_version.fields, e.notes, quote_config):
             quote_config,maximum_charge=batch_jobs.quote(e,quote_config)
         else:
-            maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
+            from . import transcript_context
+            context_config=transcript_context.admitted(quote_config,e)
+            maximum_charge=maximum_cost(e.notes,e.template_version.fields,config=context_config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
     except ValidationError as exc:
         maximum_charge=None
         generation_quote_error=error_message(exc)
@@ -990,6 +1175,8 @@ def encounter_detail(request,pk):
         visible_jobs.append(job)
     jobs=visible_jobs
     transcript_reviews=[]
+    from . import transcript_context
+    patient_context_current=bool(transcript_context.current(e))
     applied=set(AuditEvent.objects.filter(action='transcription.applied',target__in=[str(job.pk) for job in jobs]).values_list('target',flat=True))
     for job in jobs:
         if (job.kind=='transcription' and job.config.get('transcript_review_required')
@@ -1001,12 +1188,23 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
+    if is_v3 and can_finalize and not patient_context_current and e.notes:
+        from .models import TranscriptReview
+        previous_review=TranscriptReview.objects.filter(encounter=e,patient_context=True).select_related('job').order_by('-created_at').first()
+        if previous_review:
+            try:
+                raw,_=review_transcript(previous_review.job)
+                transcript_reviews.append({'job':previous_review.job,'raw':raw,'text':e.notes,'rereview':True,'empty':False})
+            except (ValidationError,OSError,ValueError):pass
+    e.patient_context_current=patient_context_current
     from . import wm_narrative
+    from .encounter_recovery import recovery_notice
     return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'hidden_accepted':hidden_accepted,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'role_suggestion_warning':destination_roles.ROLE_SUGGESTION_WARNING,
         'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
+        'recovery_notice':recovery_notice(e) if can_finalize else None,
         'export_refusal':v3_mapping.export_refusal(e.template_version.template) if is_v3 else ''})
 
 def clinician_decided(e):
@@ -1248,7 +1446,7 @@ def document_refusal(request,encounter,message,status):
 @transaction.atomic
 def save_answers(request,pk):
     from documents import DocumentError
-    from .tab_review import clinician_identity
+    from .tab_review import electronic_identity as clinician_identity
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
@@ -1637,6 +1835,8 @@ def finalize(request,pk):
                                         [row['label'] for row in e.template_version.review_requirements])
             if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
             generation_batch.check_answers(e.template_version,e.answers)
+            from .import_binding import verify as verify_import
+            verify_import(e.template_version)
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
@@ -1690,7 +1890,9 @@ def finalize(request,pk):
                                  and destination_roles.generated_text(e.answers.get(f['key']))]
                         if refused:raise ValidationError(LEGACY_ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one and save; you may then type your own entry. Nothing was finalized.')
                         identity_fields=[destination_roles.printed(f,roles) for f in version.fields]
-                validate_identity(identity_fields,e.answers,request.user)
+                # Contract-v3 roles are completed by hand; the fresh physical
+                # refusals above apply, without appointing an electronic signer.
+                if not is_v3:validate_identity(identity_fields,e.answers,request.user)
                 # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an
                 # option label, a list of labels, a ticked box, table rows. The engine checks every anchor's
                 # fingerprint and refuses a stale one; its message is shown as it is.
@@ -1735,40 +1937,48 @@ def voice(request,pk):
     form=VoiceForm(request.POST,request.FILES)
     relative=None
     try:
-        if not form.is_valid():raise ValidationError('Choose a supported recording and confirm provider processing.')
-        if Path(form.cleaned_data['audio'].name).suffix.lower() not in ['.wav','.webm','.mp3','.m4a']:raise ValidationError(AUDIO_FORMATS_HINT)
-        relative=store_upload(form.cleaned_data['audio'],'audio')
-        raw=private_path(relative).read_bytes()[:16]
-        # The same frame-sync rule as core/audio.py, which measures the recording: the narrower
-        # three-prefix list refused MPEG audio that the measuring reader accepts.
-        if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3')) or mpeg_frame_sync(raw) or raw[4:8]==b'ftyp'):raise ValidationError('This file is not a recording QuillMD can read. '+AUDIO_FORMATS_HINT)
-        # ⚠️ A RECORDING EXISTS ONLY IN THE PAGE UNTIL IT IS SENT, so a quote that expires while the
-        # doctor dictates discards it. The voice quote therefore lives as long as the over-limit
-        # approval and the session (30 min). The limit it shows still binds, the signed pricing
-        # configuration is unchanged, and length is re-measured at enqueue.
-        quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_DOCUMENT_CHANGED),'transcript_review_required':True}
-        try:
-            job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
-        except RecordingOverLimit as over:
-            # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
-            approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
-                                    'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
-                                    'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
-            # The path lets the worker remove the upload if nobody approves it within the approval window.
-            audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
-                  charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
-            # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
-            return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
-                'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
-                'standard_limit':Decimal(over.quote['standard_limit']),
-                'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
-        if job.input_path!=relative:cleanup_file(private_path(relative),encounter_id=e.pk)
-        if getattr(job,'reused',False):
-            # The identical recording already holds this request key; the redundant upload was just
-            # removed above. Nothing was sent to the provider and nothing was charged again.
-            messages.info(request,reuse_message(job,recording=True))
-        else:
-            messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
+        with transaction.atomic():
+            if not form.is_valid():raise ValidationError('Choose a supported recording and confirm provider processing.')
+            # R6R-1: the recording must acquire a durable document reference before redaction can journal its keys.
+            # Keep this encounter lock from BEFORE bytes are stored through either job admission or the over-limit quote.
+            # enqueue's nested rollback on RecordingOverLimit must not release this outer lock.
+            from .disposition_execution import lock_available
+            e=lock_available(e.pk)
+            membership(request.user,e.department)
+            if e.status=='finalized':raise ValidationError('Finalized documents are immutable.')
+            if Path(form.cleaned_data['audio'].name).suffix.lower() not in ['.wav','.webm','.mp3','.m4a']:raise ValidationError(AUDIO_FORMATS_HINT)
+            relative=store_upload(form.cleaned_data['audio'],'audio')
+            raw=private_path(relative).read_bytes()[:16]
+            # The same frame-sync rule as core/audio.py, which measures the recording: the narrower
+            # three-prefix list refused MPEG audio that the measuring reader accepts.
+            if not (raw.startswith((b'RIFF',b'ID3',b'\x1aE\xdf\xa3')) or mpeg_frame_sync(raw) or raw[4:8]==b'ftyp'):raise ValidationError('This file is not a recording QuillMD can read. '+AUDIO_FORMATS_HINT)
+            # ⚠️ A RECORDING EXISTS ONLY IN THE PAGE UNTIL IT IS SENT, so a quote that expires while the
+            # doctor dictates discards it. The voice quote therefore lives as long as the over-limit
+            # approval and the session (30 min). The limit it shows still binds, the signed pricing
+            # configuration is unchanged, and length is re-measured at enqueue.
+            quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_DOCUMENT_CHANGED),'transcript_review_required':True}
+            try:
+                job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
+            except RecordingOverLimit as over:
+                # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
+                approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
+                                        'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
+                                        'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
+                # The path lets the worker remove the upload if nobody approves it within the approval window.
+                audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
+                      charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
+                # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
+                return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
+                    'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
+                    'standard_limit':Decimal(over.quote['standard_limit']),
+                    'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
+            if job.input_path!=relative:cleanup_file(private_path(relative),encounter_id=e.pk)
+            if getattr(job,'reused',False):
+                # The identical recording already holds this request key; the redundant upload was just
+                # removed above. Nothing was sent to the provider and nothing was charged again.
+                messages.info(request,reuse_message(job,recording=True))
+            else:
+                messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
         if relative:cleanup_file(private_path(relative))
         messages.error(request,error_message(exc))
@@ -2107,11 +2317,11 @@ def billing(request):
     from .billing import checkout_form
     from .admin_queries import page_for,searched
     query=request.GET.get('q','').strip()[:100]
-    owned_orgs=owned_organizations(request.user)
-    wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
-    usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
+    wallets=Wallet.objects.filter(user=request.user)
+    jobs=Job.objects.filter(billed_jobs(request.user))
+    usage=searched(Usage.objects.filter(job__in=jobs).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
     held=held_requests(request.user)
-    ledger=searched(LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
+    ledger=searched(LedgerEntry.objects.filter(models.Q(wallet__in=wallets)|models.Q(job__in=jobs)).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
     payments=searched(Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at','pk'),query,['status','stripe_session','stripe_intent'])
     up=page_for(request,usage,'usage_page','usage');lp=page_for(request,ledger,'ledger_page','ledger');pp=page_for(request,payments,'payments_page','payments')
     return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'held_requests':held,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
@@ -2120,17 +2330,21 @@ def billing(request):
 REQUEST_LABELS={'generation':'Generation','generation_part':'Generation','transcription':'Transcription','mapping':'Form mapping'}
 MAX_HELD_ROWS=500
 
-def owned_organizations(user):
-    """The organizations whose billing a viewer reads: those in which the viewer holds an active owner membership (the
-    Organization owner role, held through any of its departments). ONE answer for the wallet strip, the list of requests
-    holding funds and the charge page (refutation M1 of 4cfa4301: the list asked which DEPARTMENTS the viewer owns while
-    the other two asked this, so the owner of another department of the paying organization saw that wallet's funds
-    reserved beside "No request is holding funds", and still opened the request's charge page)."""
-    return set(Membership.objects.filter(user=user,active=True,role='owner').values_list('department__organization_id',flat=True))
-
 def billed_jobs(user):
-    """The requests whose charges a viewer reads: their own, and those an organization the viewer owns pays for."""
-    return models.Q(user=user)|models.Q(payer__in=[f'organization:{org}' for org in owned_organizations(user)])
+    """Own financial history, plus organization-paid requests in departments the viewer actively owns.
+
+    An owner membership is held in one department. Shared payer identity never grants another department's request,
+    requester, totals or financial evidence. Use actual foreign keys for both encounter and mapping jobs; never their
+    user-supplied config. Own requested history remains readable after clinical membership revocation.
+    """
+    owners=Membership.objects.filter(user=user,active=True,role='owner',user__is_active=True,
+                                    user__verified_at__isnull=False).values('department_id')
+    from django.db.models.functions import Cast,Concat
+    paid_encounters=models.Q(encounter__department_id__in=owners,
+        payer=Concat(models.Value('organization:'),Cast('encounter__department__organization_id',models.CharField())))
+    paid_mappings=models.Q(mapping_version__template__department_id__in=owners,
+        payer=Concat(models.Value('organization:'),Cast('mapping_version__template__department__organization_id',models.CharField())))
+    return models.Q(user=user)|paid_encounters|paid_mappings
 
 def held_requests(user):
     """Requests holding funds, newest first: exactly those whose charge page the viewer opens (billed_jobs; refutation F11
@@ -2318,12 +2532,12 @@ def admin_job_detail(request,pk):
 def billing_job_detail(request,pk):
     from .admin_queries import financial_context
     # Personal billing history remains available after clinical membership revocation.
-    # Organization owners can inspect organization-paid charges without clinical access.
-    owned=owned_organizations(request.user)
+    # Department owners can inspect that department's organization-paid charges only.
     job=get_object_or_404(Job.objects.filter(billed_jobs(request.user)).select_related('user','encounter__department'),pk=pk)
-    visible=set(Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned)).values_list('pk',flat=True))
+    # A shared organization's global balances include other departments: only personal overall balances are visible.
+    visible=set(Wallet.objects.filter(user=request.user).values_list('pk',flat=True))
     context=financial_context(job,visible);context.pop('audit_targets')
-    context['doctor_status']=doctor_status(job)
+    context['doctor_status']=doctor_status(job) if job.user_id==request.user.pk else for_others(doctor_status(job))
     context['request_label']=REQUEST_LABELS.get(job.kind,'Request')
     if job.kind=='generation_part':
         # The held list's one row of a complete form links here (part 1): the page names the part and the whole request's
@@ -2487,7 +2701,16 @@ def encounter_notes(request,pk):
         try:transcript_id=UUID(request.POST['transcript_job'])
         except (ValueError,TypeError):return document_refusal(request,e,'Invalid transcript reference.',400)
         transcript_job=get_object_or_404(Job,pk=transcript_id,encounter=e,kind='transcription',state='succeeded')
-        if not transcript_job.config.get('transcript_review_required') or AuditEvent.objects.filter(action='transcription.applied',target=str(transcript_job.pk)).exists():
+        from .models import TranscriptReview
+        reconfirm=request.POST.get('transcript_reconfirm')=='on'
+        was_applied=AuditEvent.objects.filter(action='transcription.applied',target=str(transcript_job.pk)).exists()
+        if reconfirm:
+            membership(request.user,e.department,roles=['owner','clinician'])
+            if (not was_applied or request.POST.get('transcript_patient_context')!='on'
+                    or request.POST.get('transcript_mode')!='replace'
+                    or not TranscriptReview.objects.filter(encounter=e,job=transcript_job).exists()):
+                return document_refusal(request,e,'Re-review the revised transcript and explicitly confirm its patient context.',400)
+        if not transcript_job.config.get('transcript_review_required') or (was_applied and not reconfirm):
             return document_refusal(request,e,'This transcript has already been applied or is not awaiting review.',409)
         if request.POST.get('transcript_reviewed')!='on' or request.POST.get('transcript_mode') not in ['append','replace']:
             return document_refusal(request,e,'Review the transcript and choose how to add it to the source notes.',400)
@@ -2513,9 +2736,21 @@ def encounter_notes(request,pk):
     audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared,
           codes_marked_for_review=marked)
     if transcript_job:
+        from .models import TranscriptReview
+        from . import transcript_context
+        confirm_context=request.POST.get('transcript_patient_context')=='on'
+        if confirm_context:membership(request.user,e.department,roles=['owner','clinician'])
+        start=len(notes)-len(corrected)
+        review=TranscriptReview(encounter=e,job=transcript_job,reviewed_by=request.user,source_revision=e.revision,
+            source_sha256=transcript_context.digest(notes),raw_sha256=transcript_context.digest(raw_transcript),
+            result_sha256=transcript_job.result_sha256,reviewed_sha256=transcript_context.digest(corrected),
+            reviewed_text=corrected,span_start=start,span_end=len(notes),patient_context=confirm_context)
+        if confirm_context:review.context_token=transcript_context.token_for(review)
+        review.save()
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
-              corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
+              corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'),
+              review=str(review.pk),patient_default_context=confirm_context)
     # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
     # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
     messages.success(request,'Notes saved. '+cleared_sentence(cleared)+marked_sentence(marked)+'Generate and review a new answer draft.')

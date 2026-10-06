@@ -1,0 +1,26 @@
+[
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-6f0f647a.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-6f0f647a-refutation/refute-clinical-6f0f647a.json",
+    "sha256": "1cdbfec9cc7f1833278399c3912df61b5e09c57dc4a38b9b1fdaee97987ba2c8",
+    "bytes": 23024
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-6f0f647a.log",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-6f0f647a-refutation/refute-clinical-6f0f647a.log",
+    "sha256": "e66d1761517d33275446eeb5e6f5478faf0071c98cef3b2ecf9ab0b9316081f0",
+    "bytes": 1027
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_6f0f647a.py",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-6f0f647a-refutation/refute_clinical_6f0f647a.py",
+    "sha256": "f011574ad3364f2e3e5dfd223d7fc40d0b81bae34b2729d0b3474a87d3ec0fb0",
+    "bytes": 7918
+  },
+  {
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-6f0f647a-source/manifest.json",
+    "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-6f0f647a-refutation/source-manifest.json",
+    "sha256": "9cdf331fe7dc3401613d104b8cf067c9e8890c3c0f0769a5270a9f719ccf767c",
+    "bytes": 2780
+  }
+]

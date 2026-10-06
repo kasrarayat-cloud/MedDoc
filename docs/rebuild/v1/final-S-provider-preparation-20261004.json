@@ -1,0 +1,83 @@
+{
+  "status": "PREPARATION ONLY; no final S or execution grant",
+  "inspected_root_commit": "512391a4e144c618d0c201e604b7863d86bb075b",
+  "word_frozen_commit": "e76de10ed4d8e0ec2157c88221c4e279cf967267",
+  "source_files": {
+    "rebuild/core/generation.py": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+    "rebuild/core/v3_field_relations.py": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+    "rebuild/core/ordinary_source_scope.py": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+    "rebuild/core/reviewed_source.py": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+    "rebuild/core/reviewed_procedure_source.py": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6",
+    "rebuild/core/source_scope.py": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+    "rebuild/core/v3_actors.py": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d",
+    "rebuild/core/v3_syntax.py": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7",
+    "rebuild/core/v3_literal_facts.py": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7",
+    "rebuild/core/reviewed_speaker.py": "f4e4d1d9f11d2ffdf776946273851b73b6706bc71635333fe3c2b4539c7c6bd5",
+    "rebuild/core/transcript_context.py": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521",
+    "rebuild/core/v3_destination.py": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc",
+    "rebuild/core/v3_mapping.py": "cd4d5f5843813a75a8aef170ae7530e9ba4819b6aba1489b670cc5962ff3ae51",
+    "rebuild/core/generation_batch.py": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97",
+    "rebuild/core/batch_jobs.py": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca",
+    "rebuild/core/jobs.py": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1",
+    "rebuild/core/views.py": "35143326a5827f8c287067b0dae0e110249477c359dfe0e72113ad0a4622bb42",
+    "rebuild/core/import_binding.py": "1fb50ff996071f8125f701c7675a3e0bd211d0110ee17405b3d379ba7716b6bb",
+    "rebuild/core/destination_roles.py": "63b7fa7304a49e59729dfa268a498c6fee5f3b549ea7de6cf7e32a69b32be418",
+    "rebuild/core/soap_document.py": "77c625e74f50afc666a3b3800c1282295cb602efcd9afe0a2ddbf59a87e18e7b",
+    "rebuild/core/soap_views.py": "56c1158002e99e5dd67899f89e32e40c9b95b400c249788f209c484e0d94c012",
+    "rebuild/quillmd/settings.py": "a9d22a57bd0102038b71701626248adc5ca5da94ab0e023d84e642ee5a3147a7",
+    "rebuild/quillmd/application_profile.py": "b051d6faadd682ab38b8f2dff9f80a59266ad32f614ed80dc232a5e8bbde6721",
+    "rebuild/documents/word_v3.py": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+    "rebuild/documents/tab_form.py": "1d2fb436b8fb00cba9d9c7cfd1ab50e2ec9d45e38da7f8884c1c0039b3bae24d",
+    "rebuild/ops/standing_qa.py": "0379d9e70aad529b4fa3cbd57d2984fee0089a7d1ebadb7931aba35db56e4fd6",
+    "rebuild/ops/standing_qa_batch.py": "21a7939c01f3ace9459dae8580c06125725a69c2b0bff52cc4b8ec7560f6fa24",
+    "rebuild/ops/provider_campaign.py": "71e2140499cf0ae4dd675fb5d7d84f635f517d0ae403dd6eb8141d393272f953",
+    "rebuild/ops/sonnet5_stages.py": "3147cfdeec40d0972b52bcda65c1633545b477faa17f403ec4f9ebb6f165617d",
+    "rebuild/ops/standing_qa_transcription.py": "0909f21b6866e3d0a76ec381f6ae6c98b079daf7cc43eef3df5430c6acde9d31",
+    "rebuild/ops/standing_qa_voice_review.py": "8f236bb78b2ffe61b9c35cf94b3e169bdece08abab5a182083ebbfed3846c27c",
+    "rebuild/ops/standing_qa_notes_review.py": "21a57ee9eb3566c05b4939a68f5b479e4864d6051b451ff05191cbd1e047d82b",
+    "rebuild/ops/standing_qa_signing.py": "dd577a709242de2974b7ef0c0f8bf99c382b4dede9fe101b1d4c98977b6f2fbb",
+    "rebuild/ops/fixtures/current_wire_price_witness.source": "c10dba6840c90ccbacec04c4d4a4393d70d6cf9db0f88ab4d505adce3ae6e34c"
+  },
+  "parser_inputs": {
+    "rebuild/core/v3_syntax_model.json": "b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc",
+    "rebuild/requirements.txt": "702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b",
+    "rebuild/requirements-production.lock": "b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473",
+    "rebuild/requirements-production.manifest.json": "0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade"
+  },
+  "declarations": {
+    "20261004-quillmd-v1-standing-api-testing-2.md": "52b6c5a4a6ceee357759500fc21ef529476e88d365e336f0f79c05662b44d172",
+    "20261004-quillmd-v1-standing-api-testing-3.md": "334c49aa621d071bfbe20f502cdc7f4c7e11c25a67736a7358d082a96ba40469"
+  },
+  "wrappers": {
+    "run-prospective-reviewed-candidate-2.py": "8677220a4d54e29508d5a3331c6c6c32cd0e688bb8bc93fbe3f70f7754fcdc8b",
+    "run-prospective-ordinary-batch-3.py": "eeac4f6d103ceccc2662eced63b7c9977c31574c8d8da0d82010708644779e01"
+  },
+  "profile_probe_result_sha256": "e38ebaf10e6d2f61bfb8610580942047fb36b0159aa08714663db810899e6850",
+  "new_paid_attempts": 0,
+  "previous_closed_paid_attempts": 157,
+  "previous_calculated_exposure_usd": "1.717575505200",
+  "provider_invoice_reconciled": false,
+  "canonical_campaigns": {
+    "-2": {
+      "planned_paid_sends": 33,
+      "stages": {
+        "model_check": 1,
+        "notes_comparison": 28,
+        "transcription": 4
+      },
+      "max_per_run": 6,
+      "database": "quillmd_qa_standing_20261004_2"
+    },
+    "-3": {
+      "planned_paid_sends": 3,
+      "stages": {
+        "model_check": 1,
+        "ordinary_batch": 2
+      },
+      "max_per_run": 2,
+      "database": "quillmd_qa_standing_20261004_3"
+    }
+  },
+  "eligible_now": false,
+  "no_runtime_roots_credentials_DB_or_pin_access": true
+}

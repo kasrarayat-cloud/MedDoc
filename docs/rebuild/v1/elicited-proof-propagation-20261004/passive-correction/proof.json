@@ -1,0 +1,36 @@
+{
+  "base": "6fee1665edb3d1b4d3fb346f2de36a351604730f",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-elicited-passive-6fee1665",
+  "fixed_inputs": [
+    "That report was denied by the patient.",
+    "That statement was not made by the patient.",
+    "That statement was not true."
+  ],
+  "first_outputs_preserved": true,
+  "root_original_passive_controls": 23,
+  "root_original_wrong": 2,
+  "affected_methods": 18,
+  "actual_child_exit": 0,
+  "timed_out": false,
+  "reaped": true,
+  "source_unchanged_during_test": true,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "request_profile_prices_pin_changes": false,
+  "network_attempts": [],
+  "artifacts": {
+    "baseline-6fee-passive-diagnostic.json": "434d3e11e8a46ed62f610422f21182184f5da5fb77345386f1015a6d3be4bf70",
+    "capture-stale-final.py": "4e080b499778c2cd660955cae0230b3220351bb5da5e59f86dd7144b28b3fa6e",
+    "child-result-r1.json": "6e563b0d58b9456615b2dcf4a8865ae0217c6550a149dbfa684ceefbfdea108a",
+    "child.py": "2faf33123dc8e0ac5f5e91ce6eb1107e51df3280cf002b294e9d5d3dba295909",
+    "corrected-three-concrete-stale-final.json": "56ef961e17661d1366d22821dd0244b243e5916d22d6478788cfa6b46fd4ecf1",
+    "diagnose.py": "d08dc3b7297173c4ac7816a0563ff39149adb4ce0068ea1d7ea6eb6444f15632",
+    "priced-source-inventory.json": "74751bf5b979a1613b52f7fcb4423ba60e1333dc7120ba02b8dbce3c25154fd9",
+    "result-r1.json": "5638deb01b498eb64f3c55d0c18f1ea0100b2f8d902b9abdc17fcdfbeee7ed8e",
+    "root-first-passive-23-two-wrong.json": "6d4c58cec205941b588ae384a5f6eb1cc48a9f87c0329f44d87290fc6d13db0e",
+    "run.py": "86b8967fcbba5da9c937ee178bfc1df01ae79f0831d07dfd3832cbc200fac064",
+    "stderr-r1.log": "3e62284bbf6225268f2f82cc194ff7f25166e7aa2ae39f696625f890798b0431",
+    "stdout-r1.log": "18bff414a6c0f6535a66444fce1a4e5c5655e5467c09883fdabd3ef38dae1156"
+  }
+}

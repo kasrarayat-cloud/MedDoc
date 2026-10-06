@@ -1,0 +1,89 @@
+{
+  "state": "PREPARED_NOT_EXECUTED",
+  "source_candidate": "Await integration owner coherent freeze; no moving HEAD binding",
+  "files": {
+    "development_renderer_d30_archive_v1.py": "1142f9d93966e62a1db765adf14f861d8bdb513131f205eca6a0c1e1851cbbd8",
+    "run_d30_archived_word_workflow.py": "c9df9785a603e8c53b5a46fbccb298e1591d801c2de9ead4a16382a0733fadc6",
+    "run_dev_application_gate.py": "5a822fcfe1ed9c759f8b57d2475be69e11c5c53a2d52a3e205cb6fc0805f7032",
+    "development_renderer_numeric_archive_v2.py": "81e292d47f7e9c92aec9a6a61eef1cb62907dde77337a13234cd45d6e63ae9e5",
+    "d30-archive-preparation-v1.diff": "bc25c69024da9ec2156170381ba76158c5298f1476fc08de55b0ec51d32d84a4"
+  },
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "groundtruth_sha256": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+  "groundtruth_denominator": 62,
+  "rights_sha256": "5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7",
+  "historical_harness_sha256": "20473e634375e9da023447015ed617385b46895e2992f1a8e27e81a944c13353",
+  "historical_original_a7_automatic": {
+    "ok": 61,
+    "n": 62,
+    "missed": 1,
+    "wrong": 0,
+    "extras": 0,
+    "strict": false,
+    "A20": "MISSED",
+    "A21": "OK"
+  },
+  "historical_original_a7_manual": {
+    "ok": 62,
+    "n": 62,
+    "missed": 0,
+    "wrong": 0,
+    "extras": 0,
+    "strict": true,
+    "A20": "eight options, manual only"
+  },
+  "historical_first_fixture": {
+    "conflict": 57,
+    "missing": 5,
+    "supported": 0,
+    "useful_adopted": 0
+  },
+  "actual_routes": "original upload/initial mapping+coverage; explicit A20 manual mapping+source-bound coverage review; confirm; typed note/fixture worker; clinician corrections/blank review; finalize/archive actual DOCX before assertions; faithful option/neighbor/A21/parts verification; matching download",
+  "manual_A20": {
+    "action": "v3_add",
+    "slot": "word/document.xml#b/p[72]",
+    "label": "Accommodation selections",
+    "kind": "multi_choice",
+    "field_key": "m3_28bf30112e6d",
+    "physical_options": [
+      "b/p[73]",
+      "b/p[74]",
+      "b/p[75]",
+      "b/p[76]",
+      "b/p[77]",
+      "b/p[78]",
+      "b/p[79]",
+      "b/p[80]"
+    ]
+  },
+  "A21": "Existing word/document.xml#b/tbl[4]/tr[0]/tc[0] mapping unchanged and complete XML preservation; never substituted for A20",
+  "provider_calls": 0,
+  "new_unseen_claim": false,
+  "manual_recovery_counted_as_automatic": false,
+  "actual_score_measured": false,
+  "public_or_realpatient_installation": false,
+  "thresholds": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  },
+  "prerequisites": [
+    "Root coherent exact-commit freeze JSON",
+    "Fresh clean read-only source worktree",
+    "Root serialized QA/layout grant after first DEV D01,D02,D03",
+    "Protected authorized QA wrapper+nonsecret qualified Word runtime"
+  ],
+  "bounds": {
+    "outer_seconds": 1200,
+    "child_seconds": 900,
+    "renderer_ready_seconds": 15,
+    "renderer_reap_seconds": 30,
+    "sandbox_CPU_seconds_unchanged": 12,
+    "sandbox_wall_seconds_unchanged": 20
+  },
+  "teardown": "Real child/group exit; renderer reap/socket absence; direct owned normal+test DB catalog absence; candidate and harness hashes/clean HEAD unchanged; read-only layout-container check after process completion",
+  "preparation_verification": "AST parse and exact source/retained metadata inspection only; no original upload, test runner, DB, renderer or provider launched",
+  "protected_wrapper_sha256": "1b82afabddd679b6acb3e69076a7812b245f859b9d82364c949e19e1f5412378"
+}

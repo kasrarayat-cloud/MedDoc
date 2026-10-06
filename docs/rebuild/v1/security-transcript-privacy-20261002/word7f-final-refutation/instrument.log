@@ -1,0 +1,607 @@
+{
+  "commit": "7f3b003d4b1478cad086ad88d8734166547b6498",
+  "elapsed_seconds": 20.278,
+  "inspections": 30,
+  "cases": [
+    {
+      "name": "date_tab_separators",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_tab_separators",
+      "engine": "v3",
+      "fields": [
+        [
+          "Date DD / MM / YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": false,
+      "binding": "allowed",
+      "export": [
+        "Date: 2026-10-03",
+        "Reason: ______"
+      ],
+      "refusal": null
+    },
+    {
+      "name": "date_tab_separators",
+      "engine": "auto",
+      "fields": [
+        [
+          "Date DD / MM / YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": "allowed",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "date_nbsp_separators",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_nbsp_separators",
+      "engine": "v3",
+      "fields": [
+        [
+          "Date DD / MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": false,
+      "binding": "allowed",
+      "export": [
+        "Date: 2026-10-03",
+        "Reason: ______"
+      ],
+      "refusal": null
+    },
+    {
+      "name": "date_nbsp_separators",
+      "engine": "auto",
+      "fields": [
+        [
+          "Date DD / MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": "allowed",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "date_line_separator",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_line_separator",
+      "engine": "v3",
+      "fields": [
+        [
+          "Date DD / MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": false,
+      "binding": "allowed",
+      "export": [
+        "Date: 2026-10-03",
+        "Reason: ______"
+      ],
+      "refusal": null
+    },
+    {
+      "name": "date_line_separator",
+      "engine": "auto",
+      "fields": [
+        [
+          "Date DD / MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": "allowed",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "date_newline_control",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "date_newline_control",
+      "engine": "v3",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "date_newline_control",
+      "engine": "auto",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "spaced_nondate_menu",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "spaced_nondate_menu",
+      "engine": "v3",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "spaced_nondate_menu",
+      "engine": "auto",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "prefixed_spaced_menu",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "prefixed_spaced_menu",
+      "engine": "v3",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "prefixed_spaced_menu",
+      "engine": "auto",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "unclosed_before_placeholder",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "unclosed_before_placeholder",
+      "engine": "v3",
+      "fields": [
+        [
+          "Comments enter notes",
+          "long_text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": false,
+      "binding": "allowed",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "unclosed_before_placeholder",
+      "engine": "auto",
+      "fields": [
+        [
+          "Comments enter notes",
+          "long_text"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": "allowed",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "unclosed_before_date",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "unclosed_before_date",
+      "engine": "v3",
+      "fields": [
+        [
+          "Date DD/MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": false,
+      "binding": "allowed",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "unclosed_before_date",
+      "engine": "auto",
+      "fields": [
+        [
+          "Date DD/MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": "allowed",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "unclosed_plain_control",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "unclosed_plain_control",
+      "engine": "v3",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "unbalanced_bracketed_source"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "unclosed_plain_control",
+      "engine": "auto",
+      "fields": [
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "unbalanced_bracketed_source"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "closed_paired_control",
+      "engine": "legacy",
+      "fields": [],
+      "issues": [],
+      "advanced_unresolved": 0,
+      "block": null,
+      "binding": null,
+      "export": null,
+      "refusal": {
+        "type": "DocumentError",
+        "code": "no_fields",
+        "message": "No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+      }
+    },
+    {
+      "name": "closed_paired_control",
+      "engine": "v3",
+      "fields": [
+        [
+          "Date DD/MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    },
+    {
+      "name": "closed_paired_control",
+      "engine": "auto",
+      "fields": [
+        [
+          "Date DD/MM/YYYY",
+          "date"
+        ],
+        [
+          "Reason",
+          "long_text"
+        ]
+      ],
+      "issues": [
+        "printed_bracket_alternatives"
+      ],
+      "advanced_unresolved": 0,
+      "block": true,
+      "binding": "refused",
+      "export": null,
+      "refusal": null
+    }
+  ],
+  "quarantine": [
+    {
+      "case": "D27",
+      "engine": "legacy",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    },
+    {
+      "case": "D27",
+      "engine": "v3",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    },
+    {
+      "case": "D35",
+      "engine": "legacy",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    },
+    {
+      "case": "D35",
+      "engine": "v3",
+      "coverage_stripped_outcome": {
+        "refused": "['This exact original has retained rendered answer failures and is unsupported. No generation or charge is allowed until its whole-document growth is qualified. Leaving areas unchanged cannot qualify this original.']"
+      },
+      "scope": "direct source-hash admission-binding control; no original/corpus/browser qualification"
+    }
+  ],
+  "historical": [
+    {
+      "case": "D27",
+      "empty_historical_manifest_legacy_admission": [
+        "",
+        ""
+      ],
+      "scope": "pure historical guard observation; no actual stored legacy version or browser admission witness"
+    },
+    {
+      "case": "D35",
+      "empty_historical_manifest_legacy_admission": [
+        "",
+        ""
+      ],
+      "scope": "pure historical guard observation; no actual stored legacy version or browser admission witness"
+    }
+  ],
+  "stored_export_AST_unchanged": true
+}

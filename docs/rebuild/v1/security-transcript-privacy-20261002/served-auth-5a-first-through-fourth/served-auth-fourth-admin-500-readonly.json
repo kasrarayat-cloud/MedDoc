@@ -1,0 +1,151 @@
+{
+  "source_commit": "5a06295a6bcfa7aca82f024e761c0a53f2b92ab5",
+  "read_only": true,
+  "provider_requests": 0,
+  "audit_patched_for_read_only_diagnosis": true,
+  "type": "VariableDoesNotExist",
+  "message_sha256": "3fe0d5a07124369d12373c7d6714a2df46a0d3966ba0f507e0867335543a7647",
+  "frames": [
+    {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/diagnose_served_admin_dashboard.py",
+      "line": 35,
+      "function": "<module>"
+    },
+    {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/demo-5a06295a/src/rebuild/core/views.py",
+      "line": 2360,
+      "function": "admin_dashboard"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/shortcuts.py",
+      "line": 25,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/loader.py",
+      "line": 62,
+      "function": "render_to_string"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/backends/django.py",
+      "line": 107,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 172,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 164,
+      "function": "_render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 1018,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 979,
+      "function": "render_annotated"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/loader_tags.py",
+      "line": 159,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 164,
+      "function": "_render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 1018,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 979,
+      "function": "render_annotated"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/loader_tags.py",
+      "line": 65,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 1018,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 979,
+      "function": "render_annotated"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/loader_tags.py",
+      "line": 65,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 1018,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 979,
+      "function": "render_annotated"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/defaulttags.py",
+      "line": 327,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 1018,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 979,
+      "function": "render_annotated"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/defaulttags.py",
+      "line": 243,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 979,
+      "function": "render_annotated"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 1077,
+      "function": "render"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 744,
+      "function": "resolve"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 856,
+      "function": "resolve"
+    },
+    {
+      "file": "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/template/base.py",
+      "line": 916,
+      "function": "_resolve_lookup"
+    }
+  ],
+  "message": "Failed lookup for key [created_by] in None"
+}

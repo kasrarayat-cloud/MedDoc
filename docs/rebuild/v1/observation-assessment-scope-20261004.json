@@ -1,0 +1,35 @@
+{
+  "classification": "Retrospective exposed N04 provider-wire replay; no new paid qualification or HTTP/export claim",
+  "base": "700410e98ed439f61cc42d4c8febcd65ec44b6aa",
+  "source": {
+    "rebuild/core/source_scope.py": "6e65e683eb59b77a154e9d7d741005fe1d279532025d9fa99e12926909ab2fea",
+    "rebuild/core/v3_field_relations.py": "06defcb836f5530107f38f96c9c72c7055c1b3a062fa68056b8d91dbc41003be",
+    "rebuild/core/tests/test_v3_observation_assessment_scope.py": "a5518ac5402ef8b10abd10ed26edfbc7fa8eb98c64f3d5bf050fbab1a5c52b76",
+    "rebuild/core/tests/observation_assessment_first_pass_control.json": "92b41d98c21bb43a26d63f5700014140ae3381951cb135b9998b92cc4b3ff549"
+  },
+  "evidence": {
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/observation-assessment-scope-first.log": "219b3a7ac2ee9e336fbcfa857961aadf5cae52fe2be50cccf3e5d752e8f98c12",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/observation-assessment-scope-second.log": "9537634ebc7257c8484cdea0532a43776a72212e8ece49c6a3a7372874646886",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/observation-assessment-affected-third.log": "ce752f804fed45665efcc8077b0354bcac60d89312ed0ce73a6278046e13a007",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/observation-assessment-first-failure-baseline.json": "73c86a8e2303570f51632c6757e8912217b34b0aa8697265de8c3302cfe8a37c",
+    "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/observation-assessment-second-failure-baseline.json": "fdbe15f96ec22d2c2b0887315fc9089146e6778582e5b4e863e87634f327f6f9"
+  },
+  "gate": {
+    "methods": 12,
+    "seconds": 37.169,
+    "exit": 0,
+    "network": 0,
+    "DB": 0
+  },
+  "first_packet": {
+    "methods": 5,
+    "exit": 1,
+    "failures": 2
+  },
+  "second_packet": {
+    "methods": 5,
+    "exit": 1,
+    "failures": 1
+  },
+  "adjudication": "Those additional test expectations had identical baseline/current supported answers; all first results preserved. No new unsafe release demonstrated by those expectations."
+}

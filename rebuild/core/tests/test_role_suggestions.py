@@ -1,21 +1,16 @@
-"""Role suggestions on the legacy default path (QUILLMD_ROLE_SUGGESTIONS, core.destination_roles.suggestion_scope).
+"""Withdrawn signer suggestions: current invariants and retained historical specifications.
 
-Since the destination-roles salvage (V1-DECISIONS 2026-09-30) a legacy field whose PRINTED label the engine's kind rule
-types signature/initials and signing_place names a signing place is never generated - 'Troponin (initial)' with it. The
-repair is NOT a wording release: such a field is asked as an ordinary question, its reading is NEVER adopted (the answer
-stays 'missing' with the role reason), and a supported, un-held reading is only offered beside it, for the clinician to
-enter by an explicit act ("Use this value"). Synthetic blank forms only; every provider is mocked or the fixture, and the
-live-mode tests run the real worker (enqueue, run_one) against a mocked client.
-
-Each test carries its own positive control (a suggestion offered, or an acceptance that succeeds), so none of them can
-pass on a tree without the feature. Refutation of afdf7bfe: G1, G2, I-1, I-2, I-3, L-1, L-2, X1, F01, F02, F05, F06, F07,
-F08, F12 are each pinned below by name; of 2aa618fb: T-1, T-2, T-3, A1, PIN-MA6; of b831936c: E-1 and E-2
-(RequestInvariant, MixedTabAndCell, RelationsRequest, BatchRequest - the '1' request is the '0' request plus the role
-questions, byte for byte) and RS3A-1 (the page offers the act exactly where it is routed).
+The October 3 standing continuation withdraws note-derived signing values.
+Flags 0/1 now send identical ordinary requests. Applicable evidence, request,
+accounting, old-state and refusal controls still execute. Explicitly marked
+positive offer/acceptance specifications are superseded and preserved verbatim
+in git and the owned continuation evidence; no signing click creates authority.
+Synthetic fixture/mocked providers only; no actual provider calls.
 """
 import io
 import json
 import re
+import unittest
 import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -26,7 +21,7 @@ from docx import Document
 from core import destination_roles, generation
 from core.jobs import enqueue, run_one
 from core.models import (AuditEvent, Department, Encounter, Job, MappingConfirmation, Membership, Organization,
-                         TemplateVersion, User)
+                         Template, TemplateVersion, User)
 from core.security import private_path
 from core.tests.test_destination_roles import LIVE, legacy_rows
 from core.tests.test_generation_batch import SETTINGS as BATCH, BatchFixture
@@ -172,6 +167,7 @@ class Legacy(V3Fixture):
 
 @override_settings(**ON)
 class Generation(Legacy, TestCase):
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_a_role_only_row_is_asked_and_offered_never_adopted(self):
         e = self.generated()
         answer = e.answers[self.key('Troponin (initial)')]
@@ -184,7 +180,7 @@ class Generation(Legacy, TestCase):
 
     def test_identity_and_another_signers_line_are_never_offered(self):
         e = self.generated()
-        self.assertTrue(self.offered(e))                       # positive control: the role-only row is offered
+        self.assertFalse(self.offered(e))                       # positive control: the role-only row is offered
         for label in ('Electronically signed by', 'Signature (patient)'):
             with self.subTest(label=label):
                 answer = e.answers[self.key(label)]
@@ -192,10 +188,10 @@ class Generation(Legacy, TestCase):
                 self.assertNotIn('role_suggestion', answer)
         fields = destination_roles.generation_fields(self.version, suggest=True)
         marked = {f['label'] for f in fields if (f.get('destination_role') or {}).get('suggest')}
-        self.assertEqual(marked, {'Troponin (initial)'})
+        self.assertEqual(marked, set())
 
     def test_a_held_conflicting_unsupported_or_injected_reading_offers_nothing(self):
-        self.assertTrue(self.offered(self.generated()))          # positive control
+        self.assertFalse(self.offered(self.generated()))          # positive control
         for name, notes in (
                 ('missing', 'Plan: Rest.'),
                 ('conflict', 'Troponin (initial): 14 ng/L\nTroponin (initial): 41 ng/L\nPlan: Rest.'),
@@ -209,7 +205,7 @@ class Generation(Legacy, TestCase):
 
     def test_a_value_longer_than_an_answer_may_be_is_never_offered(self):
         """L-2: save_answers refuses an answer over 20,000 characters, so no longer reading is offered."""
-        for length, offered in ((20000, True), (20001, False)):
+        for length, offered in ((20000, False), (20001, False)):
             with self.subTest(length=length):
                 e = self.generated('Troponin (initial): ' + '7' * length + '\nPlan: Rest.')
                 self.assertEqual(bool(self.offered(e)), offered)
@@ -218,14 +214,15 @@ class Generation(Legacy, TestCase):
     def test_the_live_worker_asks_the_role_only_row_and_the_reading_is_still_only_offered(self):
         e, job, payload = self.live()
         self.assertEqual(job.state, 'succeeded')
-        self.assertEqual(job.config['role_suggestion_contract'], generation.ROLE_SUGGESTION_CONTRACT)
-        self.assertEqual([q['label'] for q in payload['questions']], ['Troponin (initial)', 'Plan'])
+        self.assertNotIn('role_suggestion_contract', job.config)
+        self.assertEqual([q['label'] for q in payload['questions']], ['Plan'])
         self.assertTrue(all(set(q) == {'key', 'label', 'answer_policy'} for q in payload['questions']))
         # E-1: the role row's label stays a context label, exactly where the request without it puts it
         self.assertEqual(payload['context_labels'], ['Troponin (initial)', 'Electronically signed by',
                                                      'Signature (patient)'])
         answer = e.answers[self.key('Troponin (initial)')]
-        self.assertEqual((answer['status'], answer['text'], answer['role_suggestion']['text']), ('missing', '', '14 ng/L'))
+        self.assertEqual((answer['status'], answer['text']), ('missing', ''))
+        self.assertNotIn('role_suggestion', answer)
         self.assertEqual(e.answers[self.key('Plan')]['text'], 'Rest.')
         self.assertNotIn('role_suggestion', e.answers[self.key('Electronically signed by')])
 
@@ -238,7 +235,7 @@ class Generation(Legacy, TestCase):
         self.assertEqual(request_off['context_labels'], ['Troponin (initial)', 'Electronically signed by',
                                                          'Signature (patient)'])
         self.assertNotIn('role_suggestion', off.answers[self.key('Troponin (initial)')])
-        self.assertNotEqual(request_off, request_on)
+        self.assertEqual(request_off, request_on)
         self.assertEqual(self.ordinary(on.answers), off.answers)
 
     def test_no_configuration_depends_on_the_setting(self):
@@ -253,8 +250,8 @@ class Generation(Legacy, TestCase):
                 self.assertEqual(on, off)
                 self.assertNotIn('role_suggestion_contract', on)
         with override_settings(QUILLMD_ROLE_SUGGESTIONS='1'):
-            self.assertEqual(generation.admitted_with_role_suggestions(generation.configuration(), self.version)
-                             ['role_suggestion_contract'], generation.ROLE_SUGGESTION_CONTRACT)
+            self.assertNotIn('role_suggestion_contract', generation.admitted_with_role_suggestions(
+                generation.configuration(), self.version))
         with override_settings(QUILLMD_ROLE_SUGGESTIONS='0'):
             self.assertEqual(generation.admitted_with_role_suggestions(
                 {**generation.configuration(), 'role_suggestion_contract': generation.ROLE_SUGGESTION_CONTRACT},
@@ -285,20 +282,21 @@ class Generation(Legacy, TestCase):
                 e.refresh_from_db()
                 asked = [q['label'] for q in json.loads(sent[0]['messages'][0]['content'])['questions']]
                 self.assertEqual(job.state, 'succeeded')
-                self.assertEqual('role_suggestion_contract' in job.config, posted_flag == '1')
-                self.assertEqual('Troponin (initial)' in asked, posted_flag == '1')
-                self.assertEqual(bool(self.offered(e)), posted_flag == '1')
+                self.assertEqual('role_suggestion_contract' in job.config, False)
+                self.assertEqual('Troponin (initial)' in asked, False)
+                self.assertEqual(bool(self.offered(e)), False)
 
     def test_switching_the_setting_off_stops_a_queued_job_asking(self):
         """I-1: a job admitted with the setting on and run after it was turned off sends the request without it."""
         e, job, payload = self.live(flag='1', run_flag='0')
-        self.assertEqual(job.config['role_suggestion_contract'], generation.ROLE_SUGGESTION_CONTRACT)
+        self.assertNotIn('role_suggestion_contract', job.config)
         self.assertEqual([q['label'] for q in payload['questions']], ['Plan'])
         self.assertNotIn('role_suggestion', e.answers[self.key('Troponin (initial)')])
         e, job, payload = self.live(flag='1', run_flag='1')                    # positive control
-        self.assertEqual([q['label'] for q in payload['questions']], ['Troponin (initial)', 'Plan'])
-        self.assertTrue(self.offered(e))
+        self.assertEqual([q['label'] for q in payload['questions']], ['Plan'])
+        self.assertFalse(self.offered(e))
 
+    @unittest.skip("Superseded optional signer-response tolerance; current unasked-key refusal is tested")
     def test_a_missing_or_unreadable_suggested_item_loses_only_the_suggestion(self):
         """The suggested row is read apart from the ordinary ones: its unreadable or missing item offers nothing, and
         the ordinary answers are exactly those of the request without it."""
@@ -321,6 +319,7 @@ class Generation(Legacy, TestCase):
                 self.assertIsNone(self.offered(e))
                 self.assertEqual(self.ordinary(e.answers), plain.answers)
 
+    @unittest.skip("Superseded optional signer-response tolerance; current unasked-key refusal is tested")
     def test_any_other_irregularity_refuses_the_whole_output_as_the_request_without_suggestions_does(self):
         """Round 2 decision: the items under the suggested keys are taken out (one per key, by that exact key) and the
         rest must be exactly a valid '0' response. A suggested answer under another key - an ordinary one, a held row's,
@@ -345,6 +344,7 @@ class Generation(Legacy, TestCase):
                 self.assertIn('ValidationError', job.error)      # the validator's own refusal, not a crash
                 self.assertEqual(e.answers, {})
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_one_unreadable_suggestion_loses_only_itself(self):
         """With two suggested rows, an unreadable item for one costs only that suggestion; the other is offered."""
         self.version = self.uploaded(data=legacy_rows('Troponin (initial)', 'Lactate (initial)', 'Plan'),
@@ -409,14 +409,12 @@ class Generation(Legacy, TestCase):
             for sname, extra in suggested.items():
                 with self.subTest(ordinary=oname, suggested=sname):
                     on = outcome('1', change(base) + extra)
-                    if off is None:
+                    if extra or off is None:
                         self.assertIsNone(on)
-                    if sname in ('correct', 'missing', 'unreadable'):
-                        self.assertEqual(on is None, off is None)
-                        if on is not None:
-                            self.assertEqual(self.ordinary(on), off)
-                            self.assertEqual(bool(on[key].get('role_suggestion')), sname == 'correct')
-        self.assertIsNotNone(outcome('1', base + suggested['correct']))      # positive control
+                    else:
+                        self.assertEqual(on, off)
+                        self.assertNotIn('role_suggestion', on[key])
+        self.assertIsNotNone(outcome('1', base))
 
     def test_the_hold_is_the_shown_maximum_and_covers_the_extra_question(self):
         """maximum_cost bounds every field of the mapping, held ones included: asking a held field moves neither the
@@ -434,7 +432,7 @@ class Generation(Legacy, TestCase):
         self.assertEqual((on['pricing_version'], bound_on), (off['pricing_version'], bound_off))
         e, job, _ = self.live(flag='1')
         self.assertEqual(job.state, 'succeeded')
-        self.assertTrue(self.offered(e))
+        self.assertFalse(self.offered(e))
         sent = []
         with override_settings(**dict(LIVE, QUILLMD_ROLE_SUGGESTIONS='1')), labelled_provider(sent):
             generation.generate(e.notes, destination_roles.generation_fields(self.version, suggest=True), on,
@@ -451,7 +449,7 @@ class Generation(Legacy, TestCase):
     def test_a_role_row_renamed_to_a_signature_label_is_never_offered(self):
         """Identity is the mapped label's OR the printed label's (FV-01): a role-only row renamed 'Signature' is the
         finalizer's identity row and is never asked or offered."""
-        self.assertTrue(self.offered(self.generated()))          # positive control, before the rename
+        self.assertFalse(self.offered(self.generated()))          # positive control, before the rename
         labels = {f['key']: f['label'] for f in self.version.fields}
         labels[self.key('Troponin (initial)')] = 'Signature'
         response = self.client.post(f'/templates/{self.template.pk}/', {'mapping_version': self.version.pk,
@@ -477,8 +475,8 @@ class Generation(Legacy, TestCase):
                 answers = generation.validated(generation.generate(e.notes, marked, config)[0])
             asked = [q['label'] for q in json.loads(sent[0]['messages'][0]['content'])['questions']]
             with self.subTest(admitted=admitted):
-                self.assertEqual('Troponin (initial)' in asked, admitted)
-                self.assertEqual('role_suggestion' in answers[self.key('Troponin (initial)')], admitted)
+                self.assertNotIn('Troponin (initial)', asked)
+                self.assertNotIn('role_suggestion', answers[self.key('Troponin (initial)')])
 
 
 @override_settings(**ON)
@@ -490,21 +488,20 @@ class TabForms(Legacy, TestCase):
 
     def test_the_form_takes_the_tab_contract(self):
         self.assertTrue(generation.tab_evidence_contract(self.version.fields))
-        self.assertTrue(self.offered(self.generated(self.notes)))     # the fixture path offers it too
+        self.assertFalse(self.offered(self.generated(self.notes)))     # the fixture path offers it too
 
-    def test_a_tab_role_row_is_offered_and_the_ordinary_answers_equal_the_setting_off(self):
+    def test_a_tab_role_row_is_held_and_the_ordinary_answers_equal_the_setting_off(self):
         off, job_off, request_off = self.live(self.notes, flag='0', provider=unit_provider)
         on, job_on, request_on = self.live(self.notes, flag='1', provider=unit_provider)
         self.assertEqual((job_off.state, job_on.state), ('succeeded', 'succeeded'))
         self.assertIn('source_units', request_on)
-        self.assertEqual([q['label'] for q in request_on['questions']], ['Troponin (initial)', 'Heart rate', 'Plan'])
+        self.assertEqual([q['label'] for q in request_on['questions']], ['Heart rate', 'Plan'])
         offer = self.offered(on)
-        self.assertEqual(offer['text'], '14 ng/L')
-        self.assertEqual(offer['evidence'][0]['quote'], 'Troponin (initial): 14 ng/L')
+        self.assertIsNone(offer)
         self.assertEqual(self.ordinary(on.answers), off.answers)
         self.assertEqual(on.answers[self.key('Heart rate')]['text'], '72 bpm')
         body = self.client.get(f'/encounters/{on.pk}/').content.decode()
-        self.assertEqual(body.count('data-role-suggestion'), 1)          # the value is what its unit says (X1)
+        self.assertEqual(body.count('data-role-suggestion'), 0)          # the value is what its unit says (X1)
 
     def test_a_repeated_unit_is_refused_under_both_settings(self):
         plan = self.key('Plan')
@@ -518,7 +515,7 @@ class TabForms(Legacy, TestCase):
                 self.assertEqual(e.answers, {})
         e, job, _ = self.live(self.notes, flag='1', provider=unit_provider)   # positive control
         self.assertEqual(job.state, 'succeeded')
-        self.assertEqual(self.offered(e)['text'], '14 ng/L')
+        self.assertIsNone(self.offered(e))
 
 
 @override_settings(**ON)
@@ -535,7 +532,7 @@ class RoundTwoTolerance(Legacy, TestCase):
                 self.assertEqual(e.answers, {})
         e, job, _ = self.live(notes, flag='1', provider=provider)              # positive control: the honest response
         self.assertEqual(job.state, 'succeeded')
-        self.assertTrue(self.offered(e))                                       # ... asks and offers the role row
+        self.assertFalse(self.offered(e))                                       # ... asks and offers the role row
         return e
 
     def units(self, payload, *quotes):
@@ -724,13 +721,13 @@ class RequestInvariant(Legacy, TestCase):
             body = self.client.get(f'/encounters/{generated["1"].pk}/').content.decode()
             self.assertEqual(body.count('data-role-suggestion'), len(offered))
 
-    def test_an_all_tab_form_asks_the_role_row_and_changes_nothing_else(self):
+    def test_an_all_tab_form_keeps_role_held_and_changes_nothing_else(self):
         self.check(tab_sheet('Troponin (initial)', 'Troponin (repeat)', 'Plan'), 'Synthetic all tab',
-                   ['Troponin (initial)'], {'Troponin (initial)': '14 ng/L'})
+                   [], {})
 
-    def test_an_all_cell_form_asks_the_role_row_and_changes_nothing_else(self):
+    def test_an_all_cell_form_keeps_role_held_and_changes_nothing_else(self):
         self.check(legacy_rows('Troponin (initial)', 'Troponin (repeat)', 'Plan'), 'Synthetic all cell',
-                   ['Troponin (initial)'], {'Troponin (initial)': '14 ng/L'})
+                   [], {})
 
     def test_e1_a_cell_role_row_among_tab_rows_is_not_asked(self):
         self.check(mixed(('Troponin (initial)', 'cell'), ('Troponin (repeat)', 'tab'), ('Plan', 'tab')),
@@ -738,16 +735,17 @@ class RequestInvariant(Legacy, TestCase):
 
     def test_only_the_role_rows_that_change_nothing_else_are_asked(self):
         self.check(mixed(('Troponin (initial)', 'tab'), ('Lactate (initial)', 'cell'), ('Troponin (repeat)', 'tab'),
-                         ('Plan', 'tab')), 'Synthetic two roles mixed', ['Troponin (initial)'],
-                   {'Troponin (initial)': '14 ng/L'}, self.TWO)
+                         ('Plan', 'tab')), 'Synthetic two roles mixed', [],
+                   {}, self.TWO)
 
     def test_a_form_already_on_the_legacy_contract_asks_a_tab_role_row_and_stores_only_what_the_page_shows(self):
         """Ordinary rows of both kinds (the legacy quote contract under '0'): a tab role row changes nothing else, so it
         is asked. But the page reads a stored offer on its own field - by the tab contract its locator selects - and that
         reading is not the request's, so the page would never show it: it is not stored (`role_offered`)."""
         self.check(mixed(('Troponin (initial)', 'tab'), ('Troponin (repeat)', 'cell'), ('Plan', 'tab')),
-                   'Synthetic legacy mixed', ['Troponin (initial)'], {})
+                   'Synthetic legacy mixed', [], {})
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_the_same_form_offers_the_reading_the_page_reads_the_same_way(self):
         """The other half of `role_offered`: cited as its whole labelled line, the tab role row's reading on that legacy
         contract form is exactly the one the page reads again on its own field - so it is stored, shown and accepted."""
@@ -799,7 +797,7 @@ class RequestInvariant(Legacy, TestCase):
                 self.assertEqual(answers['1'], answers['0'])
                 self.assertEqual(answers['0'][self.key('Troponin (repeat)')]['text'], '40 ng/L')
         self.use(tab_sheet('Troponin (initial)', 'Troponin (repeat)', 'Plan'), 'Synthetic E-2 control')
-        self.assertEqual(self.offered(self.generated(self.NOTES))['text'], '14 ng/L')        # positive control
+        self.assertIsNone(self.offered(self.generated(self.NOTES)))        # positive control
 
 
 @override_settings(**ON)
@@ -826,7 +824,7 @@ class MixedTabAndCell(Legacy, TestCase):
         return generated, payload, e.status
 
     def test_e1_the_tab_contracts_holds_stand_under_both_settings(self):
-        self.assertTrue(any((f.get('destination_role') or {}).get('suggest')
+        self.assertFalse(any((f.get('destination_role') or {}).get('suggest')
                             for f in destination_roles.generation_fields(self.version, suggest=True)))
         cases = (('correction', 'Troponin (repeat): 40 ng/L; correction, 41 ng/L\nPlan: Rest and fluids.',
                   ('Troponin (repeat)',)),
@@ -939,15 +937,31 @@ class V3RolePlaces(V3Fixture, TestCase):
             legacy_template, legacy = self.uploaded(data=legacy_rows('Troponin (initial)', 'Plan'),
                                                     name='Synthetic legacy twin')
         self.assertEqual(legacy.contract, '')
-        self.assertTrue(any((f.get('destination_role') or {}).get('suggest')
+        self.assertFalse(any((f.get('destination_role') or {}).get('suggest')
                             for f in destination_roles.generation_fields(legacy, suggest=True)))
         with override_settings(QUILLMD_ROLE_SUGGESTIONS='1'):
-            self.assertIn('role_suggestion_contract', generation.admitted_with_role_suggestions(
+            self.assertNotIn('role_suggestion_contract', generation.admitted_with_role_suggestions(
                 generation.configuration(legacy.fields), legacy))
 
 
 @override_settings(**ON)
 class Review(Legacy, TestCase):
+    def generated(self, notes=NOTES):
+        """Model a historical stored offer; the current worker never makes it.
+
+        This is explicit synthetic old-state setup, not a feature bypass. Every
+        current page/route must continue to withdraw the planted offer.
+        """
+        e = super().generated(notes)
+        key = self.key('Troponin (initial)')
+        quote = '14 ng/L'
+        start = notes.find(quote)
+        e.answers[key]['role_suggestion'] = {'text': quote, 'evidence': [
+            {'quote': quote, 'start': start, 'end': start + len(quote)}]}
+        e.save(update_fields=['answers'])
+        return e
+
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_the_page_shows_the_suggestion_its_lines_and_the_warning_only_on_the_role_row(self):
         e = self.generated()
         body = self.client.get(f'/encounters/{e.pk}/').content.decode()
@@ -959,6 +973,7 @@ class Review(Legacy, TestCase):
         key = self.key('Troponin (initial)')
         self.assertIn(f'<textarea id="answer-{key}" name="answer_{key}" rows="4" maxlength="20000"></textarea>', body)
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_a_value_exactly_as_long_as_an_answer_may_be_is_shown_and_accepted(self):
         """PIN-MA6: 20,000 characters is a value save_answers keeps, so the page offers it and the act enters it."""
         value = '7' * 20000
@@ -969,6 +984,7 @@ class Review(Legacy, TestCase):
         e.refresh_from_db()
         self.assertEqual(e.answers[self.key('Troponin (initial)')]['text'], value)
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_an_employee_sees_the_suggestion_but_not_the_act(self):
         """F07: only an owner or clinician is given the button and its form."""
         e = self.generated()
@@ -994,7 +1010,7 @@ class Review(Legacy, TestCase):
         device = TOTPDevice.objects.create(user=ops, name='Synthetic authenticator', confirmed=True)
         client = Client(); client.force_login(ops)
         session = client.session; session['otp_device_id'] = device.persistent_id; session.save()
-        for admin, flag, offered in ((False, '1', True), (True, '1', False), (False, '0', False), (True, '0', False)):
+        for admin, flag, offered in ((False, '1', False), (True, '1', False), (False, '0', False), (True, '0', False)):
             with self.subTest(admin_site=admin, setting=flag), override_settings(ADMIN_SITE=admin,
                                                                                  QUILLMD_ROLE_SUGGESTIONS=flag):
                 page = client.get(f'/encounters/{e.pk}/')
@@ -1030,9 +1046,11 @@ class Review(Legacy, TestCase):
                     self.unchanged(e, response, expected[method].status_code)
                     self.assertNotIn('Location', response)
         response = self.client.get(f'/encounters/{e.pk}/role-suggestion')     # positive control: on, it is routed
-        self.assertEqual((response.status_code, response['Location']), (301, f'/encounters/{e.pk}/role-suggestion/'))
-        self.assertEqual(self.accept(e).status_code, 302)
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Location', response)
+        self.assertEqual(self.accept(e).status_code, 404)
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_using_the_value_enters_it_as_the_clinicians_own_answer_and_audits_identifiers_only(self):
         """L-1: the audit row names the field and the revision; nothing derived from the value."""
         e = self.generated()
@@ -1056,6 +1074,7 @@ class Review(Legacy, TestCase):
         self.assertEqual((e.answers, e.revision), before)
         self.assertEqual(AuditEvent.objects.filter(action=ACTION).count(), 1)
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_using_the_value_stores_what_typing_it_would_store(self):
         """The same answer as save_answers' typed path for the same value (one field, nothing reviewed)."""
         accepted = self.generated()
@@ -1072,19 +1091,19 @@ class Review(Legacy, TestCase):
 
     def test_a_stale_revision_a_finalized_document_or_a_pending_job_is_refused(self):
         e = self.generated()
-        self.unchanged(e, self.accept(e, revision=e.revision - 1), 409)
-        self.unchanged(e, self.accept(e, revision='x'), 409)
+        self.unchanged(e, self.accept(e, revision=e.revision - 1), 404)
+        self.unchanged(e, self.accept(e, revision='x'), 404)
         queued = Job.objects.create(encounter=e, user=self.user, kind='transcription', request_key='rs:queued')
-        self.unchanged(e, self.accept(e), 409)
+        self.unchanged(e, self.accept(e), 404)
         queued.delete()
-        self.assertEqual(self.accept(e).status_code, 302)        # positive control
+        self.assertEqual(self.accept(e).status_code, 404)        # positive control
         other = self.generated()
         self.assertEqual(self.review_all(other).status_code, 302)
         self.finalized(other)
         self.assertEqual(other.status, 'finalized')
         before = (other.answers, other.revision)
         response = self.accept(other)
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 404)
         other.refresh_from_db()
         self.assertEqual((other.answers, other.revision), before)
 
@@ -1092,21 +1111,21 @@ class Review(Legacy, TestCase):
         e = self.generated()
         for value in ('41 ng/L', '14 ng/L ', '', 'Dr Other'):
             with self.subTest(value=value):
-                self.unchanged(e, self.accept(e, value=value), 400)
-        self.assertEqual(self.accept(e, value='14 ng/L').status_code, 302)
+                self.unchanged(e, self.accept(e, value=value), 404)
+        self.assertEqual(self.accept(e, value='14 ng/L').status_code, 404)
 
     def test_a_field_with_no_current_suggestion_is_refused(self):
         e = self.generated()
         for label, value in (('Plan', 'Rest.'), ('Electronically signed by', 'Dr Other'),
                              ('Signature (patient)', 'John Example')):
             with self.subTest(label=label):
-                self.unchanged(e, self.accept(e, key=self.key(label), value=value), 400)
-        self.unchanged(e, self.accept(e, key='no-such-field'), 400)
+                self.unchanged(e, self.accept(e, key=self.key(label), value=value), 404)
+        self.unchanged(e, self.accept(e, key='no-such-field'), 404)
         # a typed answer (or "Leave blank - reviewed") ends the offer
         typed = self.generated()
         self.assertEqual(self.review_all(typed, typed={'Troponin (initial)': '9 ng/L'}).status_code, 302)
-        self.unchanged(typed, self.accept(typed), 400)
-        self.assertEqual(self.accept(e).status_code, 302)        # positive control
+        self.unchanged(typed, self.accept(typed), 404)
+        self.assertEqual(self.accept(e).status_code, 404)        # positive control
 
     def test_leave_blank_reviewed_ends_the_offer(self):
         e = self.generated()
@@ -1119,8 +1138,8 @@ class Review(Legacy, TestCase):
         self.assertEqual((e.answers[key]['status'], e.answers[key]['text']), ('left_blank', ''))
         self.assertTrue(e.answers[key]['role_suggestion'])
         self.assertNotIn('data-role-suggestion', self.client.get(f'/encounters/{e.pk}/').content.decode())
-        self.unchanged(e, self.accept(e), 400)
-        self.assertEqual(self.accept(self.generated()).status_code, 302)   # positive control
+        self.unchanged(e, self.accept(e), 404)
+        self.assertEqual(self.accept(self.generated()).status_code, 404)   # positive control
 
     def plant(self, notes, planted):
         """A generated draft whose stored suggestions are replaced by `planted` ({key: answer})."""
@@ -1204,12 +1223,13 @@ class Review(Legacy, TestCase):
                 self.assertEqual(page.status_code, 200)
                 body = page.content.decode()
                 if value is None:                                  # the planting itself changes nothing
-                    self.assertEqual(body.count('data-role-suggestion'), 1)
+                    self.assertEqual(body.count('data-role-suggestion'), 0)
                     continue
                 self.assertNotIn('data-role-suggestion', body)
-                self.unchanged(fresh, self.accept(fresh, key=target, value=value), 400)
-        self.assertEqual(self.accept(e).status_code, 302)        # positive control: the untouched offer is accepted
+                self.unchanged(fresh, self.accept(fresh, key=target, value=value), 404)
+        self.assertEqual(self.accept(e).status_code, 404)        # positive control: the untouched offer is accepted
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_one_bad_stored_offer_withholds_only_itself(self):
         """The page and the act read every offer again together; one that cannot be read withholds only itself."""
         self.version = self.uploaded(data=legacy_rows('Troponin (initial)', 'Lactate (initial)', 'Plan'),
@@ -1224,8 +1244,8 @@ class Review(Legacy, TestCase):
         Encounter.objects.filter(pk=e.pk).update(answers={**e.answers, lactate: broken})
         e.refresh_from_db()
         self.assertEqual(self.client.get(f'/encounters/{e.pk}/').content.decode().count('data-role-suggestion'), 1)
-        self.unchanged(e, self.accept(e, key=lactate, value='2.1'), 400)
-        self.assertEqual(self.accept(e).status_code, 302)
+        self.unchanged(e, self.accept(e, key=lactate, value='2.1'), 404)
+        self.assertEqual(self.accept(e).status_code, 404)
 
     def test_the_act_refuses_a_stored_suggestion_on_a_contract_v3_or_qualified_word_version(self):
         """F05: the act's own form checks are the only barrier for stored state on those versions."""
@@ -1234,14 +1254,18 @@ class Review(Legacy, TestCase):
             with self.subTest(version=name):
                 e = self.generated()
                 self.assertTrue(self.offered(e))
-                latest = self.latest(self.template)
-                moved = TemplateVersion.objects.create(template=self.template, number=latest.number + 1,
+                # Model pre-binding stored state on a separate historical original: an imported template's engine
+                # is immutable. Do not replace its bound legacy engine just to reach this negative act control.
+                historical=Template.objects.create(department=self.template.department,
+                    name='Synthetic historical '+name,format=self.template.format,original_name=self.template.original_name,
+                    original_path=self.template.original_path,sha256=self.template.sha256,created_by=self.user)
+                moved = TemplateVersion.objects.create(template=historical, number=1,
                                                        fields=self.version.fields, created_by=self.user, **extra)
                 MappingConfirmation.objects.create(version=moved, confirmed_by=self.user)
                 Encounter.objects.filter(pk=e.pk).update(template_version=moved)
                 e.refresh_from_db()
-                self.unchanged(e, self.accept(e), 400)
-        self.assertEqual(self.accept(self.generated()).status_code, 302)     # positive control on the legacy version
+                self.unchanged(e, self.accept(e), 404)
+        self.assertEqual(self.accept(self.generated()).status_code, 404)     # positive control on the legacy version
 
     def test_another_tenant_an_employee_get_and_a_missing_csrf_token_are_refused(self):
         e = self.generated()
@@ -1253,12 +1277,13 @@ class Review(Legacy, TestCase):
         intruder = Client(); intruder.force_login(stranger)
         self.unchanged(e, self.accept(e, client=intruder), 404)
         staff = Client(); staff.force_login(self.employee)
-        self.unchanged(e, self.accept(e, client=staff), 403)
-        self.unchanged(e, self.client.get(f'/encounters/{e.pk}/role-suggestion/'), 405)
+        self.unchanged(e, self.accept(e, client=staff), 404)
+        self.unchanged(e, self.client.get(f'/encounters/{e.pk}/role-suggestion/'), 404)
         guarded = Client(enforce_csrf_checks=True); guarded.force_login(self.user)
-        self.unchanged(e, self.accept(e, client=guarded), 403)
-        self.assertEqual(self.accept(e).status_code, 302)        # positive control
+        self.unchanged(e, self.accept(e, client=guarded), 404)
+        self.assertEqual(self.accept(e).status_code, 404)        # positive control
 
+    @unittest.skip("Superseded 2026-10-03: note-derived signing offers/acceptance withdrawn; original retained")
     def test_an_unaccepted_suggestion_never_reaches_the_export_and_an_accepted_one_does(self):
         e = self.generated()
         self.assertTrue(self.offered(e))
@@ -1305,11 +1330,11 @@ class Review(Legacy, TestCase):
         self.assertEqual(response.status_code, 302)
         e.refresh_from_db()
         self.assertEqual(e.answers, {})
-        self.unchanged(e, self.accept(e), 400)
+        self.unchanged(e, self.accept(e), 404)
         enqueue(Encounter.objects.get(pk=e.pk), self.user); self.assertTrue(run_one())
         e.refresh_from_db()
-        self.assertEqual(self.offered(e)['text'], '14 ng/L')
-        self.assertEqual(self.accept(e).status_code, 302)
+        self.assertIsNone(self.offered(e))
+        self.assertEqual(self.accept(e).status_code, 404)
 
     def test_changing_the_notes_clears_suggestions_and_a_new_generation_replaces_them(self):
         """F08: the notes save itself clears a stored suggestion (no review clearing first)."""
@@ -1321,12 +1346,12 @@ class Review(Legacy, TestCase):
         e.refresh_from_db()
         self.assertEqual(e.answers, {})
         self.assertNotIn('data-role-suggestion', self.client.get(f'/encounters/{e.pk}/').content.decode())
-        self.unchanged(e, self.accept(e), 400)
+        self.unchanged(e, self.accept(e), 404)
         enqueue(Encounter.objects.get(pk=e.pk), self.user); self.assertTrue(run_one())
         e.refresh_from_db()
-        self.assertEqual(self.offered(e)['text'], '22 ng/L')
-        self.unchanged(e, self.accept(e, value='14 ng/L'), 400)
-        self.assertEqual(self.accept(e, value='22 ng/L').status_code, 302)
+        self.assertIsNone(self.offered(e))
+        self.unchanged(e, self.accept(e, value='14 ng/L'), 404)
+        self.assertEqual(self.accept(e, value='22 ng/L').status_code, 404)
 
 
 class Setting(TestCase):
@@ -1366,12 +1391,12 @@ class Setting(TestCase):
 
 
 class Scope(TestCase):
-    def test_the_scope_admits_only_a_text_field_held_for_its_printed_role(self):
+    def test_the_scope_admits_no_signing_field_even_under_the_old_flag(self):
         row = {'printed_label': 'Troponin (initial)', 'role': 'initials'}
         field = {'key': 'k', 'label': 'Troponin (initial)', 'kind': 'text'}
-        self.assertTrue(destination_roles.suggestion_scope(field, row))
-        self.assertTrue(destination_roles.suggestion_scope({**field, 'kind': 'long_text'}, row))
-        self.assertTrue(destination_roles.suggestion_scope({**field, 'answer_policy': 'documented_source_only'}, row))
+        self.assertFalse(destination_roles.suggestion_scope(field, row))
+        self.assertFalse(destination_roles.suggestion_scope({**field, 'kind': 'long_text'}, row))
+        self.assertFalse(destination_roles.suggestion_scope({**field, 'answer_policy': 'documented_source_only'}, row))
         for name, changed, changed_row in (
                 ('no role', field, {**row, 'role': ''}), ('no reading', field, None),
                 ('checkbox', {**field, 'kind': 'checkbox'}, row), ('choice', {**field, 'kind': 'choice'}, row),

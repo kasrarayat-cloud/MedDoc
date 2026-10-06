@@ -1,0 +1,106 @@
+{
+  "source_commit": "d7f4ebf7759cecf3d9517d208d6c2d8d7c40e3fc",
+  "readonly_snapshot": "/opt/meddoc-pro/.worktrees/v1-clinical-source-refute-d7f4ebf7",
+  "prior_source": "7af94030fd3d5d8a2fa5ff4b14c9c64528f86187",
+  "root_refutation_required": true,
+  "claims": [
+    "Only actual source annotation or exact destination theme can reassign reviewed source; determiners alone cannot.",
+    "An actual annotation assigning a foreign bearer, uncertain bearer, excluded current patient or another visit time cannot be cleared, whether before or after selected source.",
+    "Separate appointment/object owners do not assign the report; passive reviewing/authoring remains metadata.",
+    "All existing complete ordinary-v4 relation, clinical invalidation, medication, actor, time and signing gates remain required."
+  ],
+  "priced_source_hashes": {
+    "rebuild/core/generation.py": "270a62d3972da8e7891908977355c8f64281266e39b96338e72f71c90ff29ff6",
+    "rebuild/core/v3_field_relations.py": "0d369c5c0d48a8421dfcd2cf2ae651bbe2968d95c86b1e30471b637970a6f470",
+    "rebuild/core/ordinary_source_scope.py": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+    "rebuild/core/reviewed_source.py": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+    "rebuild/core/reviewed_procedure_source.py": "9c647ffaeae78e4ee636345fc7749a9b33be041d2eae534aa3d67756c432c9f6"
+  },
+  "artifacts": {
+    "backward-annotation-object-coherent-first.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/backward-annotation-object-coherent-first.log",
+      "sha256": "1d41b6d7ee79dc668649546ae13b0be7eb673272ed2258a1fd2357b90b32a812"
+    },
+    "preceding-annotation-first.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/preceding-annotation-first.log",
+      "sha256": "a8f30bcc4f2913055b8dbe424653e3bcaeb7dbfbc6ddc6bff423e447a3c9b299"
+    },
+    "preceding-annotation-whole-wire-first.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/preceding-annotation-whole-wire-first.json",
+      "sha256": "ebd282e4fa73e065e8374fe8a357d8ff5460e60e6e0a85cca0fa857f18e3bc4d"
+    },
+    "preceding-annotation-whole-wire-repaired.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/preceding-annotation-whole-wire-repaired.json",
+      "sha256": "feb1fd3e89cd750eeb8fcdfea4524aeb673b14dfc599fd80ff66658d934af5ae"
+    },
+    "backward-annotation-coherent-final.log": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/backward-annotation-coherent-final.log",
+      "sha256": "ffda525a9fb4fa5f89e8ab54beb2b25af05bacc9572e0452dd44764d07a3b710"
+    },
+    "backward-annotation-final-source-before.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/backward-annotation-final-source-before.json",
+      "sha256": "1bcee2122570668ecb0ebe815bd746d414b104863d31d2bd4c1f829fead84c4e"
+    },
+    "backward-annotation-final-test-result.json": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/backward-annotation-final-test-result.json",
+      "sha256": "522cff9b94ba93b319e5df488a7db57895574b3a101c93500e410bb863b361db"
+    }
+  },
+  "affected_gate": {
+    "base_head": "4f564a44231394be775a969dd082ca99ce598e52",
+    "source_hashes": {
+      "rebuild/core/reviewed_source.py": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "rebuild/core/tests/test_reviewed_procedure_source.py": "9229df68661f19fcaadfe85a3b3318759c686b8bd8861d3b0279c5a21517314c",
+      "rebuild/core/ordinary_source_scope.py": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "rebuild/core/tests/test_v3_ordinary_source_scope.py": "726e804ccaaa89a1672ffa7a8181e16bb9a2d8789eee949f7738a43db0ec00df"
+    },
+    "capture": "After final16-method child start, no source mutations until child completion.",
+    "deadline_seconds": 190,
+    "provider_calls": 0,
+    "DB_calls": 0,
+    "prior_direct_header_proofs": {
+      "wrongfirst": "ebd282e4fa73e065e8374fe8a357d8ff5460e60e6e0a85cca0fa857f18e3bc4d",
+      "repaired": "feb1fd3e89cd750eeb8fcdfea4524aeb673b14dfc599fd80ff66658d934af5ae"
+    },
+    "source_hashes_after": {
+      "rebuild/core/reviewed_source.py": "cd0d7ab9a97fa1371066e1489d6db0637c4d07d90b011f45512a30fa835c5b88",
+      "rebuild/core/tests/test_reviewed_procedure_source.py": "9229df68661f19fcaadfe85a3b3318759c686b8bd8861d3b0279c5a21517314c",
+      "rebuild/core/ordinary_source_scope.py": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "rebuild/core/tests/test_v3_ordinary_source_scope.py": "726e804ccaaa89a1672ffa7a8181e16bb9a2d8789eee949f7738a43db0ec00df"
+    },
+    "actual_exit": 0,
+    "actual_methods": 16,
+    "elapsed_test_seconds": 141.596,
+    "log_sha256": "ffda525a9fb4fa5f89e8ab54beb2b25af05bacc9572e0452dd44764d07a3b710",
+    "child_reaped": true
+  },
+  "historical_provider_attempts": 157,
+  "historical_calculated_exposure_usd": "1.717575505200",
+  "invoice_reconciled": false,
+  "provider_sends": 0,
+  "DB_calls": 0,
+  "cleanup_bytes": 0,
+  "new_2_campaign_started": false,
+  "preserved_failures": [
+    {
+      "kind": "root7af distinct-object overholds",
+      "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-procedure-independent-object-7af/result.json",
+      "sha256": "4404f299228ba6c68ea86f848f8c1da75caaf7df53f247db482f04e5e91244a2",
+      "controls": 12,
+      "false_holds": 9,
+      "unsafe": 0
+    },
+    {
+      "kind": "preceding annotation initial whole wire",
+      "result": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/voice-retained-003-005/preceding-annotation-whole-wire-first.json",
+      "sha256": "ebd282e4fa73e065e8374fe8a357d8ff5460e60e6e0a85cca0fa857f18e3bc4d",
+      "wrong_validation_page_final_releases": 3
+    }
+  ],
+  "instrument_corrections": [
+    "Initial preceding-header unittest stopped at validation; its initially overstated page/final claim was withdrawn, then separately confirmed by exact full capture.",
+    "The first ad-hoc full-capture stdin failed with SyntaxError before application import and created no application or request state.",
+    "Two read-only preparatory commands addressed a nonexistent scratch path/rebuild-docs path and exited2; no mutation or request occurred."
+  ],
+  "prior_9b_7af_not_claimed_qualified": true
+}

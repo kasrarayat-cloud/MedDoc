@@ -1,0 +1,33 @@
+{
+  "source_commit": "ae2a04dbd5e6c15ef7f94938fa17e16e503bf207",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-named-balanced-source-20261004",
+  "word_sha256": "92c3a40349e692ed53e52a94d2f699d54e45a6c8a92398af5af8ef0ccd9dac7a",
+  "test_sha256": "686c2089eea7e1184d3e3bf9cb82ae6e30a7bb4a7490f9fa1614cb9564f48b2c",
+  "evidence": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d07-named-scope-human-correction-20261004",
+  "artifact_seal_sha256": "b092535c708e19fcb8ae705e093fb984307b2ad9af3dc4c7f9cdfa9e0ea726bf",
+  "artifact_files": 144,
+  "artifact_bytes": 2947549,
+  "frozen_prior_commits": [
+    "7dc6800d948eddadba8dcf41eb0518eaee623c11",
+    "5535a9bb7b7674e4065d17cdb078d9f1a6324197"
+  ],
+  "final_retained_result_sha256": "4eb0ae9a310218c582b311d0402ae59abe50f8f0ad629a884d676f3580513579",
+  "balanced_four_method_exit": 0,
+  "retained_exact_seven_negative_replay_exit": 0,
+  "ordinary_export_byte_identity": true,
+  "D07_mapping_and_export_byte_transfer": true,
+  "whole_word_gates_met": false,
+  "independent_finished_diff_refutation": "pending root and Ops",
+  "source_clean": true,
+  "children_reaped": true,
+  "database": 0,
+  "renderer": 0,
+  "provider": 0,
+  "native_word_verified": false,
+  "next": [
+    "D10 retained PDF-verifier resource refusal",
+    "D30 explicit manager blank-review recovery",
+    "finite common-layout cluster from fixed original whole-route failures"
+  ],
+  "checkpoint_sha256": "13744e2b9001f4f9c978047fc0d951a9830d7e9af0565f423e53bd0bdbb3ae17"
+}

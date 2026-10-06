@@ -1,0 +1,419 @@
+{
+  "source": "55847ad8916d2e4f09af9735158833d346115dc9",
+  "cases": [
+    {
+      "case": "cached-intact",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+      "export_sha256": "0e28f73fd6259153ab6419f89b6c5c74d217a184617123b208b696da2836f9a7",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "direct-vanish-1",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "3ce120bd6756141e6d0f2bc43580a7dfed4a142eed4d3e54e09804d5bc2d8452",
+      "export_sha256": "d1ef8b8d897199011b57e113e1ce08f6627c0327131088c765edd1c8694e3680",
+      "problems": [
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "direct-vanish-true",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "3ce120bd6756141e6d0f2bc43580a7dfed4a142eed4d3e54e09804d5bc2d8452",
+      "export_sha256": "04deccff9b6b1b7b963ead4cc7ef77e56dde1ed176c5ec7cf1f794fc9b297daf",
+      "problems": [
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "direct-vanish-on",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "3ce120bd6756141e6d0f2bc43580a7dfed4a142eed4d3e54e09804d5bc2d8452",
+      "export_sha256": "fde7409402f72638a3e3869b0ba027db5b25e69f952eeacd164fbf5d1a0b6e0f",
+      "problems": [
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "direct-vanish-0",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "3ce120bd6756141e6d0f2bc43580a7dfed4a142eed4d3e54e09804d5bc2d8452",
+      "export_sha256": "37dc029365567c966dcf9530407fe1e456531e13bea11e8c21cb11b85716e00d",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "direct-vanish-false",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "3ce120bd6756141e6d0f2bc43580a7dfed4a142eed4d3e54e09804d5bc2d8452",
+      "export_sha256": "7c9ed26e4d16724919e2de5600350f6ed173fb3adf93e2cea58f792429fd56bc",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "direct-vanish-off",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "3ce120bd6756141e6d0f2bc43580a7dfed4a142eed4d3e54e09804d5bc2d8452",
+      "export_sha256": "57705ccd374c3d6866f32209b2c5e2432778db1dc629e6883f61d9d4023213ae",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "paragraph-basedOn-1",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "e5176d93e9f387c7acebc4e3fc93f6076966e243ca51e8d71939ac51cd352547",
+      "export_sha256": "9cba7551f8977b5708455d8f12c09c6bc5f4c964bc9581daec41e143d84f6272",
+      "problems": [
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "paragraph-basedOn-0",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "ab2a1fcc5f4f80d6603f7f51012279e180b907e56ebd3895ff9bb69e735f3a87",
+      "export_sha256": "b89b20d42cd728a7799516f015e113106677c3be4a80f0ea0cbb1985ae10f3d2",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "character-basedOn-1",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "617a1dd780ae354ed4bf8b182793e3f5a4388b3000402aa4e6de1a5701b0fab6",
+      "export_sha256": "f15e43f58b72d0a0779f381f36b57a4f113484ebcaa3ca9c1d7d4ad4b4790b0b",
+      "problems": [
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "character-basedOn-0",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "5af9d464bf2a91bdf723d6a1223d8cd508b994e3e19c5352cf64aa78ecf527be",
+      "export_sha256": "81a4bd0da8ee3f05005fb135bf32dcb01f7fee6d83d589a630be34ee349a49d1",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "table-basedOn-1",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "acc1983ed5087f0030dc6561110f4562c936ac16e9ab321bb6149ba63d531b5a",
+      "export_sha256": "f5d4b2141de9ddd043eb58144d488094dff1efa0871c3721716a18e6dbf78d31",
+      "problems": [
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "table-basedOn-0",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "c4ec6cbbb66c078b1cad8b80a685b1a3ca0d0a215c9dba1bebfc05be13ddc478",
+      "export_sha256": "951388084692668632303c0be0a5208e71e5a6c6c8e312a7db6d261ad1a3fad2",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "docDefaults-1",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "162a3267b49c52b26b7d91ec8f0dc1b18cf6cced2a4781ecfa667a8e16af6ecc",
+      "export_sha256": "2098a523ad997cf0d92421d4419284b727fd6531ced8bf61dfde1f480a6b738d",
+      "problems": [
+        {
+          "where": "v3_1",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_4",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_5",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_6",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_7",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_8",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "docDefaults-0",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "6c386cf264afb36025ecd2e096cc5f67577f541114822800c1d000a88e475be0",
+      "export_sha256": "e96d631cb2380131c38b2c5dceb9082020d12ebd64e920c2ae2853d3e2ea10d7",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "default-paragraph-hidden",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "4ba77ab6d8960550019cc1854cee81d1ccd66105e761424d78d6bfc4d1937394",
+      "export_sha256": "00ae2c1825ee085d796c7ea361f5850398073c47fa7a3b7472bd83afb373b4b0",
+      "problems": [
+        {
+          "where": "v3_1",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_4",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_5",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_6",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_7",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_8",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "default-character-hidden",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "ff5b5b245693106a81dba19ca18a30604bf4b204f5c8c7376dba66469671b09f",
+      "export_sha256": "4f82a297277ae4101f938ab304f2de5531668e316385ad2cfe8a9f01a24b5977",
+      "problems": [
+        {
+          "where": "v3_1",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_4",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_5",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_6",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_7",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_8",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "default-table-hidden",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "51c89f73f46d2b5b299f5fd3ca1b345a34e83e3e280bdb382b6ad6b5815c97b0",
+      "export_sha256": "a8e6dd127384ffad9e2c4115304b4492484c4eef1cc539f965abf2a362d66fe9",
+      "problems": [
+        {
+          "where": "v3_1",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_4",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_5",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_6",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_7",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_8",
+          "why": "the written destination has hidden or unresolved visibility"
+        },
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "cyclic-character",
+      "expected_workflow_success": false,
+      "actual_workflow_success": false,
+      "read_back_pass": false,
+      "frozen_pass": false,
+      "corrections": [],
+      "original_sha256": "846ccbb049694c11e8919f7f083f9d9bbe58985e9a33409e79cff5c8f3eadeac",
+      "export_sha256": "1fa8a6975c5ccfb2cd4782892c4ac6c2e090bafb7b67d669399e1bd58ddac081",
+      "problems": [
+        {
+          "where": "v3_9",
+          "why": "the written destination has hidden or unresolved visibility"
+        }
+      ],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    },
+    {
+      "case": "unchanged-protected-hidden",
+      "expected_workflow_success": true,
+      "actual_workflow_success": true,
+      "read_back_pass": true,
+      "frozen_pass": false,
+      "corrections": [
+        "v3_9"
+      ],
+      "original_sha256": "20fabace998bfc33618649ccd8fefbf2ec959db44173022340596a4d940ab492",
+      "export_sha256": "460bfe9badb858a6caa518ee1d0fb150e30587ca98931edc2cf403745a725b4b",
+      "problems": [],
+      "source": "55847ad8916d2e4f09af9735158833d346115dc9"
+    }
+  ],
+  "findings": [],
+  "network_DB_render_provider_calls": 0,
+  "source_clean": true,
+  "source_sha256": "2277cf606eadeaefd2ab36935e36d41b2202cda10eef592e3375321bc2677fc9",
+  "scope": "Finite visibility-diff controls on retained synthetic paid16 original/export; no native Word acceptance or broad review."
+}

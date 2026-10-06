@@ -1,0 +1,44 @@
+{
+  "source_commit": "8a030d4c8f0027dc962554b8d8df0d4a5207d21d",
+  "components": 19,
+  "cases": 60,
+  "elapsed_seconds": 15.226,
+  "actual_exit": 0,
+  "unsafe_releases": 4,
+  "new_definite_unnecessary_holds": 0,
+  "raw_flagged_holds": 3,
+  "qualification": "FAILED; instrument exit0 is not clinical qualification",
+  "source_released_after_actual_exit": true,
+  "provider_requests": 0,
+  "database_connections": 0,
+  "files": [
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-8a030d4c.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-8a030d4c-refutation/result.json",
+      "sha256": "e15b32ec8a9453c5a986ff46a7132c2db0ad48a4c6021b6b66291b782b10c8d1",
+      "bytes": 48829,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-8a030d4c.log",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-8a030d4c-refutation/instrument.log",
+      "sha256": "220fd16a670cc160855df7cde41b38715c2a2c137a91732ed31f6d82d6642891",
+      "bytes": 1109,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute_clinical_8a030d4c.py",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-8a030d4c-refutation/instrument.py",
+      "sha256": "f91a0cb2ed6cee2840f8518434b2475dc64f026f8258948d0d82a403ad41cc22",
+      "bytes": 12918,
+      "disposable": false
+    },
+    {
+      "original": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-clinical-8a030d4c-source/manifest.json",
+      "retained": "/opt/meddoc-pro/.worktrees/v1-sol-security/docs/rebuild/v1/security-transcript-privacy-20261002/clinical-8a030d4c-refutation/source-manifest.json",
+      "sha256": "05dc9a82f52e011d20965b9cac845b77600f11b7b914e9b573008a41af091211",
+      "bytes": 3343,
+      "disposable": false
+    }
+  ]
+}

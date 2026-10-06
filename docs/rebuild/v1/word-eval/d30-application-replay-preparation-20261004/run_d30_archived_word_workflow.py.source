@@ -1,0 +1,193 @@
+"""Frozen original D30, explicit manual A20 recovery, fixture-only actual routes.
+
+Requires the integration owner's freeze file before reading or uploading the original.
+Every output has a new identity; automatic scoring precedes all manual correction.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+import traceback
+
+from run_dev_application_gate import database_presence, stop, THRESHOLDS
+
+BASE = Path(__file__).resolve().parent
+PY = '/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python'
+WRAPPER = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/integration/qa_test_with_artifacts.py')
+INNER = BASE / 'development_renderer_d30_archive_v1.py'
+INNER_SHA = '1142f9d93966e62a1db765adf14f861d8bdb513131f205eca6a0c1e1851cbbd8'
+PRIOR = BASE / 'development_renderer_numeric_archive_v2.py'
+PRIOR_SHA = '81e292d47f7e9c92aec9a6a61eef1cb62907dde77337a13234cd45d6e63ae9e5'
+HISTORICAL = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/word/development_renderer_workflow_v2.py')
+HISTORICAL_SHA = '20473e634375e9da023447015ed617385b46895e2992f1a8e27e81a944c13353'
+SCORER_SHA = 'd9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c'
+RIGHTS_SHA = '5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7'
+SOURCE_SHA = 'fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f'
+GT_SHA = '9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53'
+HELPER_SHA = '5a822fcfe1ed9c759f8b57d2475be69e11c5c53a2d52a3e205cb6fc0805f7032'
+
+
+def digest(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def write(path, value):
+    with path.open('x') as output:
+        json.dump(value, output, indent=2, default=str)
+        output.write('\n')
+    path.chmod(0o600)
+
+
+def main():
+    if sys.executable != PY:
+        os.execv(PY, [PY, '-B', str(Path(__file__).resolve()), *sys.argv[1:]])
+    os.umask(0o077)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('source', type=Path)
+    parser.add_argument('commit')
+    parser.add_argument('--freeze', type=Path, required=True)
+    args = parser.parse_args()
+    source = args.source.resolve()
+    commit = args.commit
+    assert len(commit) == 40 and set(commit) <= set('0123456789abcdef')
+    freeze = json.loads(args.freeze.read_bytes())
+    assert freeze.get('frozen_for_word_acceptance') is True
+    assert freeze.get('source_commit') == commit
+    assert freeze.get('thresholds') == THRESHOLDS and freeze.get('provider_calls') == 0
+    assert digest(INNER.read_bytes()) == INNER_SHA
+    assert digest((BASE / 'run_dev_application_gate.py').read_bytes()) == HELPER_SHA
+    assert digest(PRIOR.read_bytes()) == PRIOR_SHA
+    assert digest(HISTORICAL.read_bytes()) == HISTORICAL_SHA
+    corpus = Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus')
+    ledger = corpus / 'custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json'
+    assert digest(ledger.read_bytes()) == RIGHTS_SHA
+    row = next(row for row in json.loads(ledger.read_bytes())['records'] if row['development_id'] == 'D30')
+    assert row['offline_filled_copy_replay_supported'] and row['sha256'] == SOURCE_SHA
+    assert row['paid_or_model_stage1_authorized'] is False
+    original = corpus / row['corpus_file']
+    expected = Path(row['prior_expected_map_path'])
+    assert original.is_relative_to(corpus / 'dev/originals') and expected.is_relative_to(corpus / 'dev/groundtruth')
+    assert not original.is_symlink() and not expected.is_symlink()
+    assert digest(original.read_bytes()) == SOURCE_SHA and digest(expected.read_bytes()) == GT_SHA
+    assert len(json.loads(expected.read_bytes())['answer_areas']) == 62
+    started = time.monotonic()
+    out = BASE / ('d30-archived-original-word-' + commit[:12] + '-' + str(time.time_ns()))
+    out.mkdir(mode=0o700)
+    database_name = 'quillmd_qa_sol_word_d30_' + str(os.getpid())
+    deadline = 1200
+
+    def proof():
+        assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source).decode().strip() == commit
+        assert not subprocess.check_output(['git', 'status', '--porcelain'], cwd=source).strip()
+        assert not (source / 'rebuild/.env').exists()
+        hashes = {}
+        names = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', commit, 'rebuild'], cwd=source).decode().splitlines()
+        for name in names:
+            if not name.endswith('.py'):
+                continue
+            raw = subprocess.check_output(['git', 'show', commit + ':' + name], cwd=source)
+            assert (source / name).read_bytes() == raw, name
+            hashes[name] = digest(raw)
+        assert digest((source / 'docs/rebuild/v1/word-eval/score.py').read_bytes()) == SCORER_SHA
+        return hashes
+
+    before = proof()
+    write(out / 'source-before.json', before)
+    database_before = database_presence(source, database_name)
+    write(out / 'database-before.json', database_before)
+    assert database_before['all_absent'], 'Prospective task database exists; nothing launched'
+    socket_dir = Path('/tmp') / ('quillmd-d30-gate-' + str(os.getpid()))
+    socket_dir.mkdir(mode=0o700)
+    socket = socket_dir / 'layout.sock'
+    assert len(str(socket).encode()) < 108 and not socket.exists()
+    text = INNER.read_text()
+    root_literal = 'ROOT=Path(' + repr(str(BASE)) + ')'
+    assert text.count(root_literal) == 1 and text.count("QUILLMD_LAYOUT_SOCKET=str(ROOT/'e.sock')") == 1
+    text = text.replace(root_literal, 'ROOT=Path(' + repr(str(out)) + ')')
+    text = text.replace("QUILLMD_LAYOUT_SOCKET=str(ROOT/'e.sock')", 'QUILLMD_LAYOUT_SOCKET=' + repr(str(socket)))
+    workflow = out / 'workflow.py'
+    with workflow.open('x') as output:
+        output.write(text)
+    workflow.chmod(0o600)
+    harness_before = {path.name: digest(path.read_bytes()) for path in (Path(__file__), INNER, BASE / 'run_dev_application_gate.py')}
+    write(out / 'prospective-harness-before.json', harness_before)
+    write(out / 'execution-manifest.json', {
+        'candidate': commit, 'freeze_path': str(args.freeze.resolve()), 'freeze_sha256': digest(args.freeze.read_bytes()),
+        'freeze': freeze, 'source_sha256': SOURCE_SHA, 'groundtruth_sha256': GT_SHA, 'groundtruth_n': 62,
+        'rights_sha256': RIGHTS_SHA, 'scorer_sha256': SCORER_SHA, 'database': database_name,
+        'source_attribution': {key: row[key] for key in ('source_org', 'url', 'status', 'conditions')},
+        'socket': str(socket), 'original_harness': str(INNER), 'original_harness_sha256': INNER_SHA,
+        'derived_harness_sha256': digest(workflow.read_bytes()), 'prior_harness_sha256': PRIOR_SHA,
+        'historical_harness': str(HISTORICAL), 'historical_harness_sha256': HISTORICAL_SHA,
+        'deadline_seconds': deadline, 'child_deadline_seconds': 900, 'provider_calls': 0,
+        'scope': 'Original D30 actual fixture worker and explicit manual A20 option recovery; never automatic gate credit',
+        'automatic_score_before_manual': True, 'manual_option_slots': ['b/p[' + str(n) + ']' for n in range(73, 81)],
+        'A21': 'Existing separate narrative remains unchanged; no substitution for A20',
+        'archive_before_assertions': True, 'new_independence_claim': False})
+    server = child = None
+    log = None
+    database_after = {'verified': False, 'all_absent': False}
+    timed_out = False
+    error = None
+    print('D30 archived actual workflow evidence: ' + str(out), flush=True)
+    try:
+        log = (out / 'renderer.log').open('xb')
+        server = subprocess.Popen([PY, '-I', '-B', str(source / 'rebuild/documents/layout_server.py'),
+            '--socket', str(socket), '--client-uid', str(os.getuid()), '--evidence', str(out / 'layout-evidence')],
+            cwd=source / 'rebuild', env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'TZ': 'UTC'},
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        write(out / 'renderer-identity.json', {'pid': server.pid, 'argv': server.args, 'candidate': commit})
+        while not socket.exists():
+            assert server.poll() is None and time.monotonic() - started < 15
+            time.sleep(0.1)
+        command = ['python3', '-B', str(WRAPPER), str(source), database_name, str(out / 'qa'),
+            'manage.py', 'shell', '-c', 'import runpy; runpy.run_path(' + repr(str(workflow)) + ')']
+        write(out / 'command.json', {'command': command, 'bound_seconds': 900})
+        with (out / 'workflow.log').open('xb') as child_log:
+            child = subprocess.Popen(command, cwd=source, stdout=child_log, stderr=subprocess.STDOUT, start_new_session=True)
+            try:
+                child.wait(timeout=min(900, max(1, deadline - (time.monotonic() - started))))
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                stop(child)
+    except Exception:
+        error = traceback.format_exc()
+        write(out / 'campaign-error.json', {'traceback': error})
+    finally:
+        stop(child)
+        if server is not None and server.poll() is None:
+            server.send_signal(signal.SIGINT)
+            try:
+                server.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                stop(server)
+        if log is not None:
+            log.close()
+        write(out / 'process-teardown.json', {
+            'worker_exit': child.returncode if child else None, 'renderer_exit': server.returncode if server else None,
+            'socket_removed': not socket.exists(), 'timed_out': timed_out})
+        try:
+            database_after = database_presence(source, database_name)
+        except Exception as failure:
+            database_after = {'verified': False, 'all_absent': False, 'error_type': type(failure).__name__}
+        write(out / 'database-after.json', database_after)
+        after = proof()
+        write(out / 'source-after.json', after)
+        harness_after = {name: digest((BASE / name).read_bytes()) for name in harness_before}
+        write(out / 'prospective-harness-after.json', harness_after)
+        assert before == after and harness_before == harness_after
+        write(out / 'result.json', {
+            'candidate': commit, 'exit_code': child.returncode if child else None, 'timed_out': timed_out,
+            'elapsed_seconds': round(time.monotonic() - started, 3), 'provider_calls': 0,
+            'database_teardown_verified': database_after['all_absent'], 'error': error,
+            'scope': 'Manual original D30 recovery workflow; automatic mapping and first fixture usefulness recorded separately'})
+    raise SystemExit(0 if child and child.returncode == 0 and not timed_out and error is None and database_after['all_absent'] and not socket.exists() else 1)
+
+
+if __name__ == '__main__':
+    main()

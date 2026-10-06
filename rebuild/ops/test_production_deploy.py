@@ -1007,7 +1007,13 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # request or price - generation_batch (plan_for, request: the priced wire) is unchanged, and in batch_jobs the send
 # (client.messages.create(**wire), max_retries=0, inside run_one's try) and every definition but stop() and run_one's
 # exception handler are AST-identical; a refused part's hold is released instead of kept.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02', 'core/batch_jobs.py': '0e5dc19bda55a29a3b07691dca2a256da1e5198d85d2ef130a7545d1e0bffeda'}
+BATCH_PRICED_MODULES = {
+    # 2026-10-05 divided-calendar uniqueness addendum: constraints() adds only
+    # a pre-plan refusal. Removing that exact branch restores the previous
+    # complete module AST; request, plan_for, imports and prices are unchanged.
+    'core/generation_batch.py': '57718cc78ecca95a1b2987bd779373febf836a71883270ffd7b0d9d00fba808f',
+    'core/batch_jobs.py': 'b8b5b0471d4a6590f22bc96fc4c5964ec8837fe843dd7f900d95f1dc5ba09f74',
+}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
@@ -1076,7 +1082,90 @@ BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8
 # is about a fifth of v3's per unit, so far more fields fit one bounded 20,000-token response (25 units: 60 fields, was
 # 17) and the relations field batches split far later. compile_request, maximum_cost, generate, validated, records,
 # read, claimed, disagrees and the send are AST-identical.
-ORDINARY_PRICED_SHA256 = 'efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb'
+# Financial renewal 2026-10-04, elicited-proof correction: only the complete
+# relations reader/source-dependency AST and three generation governance floors
+# changed. Independent ROOT33 controls qualify the finished semantic correction;
+# the SDK compiler, quotes, caps, billing and 13 other guarded ASTs/four inputs
+# remain identical. Four genuine OLD-paid/NEW1229 offline reconstructions pass
+# with unchanged actual request/usage/QA-settlement rows. Full original and new
+# identities, proof limits and affected119 gate are recorded separately in
+# docs/rebuild/v1/financial-renewal-20261004/ELICITED-RENEWAL.md.
+# Old campaigns stay closed. This is no voice, corpus or invoice qualification.
+# Financial renewal 2026-10-04, final bounded nominal-denial correction:
+# exact e238 source and four genuine OLD/e238 offline reconstructions retain
+# the unchanged SDK requests, quotes, usage and original QA settlement rows.
+# Independent full-HPI/partial-omission controls qualify the finished semantic
+# change. All other 13 module ASTs and four exact inputs match accepted source.
+# Full proof and limits: docs/rebuild/v1/FINANCIAL-N01-RENEWAL-20261004.md.
+# This is no reviewed-voice, corpus or invoice qualification.
+ORDINARY_PRICED_SHA256 = '90cb7342ff9cbf1670947686cef085e0aa3083c96be6fb3283d5987e925365c5'
+
+
+# Financial renewal 2026-10-04: genuine paid campaign-3 children 002/003 on
+# 04fb7603 and campaign-2 ordinary request 016 on 481b65ad. All 15 complete
+# guarded ASTs and four parser/package inputs are identical at reviewed 1983e7fa.
+# Full request/compiler/quote/receipt/settlement evidence and original fingerprints
+# remain in docs/rebuild/v1/financial-renewal-20261004/RENEWAL.md.
+# This source identity proof does not certify clinical or Word compatibility.
+ORDINARY_PRICED_DEPENDENCY_PATHS = (
+    'core/generation.py', 'core/ordinary_source_scope.py', 'core/reviewed_source.py',
+    'core/reviewed_procedure_source.py', 'core/source_scope.py', 'core/v3_actors.py',
+    'core/v3_syntax.py', 'core/v3_literal_facts.py', 'core/reviewed_speaker.py',
+    'core/transcript_context.py', 'core/v3_destination.py', 'core/v3_mapping.py',
+)
+ORDINARY_PRICED_DEPENDENCIES = {
+    # 2026-10-05 WQ01 omission-floor addendum: only MISSING_RECORD_VALUE and
+    # v3_shape_holds change; entire earlier AST restores when removed. Actual
+    # captured WQ01 SDK body and 0.355992 reservation reconstruct exactly.
+    'core/generation.py': '80624fb45d82a6795e4450f12dff4135be0c9f7961fe55942e82aaf4bc8f9456',
+    'core/ordinary_source_scope.py': '42ef86c3e4f69222040edc6a630e694eac424b28a8066a311d90e00afd0a4338',
+    'core/reviewed_source.py': '8a0f3f687f367100d00d5e6299df19992b22476c996cbb349d94c77b0bfbc157',
+    'core/reviewed_procedure_source.py': 'aa4d75a2603f2642de278ffba7850e6d1c78fdf234263b4fdaaa8e6bc8e47fa0',
+    'core/source_scope.py': '5b1bf9d765303c426047477decddb5f1b90e611651e634d9adafeb84a68016c1',
+    'core/v3_actors.py': 'bac5d81f5d7112db20502b4c0a952d86b05d3388b07cf8b788e148ac26e81275',
+    'core/v3_syntax.py': 'd38b74fa82c00a0d2a37cc80cacec4163a4ad9fe9a2b3025874f56fc4d207c96',
+    'core/v3_literal_facts.py': '5a496beae391ec92f9144e8fa995b5a13b5e358fb880fbc0262cf5a1cf4af034',
+    'core/reviewed_speaker.py': '4da43d8c4dc86b9847604f84edf0f0fc28133242ec4d73270d24dfc36e3c1b91',
+    'core/transcript_context.py': 'e4bdacc5301976b07fac91d5bc63fd0e7295201a0b969b47ec38148bc7c8dfff',
+    'core/v3_destination.py': 'b8ff1dff5825ef66c86c43d3db21fd9e7b9b8468179205ebac01899e347809ef',
+    'core/v3_mapping.py': '34cae0324aa323299cea26e035c560d32a5aeda23fc25e435234ab73c2e5c87c',
+}
+ORDINARY_PRICED_INPUT_PATHS = (
+    'core/v3_syntax_model.json', 'requirements.txt', 'requirements-production.lock',
+    'requirements-production.manifest.json',
+)
+ORDINARY_PRICED_INPUTS = {
+    'core/v3_syntax_model.json': 'b10eb2639ed76ce01b1122796ad6f5e1a2d6fd42124aafdddae579672ca197bc',
+    'requirements.txt': '702f180a80b5bb1d7ba7b2a0fa137feabcf19b86133e06b163fd7ba31d1f213b',
+    'requirements-production.lock': 'b94c81f52375162561c9b6445e2ffabf3a7452613c573a94ffc42d8019652473',
+    'requirements-production.manifest.json': '0226d37c2e5ab391679d65cc257a940db29976fc1a70e54c9d2bcf11777f6ade',
+}
+
+
+def ordinary_dependency_proof(where):
+    """Union of complete helper/caller ASTs and exact pinned parser inputs.
+
+    This verifies declared source, not installed packages or provider access.
+    An unchanged importing caller cannot conceal a changed helper body/import.
+    """
+    if (set(ORDINARY_PRICED_DEPENDENCIES) != set(ORDINARY_PRICED_DEPENDENCY_PATHS)
+            or set(ORDINARY_PRICED_INPUTS) != set(ORDINARY_PRICED_INPUT_PATHS)):
+        raise Unresolved(f'{where}: ordinary dependency proof is incomplete')
+    for relative, expected in ORDINARY_PRICED_DEPENDENCIES.items():
+        try:
+            tree = ast.parse((REBUILD / relative).read_text())
+        except (OSError, SyntaxError, UnicodeError):
+            raise Unresolved(f'{where}: {relative} is unreadable; its ordinary proof needs review') from None
+        actual = hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+        if actual != expected:
+            raise Unresolved(f'{where}: {relative} changed or is unreviewed; its complete ordinary proof needs review')
+    for relative, expected in ORDINARY_PRICED_INPUTS.items():
+        try:
+            actual = hashlib.sha256((REBUILD / relative).read_bytes()).hexdigest()
+        except OSError:
+            raise Unresolved(f'{where}: {relative} is unreadable; its ordinary parser input needs review') from None
+        if actual != expected:
+            raise Unresolved(f'{where}: {relative} changed or is unreviewed; its ordinary parser input needs review')
 
 
 def ordinary_module_proof(where):
@@ -1085,6 +1174,7 @@ def ordinary_module_proof(where):
     actual = hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
     if actual != ORDINARY_PRICED_SHA256:
         raise Unresolved(f'{where}: complete ordinary compiler/binding/price proof needs review')
+    ordinary_dependency_proof(where)
     return tree
 
 

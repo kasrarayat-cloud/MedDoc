@@ -1,0 +1,43 @@
+{
+  "scope": "private synthetic; zero provider requests; retained failed outcomes",
+  "base": "a893ad8e229d68cf2cb900390dbe718e482257ae",
+  "results": {
+    "leaf_fixture_suite": {
+      "exit_status": 0,
+      "checks": 28,
+      "seconds": 183.403
+    }
+  },
+  "files": [
+    {
+      "raw_source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/leaf-fixture-1.log",
+      "durable": "leaf-fixture-1.log",
+      "sha256": "6cbdc68383e22e3e8ed4e5ca40051a3feb937f7fff174b78544d7bac17705372"
+    },
+    {
+      "raw_source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/ci-313c-fixture-errors.json",
+      "durable": "ci-313c-fixture-errors.json",
+      "sha256": "b9202dd70806e77d006871b526e75105df7aef0fca906068c30d0eda316e0bcb"
+    },
+    {
+      "raw_source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-governance-1.json",
+      "durable": "refute-notes-repaired-governance-1.json",
+      "sha256": "ec2d9f15b802705709e93a7898ca5a80425a3a3c2bc6f9f0e9a0976463bc1836"
+    },
+    {
+      "raw_source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-notes-repaired-parser-1.json",
+      "durable": "refute-notes-repaired-parser-1.json",
+      "sha256": "4c96836ce7cdcc78bf421e4b623bf6bdaf6000fa0a1263b8c6df7f9faefb671b"
+    },
+    {
+      "raw_source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/refute-privacy-static-2.json",
+      "durable": "refute-privacy-static-2.json",
+      "sha256": "ab8d9ce6e9fb7e7c24ab9361b167e3eafdbe1fbd0ceeb078b7e480847a117ffa"
+    },
+    {
+      "raw_source": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-1-source/manifest.json",
+      "durable": "notes-repaired-refutation-1-source.json",
+      "sha256": "101037e5e8c9e81278c88401987e9e9ed81a627ae87e8a84553dab77f1423f43"
+    }
+  ]
+}

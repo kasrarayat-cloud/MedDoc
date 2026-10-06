@@ -1,0 +1,41 @@
+{
+  "base_head": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-clinical-proof-481b65ad",
+  "source_ownership": [
+    "rebuild/ops/test_production_deploy.py",
+    "rebuild/ops/tests/test_ordinary_dependency_proof_preparation.py"
+  ],
+  "source_sha256": {
+    "rebuild/ops/test_production_deploy.py": "1822bbd46e290f61f080cb4d601c760af4c6e334fae255b896053de16c8ad0aa",
+    "rebuild/ops/tests/test_ordinary_dependency_proof_preparation.py": "db66cfbdf336191a19682170e2ecf2baad4d3063f6c4bbe642f6c6aae6ba1b7f"
+  },
+  "original_pending_patch_sha256": "70ba31624221b2e20cc1efc6c61518667958cfcf9cb1749f813d72f22e1a5f34",
+  "accepted_old_literals_identical": true,
+  "accepted_old_literals": {
+    "BATCH_PRICED_MODULES": {
+      "core/generation_batch.py": "c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02",
+      "core/batch_jobs.py": "0e5dc19bda55a29a3b07691dca2a256da1e5198d85d2ef130a7545d1e0bffeda"
+    },
+    "ORDINARY_PRICED_SHA256": "efe4c9dbf74ee5403e4144fd296b2bdb1e3dc6169c7fa24d9d8284f36deb84fb"
+  },
+  "new_pins_default": null,
+  "whole_ast_module_count": 12,
+  "byte_input_count": 4,
+  "methods": 34,
+  "named_mutants": 26,
+  "all_named_refusals_pin_exact_changed_file": true,
+  "result_sha256": "1c2a546d9585707bee34a91a53e8fe06dc09eceab3b74edba2e968a7c2b59f08",
+  "exit": {
+    "exit_code": 0,
+    "timeout": false,
+    "elapsed_seconds": 30.87806032699882,
+    "child_reaped": true,
+    "source_head": "481b65adb8ffa97053b694f0de3ba4dbaac72d0a",
+    "stdout_sha256": "12c29e07d5871fbcd7c5b101578bc97d530b1daf820eda5149cd847210885282",
+    "stderr_sha256": "13b310376ecb9eaaa1311063f98eaecaccbed01bdc14b9b99a49f554554e014e"
+  },
+  "network_attempts": [],
+  "DB_calls": 0,
+  "provider_calls": 0,
+  "live_financial_qualification_claimed": false
+}

@@ -651,12 +651,59 @@ class NestedCheckboxOwnership(unittest.TestCase):
                     if slot.kind == 'p' and '/tbl[0]/tr[0]/tc[0]/tbl[0]/' not in slot.path:
                         self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
 
+    def test_one_complete_colon_label_owns_its_nested_grid_without_relaxing_boundaries(self):
+        source='20. What relieves your symptoms:'
+        doc=self.form(write_in=True);doc.tables[0].cell(0,0).paragraphs[0].text=source
+        result=w.inspect(data(doc));group=next(f for f in result['fields'] if f['locator']['target']['type']=='checkboxes')
+        self.assertEqual(group['label'],source)
+        self.assertEqual(group['options'],['Tightness','Other'])
+        self.assertTrue(any(f['label']=='Other:' and f['locator']['target']['type']=='span' for f in result['fields']))
+        for case in ('competing_colons','marked_boundary','subordinate','signing'):
+            with self.subTest(case=case):
+                adverse=self.form(mixed=case=='subordinate',spacer='underline' if case=='marked_boundary' else 'plain')
+                owner=adverse.tables[0].cell(0,0);owner.paragraphs[0].text=source
+                if case=='competing_colons':owner.paragraphs[1].text='Which symptoms occurred last year:'
+                if case=='signing':owner.paragraphs[0].text='Witness attestation:'
+                inspected=w.inspect(data(adverse))
+                self.assertFalse([f for f in inspected['fields'] if f['locator']['target']['type']=='checkboxes'])
+                self.assertTrue(any('Nested option' in n for n in inspected['notes']))
+                if case=='signing':
+                    # A later manual field cannot turn this real witness area
+                    # into the finalizer's attestation through ordinary review.
+                    forged=dict(group,key='forged_witness')
+                    self.assertIn('forged_witness',w.destination_roles(data(adverse),[forged])['violations'])
+                    with self.assertRaises(w.V3Failure):w.fill(data(adverse),[forged],{'forged_witness':'Tightness'})
+
     def test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed(self):
         for spacer in ('underline', 'other_question'):
             with self.subTest(spacer=spacer):
                 result = w.inspect(data(self.form(spacer=spacer)))
                 self.assertFalse([f for f in result['fields'] if f['kind'] == 'multi_choice'])
                 self.assertTrue(any('Nested option' in note for note in result['notes']))
+
+    def test_direct_attestation_place_is_human_owned_for_every_named_role(self):
+        ordinary=self.form(); ordinary.tables[0].cell(0,0).paragraphs[0].text='Recorded declaration status:'
+        ordinary.tables[0].cell(0,0).tables[0].cell(0,0).text='☐ Recorded'
+        ordinary.tables[0].cell(0,0).tables[0].cell(0,1).text='☐ Not recorded'
+        original=data(ordinary)
+        group=next(f for f in w.inspect(original)['fields'] if f['locator']['target']['type']=='checkboxes')
+        positive=w.fill(original,[group],{group['key']:'Recorded'})
+        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(positive)),group),[True,False])
+        for label in ('Spouse attestation:', 'Caregiver declaration:', 'Administrator signoff:',
+                      'Parent attestation:', 'Independent external assessor declaration:', 'Attestation:'):
+            with self.subTest(label=label):
+                doc=self.form();parent=doc.tables[0].cell(0,0);parent.paragraphs[0].text=label
+                parent.tables[0].cell(0,0).text='☐ I certify'
+                parent.tables[0].cell(0,1).text='☐ I do not certify'
+                raw=data(doc);inspected=w.inspect(raw)
+                self.assertFalse([f for f in inspected['fields'] if f['locator']['target']['type']=='checkboxes'])
+                self.assertTrue(any(i['code']=='nested_options' for i in inspected['coverage_issues']))
+                self.assertEqual(w.fill(raw,inspected['fields'],{}),raw)
+                # Manual mapping and a clinician's later click do not establish
+                # that they are the person whose declaration this place records.
+                forged=dict(group,key='forged_declaration',options=['I certify','I do not certify'])
+                self.assertIn('forged_declaration',w.destination_roles(raw,[forged])['violations'])
+                with self.assertRaises(w.V3Failure):w.fill(raw,[forged],{'forged_declaration':'I certify'})
 
     def test_nested_source_cannot_lose_local_subject_or_page_boundary(self):
         for case in ('foreign_prefix', 'unpaired_subsection', 'page_break', 'long_question'):
@@ -1103,3 +1150,166 @@ class TabColumnOwnership(unittest.TestCase):
                 fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
                 self.assertEqual(bool(fields),mode=='explicit_off')
                 if mode!='explicit_off':self.assertTrue(any('Tab-column' in n for n in result['notes']))
+
+
+class IndependentNestedQuestionCells(unittest.TestCase):
+    def form(self, *, control='glyph', first='1. Current symptoms (choose one):',
+             second='2. Prior episodes (select all that apply):', adverse=''):
+        from .test_word_v3 import ff_field
+        doc=Document();outer=doc.add_table(rows=1,cols=1).cell(0,0)
+        outer.text='Required items'
+        inner=outer.add_table(rows=2,cols=2)
+        captions=[first,second,'3. Start date:','4. End date:']
+        for index,cell in enumerate(cell for row in inner.rows for cell in row.cells):
+            cell.text=captions[index]
+            options=(['Yes','No'] if index==0 else ['At home','At work'] if index==1 else ['Or Unknown'])
+            for number,option in enumerate(options):
+                para=cell.add_paragraph()
+                if control=='ff':ff_field(para,'checkbox',checked=index==1 and number==1,name=f'cell{index}_{number}')
+                else:para.add_run('☒' if index==1 and number==1 else '☐')
+                para.add_run(' '+option)
+        firstcell=inner.cell(0,0)
+        if adverse=='competing_question':firstcell.add_paragraph('Another question:')
+        if adverse=='marked_spacer':firstcell.add_paragraph().add_run('      ').underline=True
+        if adverse=='mixed_options':firstcell.paragraphs[-1].add_run(' ☐ Separate subgroup')
+        if adverse=='hidden_question':firstcell.paragraphs[0].runs[0].font.hidden=True
+        if adverse=='header_instead_of_question':firstcell.paragraphs[0].text='Donor'
+        if adverse=='parent_attestation':outer.paragraphs[0].text='Witness attestation:'
+        return data(doc)
+
+    def group(self, fields, caption):
+        return next(field for field in fields if field['label']==caption)
+
+    def test_complete_cells_keep_distinct_questions_cardinality_and_existing_selections(self):
+        for control in ('glyph','ff'):
+            with self.subTest(control=control):
+                raw=self.form(control=control);result=w.inspect(raw);fields=result['fields']
+                one=self.group(fields,'1. Current symptoms (choose one):')
+                many=self.group(fields,'2. Prior episodes (select all that apply):')
+                self.assertEqual((one['kind'],many['kind']),('choice','multi_choice'))
+                self.assertEqual((one['options'],many['options']),(['Yes','No'],['At home','At work']))
+                self.assertEqual(w.option_states(w.SlotIndex(w.open_package(raw)),many),[False,True])
+                original=w.SlotIndex(w.open_package(raw))
+                out=w.fill(raw,fields,{one['key']:'Yes',many['key']:['At home','At work']})
+                after=w.SlotIndex(w.open_package(out))
+                self.assertEqual(w.option_states(after,one),[True,False])
+                self.assertEqual(w.option_states(after,many),[True,True])
+                for slot in original.slots:
+                    if slot.kind=='p' and not slot.path.endswith(('/p[1]','/p[2]')):
+                        self.assertEqual(etree.tostring(slot.el),etree.tostring(after.by_id[slot.id].el))
+
+    def test_proved_scalar_alternatives_preserve_dates_and_complete_original_controls(self):
+        raw=self.form(control='ff');result=w.inspect(raw);fields=result['fields']
+        dates=[field for field in fields if field['label']in ('Start date','End date')]
+        self.assertEqual(len(dates),2)
+        self.assertEqual([field['kind']for field in dates],['date','date'])
+        alternatives=[field for field in fields if any(r.get('relation')=='scalar_checkbox_alternative'
+                       for r in field.get('source_questions',[]))]
+        self.assertEqual(len(alternatives),2)
+        self.assertFalse([issue for issue in result['coverage_issues']if issue['code']=='nested_options'])
+        raw_index=w.SlotIndex(w.open_package(raw));reader=w._PlaceReader(raw_index)
+        for field in alternatives:
+            relation=field['source_questions'][0]
+            self.assertEqual((field['kind'],field['label'],field['options']),('checkbox','Or Unknown',['Or Unknown']))
+            scalar=next(f for f in dates if f['locator']['part']==relation['scalar']['part']
+                        and f['locator']['slot']==relation['scalar']['slot'])
+            self.assertEqual(relation['scalar_target'],scalar['locator']['target'])
+            self.assertEqual((relation['scalar_kind'],relation['scalar_label']),('date',scalar['label']))
+            self.assertEqual(relation['original_checked'],False)
+            self.assertEqual(w.constrained_option_states(raw_index,field),[False])
+            identity=field['locator']['part']+'#'+field['locator']['slot']
+            self.assertTrue(identity.endswith('/p[1]/ff[0]'))
+            region={'place':identity,'start':None,'end':None}
+            self.assertTrue(all(not reader.touches(place,region)for place in reader.of(scalar)))
+        out=w.fill(raw,fields,{dates[0]['key']:'2026-10-01',dates[1]['key']:'2026-10-02'})
+        after=w.SlotIndex(w.open_package(out))
+        for field in alternatives:
+            identity=field['locator']['part']+'#'+field['locator']['slot']
+            self.assertEqual(etree.tostring(raw_index.by_id[identity].el),etree.tostring(after.by_id[identity].el))
+            paragraph=raw_index.by_id[identity].parent
+            self.assertEqual(etree.tostring(paragraph.el),etree.tostring(after.by_id[paragraph.id].el))
+            self.assertEqual(w.constrained_option_states(after,field),[False])
+        for field,value in zip(dates,('2026-10-01','2026-10-02')):
+            self.assertEqual(w.constrained_scalar_value(raw_index,after,field,True),value)
+
+    def test_unproved_scalar_alternatives_keep_source_coverage_and_conflicts_refuse(self):
+        raw=self.form(control='ff');mapping=w.inspect(raw)
+        alternatives=[f for f in mapping['fields']if any(r.get('relation')=='scalar_checkbox_alternative'
+                      for r in f.get('source_questions',[]))]
+        alternative=alternatives[0];relation=alternative['source_questions'][0]
+        scalar=next(f for f in mapping['fields']if f['locator']['slot']==relation['scalar']['slot'])
+        with self.assertRaises(w.V3Failure)as error:
+            w.fill(raw,mapping['fields'],{scalar['key']:'2026-10-01',alternative['key']:True})
+        self.assertEqual(error.exception.code,'conflicting_alternative_answers')
+        for mode in ('competing-question','malformed-native-state'):
+            doc=Document(io.BytesIO(raw));cell=doc.tables[0].cell(0,0).tables[0].cell(1,0)
+            if mode=='competing-question':cell.add_paragraph('Another date: ______')
+            else:
+                native=cell.paragraphs[1]._p.find('.//'+w.q('w:checkBox'))
+                invalid=OxmlElement('w:checked');invalid.set(w.q('w:val'),'not-a-state');native.append(invalid)
+            changed=data(doc);info=w.inspect(changed)
+            prefix='b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[1]/tc[0]'
+            self.assertFalse([f for f in info['fields']if f['locator']['slot'].startswith(prefix)
+                             and any(r.get('relation')=='scalar_checkbox_alternative'for r in f.get('source_questions',[]))])
+            self.assertTrue(any(i['slot'].startswith(prefix)and i['code']in('scalar_alternative_source','nested_options')
+                                for i in info['coverage_issues']))
+            self.assertEqual(w.fill(changed,info['fields'],{}),changed)
+
+    def test_incomplete_local_partition_keeps_unresolved_grid_coverage(self):
+        for adverse in ('competing_question','marked_spacer','mixed_options','hidden_question','header_instead_of_question'):
+            with self.subTest(adverse=adverse):
+                raw=self.form(adverse=adverse);result=w.inspect(raw)
+                own=[field for field in result['fields']if field['label']=='1. Current symptoms (choose one):'
+                     and field['locator']['target']['type']=='checkboxes']
+                self.assertFalse(own)
+                self.assertTrue(any(issue['code']=='nested_options' for issue in result['coverage_issues']))
+                self.assertEqual(w.fill(raw,result['fields'],{}),raw)
+
+    def test_actual_signing_source_and_stale_original_cannot_become_ordinary_options(self):
+        original=self.form();mapping=w.inspect(original)['fields']
+        ordinary=self.group(mapping,'1. Current symptoms (choose one):')
+        for caption in ('Witness attestation:','This section is for Alex Reed to write comments:','I certify this document:',
+                        '1. This section is for Alex Reed to write comments:','1. I certify this document:'):
+            with self.subTest(caption=caption):
+                raw=self.form(first=caption);fields=w.inspect(raw)['fields']
+                candidate=dict(ordinary,key='forged',label='Review of systems',kind='choice')
+                # Exact changed-source fingerprints do not erase the physical
+                # role or the original's governing human action.
+                slot=w.SlotIndex(w.open_package(raw)).by_id[candidate['locator']['part']+'#'+candidate['locator']['slot']]
+                candidate['locator']=dict(candidate['locator'],fingerprint=w.fingerprint(slot.el))
+                with self.assertRaises(w.V3Failure):w.fill(raw,[candidate],{'forged':'Yes'})
+        with self.assertRaises(w.V3Failure):w.fill(self.form(first='Other current symptoms:'),mapping,{ordinary['key']:'Yes'})
+        human=self.form(adverse='parent_attestation');fields=w.inspect(human)['fields']
+        self.assertFalse([field for field in fields if field['locator']['target']['type']=='checkboxes'])
+
+    def test_ordinary_captions_and_forged_complete_group_metadata(self):
+        import copy
+        for caption in ('Review of systems:', 'Initial reading:', 'Signed receipt received:',
+                        '1. Review of systems:', '1. Initial reading:', '1. Signed receipt received:'):
+            with self.subTest(caption=caption):
+                raw=self.form(first=caption);fields=w.inspect(raw)['fields'];field=self.group(fields,caption)
+                self.assertFalse(field.get('write_protected'))
+                exported=w.fill(raw,fields,{field['key']:'Yes'})
+                self.assertEqual(w.option_states(w.SlotIndex(w.open_package(exported)),field),[True,False])
+        raw=self.form();fields=w.inspect(raw)['fields'];field=self.group(fields,'1. Current symptoms (choose one):')
+        for change in ('removed_relation','renamed','kind','options','whole_cell','whole_parent','caption','other_question'):
+            with self.subTest(change=change):
+                forged=copy.deepcopy(field)
+                if change=='removed_relation':forged.pop('source_questions')
+                elif change=='renamed':forged['label']='Another question'
+                elif change=='kind':forged['kind']='multi_choice'
+                elif change=='options':forged['options']=['No','Yes']
+                elif change=='other_question':forged['source_questions']=copy.deepcopy(self.group(fields,'2. Prior episodes (select all that apply):')['source_questions'])
+                else:
+                    index=w.SlotIndex(w.open_package(raw));anchor=index.by_id[forged['locator']['part']+'#'+forged['locator']['slot']]
+                    cell=anchor
+                    while cell.kind!='tc':cell=cell.parent
+                    if change=='whole_parent':cell=cell.parent.parent
+                    if change=='caption':
+                        cell=next(slot for slot in cell.children if slot.kind=='p');end=len(w.paragraph_text(cell.el)[0])
+                        target={'type':'span','start':end,'end':end,'shape':'after_label'}
+                    else:target={'type':'cell_append'}
+                    forged['kind']='text';forged['locator']={'contract':'v3','part':cell.part,'slot':cell.path,
+                        'fingerprint':w.fingerprint(cell.el),'target':target}
+                    forged.pop('source_questions',None)
+                with self.assertRaises(w.V3Failure):w.fill(raw,[forged],{forged['key']:'Yes'})

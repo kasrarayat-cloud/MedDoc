@@ -1,0 +1,399 @@
+"""Previously exposed DEV originals, offline fixture provider only; never a corpus rebaseline."""
+import hashlib,io,json,sys,types,subprocess,importlib.util
+from datetime import datetime,timezone
+from pathlib import Path
+from unittest.mock import patch
+from zipfile import ZipFile
+from lxml import etree
+from django.test import TestCase,override_settings
+from django.test.runner import DiscoverRunner
+from django.core.exceptions import ValidationError
+from core.tests.test_word_v3_workflow import V3Fixture
+from core.tests.test_workflow import TEST_SETTINGS
+from core.models import Encounter,Job,Reservation,Usage,ProviderReceipt,GenerationBatch
+from core import batch_jobs,generation as g
+from core.tests.test_v3_field_relations import relation_wire
+from core.jobs import enqueue,run_one
+from core.security import private_path
+from core import v3_mapping,import_binding
+from documents import word_v3
+
+ROOT=Path('/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word')
+CORPUS=Path('/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus')
+LEDGER=CORPUS/'custodian-20260927/metadata/053-original-dev40-exact-rights-ledger.json'
+assert hashlib.sha256(LEDGER.read_bytes()).hexdigest()=='5abaabb031c6e1552944dab1bc3e7fbd3ae5876436c840ffe1ee6312281851d7'
+ROWS={r['development_id']:r for r in json.loads(LEDGER.read_text())['records']}
+CANDIDATE=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+assert len(CANDIDATE)==40 and subprocess.run(['git','diff','--quiet','HEAD','--','rebuild/documents','rebuild/core','rebuild/quillmd']).returncode==0
+ATTEMPT=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+OUT=ROOT/('development-renderer-'+CANDIDATE[:12]+'-'+ATTEMPT);OUT.mkdir(mode=0o700)
+print('retained workflow directory:',OUT,flush=True)
+
+def source(identity):
+ r=ROWS[identity];assert r['offline_filled_copy_replay_supported']
+ p=CORPUS/r['corpus_file'];assert p.is_relative_to(CORPUS/'dev/originals') and not p.is_symlink()
+ data=p.read_bytes();assert hashlib.sha256(data).hexdigest()==r['sha256'];return p,data,r
+
+def retain(identity,stage,record,export=None):
+ target=OUT/identity;target.mkdir(mode=0o700,exist_ok=True)
+ p=target/(stage+'.json');record.update(candidate=CANDIDATE,attempt=ATTEMPT)
+ with p.open('x') as f:f.write(json.dumps(record,indent=2,default=str)+'\n')
+ p.chmod(0o600)
+ if export is not None:
+  p=target/(stage+'.docx')
+  with p.open('xb') as f:f.write(export)
+  p.chmod(0o600)
+
+
+def source_bound_answer_readback(original, final, field):
+ # Supplementary append readback: retain every source child in order, then
+ # read only visible plain paragraphs added after that exact prefix.
+ # It does not change the application's deliberately ambiguous scalar reader.
+ if field['locator']['target']['type']!='cell_append':
+  return word_v3.constrained_scalar_value(original,final,field,True)
+ loc=field['locator'];identity=loc['part']+'#'+loc['slot']
+ before=original.by_id.get(identity);after=final.by_id.get(identity)
+ if before is None or after is None:return None
+ old=list(before.el);new=list(after.el)
+ if len(new)<=len(old) or any(word_v3.fingerprint(a)!=word_v3.fingerprint(z) for a,z in zip(old,new)):return None
+ added=new[len(old):]
+ if any(p.tag!=word_v3.q('w:p') or word_v3.wraps_structure(p) or word_v3.region_hidden(final,p) for p in added):return None
+ return '\n'.join(word_v3.paragraph_text(p)[0] for p in added)
+
+SCORER=Path.cwd().parent/'docs/rebuild/v1/word-eval/score.py'
+assert hashlib.sha256(SCORER.read_bytes()).hexdigest()=='d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c'
+spec=importlib.util.spec_from_file_location('frozen_word_groundtruth_scorer',SCORER)
+scorer=importlib.util.module_from_spec(spec);spec.loader.exec_module(scorer)
+
+def scored(identity,row,fields,stage):
+ expected=Path(row['prior_expected_map_path']);assert expected.is_relative_to(CORPUS/'dev/groundtruth') and not expected.is_symlink()
+ raw=expected.read_bytes();groundtruth=json.loads(raw)
+ if identity=='D10':assert hashlib.sha256(raw).hexdigest()=='47145449ca9d46858f169d21f8c09dc77017fa28fe04028f41b0270d984ec67b'
+ self_score=scorer.score_doc(groundtruth,{'fields':fields})
+ retain(identity,stage,{'scope':'Fixed preexisting ground-truth scorer, physical/kind/options coverage only; no whole-workflow or native Word acceptance claim',
+    'source_sha256':row['sha256'],'expected_sha256':hashlib.sha256(raw).hexdigest(),'actual_field_count':len(fields),
+    'automatic':stage=='automatic-groundtruth','manual_recovery':stage!='automatic-groundtruth','score':self_score})
+ return self_score
+
+@override_settings(**dict(TEST_SETTINGS,QUILLMD_WORD_ENGINE='auto',QUILLMD_WORD_AUTO_PREFER_V3=True,QUILLMD_ROLE_SUGGESTIONS=False,
+ QUILLMD_LAYOUT_SOCKET=str(ROOT/'e.sock'),QUILLMD_LAYOUT_SERVICE_UID=1000,
+ V3_FIELD_RELATIONS=True,V3_GENERATION_BATCHES=False,AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-5-5',
+ AI_INPUT_RATE='2',AI_OUTPUT_RATE='10',AI_CACHED_RATE='0.20',AI_THINKING='between_tools',AI_EFFORT='medium',AI_INFERENCE_GEO=''))
+class DevelopmentWorkflow(V3Fixture,TestCase):
+ def test_d10_complete_selected_catalogue_batch_worker_atomic_review_and_renderer_export(self):
+  path,data,row=source('D10');template,version=self.uploaded(data=data,name='SYNTHETIC D10 offline original')
+  retain('D10','initial-import',{'fields':version.fields,'manifest':version.import_manifest,'source_sha256':template.sha256,
+      'historical_assertion':{'field_count':181,'scope':'Original harness retained unchanged; changed count is evidence, never success'}})
+  self.assertEqual(template.sha256,row['sha256']);self.assertTrue(version.fields)
+  first_mapping=json.loads(json.dumps(version.fields));first_manifest=json.loads(json.dumps(version.import_manifest))
+  automatic_score=scored('D10',row,first_mapping,'automatic-groundtruth');self.assertEqual(automatic_score['n'],198)
+  # Reuse only the exact complete automatic A198 source compilation. The
+  # fixed automatic score above is captured before every manual correction.
+  detector=word_v3.Detector(word_v3.open_package(data))
+  area=detector.manual_ruled_paragraphs(detector.index.by_id['word/document.xml#b/p[10]'],'long_text')
+  self.assertIsNotNone(area)
+  fresh=word_v3.area_to_field(1,area)
+  writing_slots=['b/p[%d]' % n for n in range(10,37,2)]
+  self.assertEqual([fresh['locator']['slot'],*[x['slot'] for x in fresh['locator']['extra']]],writing_slots)
+  candidates=[field for field in first_mapping if field.get('locator',{}).get('target',{}).get('type')=='ruled_paragraphs'
+      and field['locator']['part']=='word/document.xml' and field['locator']['slot']=='b/p[10]']
+  complete=[field for field in candidates if not field.get('origin') and not field.get('write_protected')
+      and all(field.get(k)==fresh.get(k) for k in ('kind','label','context','locator','source_questions'))]
+  self.assertLessEqual(len(complete),1)
+  reuse=len(complete)==1 and len(candidates)==1
+  retain('D10','ruled-destination-decision',{'automatic_reused':reuse,'automatic_candidates':candidates,
+      'fresh_source_compilation':fresh,'source_sha256':row['sha256'],
+      'fixed_automatic_score_precedes_corrections':True,'manual_correction':not reuse})
+  if reuse:
+   narrative=complete[0]
+  else:
+   response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_add',mapping_version=version.pk,
+       slot='word/document.xml#b/p[10]',label='Impression',kind='long_text'))
+   retain('D10','manual-add-response',{'status':response.status_code,'body':response.content.decode(),'mapping_version':str(version.pk)})
+   self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
+   narrative=next(f for f in version.fields if f['locator']['target']['type']=='ruled_paragraphs')
+   self.assertEqual(narrative['key'],'m3_20dbe3728879');self.assertEqual(narrative['origin'],'manual')
+  self.assertEqual(len(narrative['locator']['extra']),13)
+  self.assertEqual([narrative['locator']['slot'],*[x['slot'] for x in narrative['locator']['extra']]],writing_slots)
+  numeric_slots=('b/tbl[0]/tr[3]/tc[0]/p[0]','b/tbl[0]/tr[6]/tc[0]/p[0]')
+  whole_bands=[field for field in version.fields if field['locator']['slot'] in numeric_slots]
+  self.assertEqual(len(whole_bands),2)
+  response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_save',mapping_version=version.pk,
+      **{'remove_'+field['key']:'on' for field in whole_bands}))
+  retain('D10','manual-numeric-remove',{'status':response.status_code,'body':response.content.decode(),'removed_whole_band_fields':whole_bands})
+  self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
+  reviewed_numeric={}
+  for slot,prefix,values in ((numeric_slots[0],'Supine',('120','80')),(numeric_slots[1],'Standing',('118','76'))):
+   for number,suffix,value in ((1,'systolic',values[0]),(2,'diastolic',values[1])):
+    label=prefix+' '+suffix
+    response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_add',mapping_version=version.pk,
+        slot='word/document.xml#'+slot,label=label,kind='text',numeric_part=number))
+    retain('D10','manual-numeric-'+prefix.lower()+'-'+str(number),{'status':response.status_code,'body':response.content.decode(),
+      'human_reviewed_label':label,'original_slot':slot,'part_number':number,'automatic':False})
+    self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
+    field=next(field for field in version.fields if field['label']==label and field['locator']['target'].get('shape')=='numeric_part')
+    self.assertEqual(field['origin'],'manual');self.assertEqual(field['max_chars'],3)
+    reviewed_numeric[field['key']]={'field':field,'value':value}
+  self.assertEqual(len(reviewed_numeric),4)
+  numeric_answers={key:record['value'] for key,record in reviewed_numeric.items()}
+  manual_score=scored('D10',row,version.fields,'manual-groundtruth');self.assertEqual(manual_score['n'],198)
+  retain('D10','manual-numeric-mapping',{'fields':reviewed_numeric,'automatic':False,
+      'source_sha256':row['sha256'],'original_whole_band_fields':whole_bands,'clinical_meaning_review':'Explicit fixed clinician mapping; rendered captions cannot establish automatic association'})
+  retain('D10','manual-mapping',{'fields':version.fields,'manifest':version.import_manifest,'corrections':version.corrections,'narrative':narrative})
+  issues=version.import_manifest['coverage']['selected_engine_issues'];self.assertTrue(issues)
+  self.assertTrue(any(i['code']=='layout_held' for i in issues))
+  expectation=Path(row['prior_expected_map_path'])
+  assert expectation.is_relative_to(CORPUS/'dev/groundtruth') and not expectation.is_symlink()
+  expected_raw=expectation.read_bytes()
+  assert hashlib.sha256(expected_raw).hexdigest()=='47145449ca9d46858f169d21f8c09dc77017fa28fe04028f41b0270d984ec67b'
+  expected_map=json.loads(expected_raw);self.assertEqual(len(expected_map['answer_areas']),198)
+  detector=word_v3.Detector(word_v3.open_package(data));reader=word_v3._PlaceReader(detector.index)
+  places={f['key']:reader.of(f) for f in version.fields}
+  comparison=[]
+  for area in expected_map['answer_areas']:
+   candidates=[]
+   for field in version.fields:
+    physical=[list(place) for place in places[field['key']] if any(place[0]==slot or place[0].startswith(slot+'/')
+          or slot.startswith(place[0]+'/') for slot in area.get('slots',[]))]
+    if physical:candidates.append({'key':field['key'],'label':field['label'],'kind':field['kind'],
+        'context':field.get('context'),'source_questions':field.get('source_questions'),
+        'physical_writing_places':physical,'locator':field['locator']})
+   comparison.append({'expected':area,'candidate_associations':candidates,
+       'verdict':'UNADJUDICATED physical association; cannot certify semantic ownership/options/complete extent'
+                  if candidates else 'NO ANCHOR ASSOCIATION; manual full-source review required'})
+  retain('D10','expected-physical-review',{'scope':'198 immutable expected areas against current reviewed fields; physical associations only, automatic and manual scores retained separately',
+      'source_sha256':row['sha256'],'expected_map_sha256':hashlib.sha256(expected_raw).hexdigest(),
+      'expected_map':expected_map,'actual_fields':version.fields,'comparison':comparison,
+      'known_coverage_issues':issues,'held_layout_rows':sum(i['code']=='layout_held' for i in issues)})
+  response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_coverage',mapping_version=version.pk,
+                                                **{'exclude_'+issue['id']:'on' for issue in issues}))
+  self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
+  self.confirm(template,version)
+  notes="The patient's neck is supple."
+  self.assertEqual(self.new_encounter(version,notes).status_code,302);encounter=Encounter.objects.get(template_version=version)
+  page=self.client.get(f'/encounters/{encounter.pk}/')
+  self.assertIsNotNone(page.context['generation_max_charge'])
+  response=self.client.post(f'/encounters/{encounter.pk}/generate/',{'revision':encounter.revision,
+                                              'usage_quote':page.context['usage_quote']})
+  self.assertEqual(response.status_code,302,response.content.decode());batch=GenerationBatch.objects.get(encounter=encounter)
+  self.assertEqual(batch.plan['contract'],'ordinary-field-relations-parts-v1')
+  self.assertEqual(batch.plan['fields'],version.fields)
+  self.assertGreater(batch.parts.count(),1)
+  # The real application v4 fixture helper is exercised unchanged.
+  with patch('anthropic.Anthropic') as provider:
+   for _ in range(batch.parts.count()+1):self.assertTrue(run_one())
+   self.assertFalse(provider.called)
+  batch.refresh_from_db();encounter.refresh_from_db()
+  first_answers=json.loads(json.dumps(encounter.answers))
+  first_responses=[json.loads(private_path(p.response.result_path).read_text()) for p in batch.parts.select_related('response')]
+  retain('D10','first-batch',{'scope':'current complete selected catalogue through real HTTP/batch worker; exact omitted areas explicitly excluded; provider-shaped fixture, no full-form/live/native pass',
+   'original':str(path),'source_sha256':row['sha256'],'fixture_type':'unchanged application v4 fixture, no provider',
+   'first_mapping':first_mapping,'first_manifest':first_manifest,'reviewed_mapping':version.fields,
+   'notes':notes,'first_answers':first_answers,'first_responses':first_responses,'batch_plan':batch.plan,
+   'batch_state':batch.state,'parts':batch.parts.count(),'provider_calls':0})
+  self.assertEqual(batch.state,'succeeded',batch.error)
+  self.assertEqual(set(encounter.answers),{field['key'] for field in version.fields})
+  self.assertFalse(batch.parts.exclude(job__state='succeeded').exists())
+  target=next(f for f in version.fields if f['label']=='Supple')
+  other_areas={identity:next(f for f in version.fields if f['locator']['slot']==slot) for identity,slot in (('A191','b/tbl[1]/tr[51]/tc[0]/p[1]'),('A194','b/tbl[1]/tr[52]/tc[0]'),('A196','b/tbl[1]/tr[53]/tc[0]'))}
+  other_answers={other_areas[identity]['key']:('Clinician reviewed synthetic '+identity+' finding. '*20).strip() for identity in other_areas}
+  retain('D10','explicit-other-review',{'scope':'Actual recovered source destinations; explicit clinician corrections, never first-pass generation correctness','fields':other_areas,'answers':other_answers})
+  palpable_groundtruth={area['id']:area for area in expected_map['answer_areas'] if area['id'] in ('A92','A96')}
+  palpable_scoring={result['id']:result for result in manual_score['rows'] if result['id'] in palpable_groundtruth}
+  palpable_fields={identity:next(field for field in version.fields if field['key']==result['det']['key']) for identity,result in palpable_scoring.items() if result.get('status')=='OK' and result.get('det')}
+  palpable_answers={field['key']:palpable_groundtruth[identity]['options'][1] for identity,field in palpable_fields.items()}
+  retain('D10','palpable-source-review',{'scope':'Fixed original A92/A96 source and qualified geometry; ordinary clinician writer controls only','groundtruth':palpable_groundtruth,'scores':palpable_scoring,'mapped_fields':palpable_fields,'answers':palpable_answers,'unmapped_stay_held':sorted(set(palpable_groundtruth)-set(palpable_fields))})
+  narrative_answer='\n'.join('Reviewed synthetic impression sentence %02d.' % n for n in range(19))
+  payload={'revision':encounter.revision}
+  for field in version.fields:
+   if field.get('kind') in ('signature','initials'):continue
+   key=field['key'];payload['answer_'+key]=('Yes' if key==target['key'] else narrative_answer if key==narrative['key'] else other_answers.get(key,numeric_answers.get(key,palpable_answers.get(key,''))))
+   payload['reviewed_'+key]='on'
+   if key not in (target['key'],narrative['key']) and key not in other_answers and key not in numeric_answers and key not in palpable_answers:payload['blank_'+key]='on'
+  response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
+  self.assertEqual(response.status_code,302,response.content.decode());encounter.refresh_from_db()
+  response=self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'},follow=True)
+  encounter.refresh_from_db()
+  retain('D10','finalization-attempt',{'status':encounter.status,'response_status':response.status_code,
+      'messages':[str(m) for m in response.context['messages']] if response.context else [],'reviewed_answers':encounter.answers})
+  self.assertEqual(encounter.status,'finalized',[str(m) for m in response.context['messages']])
+  exported=private_path(encounter.export_path).read_bytes()
+  retain('D10','final-export-before-readback',{'status':encounter.status,'source_sha256':row['sha256'],
+      'export_sha256':hashlib.sha256(exported).hexdigest(),'mapping':version.fields,'reviewed_answers':encounter.answers,
+      'scope':'Actual final export retained BEFORE readback/assertions; previous failed first export was not archived'},exported)
+  original_index=word_v3.SlotIndex(word_v3.open_package(data));final_index=word_v3.SlotIndex(word_v3.open_package(exported))
+  self.assertEqual(word_v3.constrained_scalar_value(original_index,final_index,narrative,True),narrative_answer)
+  for key,record in reviewed_numeric.items():
+   self.assertEqual(word_v3.constrained_scalar_value(original_index,final_index,record['field'],True),record['value'],record['field']['label'])
+  for slot,expected_text in zip(numeric_slots,('120/80','118/76')):
+   original_band=original_index.by_id['word/document.xml#'+slot];final_band=final_index.by_id['word/document.xml#'+slot]
+   self.assertEqual(word_v3.paragraph_text(original_band.el)[0],'▯▯▯/▯▯▯')
+   self.assertEqual(word_v3.paragraph_text(final_band.el)[0],expected_text)
+   for sibling in original_band.parent.children:
+    if sibling.kind!='p' or sibling.id==original_band.id:continue
+    self.assertEqual(word_v3.fingerprint(sibling.el),word_v3.fingerprint(final_index.by_id[sibling.id].el),sibling.id+' numeric caption/neighbor')
+  for identity,field in other_areas.items():
+   self.assertEqual(source_bound_answer_readback(original_index,final_index,field),other_answers[field['key']],identity)
+   cell_slot=field['locator']['slot'].split('/p[')[0]; old_cell=original_index.by_id['word/document.xml#'+cell_slot]; new_cell=final_index.by_id['word/document.xml#'+cell_slot]
+   self.assertEqual(word_v3.fingerprint(old_cell.children[0].el),word_v3.fingerprint(new_cell.children[0].el),identity+' printed caption')
+   for old_p,new_p in zip(old_cell.children[2:],new_cell.children[2:]):
+    self.assertEqual(word_v3.fingerprint(old_p.el),word_v3.fingerprint(new_p.el),identity+' neighboring source')
+   right=cell_slot[:-5]+'tc[1]'
+   self.assertEqual(word_v3.fingerprint(original_index.by_id['word/document.xml#'+right].el),word_v3.fingerprint(final_index.by_id['word/document.xml#'+right].el),identity+' neighboring answer cell')
+  for identity,field in palpable_fields.items():
+   desired=palpable_answers[field['key']];self.assertEqual(word_v3.option_states(final_index,field),[option==desired for option in field['options']],identity)
+  with ZipFile(io.BytesIO(data)) as before,ZipFile(io.BytesIO(exported)) as after:
+   self.assertEqual(set(before.namelist()),set(after.namelist()))
+   for name in before.namelist():
+    if name!='word/document.xml':self.assertEqual(before.read(name),after.read(name),name)
+  for slot in ('b/p[7]','b/p[8]','b/p[9]','b/p[11]','b/p[35]','b/p[37]'):
+   identity='word/document.xml#'+slot
+   self.assertEqual(word_v3.fingerprint(original_index.by_id[identity].el),word_v3.fingerprint(final_index.by_id[identity].el),identity)
+  index=word_v3.SlotIndex(word_v3.open_package(exported))
+  self.assertEqual(word_v3.option_states(index,target),[True,False])
+  download=self.client.get(f'/encounters/{encounter.pk}/export/');self.assertEqual(download.status_code,200)
+  self.assertEqual(b''.join(download.streaming_content),exported);self.assertEqual(private_path(template.original_path).read_bytes(),data)
+  retain('D10','reviewed-export',{'scope':'current complete selected catalogue HTTP/batch worker/atomic clinician review/renderer-backed finalization/download; partial coverage and fixture output, not whole198 expected-area acceptance',
+   'original':str(path),'source_sha256':row['sha256'],'fixture_type':'unchanged application v4 fixture, no provider',
+   'export_sha256':hashlib.sha256(exported).hexdigest(),'expected_areas':198,'first_mapping':first_mapping,'first_manifest':first_manifest,
+   'reviewed_mapping':version.fields,'notes':notes,'first_answers':first_answers,'first_responses':first_responses,
+   'batch_plan':batch.plan,'batch_state':batch.state,'parts':batch.parts.count(),'review_actions':payload,
+   'reviewed_answers':encounter.answers,'target':target,'numeric_parts':reviewed_numeric,'numeric_original_captions_slash_neighbors_preserved':True,'other_areas':other_areas,'other_answers':other_answers,'other_caption_neighbor_readback_and_parts_preserved':True,'palpable_fields':palpable_fields,'palpable_answers':palpable_answers,'actual_option_states':[True,False],'provider_calls':0,
+   'usage':[{'simulated':u.simulated,'actual_cost':str(u.actual_cost)} for u in Usage.objects.all()]},exported)
+
+ def test_d30_accommodation_http_worker_review_finalize_download_preserves_neighbors(self):
+  path,data,row=source('D30');template,version=self.uploaded(data=data,name='SYNTHETIC D30 offline original')
+  retain('D30','initial-import',{'fields':version.fields,'manifest':version.import_manifest,'source_sha256':template.sha256})
+  self.assertEqual(template.sha256,row['sha256']);automatic_score=scored('D30',row,version.fields,'automatic-groundtruth')
+  response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_add',mapping_version=version.pk,
+      slot='word/document.xml#b/p[72]',label='Accommodation selections',kind='multi_choice'))
+  retain('D30','manual-add-response',{'status':response.status_code,'body':response.content.decode(),'mapping_version':str(version.pk)})
+  self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
+  target=next(f for f in version.fields if f['locator']['target']['type']=='paragraph_options')
+  self.assertEqual(target['key'],'m3_28bf30112e6d');self.assertEqual(len(target['options']),8)
+  manual_score=scored('D30',row,version.fields,'manual-groundtruth')
+  retain('D30','manual-mapping',{'fields':version.fields,'manifest':version.import_manifest,'corrections':version.corrections,'selection_target':target})
+  issues=version.import_manifest.get('coverage',{}).get('selected_engine_issues',[])
+  if version.import_manifest.get('coverage',{}).get('block_generation'):
+   self.assertTrue(issues)
+   response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_coverage',mapping_version=version.pk,
+       **{'exclude_'+issue['id']:'on' for issue in issues}))
+   self.assertEqual(response.status_code,302,response.content.decode());version=self.latest(template)
+  self.confirm(template,version)
+  notes='The patient lives in an own flat with their partner.'
+  self.assertEqual(self.new_encounter(version,notes).status_code,302)
+  encounter=Encounter.objects.get(template_version=version);job=enqueue(encounter,self.user)
+  with patch('anthropic.Anthropic') as provider:
+   self.assertTrue(run_one());self.assertFalse(provider.called)
+  job.refresh_from_db();encounter.refresh_from_db();first=json.loads(json.dumps(encounter.answers))
+  retain('D30','first-worker',{'job_state':job.state,'job_error':job.error,'mapping':version.fields,
+      'manifest':version.import_manifest,'notes':notes,'first_answers':first,'raw_first_result':json.loads(private_path(job.result_path).read_text()) if job.result_path else None,
+      'fixture_type':'unchanged application v4 fixture','provider_calls':0})
+  self.assertEqual(job.state,'succeeded',job.error)
+  desired='own flat/house\nwith partner';payload={'revision':encounter.revision}
+  for field in version.fields:
+   if field.get('kind') in ('signature','initials'):continue
+   key=field['key'];payload['answer_'+key]=desired if key==target['key'] else ''
+   payload['reviewed_'+key]='on'
+   if key!=target['key']:payload['blank_'+key]='on'
+  response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
+  self.assertEqual(response.status_code,302,response.content.decode());encounter.refresh_from_db()
+  response=self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'},follow=True)
+  encounter.refresh_from_db()
+  retain('D30','finalization-attempt',{'status':encounter.status,'response_status':response.status_code,'messages':[str(m) for m in response.context['messages']] if response.context else [],'reviewed_answers':encounter.answers})
+  self.assertEqual(encounter.status,'finalized',[str(m) for m in response.context['messages']])
+  actual=private_path(encounter.export_path).read_bytes()
+  old=word_v3.Detector(word_v3.open_package(data));new=word_v3.Detector(word_v3.open_package(actual))
+  part=target['locator']['part']
+  self.assertEqual(word_v3.option_states(new.index,target),[False,False,False,False,True,False,True,False])
+  for slot in ('b/p[77]','b/p[79]'):
+   a=old.index.by_id[part+'#'+slot].el;b=new.index.by_id[part+'#'+slot].el
+   self.assertEqual(word_v3.paragraph_text(b)[0],'☒ '+word_v3.paragraph_text(a)[0])
+   a.getparent().replace(a,etree.Element('removed_selected_option'));b.getparent().replace(b,etree.Element('removed_selected_option'))
+  self.assertEqual(etree.tostring(old.package.tree(part),method='c14n'),etree.tostring(new.package.tree(part),method='c14n'))
+  with ZipFile(io.BytesIO(data)) as before,ZipFile(io.BytesIO(actual)) as after:
+   self.assertEqual(set(before.namelist()),set(after.namelist()))
+   for name in before.namelist():
+    if name!=part:self.assertEqual(before.read(name),after.read(name),name)
+  download=self.client.get(f'/encounters/{encounter.pk}/export/');self.assertEqual(download.status_code,200)
+  self.assertEqual(b''.join(download.streaming_content),actual)
+  self.assertEqual(private_path(template.original_path).read_bytes(),data)
+  retain('D30','reviewed-export',{'scope':'Actual original D30 A20 eight printed options through real HTTP/fixture worker/explicit manual mapping/review/finalize/download; A21 narrative remains unchanged; no whole-form/live/native score',
+   'original':str(path),'source_sha256':row['sha256'],'export_sha256':hashlib.sha256(actual).hexdigest(),
+   'fixture_type':'unchanged application v4 fixture, no provider','notes':notes,'target':target,'mapping':version.fields,
+   'manifest':version.import_manifest,'first_answers':first,'reviewed_answers':encounter.answers,
+   'review_actions':payload,'job_state':job.state,'preserved_other_nodes_and_parts':True},actual)
+
+ def test_owner_unchanged_notes_fixture_then_clinician_seventeen_exact_locations(self):
+  from core.tests import test_natural_tab_generation as authoritative
+  from documents.test_tab_form import EXPECTED as locations,UnderlinedTabFormTests
+  from core.tab_review import clinician_identity
+  original=authoritative.ORIGINAL.read_bytes()
+  self.assertEqual(hashlib.sha256(original).hexdigest(),'8ae1e2b0ebeec317c038b8bfeed6a0824055f44d689c039ab450404593f2815a')
+  template,version=self.uploaded(data=original,name='SYNTHETIC unchanged owner colonoscopy')
+  self.assertEqual(version.import_manifest['engine'],'legacy');self.assertEqual(len(version.fields),24)
+  labels={f['key']:f['label'] for f in version.fields}
+  page=self.client.get(f'/templates/{template.pk}/');self.assertEqual(page.status_code,200)
+  response=self.client.post(f'/templates/{template.pk}/',{'mapping_version':version.pk,'labels':json.dumps(labels)})
+  self.assertEqual(response.status_code,302);version=self.latest(template)
+  self.assertEqual(self.new_encounter(version,authoritative.NOTES).status_code,302)
+  encounter=Encounter.objects.get(template_version=version)
+  quote=self.client.get(f'/encounters/{encounter.pk}/')
+  response=self.client.post(f'/encounters/{encounter.pk}/generate/',{'revision':encounter.revision,'usage_quote':quote.context['usage_quote']})
+  self.assertEqual(response.status_code,302);job=Job.objects.get(encounter=encounter)
+  with patch('anthropic.Anthropic') as provider:
+   self.assertTrue(run_one());self.assertFalse(provider.called)
+  job.refresh_from_db();encounter.refresh_from_db()
+  first=json.loads(json.dumps(encounter.answers))
+  # Independently retained expectation reader; not injected into the first job.
+  reference=g.validate_selections(authoritative.NOTES,version.fields,g.Selections(fields=[g.Selection(
+      key=f['key'],quotes=[authoritative.EXPECTED[f['label']]] if f['label'] in authoritative.EXPECTED else [],
+      conflict=False) for f in version.fields]))
+  expected={f['label']:reference[f['key']]['text'] for f in version.fields if f['label'] in authoritative.EXPECTED}
+  self.assertEqual(len(expected),17)
+  first_correct=sum(first.get(f['key'],{}).get('text')==expected[f['label']] for f in version.fields if f['label'] in expected)
+  retain('owner','first-worker',{'scope':'unchanged authoritative notes through real application fixture; model result not manufactured',
+      'source_sha256':template.sha256,'notes':authoritative.NOTES,'expected_reference':expected,'first_answers':first,
+      'first_correct':first_correct,'denominator':17,'job_state':job.state,'job_error':job.error,
+      'mapping':version.fields,'manifest':version.import_manifest,'raw_first_result':json.loads(private_path(job.result_path).read_text()) if job.result_path else None,
+      'provider_calls':0})
+  self.assertEqual(job.state,'succeeded',job.error)
+  payload={'revision':encounter.revision}
+  for field in version.fields:
+   key=field['key'];payload['answer_'+key]=expected.get(field['label'],'');payload['reviewed_'+key]='on'
+   if field['label'] not in expected and not clinician_identity(field):payload['blank_'+key]='on'
+  response=self.client.post(f'/encounters/{encounter.pk}/save/',payload)
+  self.assertEqual(response.status_code,302,response.content.decode());encounter.refresh_from_db()
+  response=self.client.post(f'/encounters/{encounter.pk}/finalize/',{'revision':encounter.revision,'reviewed':'on'},follow=True)
+  encounter.refresh_from_db();self.assertEqual(encounter.status,'finalized',[str(m) for m in response.context['messages']])
+  exported=private_path(encounter.export_path).read_bytes()
+  with ZipFile(io.BytesIO(original)) as old,ZipFile(io.BytesIO(exported)) as new:
+   self.assertEqual(old.namelist(),new.namelist())
+   for part in old.namelist():
+    if part!='word/document.xml':self.assertEqual(old.read(part),new.read(part),part)
+   before=etree.fromstring(old.read('word/document.xml'));after=etree.fromstring(new.read('word/document.xml'))
+  pars=after.findall('./w:body/w:p',word_v3.NS);oldpars=before.findall('./w:body/w:p',word_v3.NS)
+  self.assertEqual(len(pars),len(oldpars));self.assertEqual(len(pars),31)
+  for label,positions in locations:
+   if label in expected:
+    shown=''.join(''.join(pars[p].itertext()) for p,_ in positions)
+    self.assertIn(expected[label],shown,(label,positions,shown))
+   else:
+    for p,r in positions:self.assertEqual(etree.tostring(oldpars[p].findall(word_v3.q('w:r'))[r]),
+                                         etree.tostring(pars[p].findall(word_v3.q('w:r'))[r]),label)
+  # Keep every original printed label, its style and page/tab rules, plus all
+  # original parts and the seven unanswered/signing anchors unchanged.
+  verifier=UnderlinedTabFormTests();verifier.assert_original_and_parts_preserved(private_path(encounter.export_path))
+  downloaded=self.client.get(f'/encounters/{encounter.pk}/export/');self.assertEqual(downloaded.status_code,200)
+  self.assertEqual(b''.join(downloaded.streaming_content),exported)
+  self.assertEqual(private_path(template.original_path).read_bytes(),original)
+  retain('owner','reviewed-export',{'scope':'clinician-corrected17/17 exact owner locations; first fixture outcome retained separately',
+      'source_sha256':template.sha256,'notes':authoritative.NOTES,'expected_reference':expected,'first_correct':first_correct,
+      'denominator':17,'corrected_correct':17,'mapping':version.fields,'manifest':version.import_manifest,
+      'review_actions':payload,'reviewed_answers':encounter.answers,'unanswered_signing_areas':7,
+      'original_preserved':True,'other_parts_preserved':True,'provider_calls':0},exported)
+
+module=types.ModuleType('sol_word_development_runtime');module.DevelopmentWorkflow=DevelopmentWorkflow
+sys.modules[module.__name__]=module
+status=DiscoverRunner(verbosity=2,interactive=False).run_tests(['sol_word_development_runtime.DevelopmentWorkflow.test_d10_complete_selected_catalogue_batch_worker_atomic_review_and_renderer_export'])
+raise SystemExit(status)

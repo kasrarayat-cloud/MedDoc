@@ -1,0 +1,11 @@
+{
+  "verified": true,
+  "requested_database": "quillmd_qa_sol_word_dev1180267",
+  "checked_names": [
+    "quillmd_qa_sol_word_dev1180267",
+    "test_quillmd_qa_sol_word_dev1180267"
+  ],
+  "present": [],
+  "all_absent": true,
+  "provider_calls": 0
+}

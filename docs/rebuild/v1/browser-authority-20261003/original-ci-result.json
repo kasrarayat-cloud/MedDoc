@@ -1,0 +1,127 @@
+{
+  "regression": "word-authority L01 (legacy signing rows filled from labelled notes)",
+  "expected_on_43fcf214": "(b) FAILS — the known defect reproduces; (a) and (c) pass",
+  "synthetic_only": true,
+  "generation": "fixture, no provider requests",
+  "base_url": "http://127.0.0.1:9130",
+  "run": "20261003T223317Z",
+  "control_mode": null,
+  "checks": [
+    {
+      "name": "Server is synthetic-only and reports its release",
+      "passed": true
+    },
+    {
+      "name": "Synthetic doctor sign-in and fixture spending boundary",
+      "passed": true
+    },
+    {
+      "name": "Upload the blank synthetic legacy form through the upload page",
+      "passed": true
+    },
+    {
+      "name": "Mapping review lists every legacy row and keeps the original",
+      "passed": true
+    },
+    {
+      "name": "Activate the mapping and start a document from it",
+      "passed": true
+    },
+    {
+      "name": "Generate with the synthetic fixture at zero charge",
+      "passed": false
+    }
+  ],
+  "assertions": {
+    "a_ordinary_rows_filled": {
+      "passed": false,
+      "evaluated": false
+    },
+    "b_signing_rows_not_filled": {
+      "passed": false,
+      "evaluated": false
+    },
+    "c_heading_and_instruction_preserved": {
+      "passed": false,
+      "evaluated": false
+    }
+  },
+  "mapping_review": {
+    "rows": [
+      {
+        "label": "Patient name",
+        "key": "cell_0",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": false
+      },
+      {
+        "label": "Chief complaint",
+        "key": "cell_1",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": false
+      },
+      {
+        "label": "Smoking status",
+        "key": "cell_2",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": false
+      },
+      {
+        "label": "Patient signature",
+        "key": "cell_3",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": true
+      },
+      {
+        "label": "Initials",
+        "key": "cell_4",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": true
+      },
+      {
+        "label": "Consent form signed",
+        "key": "cell_5",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": false
+      },
+      {
+        "label": "Initial assessment",
+        "key": "cell_6",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": false
+      },
+      {
+        "label": "Date of visit",
+        "key": "cell_7",
+        "location": "Answer cell in a question/answer table",
+        "review_notes": 0,
+        "signing_row": false
+      }
+    ],
+    "signing_rows_offered_as_ordinary_fields": true,
+    "use_this_form_offered": true
+  },
+  "review_page": null,
+  "finalized_page": null,
+  "artifacts": {
+    "mapping-review": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/word-authority-artifacts/20261003T223317Z/mapping-review.png",
+    "failure": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/word-authority-artifacts/20261003T223317Z/failure.png",
+    "trace": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/word-authority-artifacts/20261003T223317Z/trace.zip"
+  },
+  "health": {
+    "status": "ok",
+    "data_mode": "synthetic-only",
+    "surface": "doctor",
+    "release": "development-unrecorded"
+  },
+  "encounter_path": "/encounters/2be48f7c-2e71-4598-82dd-349ace576b72/",
+  "finished": "2026-10-03T22:34:06.177Z",
+  "passed": false
+}

@@ -1,0 +1,669 @@
+{
+  "source_commit": "6f0f647a3d10227fc7ed9a30698c1877a7fff22f",
+  "source_manifest": {
+    "commit": "6f0f647a3d10227fc7ed9a30698c1877a7fff22f",
+    "status": "finished clinical diff frozen awaiting independent REFUTE; not integrated or live qualified",
+    "files": [
+      {
+        "path": "rebuild/core/generation.py",
+        "sha256": "72a01ba63d704444453bd34aa185c66c371e9d573a5a6966da03c0b07c97fbb7"
+      },
+      {
+        "path": "rebuild/core/source_scope.py",
+        "sha256": "653ffe19c8203d56c8a2aab919d4a1bf03928fccf0e805298ffbd01f427669b4"
+      },
+      {
+        "path": "rebuild/core/transcript_context.py",
+        "sha256": "d371aa5436967a7a48bb9ff284d63ce3acb2ed9b77ecf88d557b6e18ebee7521"
+      },
+      {
+        "path": "rebuild/core/v3_field_relations.py",
+        "sha256": "c3049a9b87707578f58330283bb2d1c2cbaeb602c3e15103d04a7862c595d75b"
+      },
+      {
+        "path": "rebuild/core/v3_literal_facts.py",
+        "sha256": "c4039c1ab16d008985c6028afbfc39ea60c179d52bd397f944e31b1fe88b6ce7"
+      },
+      {
+        "path": "rebuild/core/v3_actors.py",
+        "sha256": "672f54892d2502fe534421b7ca166fac862ff5c59e2fc2d2144ff7ec5362ed6d"
+      },
+      {
+        "path": "rebuild/core/v3_syntax.py",
+        "sha256": "ffe3b780051fc85c7d62c9d3ad4082829d3b28a1e9ae5f5ac903be9249b5d9f7"
+      },
+      {
+        "path": "rebuild/core/v3_destination.py",
+        "sha256": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc"
+      },
+      {
+        "path": "rebuild/core/v3_history_context.py",
+        "sha256": "447208e118543aeb89f7a92758781d35bed3a106ee283a7d2794cb206c8fc4c0"
+      },
+      {
+        "path": "rebuild/core/models.py",
+        "sha256": "bd01c65d82fee028493fce93b3dc38da4caad32f0f3be26089135a6d506c9cd9"
+      },
+      {
+        "path": "rebuild/core/views.py",
+        "sha256": "6f17abd19a43f8a280a3529b49b09b1c46929bdd2edb8892af3942658a1dd43b"
+      },
+      {
+        "path": "rebuild/core/jobs.py",
+        "sha256": "2724c6992e2736c85f5624b4d1bf91cfa4b6718afc4c447ef79a4e71019c94f1"
+      },
+      {
+        "path": "rebuild/core/batch_jobs.py",
+        "sha256": "367729ce79893c61822af480cf1f330f392699f1bff98f9e711f1447fe3f5aca"
+      },
+      {
+        "path": "rebuild/core/generation_batch.py",
+        "sha256": "89b268f6ee3f3bfafd8c000b1b5b24b873770ba7500e3d7ea263b573dae62e97"
+      },
+      {
+        "path": "rebuild/core/destination_roles.py",
+        "sha256": "dd5d919116d4c02ca5b92a087ab6d892d5597a1fb4d68213956aab4e9ed8cd4c"
+      },
+      {
+        "path": "rebuild/core/tests/test_transcript_context.py",
+        "sha256": "06d94c9cf3290be319bedab0cdfcabcd33f889705efcdc03f7306b5ab0fba554"
+      },
+      {
+        "path": "rebuild/core/tests/voice_first_pass_controls.json",
+        "sha256": "4cec016f52a1b07acd42ea5d86f8ca517608ab04abbb139cb6fa438e57352f01"
+      }
+    ],
+    "excluded_local_files": [
+      "temporary untracked Word0035 migration",
+      "isolated old-ORM test_relations_fixture compatibility edit"
+    ]
+  },
+  "provider_requests": 0,
+  "database_connections": 0,
+  "model_context_relations": "all unselected units adversarially independent",
+  "cases": [
+    {
+      "name": "prior_only_father_does",
+      "notes": "Takes warfarin 5 mg daily. Only her father does.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Only her father does.",
+          "start": 27,
+          "end": 48,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "prior_not_today",
+      "notes": "Takes warfarin 5 mg daily. Not today.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Not today.",
+          "start": 27,
+          "end": 37,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "prior_not_since_monday",
+      "notes": "Takes warfarin 5 mg daily. Not since Monday.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Not since Monday.",
+          "start": 27,
+          "end": 44,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "prior_no_longer_the",
+      "notes": "Takes warfarin 5 mg daily. No longer the daily medication.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "No longer the daily medication.",
+          "start": 27,
+          "end": 58,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "prior_exclusive_same",
+      "notes": "Takes warfarin 5 mg daily. Her father is the sole warfarin user.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Her father is the sole warfarin user.",
+          "start": 27,
+          "end": 64,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "prior_false_hold_without",
+      "notes": "Takes warfarin 5 mg daily. Her father is the only person without warfarin.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Takes warfarin 5 mg daily.",
+      "governed_status": "supported",
+      "governed_text": "Takes warfarin 5 mg daily.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "prior_false_hold_past",
+      "notes": "Takes warfarin 5 mg daily. Only her father used to take warfarin.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Takes warfarin 5 mg daily.",
+      "governed_status": "supported",
+      "governed_text": "Takes warfarin 5 mg daily.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "wrong_subject",
+      "notes": "Her father takes warfarin 5 mg daily.",
+      "selected_quote": "Her father takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Her father takes warfarin 5 mg daily.",
+          "start": 0,
+          "end": 37,
+          "after": false,
+          "same": true,
+          "other_person": true
+        }
+      ]
+    },
+    {
+      "name": "stopped_medication",
+      "notes": "Takes warfarin 5 mg daily. Warfarin was stopped.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Warfarin was stopped.",
+          "start": 27,
+          "end": 48,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "independent_other_drug",
+      "notes": "Takes warfarin 5 mg daily. Her father is the sole apixaban user.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Takes warfarin 5 mg daily.",
+      "governed_status": "supported",
+      "governed_text": "Takes warfarin 5 mg daily.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "without_same_swelling",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has a left ankle without swelling.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "without_different_side",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has a right ankle without swelling.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "absent_same_swelling",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has absent swelling over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "free_same_swelling",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has a swelling-free left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "non_same_swelling",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has non-swollen left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The patient has non-swollen left ankle.",
+          "start": 55,
+          "end": 94,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "deny_any_same",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient denies any swelling over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The patient denies any swelling over the left ankle.",
+          "start": 55,
+          "end": 107,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "different_topic_same_side",
+      "notes": "Examination mild swelling over the left lateral ankle. The patient has no pain over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Examination mild swelling over the left lateral ankle.",
+      "governed_status": "supported",
+      "governed_text": "Examination mild swelling over the left lateral ankle.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "same_topic_explicit_other",
+      "notes": "Examination mild swelling over the left lateral ankle. Her father has no swelling over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": false,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": true,
+      "held_context": [
+        {
+          "quote": "Her father has no swelling over the left ankle.",
+          "start": 55,
+          "end": 102,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "same_nominal_temporal",
+      "notes": "Examination mild swelling over the left lateral ankle. No longer swollen over the left ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "No longer swollen over the left ankle.",
+          "start": 55,
+          "end": 93,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "exam_inherited_family",
+      "notes": "Family history. Examination mild swelling over the left lateral ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Family history.",
+          "start": 0,
+          "end": 15,
+          "after": false,
+          "same": true
+        },
+        {
+          "quote": "Examination mild swelling over the left lateral ankle.",
+          "start": 16,
+          "end": 70,
+          "after": false,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "exam_inherited_hypothetical",
+      "notes": "Hypothetical. Examination mild swelling over the left lateral ankle.",
+      "selected_quote": "Examination mild swelling over the left lateral ankle.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Hypothetical.",
+          "start": 0,
+          "end": 13,
+          "after": false,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "deny_either_knee",
+      "notes": "The patient reports pain in the left knee. The patient denies pain in either knee.",
+      "selected_quote": "The patient reports pain in the left knee.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "The patient denies pain in either knee.",
+          "start": 43,
+          "end": 82,
+          "after": true,
+          "same": true
+        }
+      ]
+    },
+    {
+      "name": "without_left_pain",
+      "notes": "The patient reports pain in the left knee. The patient has a left knee without pain.",
+      "selected_quote": "The patient reports pain in the left knee.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "The patient reports pain in the left knee.",
+      "governed_status": "supported",
+      "governed_text": "The patient reports pain in the left knee.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "opposite_polarity_exclusive",
+      "notes": "The patient reports pain in the left knee. Only her father denies left knee pain.",
+      "selected_quote": "The patient reports pain in the left knee.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "The patient reports pain in the left knee.",
+      "governed_status": "supported",
+      "governed_text": "The patient reports pain in the left knee.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "same_polarity_exclusive",
+      "notes": "The patient reports pain in the left knee. Only her father has left knee pain.",
+      "selected_quote": "The patient reports pain in the left knee.",
+      "expected_hold": true,
+      "validated_status": "supported",
+      "validated_text": "The patient reports pain in the left knee.",
+      "governed_status": "supported",
+      "governed_text": "The patient reports pain in the left knee.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": true,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "explicit_different_side",
+      "notes": "The patient reports pain in the left knee. Only her father has right knee pain.",
+      "selected_quote": "The patient reports pain in the left knee.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "The patient reports pain in the left knee.",
+      "governed_status": "supported",
+      "governed_text": "The patient reports pain in the left knee.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "local_temporal",
+      "notes": "Takes warfarin 5 mg daily. Reports cough. Not until next week.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": false,
+      "validated_status": "supported",
+      "validated_text": "Takes warfarin 5 mg daily.",
+      "governed_status": "supported",
+      "governed_text": "Takes warfarin 5 mg daily.",
+      "finalization_governed_decisions": [],
+      "released": true,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": []
+    },
+    {
+      "name": "same_temporal",
+      "notes": "Takes warfarin 5 mg daily. Not until next week.",
+      "selected_quote": "Takes warfarin 5 mg daily.",
+      "expected_hold": true,
+      "validated_status": "conflict",
+      "validated_text": "",
+      "governed_status": "conflict",
+      "governed_text": "",
+      "finalization_governed_decisions": [],
+      "released": false,
+      "demonstrated_unsafe_release": false,
+      "unnecessary_hold": false,
+      "held_context": [
+        {
+          "quote": "Not until next week.",
+          "start": 27,
+          "end": 47,
+          "after": true,
+          "same": true
+        }
+      ]
+    }
+  ],
+  "original_first_pass_voice_replay": [
+    {
+      "patient_context": false,
+      "supported": [],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    },
+    {
+      "patient_context": true,
+      "supported": [
+        "v3_7"
+      ],
+      "original_held_controls": {
+        "v3_2": {
+          "status": "conflict",
+          "text": ""
+        },
+        "v3_4": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "finalization_governed_decisions": []
+    }
+  ],
+  "elapsed_seconds": 8.69
+}

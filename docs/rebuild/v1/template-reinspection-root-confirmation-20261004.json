@@ -1,0 +1,238 @@
+{
+  "scope": "Focused independent original-destination/preservation controls and actual forward-review guard; not whole Word qualification",
+  "claims_revision": "eda1a32dc6bf4ebe9243048cfabd05e677f5f3ad",
+  "supported_route_revision": "23a4e6bfefe4e9b0d74dfcc7a0ccff0cac6cf3f7",
+  "root_driver": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/refute-reinspection-root-kind.py",
+    "sha256": "1d135de578a31b96281d682195d67bc2ab594f19cb08cb37fa64e8b98edfb745"
+  },
+  "receipts": {
+    "root_six": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-reinspection-refutation-kind-eda1/result.json",
+      "sha256": "155fa69c18abeb2b2ddf4703d92fdd776bfba5a25a1fc17d48265aa544b43215",
+      "result": {
+        "source": "eda1a32dc6bf4ebe9243048cfabd05e677f5f3ad",
+        "actual": {
+          "actual_exit": 0,
+          "elapsed_seconds": 46.638411145002465,
+          "timed_out": false,
+          "reaped": true
+        },
+        "catalog_before": {
+          "actual_exit": 0,
+          "elapsed_seconds": 0.5669130160022178,
+          "timed_out": false,
+          "reaped": true
+        },
+        "catalog_after": {
+          "actual_exit": 0,
+          "elapsed_seconds": 0.4675102000037441,
+          "timed_out": false,
+          "reaped": true
+        },
+        "source_unchanged": true,
+        "methods": 6,
+        "provider_calls": 0,
+        "renderer_calls": 0
+      }
+    },
+    "word_legacy_guard": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/template-upgrade-20261004/guard-23a4e6bf/result.json",
+      "sha256": "3d40c6a5d14e2f8b720ee854a018e1d77e95c8da324d620ba7772061ba8dd025",
+      "result": {
+        "case": "guard-23a4e6bf",
+        "source_commit": "23a4e6bfefe4e9b0d74dfcc7a0ccff0cac6cf3f7",
+        "source_path": "/opt/meddoc-pro/.worktrees/v1-word-guard-23a4e6bf",
+        "source_hashes": {
+          "rebuild/core/import_binding.py": "d1dc63785444249baa48652831be08dbd774f88d618e2b70c6c15f0eeb016f23",
+          "rebuild/core/models.py": "03cd2bcbfd109676de24664379cbaa2ca8a4460595cad3e1d2564a273d3153dc",
+          "rebuild/core/views.py": "de7ddbfaa6d96cd61e7c6013d5aaf3cba76defab47c4a09ddc7a89fe083c55a7",
+          "rebuild/core/tests/test_template_reinspection.py": "87b430b980fa3c4d70d588453a376659f60df5917986e71f420021d535f097c9"
+        },
+        "command": [
+          "python3",
+          "-B",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/independent-product-20261003T183045Z/integration/qa_test_with_artifacts.py",
+          "/opt/meddoc-pro/.worktrees/v1-word-guard-23a4e6bf",
+          "quillmd_qa_sol_word_guard_20261004",
+          "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/template-upgrade-20261004/guard-23a4e6bf/qa",
+          "manage.py",
+          "test",
+          "core.tests.test_template_reinspection.TemplateReinspection.test_new_legacy_reinspection_requires_review_before_encounter_job_or_finalize",
+          "--noinput",
+          "-v2"
+        ],
+        "driver_sha256": "91333e4af0cb64db1c95b899fd1438cb7d6ef225741c90dcdcde51d51865a002",
+        "database_names": [
+          "quillmd_qa_sol_word_guard_20261004",
+          "test_quillmd_qa_sol_word_guard_20261004"
+        ],
+        "deadline_seconds": 180,
+        "provider_calls": 0,
+        "renderer_calls": 0,
+        "actual": {
+          "exit_status": 0,
+          "timed_out": false,
+          "child_reaped": true,
+          "elapsed_seconds": 14.474719325000478
+        },
+        "catalog_before": {
+          "exit_status": 0,
+          "timed_out": false,
+          "child_reaped": true,
+          "elapsed_seconds": 0.5667320069987909
+        },
+        "catalog_after": {
+          "exit_status": 0,
+          "timed_out": false,
+          "child_reaped": true,
+          "elapsed_seconds": 0.46695390999957453
+        },
+        "source_unchanged": true,
+        "source_clean": true,
+        "qualification": false
+      }
+    },
+    "clinical_migration_refutation": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/clinical/migration0038-refutation-eda1/result.json",
+      "sha256": "ff48deb61ab44728f440b18e0c7971598e5f5b6e1f622bcd628ed1a9659a36d8",
+      "result": {
+        "source": "eda1a32dc6bf4ebe9243048cfabd05e677f5f3ad",
+        "controls": 13,
+        "matched": 13,
+        "rows": [
+          {
+            "id": "exact-only-predicate-delta",
+            "matched": true
+          },
+          {
+            "id": "source-prosrc-hash-exact",
+            "matched": true,
+            "sha256": "3d174c3dcd7986a7bac9443f1e6a07a83123ad655544606ea41b409b83642d74"
+          },
+          {
+            "id": "no-schema-or-row-write-forward",
+            "matched": true
+          },
+          {
+            "id": "unchanged-final-and-department-and-version-equality-guards",
+            "matched": true
+          },
+          {
+            "id": "exact-migration-dependency",
+            "matched": true
+          },
+          {
+            "id": "actual-reverse-order-count-0",
+            "matched": true,
+            "count": 0,
+            "error": null,
+            "sql_writes": 1,
+            "calls": [
+              [
+                "using",
+                "owned_0038_refutation"
+              ],
+              [
+                "filter",
+                {
+                  "import_manifest__has_key": "reinspection"
+                }
+              ],
+              [
+                "count"
+              ]
+            ]
+          },
+          {
+            "id": "alias-and-key-presence-0",
+            "matched": true
+          },
+          {
+            "id": "actual-reverse-order-count-1",
+            "matched": true,
+            "count": 1,
+            "error": "0038_reinspection_confirmation_guard cannot be reversed: 1 mapping version(s) retain reinspection evidence. Preserve the exact-version clinician review gate and use a reviewed forward repair or compatible code rollback. 0038 was not reversed; its guard and all retained mapping and document records are unchanged.",
+            "sql_writes": 0,
+            "calls": [
+              [
+                "using",
+                "owned_0038_refutation"
+              ],
+              [
+                "filter",
+                {
+                  "import_manifest__has_key": "reinspection"
+                }
+              ],
+              [
+                "count"
+              ]
+            ]
+          },
+          {
+            "id": "alias-and-key-presence-1",
+            "matched": true
+          },
+          {
+            "id": "actual-reverse-order-count-3",
+            "matched": true,
+            "count": 3,
+            "error": "0038_reinspection_confirmation_guard cannot be reversed: 3 mapping version(s) retain reinspection evidence. Preserve the exact-version clinician review gate and use a reviewed forward repair or compatible code rollback. 0038 was not reversed; its guard and all retained mapping and document records are unchanged.",
+            "sql_writes": 0,
+            "calls": [
+              [
+                "using",
+                "owned_0038_refutation"
+              ],
+              [
+                "filter",
+                {
+                  "import_manifest__has_key": "reinspection"
+                }
+              ],
+              [
+                "count"
+              ]
+            ]
+          },
+          {
+            "id": "alias-and-key-presence-3",
+            "matched": true
+          },
+          {
+            "id": "count-cannot-tell-fails-before-old-guard-write",
+            "matched": true,
+            "error": "Synthetic count query unavailable",
+            "writes": []
+          },
+          {
+            "id": "failed-guard-restoration-does-not-report-success",
+            "matched": true,
+            "error": "Synthetic guard restoration unavailable"
+          }
+        ],
+        "demonstrated_findings": [],
+        "result": "NOTHING FOUND",
+        "scope": "Literal SQL delta + actual Django migration reverse execution with read/count fake apps and SQL-recording fake editor; no PostgreSQL/schema/served acceptance claim. Existing Ops database guard/upgrade proof remains separate.",
+        "db": false,
+        "network": false,
+        "provider": false,
+        "source_changed": false
+      }
+    }
+  },
+  "root_methods": 6,
+  "all_root_passed": true,
+  "new_long_text_positive_passed": true,
+  "original_root_failure": "B/root-reinspection-refutation-53324aa5 retained; 4PASS+1FAIL actualmanualdestination302, no separatebinaryarchive in that firstdriver; Word duplicate-before-1f68 separately archivesactualoriginal/fields/response",
+  "provider_calls": 0,
+  "native_word": false,
+  "word_acceptance": false,
+  "frozen_thresholds": {
+    "overall_required": 54,
+    "overall_total": 60,
+    "holdout_required": 18,
+    "holdout_total": 20
+  }
+}

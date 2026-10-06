@@ -101,7 +101,9 @@ def resolve(request,template,version):
         decisions.append({'slot':slot,'key':row.get('key',''),'decision':decision})
     from .views import v3_outline
     mapping.validate_mapping(version,fields,v3_outline(template))
+    from .import_binding import for_mapping
     new=TemplateVersion.objects.create(template=template,number=version.number+1,fields=fields,contract='v3',
+        import_manifest=for_mapping(version.import_manifest,fields),
         created_by=request.user,review_requirements=version.review_requirements,
         assistance={**version.assistance,'unresolved':[],'assisted':True,'resolutions':decisions},
         corrections={'base_version':version.number,'removed':[f for f in version.fields if f['key'] in removed],

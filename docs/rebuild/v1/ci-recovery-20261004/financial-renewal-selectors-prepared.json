@@ -1,0 +1,1304 @@
+{
+  "database_calls": 0,
+  "execution_performed": false,
+  "format": "quillmd-financial-renewal-selectors-v1",
+  "future_source_and_source_bytes_must_be_rebound": true,
+  "invoice_reconciliation": false,
+  "mandatory_final_new_dependency": {
+    "clean_observed_source_snapshot": "7ccdcb6e75241685e90519774b909ecbd5b1e827",
+    "database_calls": 0,
+    "final_compiler_and_output_call_graph_verified": false,
+    "final_source_hash": null,
+    "final_whole_module_normalized_ast_hash": null,
+    "fingerprints_changed": false,
+    "new_dependency_exists_in_clean_snapshot": false,
+    "pending_guard_extension_sha256": "dd2ffff4bcc788f36904c61ec16a8d3992768a9d91b8bbce8bc450a8b08a2561",
+    "provider_calls": 0,
+    "reported_unfinished_new_dependency": "rebuild/core/ordinary_source_scope.py",
+    "required_final_work": [
+      "Read the finished new helper and every compiler/source-output caller from the supplied clean freeze; retain full baseline/new diff and exact bytes.",
+      "Determine input/wire/grouping/output-binding priced effects from actual finished source and new application request/receipt evidence.",
+      "Bind the entire helper AST through ordinary_module_proof so an unchanged import in a pinned caller cannot mask a changed helper body.",
+      "Add actual finished-helper semantic mutants and demonstrate source/compiler/output dependency changes refuse under the unchanged proof mechanism, alongside real compile/send/quote/settlement positives.",
+      "Independently refute the finished clinical and financial qualification; only then replace unresolved markers and renew the three current priced-module guards."
+    ],
+    "status": "prepared_only_not_applied",
+    "tests_executed": 0
+  },
+  "new_campaign_declaration_reported_by_integration_owner": {
+    "actual_application_wires_available_to_this_proof": false,
+    "final_clinical_source_frozen": false,
+    "pure_validation_result_sha256": "3f1b6d0589d430a38de8253ca9468a6e92c5c3ecea614c8bf98df7de365c4fcc",
+    "sha256": "52b6c5a4a6ceee357759500fc21ef529476e88d365e336f0f79c05662b44d172"
+  },
+  "packets": {
+    "historical_profiles_wires_and_metering": [
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_rollback_reproduces_the_recorded_fingerprint_whatever_the_sonnet_5_settings_say",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_sonnet_5_fingerprints_are_pinned_and_carry_the_profile",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_the_defaults_are_disabled_thinking_at_medium_effort_and_no_geography",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_an_invalid_choice_is_recorded_never_raised_and_refuses_generation",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_newer_claude_model_without_its_own_profile_is_refused_whatever_it_carries",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_the_provider_and_model_must_be_a_pair_quillmd_sends",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_model_id_that_is_not_a_plain_id_is_invalid_for_every_provider",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_only_the_listed_claude_models_get_the_legacy_request_deny_by_default",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_provider_spelled_any_other_way_is_invalid_and_refused_before_any_request",
+      "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_stored_profile_that_does_not_match_its_shapes_is_refused_before_any_request",
+      "core.tests.test_sonnet5_profile.DiscountValidatedAsUsed.test_a_discount_that_rounds_to_one_is_refused_before_any_hold_or_request",
+      "core.tests.test_sonnet5_profile.DiscountValidatedAsUsed.test_a_stored_discount_of_one_is_refused_before_the_request",
+      "core.tests.test_sonnet5_profile.RollbackIsByteIdentical.test_the_rollback_kwargs_are_the_pre_profile_call",
+      "core.tests.test_sonnet5_profile.RollbackIsByteIdentical.test_a_job_quoted_before_profiles_existed_sends_the_same_legacy_request",
+      "core.tests.test_sonnet5_profile.RollbackIsByteIdentical.test_the_http_body_is_byte_identical_to_the_pre_profile_call",
+      "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_every_sonnet_5_request_states_thinking_and_effort_and_nothing_forbidden",
+      "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_inference_geo_is_sent_only_when_configured",
+      "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_the_hold_prices_exactly_the_max_tokens_that_is_sent",
+      "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_requested_us_inference_raises_the_hold_by_the_multiplier",
+      "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_every_profile_stays_non_streaming_and_inside_the_worker_stop",
+      "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_the_schema_sent_carries_no_text_from_the_notes",
+      "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_the_real_sdk_serializes_the_profile_and_parses_a_thinking_first_reply",
+      "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_default_is_between_tools_at_medium_and_names_what_is_sent",
+      "core.tests.test_sonnet55_profile.Sonnet55Profile.test_every_choice_is_a_distinct_new_price_and_old_prices_are_untouched",
+      "core.tests.test_sonnet55_profile.Sonnet55Profile.test_sonnet_5_profiles_are_byte_identical_to_the_base_commit",
+      "core.tests.test_sonnet55_profile.Sonnet55Profile.test_choices_the_model_refuses_or_that_exceed_the_bounds_are_invalid_and_never_sent",
+      "core.tests.test_sonnet55_profile.Sonnet55Profile.test_a_stored_profile_that_is_not_one_this_model_takes_is_refused_before_any_request",
+      "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_model_is_admitted_exactly_and_nothing_near_it_is",
+      "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_production_renderer_and_profile_carry_the_settings_for_this_model",
+      "core.tests.test_sonnet55_profile.Sonnet55Wire.test_ordinary_default_request_every_choice",
+      "core.tests.test_sonnet55_profile.Sonnet55Wire.test_complete_sentence_v3_request",
+      "core.tests.test_sonnet55_profile.Sonnet55Wire.test_history_context_request",
+      "core.tests.test_sonnet55_profile.Sonnet55Wire.test_field_relations_request",
+      "core.tests.test_sonnet55_profile.Sonnet55Wire.test_narrative_request",
+      "core.tests.test_sonnet55_profile.Sonnet55Wire.test_large_form_batch_requests",
+      "core.tests.test_sonnet55_profile.Sonnet55Price.test_the_list_prices_with_thinking_cache_writes_reads_and_geography",
+      "core.tests.test_sonnet55_profile.Sonnet55Price.test_the_hold_bounds_the_worst_metered_charge",
+      "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_new_disabled_profile_has_a_distinct_identity_and_old_snapshots_are_unchanged",
+      "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_capacity_boundary_is_exact_serialized_response_not_an_arbitrary_matrix_size",
+      "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_exact_sdk_bytes_new_cap_us_geography_and_retail_reservation_share_the_price",
+      "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_request_byte_boundary_never_silently_shortens_catalogue",
+      "core.tests.test_batch_payload.BatchPayload.test_original_v1_four_request_hashes_reconstruct_without_new_admission",
+      "core.tests.test_batch_payload.BatchPayload.test_v2_keeps_full_original_fields_options_scope_sources_and_rules_once",
+      "core.tests.test_batch_payload.BatchPayload.test_sixteen_actual_compiler_profiles_and_costs_stay_bounded",
+      "core.tests.test_batch_payload.BatchPayload.test_actual_oversize_and_unknown_or_mismatched_contract_refuse",
+      "core.tests.test_generation_batch.BatchContract.test_request_hash_survives_database_json_key_order",
+      "core.tests.test_generation_batch.BatchContract.test_old_single_request_limit_and_bounded_complete_plan",
+      "core.tests.test_generation_batch.BatchContract.test_group_and_unknown_rule_admission_are_not_silent_splits",
+      "core.tests.test_generation_batch.BatchContract.test_exact_subset_union_and_actual_model_are_required",
+      "core.tests.test_generation_batch.BatchContract.test_cross_part_repeated_questions_and_global_rules_keep_full_scope",
+      "core.tests.test_generation_batch.BatchContract.test_unique_priorities_and_full_source_guards_cannot_be_split_away",
+      "core.tests.test_generation_batch.BatchContract.test_known_existing_single_field_side_gap_is_not_clinical_acceptance",
+      "core.tests.test_generation_batch.BatchContract.test_signing_fields_stay_visible_in_catalogue_and_are_never_requested",
+      "core.tests.test_generation_batch.BatchContract.test_actual_compiled_requests_are_fully_covered_by_aggregate_charge",
+      "core.tests.test_v3_field_relations_batch.OrdinaryBatchContract.test_bounded_children_keep_whole_source_catalogue_constraints_and_exact_price",
+      "core.tests.test_v3_field_relations_batch.OrdinaryBatchContract.test_response_capacity_can_require_batch_below_100_and_never_splits_physical_group",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_a_new_receipt_records_geography_thinking_and_why_it_stopped",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_mixed_cache_lifetimes_are_metered_at_their_actual_rates",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_inconsistent_provider_cache_lifetimes_cannot_be_settled",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_metered_us_inference_is_billed_at_1_1_on_claude_4_6_and_later_only",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_the_4_6_plus_rule_reads_the_model_generation",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_settlement_and_the_audit_recompute_in_lockstep",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_historical_receipts_recompute_exactly_as_before",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_a_recorded_multiplier_must_agree_with_the_metered_geography",
+      "core.tests.test_sonnet5_settlement.SettlementFidelity.test_the_real_sdk_response_is_read_for_geography_and_thinking",
+      "core.tests.test_billing_policy.DiscountConfiguration.test_default_discount_is_zero_and_part_of_the_pricing_fingerprint",
+      "core.tests.test_billing_policy.DiscountConfiguration.test_discounted_cost_is_unchanged_at_zero_and_rounded_once_to_ledger_precision"
+    ],
+    "persisted_quotes_holds_settlement_and_payers": [
+      "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_page_loaded_under_sonnet_5_cannot_queue_it_after_the_rollback",
+      "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_any_price_change_refuses_a_directly_enqueued_quote_before_any_hold",
+      "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_quote_signed_before_profiles_existed_is_checked_the_same_way",
+      "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_stale_price_is_refused_in_fixture_mode_too",
+      "core.tests.test_sonnet5_profile.Sonnet5Outcomes.test_a_queued_job_keeps_the_profile_it_was_priced_with",
+      "core.tests.test_sonnet55_profile.Sonnet55Outcomes.test_a_queued_job_keeps_its_profile_and_price",
+      "core.tests.test_sonnet55_profile.Sonnet55Outcomes.test_a_stored_job_at_other_rates_is_refused_and_released",
+      "core.tests.test_sonnet55_profile.Sonnet55BatchWorker.test_every_part_is_sent_as_quoted_receipted_as_5_5_and_the_whole_form_adopted",
+      "core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_all_actual_request_holds_precede_send_then_complete_union_adopts_once",
+      "core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_unknown_second_response_remains_held_and_never_retried",
+      "core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_flag_withdrawal_and_cancel_never_send_an_extra_request",
+      "core.tests.test_generation_batch.BatchWorkflow.test_insufficient_funds_rolls_back_all_children_and_duplicate_quote_is_one_admission",
+      "core.tests.test_generation_batch.BatchWorkflow.test_interrupted_second_call_keeps_unknown_hold_and_never_retries",
+      "core.tests.test_generation_batch.BatchWorkflow.test_model_change_after_staging_refunds_known_part_and_never_sends_second",
+      "core.tests.test_sonnet5_settlement.Sonnet5ReceiptUnits.test_metered_us_inference_settles_at_1_1_and_audits_clean",
+      "core.tests.test_sonnet5_settlement.Sonnet5ReceiptUnits.test_every_stop_is_recorded_with_its_refusal_category",
+      "core.tests.test_billing_policy.ConfiguredEstimateDiscount.test_discount_rate_reduces_the_configured_estimate_and_is_recorded_for_audit",
+      "core.tests.test_billing_policy.ReconciliationLedger.test_credit_back_returns_to_debited_wallets_in_proportion",
+      "core.tests.test_billing_policy.ReconciliationLedger.test_audit_report_keeps_existing_keys_and_adds_policy_keys",
+      "core.tests.test_billing_policy.RefutationRegressions.test_negative_zero_discount_is_plain_zero",
+      "core.tests.test_billing_policy.RefutationRegressions.test_twelve_decimal_list_cost_settles_at_zero_discount_and_never_exceeds_list",
+      "core.tests.test_billing_policy.RefutationRegressions.test_audit_accepts_the_split_the_writer_produced_in_either_wallet_order",
+      "core.tests.test_billing_boundary.DuplicateProcessingNeverDuplicatesCharges.test_two_enqueues_for_the_same_revision_return_one_job_and_reserve_once",
+      "core.tests.test_billing_boundary.DuplicateProcessingNeverDuplicatesCharges.test_settling_the_same_job_twice_creates_one_usage_and_one_debit",
+      "core.tests.test_refutation.AuthorizationAndPayerRefutation.test_payer_is_attributed_to_reservation_not_later_policy",
+      "core.tests.test_v1_invite_only.WelcomeCreditSetting.test_a_configured_amount_is_granted_once",
+      "core.tests.test_v1_real_mode_payments.RealModeNeverSpendsSandboxMoney.test_real_mode_without_payments_still_reserves_promotional_credit",
+      "core.tests.test_v1_real_mode_payments.RealModeWorkerNeverSpendsAHoldOnSandboxMoney.test_real_mode_spends_a_hold_on_promotional_credit"
+    ],
+    "pure_scanner_and_prepared_witness": [
+      "ops.test_cost_scanner_contract.AdditionalCostContracts.test_current_general_and_mapping_contracts_resolve",
+      "ops.test_cost_scanner_contract.AdditionalCostContracts.test_local_request_alias_cannot_hide_changes",
+      "ops.test_cost_scanner_contract.AdditionalCostContracts.test_both_cost_branches_must_price_the_same_bound",
+      "ops.test_cost_scanner_contract.AdditionalCostContracts.test_history_addition_must_remain_fully_measured_and_additive",
+      "ops.test_cost_scanner_contract.AdditionalCostContracts.test_history_formula_in_dead_or_bypassed_code_is_not_a_bound",
+      "ops.test_cost_scanner_contract.AdditionalCostContracts.test_compiled_mapping_changes_fail_closed",
+      "ops.test_cost_scanner_contract.BatchCostContract.test_batch_compiler_send_and_complete_price_have_reviewed_identities",
+      "ops.test_cost_scanner_contract.BatchCostContract.test_batch_price_control_flow_and_request_mutants_refuse",
+      "ops.test_cost_scanner_contract.BatchCostContract.test_batch_global_dependency_rebinding_cannot_hide_undercharge",
+      "ops.test_cost_scanner_contract.OrdinaryCostContract.test_imported_compiler_and_single_and_batch_sends_share_the_reviewed_price",
+      "ops.test_cost_scanner_contract.OrdinaryCostContract.test_imported_module_changes_cannot_hide_under_the_batch_pin",
+      "ops.test_cost_scanner_contract.OrdinaryCostContract.test_single_dispatch_cannot_price_or_send_a_different_input",
+      "ops.test_cost_scanner_contract.OrdinaryCostContract.test_ordinary_sdk_send_must_remain_in_its_reviewed_function",
+      "ops.test_production_deploy.ProductionCostDocumentTests.test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states",
+      "ops.test_production_deploy.ProductionCostDocumentTests.test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code",
+      "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_default_prepared_receipt_reads_no_source_or_runtime",
+      "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_missing_execution_bindings_refuse_without_a_false_receipt",
+      "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_short_revision_refuses_before_source_or_evidence_reads",
+      "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_existing_foreign_source_refuses_before_git_or_evidence",
+      "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_source_alias_refuses_before_following_or_reading_it",
+      "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_first_and_all_authorized_later_campaign_roots_pass_this_guard",
+      "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_zero_one_padded_and_unbounded_later_identities_refuse",
+      "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_foreign_root_and_evidence_directory_cannot_use_a_valid_suffix",
+      "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_literal_identity_grammar_matches_the_normal_standing_runner"
+    ]
+  },
+  "prepared_only": true,
+  "prospective_capture_unverified": true,
+  "provider_calls": 0,
+  "renewal_conditions": [
+    "Recapture every final source/method hash after clinical source freeze.",
+    "Bind new genuine exact-source SDK/quote/reservation/receipt/settlement evidence; retain old7907 identities.",
+    "Run selected mocked regressions only after serialized QA resource grant.",
+    "Retain actual process exits, original failures, exact source before/after and direct QA normal/test database absence.",
+    "Independently refute the finished financial proof before changing the three whole-module guards."
+  ],
+  "required_prospective_capture_root": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004-2/evidence",
+  "required_teardown": "Actual process and outer exit; no timed-out descendants; source hashes before/after; protected-QA normal/test catalog absence before slot release",
+  "selector_source_snapshot": "7ccdcb6e75241685e90519774b909ecbd5b1e827",
+  "selectors": {
+    "core.tests.test_batch_payload.BatchPayload.test_actual_oversize_and_unknown_or_mismatched_contract_refuse": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "f93501193a2663117097860b300cf82c7eb607bf2711467238296135c4a1bfb4",
+      "method_line": 79,
+      "source_path": "rebuild/core/tests/test_batch_payload.py",
+      "source_sha256": "b9a59ebb47155f5d23b4f3020b34d2e01adb01cde324b37da4cf3e7b9c170c67"
+    },
+    "core.tests.test_batch_payload.BatchPayload.test_original_v1_four_request_hashes_reconstruct_without_new_admission": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "b31cd8e34b9fa3427629cd67da7cc745f19a9fdc156305d2c62268aad28b2678",
+      "method_line": 15,
+      "source_path": "rebuild/core/tests/test_batch_payload.py",
+      "source_sha256": "b9a59ebb47155f5d23b4f3020b34d2e01adb01cde324b37da4cf3e7b9c170c67"
+    },
+    "core.tests.test_batch_payload.BatchPayload.test_sixteen_actual_compiler_profiles_and_costs_stay_bounded": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "3ed04fd00da70103e0eaaccb6a6e4c0f4a9ad18ea8abd0957d62a4df56aa55d6",
+      "method_line": 57,
+      "source_path": "rebuild/core/tests/test_batch_payload.py",
+      "source_sha256": "b9a59ebb47155f5d23b4f3020b34d2e01adb01cde324b37da4cf3e7b9c170c67"
+    },
+    "core.tests.test_batch_payload.BatchPayload.test_v2_keeps_full_original_fields_options_scope_sources_and_rules_once": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "aaa1b6f5bcd1c6a12d699fc6d72d19ea088d5c8b241029bd5829fc8348dc5c21",
+      "method_line": 28,
+      "source_path": "rebuild/core/tests/test_batch_payload.py",
+      "source_sha256": "b9a59ebb47155f5d23b4f3020b34d2e01adb01cde324b37da4cf3e7b9c170c67"
+    },
+    "core.tests.test_billing_boundary.DuplicateProcessingNeverDuplicatesCharges.test_settling_the_same_job_twice_creates_one_usage_and_one_debit": {
+      "bases": [
+        "BoundaryFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "be5ddd49b19da63fd7192c7e5de83f8a933c308108634ada1e8f9618463ab1de",
+      "method_line": 362,
+      "source_path": "rebuild/core/tests/test_billing_boundary.py",
+      "source_sha256": "a8643e21c4305f63d4f7a8b28c6c1e911fb2ac6b363667537656ab13c29bf830"
+    },
+    "core.tests.test_billing_boundary.DuplicateProcessingNeverDuplicatesCharges.test_two_enqueues_for_the_same_revision_return_one_job_and_reserve_once": {
+      "bases": [
+        "BoundaryFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "f8be439d67e57184cf08bcd48f947c2c2a4ddcad453236c541e8fea13169c3f8",
+      "method_line": 354,
+      "source_path": "rebuild/core/tests/test_billing_boundary.py",
+      "source_sha256": "a8643e21c4305f63d4f7a8b28c6c1e911fb2ac6b363667537656ab13c29bf830"
+    },
+    "core.tests.test_billing_policy.ConfiguredEstimateDiscount.test_discount_rate_reduces_the_configured_estimate_and_is_recorded_for_audit": {
+      "bases": [
+        "PolicyFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "0dfdb866a5f4de44365af02d58fa09017f6363b5c71b467781641f210d3b1570",
+      "method_line": 94,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_billing_policy.DiscountConfiguration.test_default_discount_is_zero_and_part_of_the_pricing_fingerprint": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "b7547c6d2ece07d47e01207cdc67a99c1d2bdaaf13835fb1c447811d68a9f34b",
+      "method_line": 47,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_billing_policy.DiscountConfiguration.test_discounted_cost_is_unchanged_at_zero_and_rounded_once_to_ledger_precision": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "33a2080d1270f751a9fdc9be4981784eadb41195b4c65942bc54ebce9dd9783e",
+      "method_line": 59,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_billing_policy.ReconciliationLedger.test_audit_report_keeps_existing_keys_and_adds_policy_keys": {
+      "bases": [
+        "PolicyFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "062e3c1652a775a67f81c2fe34742c2313dcbc42fc0033caaf0520b7ecbe1821",
+      "method_line": 296,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_billing_policy.ReconciliationLedger.test_credit_back_returns_to_debited_wallets_in_proportion": {
+      "bases": [
+        "PolicyFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "bc24510f2a42fe560ba4cee1505b3ee777dcc49001d53d100dad054414c299e1",
+      "method_line": 224,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_billing_policy.RefutationRegressions.test_audit_accepts_the_split_the_writer_produced_in_either_wallet_order": {
+      "bases": [
+        "PolicyFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "785985048eef44faf71fc435a03988779a7fb10f9c027ee9ce8ad8ca3b17a45d",
+      "method_line": 600,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_billing_policy.RefutationRegressions.test_negative_zero_discount_is_plain_zero": {
+      "bases": [
+        "PolicyFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "a7517b0f45afeb7b422bbaaad305bfe87298a99874ce0b189453dd56c3939936",
+      "method_line": 522,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_billing_policy.RefutationRegressions.test_twelve_decimal_list_cost_settles_at_zero_discount_and_never_exceeds_list": {
+      "bases": [
+        "PolicyFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "559abf67e2e3ba46e8e499739b7387a3648e18d2f2e256cc51fddd030ceb4d20",
+      "method_line": 588,
+      "source_path": "rebuild/core/tests/test_billing_policy.py",
+      "source_sha256": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_actual_compiled_requests_are_fully_covered_by_aggregate_charge": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "c9f50f1dff8e8ce5b454a6f74262997453d96b1e3ee60cd22ca779f13cc84424",
+      "method_line": 162,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_cross_part_repeated_questions_and_global_rules_keep_full_scope": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "11e2e57a61ba7e986ba54a09a46397a84574b223583e547b4bc8bbc0866ba6bd",
+      "method_line": 106,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_exact_subset_union_and_actual_model_are_required": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "87887f6f6de3ccd3373cd0058803d943c85109decfbb2bdaf56f86122cd768f9",
+      "method_line": 90,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_group_and_unknown_rule_admission_are_not_silent_splits": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "7fad221cfeb085043daafc67199beabd6486f305e227f44cce57ac7f12264965",
+      "method_line": 78,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_known_existing_single_field_side_gap_is_not_clinical_acceptance": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "a7417330696ae330ad50fcfc9f77dd527d5294b31d406b5bb895648be3af4ec7",
+      "method_line": 144,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_old_single_request_limit_and_bounded_complete_plan": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "7b8a23baeafe76513d95eefdefecca2729f01b9a26398886bc9b2c3974901b92",
+      "method_line": 62,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_request_hash_survives_database_json_key_order": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "b0968fae860fd2b24f75499e6e514d29057f0b5e37b5bd045f3723909cac265a",
+      "method_line": 57,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_signing_fields_stay_visible_in_catalogue_and_are_never_requested": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "6acbf5edc1a8715d9b4ea091057707c209a2142ef80ced826924db51795b01f7",
+      "method_line": 154,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchContract.test_unique_priorities_and_full_source_guards_cannot_be_split_away": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "0fcfca010348c03c413caccffe0a79dd608ccca9719079e1aef48bbe7feb2f55",
+      "method_line": 125,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchWorkflow.test_insufficient_funds_rolls_back_all_children_and_duplicate_quote_is_one_admission": {
+      "bases": [
+        "BatchFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "2bfed8bdf98bc6d264a3e942d01103dbfa2c2a2b1086bb9a4c4e433fb78c2efe",
+      "method_line": 264,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchWorkflow.test_interrupted_second_call_keeps_unknown_hold_and_never_retries": {
+      "bases": [
+        "BatchFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "08e274177fcf1b6ca859b024fe2f58b7d31a5e3fc7a39f7a2641ae568136e11c",
+      "method_line": 251,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_generation_batch.BatchWorkflow.test_model_change_after_staging_refunds_known_part_and_never_sends_second": {
+      "bases": [
+        "BatchFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "9d3b440f64fa23964482af603ecb5fe241b63332407c4f80fc5483700e8a8689",
+      "method_line": 356,
+      "source_path": "rebuild/core/tests/test_generation_batch.py",
+      "source_sha256": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207"
+    },
+    "core.tests.test_refutation.AuthorizationAndPayerRefutation.test_payer_is_attributed_to_reservation_not_later_policy": {
+      "bases": [
+        "TestCase"
+      ],
+      "method_ast_sha256": "2bb6da6207e408a6b7f950bb6ac53a4cfab93c5a8c24b3b2d509d560b57900bc",
+      "method_line": 97,
+      "source_path": "rebuild/core/tests/test_refutation.py",
+      "source_sha256": "40c7ec22ee4948165020bae5081929c200d1c0574ee2da226ee4bc4ccc7f4481"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55BatchWorker.test_every_part_is_sent_as_quoted_receipted_as_5_5_and_the_whole_form_adopted": {
+      "bases": [
+        "batch_fixture()",
+        "TestCase"
+      ],
+      "method_ast_sha256": "a8d2395b145381209413561f8f89aef212831c1a55eb47c6670a4a8acfb1e57c",
+      "method_line": 751,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Outcomes.test_a_queued_job_keeps_its_profile_and_price": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "0e6e26798cd1aee75bb15a2cd025750ae18a1d4659a94a01ef27bbe1ba3820b5",
+      "method_line": 571,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Outcomes.test_a_stored_job_at_other_rates_is_refused_and_released": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "47ebbdf07320cd4168a084bf9a9f42b1b38fd5a0c1d7045783acace357823d0d",
+      "method_line": 585,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Price.test_the_hold_bounds_the_worst_metered_charge": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "c126604b4b40f4cc3f55563fb0f33671714acd60f45aa78ecb3198c50009bb6d",
+      "method_line": 632,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Price.test_the_list_prices_with_thinking_cache_writes_reads_and_geography": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "f287d620587b9728f812c6814a1588f167c164105f87b7833f1ee253a068f985",
+      "method_line": 613,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Profile.test_a_stored_profile_that_is_not_one_this_model_takes_is_refused_before_any_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "fbcde808c1994508fc0f37fe6f6bd006b11aaa5b1c36dae07737c86735e4aa05",
+      "method_line": 226,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Profile.test_choices_the_model_refuses_or_that_exceed_the_bounds_are_invalid_and_never_sent": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "d5bb9b2a2523f9460f633784c9a4fc8db1fb57029edaf5f451914b0ffe6d5088",
+      "method_line": 203,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Profile.test_every_choice_is_a_distinct_new_price_and_old_prices_are_untouched": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "7503145fe1dfb3430c488a822056fc419f2bebdd388167b814d877645062423f",
+      "method_line": 163,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Profile.test_sonnet_5_profiles_are_byte_identical_to_the_base_commit": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "9de4e1d1b234d4c024d4ea4d7977a6b4b5260394f8e614c531271d55f42e7387",
+      "method_line": 187,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_default_is_between_tools_at_medium_and_names_what_is_sent": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "f83c5d447f1274078a5c483528230c52836ee75c5a6da96b8b6408a1e049ab3b",
+      "method_line": 148,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_model_is_admitted_exactly_and_nothing_near_it_is": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "be6f2c048359d25e011e6e097a1f4a73208faeb8a9b6a2aa95652152a906d786",
+      "method_line": 267,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Profile.test_the_production_renderer_and_profile_carry_the_settings_for_this_model": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "09f249739e4ff3a910eaa5fa0e93a57ae3181022fb54d791da84e3a9876ac85e",
+      "method_line": 277,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Wire.test_complete_sentence_v3_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "4e77c82eb27da62e216595554d1707a35bd3fe837bc38aef3c4b328a278a5b6d",
+      "method_line": 363,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Wire.test_field_relations_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "48f244846b5293dce756a941e0cb20b0c92aa3b796d684ecc164ccebf8e20500",
+      "method_line": 411,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Wire.test_history_context_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "48bf94d33020849c1ef513d57083b3d65221ee9907adc7ba91db91aa39a7f8df",
+      "method_line": 387,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Wire.test_large_form_batch_requests": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "fecc2e141256cd8f3c36ac395c7f37d788ad9e1798dc9f32b3d4ab4f2de4e1c8",
+      "method_line": 457,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Wire.test_narrative_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "c92655e5641389980c8d39635e84c8ea492d8c2b2f0fae132c73175d229d1f44",
+      "method_line": 441,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet55_profile.Sonnet55Wire.test_ordinary_default_request_every_choice": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "29f72b200ad9809db80c8c176238aa3e640fa67774812f0c508b655766050d23",
+      "method_line": 341,
+      "source_path": "rebuild/core/tests/test_sonnet55_profile.py",
+      "source_sha256": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231"
+    },
+    "core.tests.test_sonnet5_profile.DiscountValidatedAsUsed.test_a_discount_that_rounds_to_one_is_refused_before_any_hold_or_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "4af4ebf2f140f44b474bb17c3cea6da2c28cde46d5a6985f5ecda6b51e3b90a9",
+      "method_line": 358,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.DiscountValidatedAsUsed.test_a_stored_discount_of_one_is_refused_before_the_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "4f0fddb8661799bd8a10ed1a9c04ca8a0599434fc13366e73d3c56be41b1a29c",
+      "method_line": 374,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_model_id_that_is_not_a_plain_id_is_invalid_for_every_provider": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "cd4e4df59d3235f0f08a1c95de25cb9b2fd0a5858c1c9e4a4f4349cb529e65b5",
+      "method_line": 212,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_newer_claude_model_without_its_own_profile_is_refused_whatever_it_carries": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "2a94a4757d772780f56cdc59ac93b557285d7e5066f005972c3049abef11b652",
+      "method_line": 158,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_provider_spelled_any_other_way_is_invalid_and_refused_before_any_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "f155443616d54be2a8db08425310f2e149837b1f01e9a94ebf1939c021b01082",
+      "method_line": 303,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_a_stored_profile_that_does_not_match_its_shapes_is_refused_before_any_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "1909ff5549b65107ebfa9763e54b6bc020dc491be2e8cba43a769da0c0ae79bd",
+      "method_line": 327,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_an_invalid_choice_is_recorded_never_raised_and_refuses_generation": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "0aeb02bbcca8bd95066907fcdd87fe8e25bd2cc8167994924e5275bd0ee6fbd2",
+      "method_line": 139,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_only_the_listed_claude_models_get_the_legacy_request_deny_by_default": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "6fa9ea08e35ec596307d293c538e13c0de6f5c2f2da23c71a96114c111196926",
+      "method_line": 267,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_rollback_reproduces_the_recorded_fingerprint_whatever_the_sonnet_5_settings_say": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "46765092122ea15147d735bf3c145aa211e3a0f0a58ce3068f9bfcc5e587c556",
+      "method_line": 107,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_sonnet_5_fingerprints_are_pinned_and_carry_the_profile": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "e6a19ccd396ce6d5fb802d46756949b3273620aa89ce733cbf3f940711f0c75d",
+      "method_line": 115,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_the_defaults_are_disabled_thinking_at_medium_effort_and_no_geography": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "b240b70c7b84f44e26888f824014094be9badb6d075b386c9c6de0922c43f0bf",
+      "method_line": 133,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.PricingFingerprint.test_the_provider_and_model_must_be_a_pair_quillmd_sends": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "7cd18c2233d7ae30c40a101afbefe612024d5a07dd5bf865898ce794add98fdb",
+      "method_line": 184,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_page_loaded_under_sonnet_5_cannot_queue_it_after_the_rollback": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "eebc1f420d888f64cb01373c5ef2a1bfd2815c2ec6c42cd94afb555d5311ead8",
+      "method_line": 810,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_quote_signed_before_profiles_existed_is_checked_the_same_way": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "95f4558430cfac38de11a2b5dc0b5f9aa43b1ebbfda77a3181f23cdaca5a2d48",
+      "method_line": 851,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_a_stale_price_is_refused_in_fixture_mode_too": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "a916d8887c76a1f5df27e62cada390331732acc9a1a154f6013ce4465d760014",
+      "method_line": 867,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.QuoteAcrossAModelSwitch.test_any_price_change_refuses_a_directly_enqueued_quote_before_any_hold": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "cd37610f718c97a5d46e0792ce203fbae95cd8a7cadeda28208b7c69e58edcc1",
+      "method_line": 833,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.RollbackIsByteIdentical.test_a_job_quoted_before_profiles_existed_sends_the_same_legacy_request": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "821845ff8b4a931ffa825f609f0012711b1dba5b8140f49a976c36900e71089c",
+      "method_line": 403,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.RollbackIsByteIdentical.test_the_http_body_is_byte_identical_to_the_pre_profile_call": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "58ee03eb123fa26e255f34964bd2ae1d23aab533e8d9552dda34e6d0c8e9796c",
+      "method_line": 410,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.RollbackIsByteIdentical.test_the_rollback_kwargs_are_the_pre_profile_call": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "a9f0ec795fe930d5b39f9b94df53d9b426f6cc12c49441ac3cde1ddc6f976f75",
+      "method_line": 392,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5Outcomes.test_a_queued_job_keeps_the_profile_it_was_priced_with": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "ac30df42977ec1381de7e03ed7a47298e164f1f1e86fc637e6750661dc918d2e",
+      "method_line": 762,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_every_profile_stays_non_streaming_and_inside_the_worker_stop": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "1c7bb84fb055a4cf79be15f8665676a289429149012faf119f49cbf3c2b2f080",
+      "method_line": 488,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_every_sonnet_5_request_states_thinking_and_effort_and_nothing_forbidden": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "69ca25febe6dd18e93019ca327bd3fa90d2b45a1ef83cd7583c33c0b7892c20d",
+      "method_line": 442,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_inference_geo_is_sent_only_when_configured": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "f10c18f1be8ec88da7457a32795b215eda447b2e680030c0d95b064c6b96546f",
+      "method_line": 459,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_requested_us_inference_raises_the_hold_by_the_multiplier": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "9ed4b88ab69f42c1c2d0cc5d7efbb39df3b62aa0df59fda28f95cf9286f194b1",
+      "method_line": 479,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_the_hold_prices_exactly_the_max_tokens_that_is_sent": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "7f16107bbdc9c972ef1160552a25969de137d8a0266e9374f8ba431a80c5d3a0",
+      "method_line": 468,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_the_real_sdk_serializes_the_profile_and_parses_a_thinking_first_reply": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "5c093884325f73239b6fdb1cb351e6d42e146dacef016fc7753d51cc278be58e",
+      "method_line": 527,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_profile.Sonnet5RequestProfile.test_the_schema_sent_carries_no_text_from_the_notes": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "6c5a99eaf443d9537ae5421f4693fca9d74991cc45c7f3fbb84ec1959e602a35",
+      "method_line": 507,
+      "source_path": "rebuild/core/tests/test_sonnet5_profile.py",
+      "source_sha256": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_a_new_receipt_records_geography_thinking_and_why_it_stopped": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "c324d07b95c7f365f8175db457952249953693e011305fb09eb9e184fe37201e",
+      "method_line": 55,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_a_recorded_multiplier_must_agree_with_the_metered_geography": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "4e05c8bd377fd5a50d4761b552443620105c5dc4fc13b71a035971df44e34fd2",
+      "method_line": 143,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_historical_receipts_recompute_exactly_as_before": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "48918dbc0efbdaeb41bc27f4dfd69ee3ef6c0d0868a3561026712bd91fc09fcb",
+      "method_line": 120,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_inconsistent_provider_cache_lifetimes_cannot_be_settled": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "bf999ab2ee217bce4e0cb3a067f684ed726b5f82681557b0895f05b4726a96f0",
+      "method_line": 78,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_metered_us_inference_is_billed_at_1_1_on_claude_4_6_and_later_only": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "916c2e1e484b4bcd4c0a7cfab8218b003e9e4b5d3aa909386e0ecef10410864d",
+      "method_line": 83,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_mixed_cache_lifetimes_are_metered_at_their_actual_rates": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "f74335f8729f4c72744bb30e89f418e9d2e961eedc9a8924ee2a9ab2ee4342c5",
+      "method_line": 66,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_settlement_and_the_audit_recompute_in_lockstep": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "8d395fb390103082cd9211ec357409fe987e3eb49418011d02b6fc2295427f08",
+      "method_line": 109,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_the_4_6_plus_rule_reads_the_model_generation": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "e124c5d71b756755277481ead04ff4c3722e5b127dd3735fe5f7271db1800755",
+      "method_line": 98,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.SettlementFidelity.test_the_real_sdk_response_is_read_for_geography_and_thinking": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "9c3448c4de2e0c3fa08f81cf6bc3cccb4fd4727c555d03753a3f14710105a283",
+      "method_line": 154,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.Sonnet5ReceiptUnits.test_every_stop_is_recorded_with_its_refusal_category": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "78eb59ae4318eb9d1d26f7ace289e0a1105e1b8785f00809bc54b77d4c142d82",
+      "method_line": 192,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_sonnet5_settlement.Sonnet5ReceiptUnits.test_metered_us_inference_settles_at_1_1_and_audits_clean": {
+      "bases": [
+        "OutcomeFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "d7bf4741c0300aab7fe4392fad314fd81defdeef14e876292960e7c987a0dea1",
+      "method_line": 178,
+      "source_path": "rebuild/core/tests/test_sonnet5_settlement.py",
+      "source_sha256": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+    },
+    "core.tests.test_v1_invite_only.WelcomeCreditSetting.test_a_configured_amount_is_granted_once": {
+      "bases": [
+        "TestCase"
+      ],
+      "method_ast_sha256": "810339bcea5c44924a80d1d182e97e73e5ffe45ec227f669c1670df3c921311f",
+      "method_line": 221,
+      "source_path": "rebuild/core/tests/test_v1_invite_only.py",
+      "source_sha256": "d3c5dcbdd3f1842098c5775c60464d75aa6e06351421ca0a228d60818245f92f"
+    },
+    "core.tests.test_v1_real_mode_payments.RealModeNeverSpendsSandboxMoney.test_real_mode_without_payments_still_reserves_promotional_credit": {
+      "bases": [
+        "SyntheticFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "0a1ba759c1fa20ce2d91081c10ba46974767ce291903bc5e1fb34922c684ddac",
+      "method_line": 124,
+      "source_path": "rebuild/core/tests/test_v1_real_mode_payments.py",
+      "source_sha256": "8b71d6db772c325d2ba426f31fe9e2f6cbaa159be318a1e8cf15a7b5e114db59"
+    },
+    "core.tests.test_v1_real_mode_payments.RealModeWorkerNeverSpendsAHoldOnSandboxMoney.test_real_mode_spends_a_hold_on_promotional_credit": {
+      "bases": [
+        "SyntheticFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "196f3762ebd59dfc8bc03abd9351c88d64ce2d5058beb62358b9b453a653af7a",
+      "method_line": 516,
+      "source_path": "rebuild/core/tests/test_v1_real_mode_payments.py",
+      "source_sha256": "8b71d6db772c325d2ba426f31fe9e2f6cbaa159be318a1e8cf15a7b5e114db59"
+    },
+    "core.tests.test_v3_field_relations_batch.OrdinaryBatchContract.test_bounded_children_keep_whole_source_catalogue_constraints_and_exact_price": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "0beb141b335d99ed446638a5fc5d353345f9f3b60087cc06e465d5c643c96f54",
+      "method_line": 29,
+      "source_path": "rebuild/core/tests/test_v3_field_relations_batch.py",
+      "source_sha256": "58002c82869cd75038ea0f89e80ff5838ca24ad7d15a6208f0be010859f9a71d"
+    },
+    "core.tests.test_v3_field_relations_batch.OrdinaryBatchContract.test_response_capacity_can_require_batch_below_100_and_never_splits_physical_group": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "9878d1267c95ca9e1597052561d52ff78fb6ae029ceeee938f44492ec5e161ce",
+      "method_line": 56,
+      "source_path": "rebuild/core/tests/test_v3_field_relations_batch.py",
+      "source_sha256": "58002c82869cd75038ea0f89e80ff5838ca24ad7d15a6208f0be010859f9a71d"
+    },
+    "core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_all_actual_request_holds_precede_send_then_complete_union_adopts_once": {
+      "bases": [
+        "BatchFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "f1313fab6fa98214f8419988fd16901a0bb689dee21d4fbdb5e8165ee554c2dc",
+      "method_line": 196,
+      "source_path": "rebuild/core/tests/test_v3_field_relations_batch.py",
+      "source_sha256": "58002c82869cd75038ea0f89e80ff5838ca24ad7d15a6208f0be010859f9a71d"
+    },
+    "core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_flag_withdrawal_and_cancel_never_send_an_extra_request": {
+      "bases": [
+        "BatchFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "4692232f154e86fd6fd5ef61a10d93d0fdd3cd8b370af61da381a43f77acf953",
+      "method_line": 230,
+      "source_path": "rebuild/core/tests/test_v3_field_relations_batch.py",
+      "source_sha256": "58002c82869cd75038ea0f89e80ff5838ca24ad7d15a6208f0be010859f9a71d"
+    },
+    "core.tests.test_v3_field_relations_batch.OrdinaryBatchWorkflow.test_unknown_second_response_remains_held_and_never_retried": {
+      "bases": [
+        "BatchFixture",
+        "TestCase"
+      ],
+      "method_ast_sha256": "6fb6666681211f57067dfe9fea6a3344d15099ab0f6d7c3f10a367700dd9f91b",
+      "method_line": 218,
+      "source_path": "rebuild/core/tests/test_v3_field_relations_batch.py",
+      "source_sha256": "58002c82869cd75038ea0f89e80ff5838ca24ad7d15a6208f0be010859f9a71d"
+    },
+    "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_capacity_boundary_is_exact_serialized_response_not_an_arbitrary_matrix_size": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "408b3ed8172bd06a75667c89820949a8feeaa900f53179d78cad15e50f75aab1",
+      "method_line": 40,
+      "source_path": "rebuild/core/tests/test_v3_ordinary_profile.py",
+      "source_sha256": "4e5cff761d853d416fa992e6993689f3802319d5e37c3290d9d88705e772c17a"
+    },
+    "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_exact_sdk_bytes_new_cap_us_geography_and_retail_reservation_share_the_price": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "5d3af9a15a782f44151213609450aee19000866e04a7eff2d944c49b2dffaab8",
+      "method_line": 58,
+      "source_path": "rebuild/core/tests/test_v3_ordinary_profile.py",
+      "source_sha256": "4e5cff761d853d416fa992e6993689f3802319d5e37c3290d9d88705e772c17a"
+    },
+    "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_new_disabled_profile_has_a_distinct_identity_and_old_snapshots_are_unchanged": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "fe6bbb911d453242b7998ee44db14adfcfcf56b6a2f55b49070013cac8bcfb53",
+      "method_line": 16,
+      "source_path": "rebuild/core/tests/test_v3_ordinary_profile.py",
+      "source_sha256": "4e5cff761d853d416fa992e6993689f3802319d5e37c3290d9d88705e772c17a"
+    },
+    "core.tests.test_v3_ordinary_profile.OrdinaryResponseProfile.test_request_byte_boundary_never_silently_shortens_catalogue": {
+      "bases": [
+        "SimpleTestCase"
+      ],
+      "method_ast_sha256": "641cb98af2e3a2dbf0ccb98ed30eeffa2b8853992d7643d1b665bf1b4795a9d5",
+      "method_line": 82,
+      "source_path": "rebuild/core/tests/test_v3_ordinary_profile.py",
+      "source_sha256": "4e5cff761d853d416fa992e6993689f3802319d5e37c3290d9d88705e772c17a"
+    },
+    "ops.test_cost_scanner_contract.AdditionalCostContracts.test_both_cost_branches_must_price_the_same_bound": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "71161ca5831731621d72809f293c57abd9e13ad0110c6300f0663231c3094d29",
+      "method_line": 43,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.AdditionalCostContracts.test_compiled_mapping_changes_fail_closed": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "e127dbaddb5e6fa7e9a17b4e3b3bf83c231bfbeea82cf1fea0b2d4671e7f04d9",
+      "method_line": 95,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.AdditionalCostContracts.test_current_general_and_mapping_contracts_resolve": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "0355e384789e52ac44ee55361042d06f161d4cd771430bc1c6444c7df63755fb",
+      "method_line": 27,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.AdditionalCostContracts.test_history_addition_must_remain_fully_measured_and_additive": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "e7c484819225358dfccee42a385b22afbcd6730c6935bdc4cccf5906cbec8c8a",
+      "method_line": 51,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.AdditionalCostContracts.test_history_formula_in_dead_or_bypassed_code_is_not_a_bound": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "0301b452b587f1ae624bcb57691be142e27df553a46b2bee303f2ae2eaef8708",
+      "method_line": 77,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.AdditionalCostContracts.test_local_request_alias_cannot_hide_changes": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "09a464130087a3da92d1cd473441d992ec8b77d372baa1510f2a53e4b6136047",
+      "method_line": 34,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.BatchCostContract.test_batch_compiler_send_and_complete_price_have_reviewed_identities": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "374e5de7959b011e67ed20f3994b5ad0e3b90ae3b5a5a1832132b89861f9db8a",
+      "method_line": 134,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.BatchCostContract.test_batch_global_dependency_rebinding_cannot_hide_undercharge": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "3c1a981deb767c214df200cecfc9225e6486da094555bd8ee8ce7787856559bc",
+      "method_line": 161,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.BatchCostContract.test_batch_price_control_flow_and_request_mutants_refuse": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "d4cc789ad0f35a67e87db9f8aa689c030d97ea056ee29b62dd289e96b7bacdd5",
+      "method_line": 138,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.OrdinaryCostContract.test_imported_compiler_and_single_and_batch_sends_share_the_reviewed_price": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "45c6c7077069ea28e715ab9319ac16d2ca9395cf8a0d6c05675e9f06ec00947a",
+      "method_line": 184,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.OrdinaryCostContract.test_imported_module_changes_cannot_hide_under_the_batch_pin": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "22e50e808f257e1006d4decf952d0bd85e345906d86ef74569250acafab138b6",
+      "method_line": 190,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.OrdinaryCostContract.test_ordinary_sdk_send_must_remain_in_its_reviewed_function": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "a7d7c7ceb7edf7e9b06399dae91fab76da8f75fc982e2699113d9d361db20fe2",
+      "method_line": 225,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_cost_scanner_contract.OrdinaryCostContract.test_single_dispatch_cannot_price_or_send_a_different_input": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "cdea7182995c764db4571e77a6d192a2ec7d688afe98b1e1a4a8e284d6948fbb",
+      "method_line": 211,
+      "source_path": "rebuild/ops/test_cost_scanner_contract.py",
+      "source_sha256": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef"
+    },
+    "ops.test_production_deploy.ProductionCostDocumentTests.test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "996a0e7f4e2346c951f1f5f19fec2067ef2d95bcbcfbad85d7b957c622f2883b",
+      "method_line": 1368,
+      "source_path": "rebuild/ops/test_production_deploy.py",
+      "source_sha256": "39a75626ec3ea1a21812ed4eb294205a98f52d97827c847185330a21e6b989fe"
+    },
+    "ops.test_production_deploy.ProductionCostDocumentTests.test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "e3bd56cb9508ffb7ca7e18e0b4f5486d078c5065e821b15c0b219248c4d6eedc",
+      "method_line": 1389,
+      "source_path": "rebuild/ops/test_production_deploy.py",
+      "source_sha256": "39a75626ec3ea1a21812ed4eb294205a98f52d97827c847185330a21e6b989fe"
+    },
+    "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_default_prepared_receipt_reads_no_source_or_runtime": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "40b1ae6bfea746c32b5603b5e9f50464484261049715e1db5fa4ee51f00cfbb7",
+      "method_line": 91,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_existing_foreign_source_refuses_before_git_or_evidence": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "438d7b7a7450bb145141eee929638f4781f3be7d03c4b097d9cfc93b1edd3a54",
+      "method_line": 116,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_missing_execution_bindings_refuse_without_a_false_receipt": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "5f17322988d5816adb2008913762afce675c77bbfb67e215b23e918cbb12db6d",
+      "method_line": 101,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_short_revision_refuses_before_source_or_evidence_reads": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "1f1a3083f9f89fa51a048ad06f0dd2fc0f192489dfe09c67a4bed5e892900303",
+      "method_line": 107,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.PreparedPriceWitness.test_source_alias_refuses_before_following_or_reading_it": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "97852525546c8fda0864faccf6f89a7753a411806241cb2e5d0b7c23a790122b",
+      "method_line": 126,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_first_and_all_authorized_later_campaign_roots_pass_this_guard": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "eea8f5151ed4faff59894849697caaf65dcbaedc8eabc53a378ff5422f2e747c",
+      "method_line": 42,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_foreign_root_and_evidence_directory_cannot_use_a_valid_suffix": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "ee8abc40bb41530886776001eb859287d44a79d85676c0f9fb69cb393de6e4a5",
+      "method_line": 54,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_literal_identity_grammar_matches_the_normal_standing_runner": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "49f8bdf243406f580f7e28990333a8f446ccdd254a66ab8266bc827c05de2717",
+      "method_line": 62,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    },
+    "ops.tests.test_current_wire_price_witness.StandingEvidenceIdentity.test_zero_one_padded_and_unbounded_later_identities_refuse": {
+      "bases": [
+        "unittest.TestCase"
+      ],
+      "method_ast_sha256": "cf5591772c2c6833d9c80776d4e4340bc68206f212b39d2c0da24548d943605d",
+      "method_line": 48,
+      "source_path": "rebuild/ops/tests/test_current_wire_price_witness.py",
+      "source_sha256": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+    }
+  },
+  "source_diff_snapshot": "6da3b3d65c7a9172b1fc1235c027d81d7fa06b89",
+  "source_files": {
+    "rebuild/core/tests/test_batch_payload.py": "b9a59ebb47155f5d23b4f3020b34d2e01adb01cde324b37da4cf3e7b9c170c67",
+    "rebuild/core/tests/test_billing_boundary.py": "a8643e21c4305f63d4f7a8b28c6c1e911fb2ac6b363667537656ab13c29bf830",
+    "rebuild/core/tests/test_billing_policy.py": "fd3dd23fcc365f93a4468c03997d27442332033523f57d2259c58ad51f36c0a0",
+    "rebuild/core/tests/test_generation_batch.py": "d4670d7ff34d53a883bcf4c26a86f819efe68e4a81797472aadae1d6abd75207",
+    "rebuild/core/tests/test_refutation.py": "40c7ec22ee4948165020bae5081929c200d1c0574ee2da226ee4bc4ccc7f4481",
+    "rebuild/core/tests/test_sonnet55_profile.py": "a78e3f657631845d8ff5abcc6fe650d729a5531cb73ce0789ab8872f8b7db231",
+    "rebuild/core/tests/test_sonnet5_profile.py": "b9f202b54623508292685b7fc72fdd75aa400b1051dbcea1d63129caad0e99c4",
+    "rebuild/core/tests/test_sonnet5_settlement.py": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d",
+    "rebuild/core/tests/test_v1_invite_only.py": "d3c5dcbdd3f1842098c5775c60464d75aa6e06351421ca0a228d60818245f92f",
+    "rebuild/core/tests/test_v1_real_mode_payments.py": "8b71d6db772c325d2ba426f31fe9e2f6cbaa159be318a1e8cf15a7b5e114db59",
+    "rebuild/core/tests/test_v3_field_relations_batch.py": "58002c82869cd75038ea0f89e80ff5838ca24ad7d15a6208f0be010859f9a71d",
+    "rebuild/core/tests/test_v3_ordinary_profile.py": "4e5cff761d853d416fa992e6993689f3802319d5e37c3290d9d88705e772c17a",
+    "rebuild/ops/test_cost_scanner_contract.py": "61dd6514edffa188126ac0ecb351655e69ee91235395297148953d646041e3ef",
+    "rebuild/ops/test_production_deploy.py": "39a75626ec3ea1a21812ed4eb294205a98f52d97827c847185330a21e6b989fe",
+    "rebuild/ops/tests/test_current_wire_price_witness.py": "22397f603b9a22148b6874341d452362a79b9c7daf802ca712a9b69314859ffc"
+  },
+  "source_snapshot_not_final_qualified": true,
+  "static_existence_is_not_test_execution": true,
+  "static_selector_counts": {
+    "historical_profiles_wires_and_metering": 67,
+    "persisted_quotes_holds_settlement_and_payers": 28,
+    "pure_scanner_and_prepared_witness": 24
+  },
+  "technical_deadlines_seconds": {
+    "historical_profiles_wires_and_metering": 600,
+    "persisted_quotes_holds_settlement_and_payers": 600,
+    "pure_scanner_and_prepared_witness": 180
+  },
+  "whole_old_53_or_35_fixture_packets_repeated": false
+}

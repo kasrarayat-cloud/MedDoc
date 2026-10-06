@@ -1,0 +1,164 @@
+{
+  "source_commit": "d3bad39a4805b07cd802a58dacf69770b2285acc",
+  "source_worktree": "/opt/meddoc-pro/.worktrees/v1-word-d11-clause-correction-20261004",
+  "source_clean": true,
+  "state": "finished source, awaiting independent root/operations refutation; not integrated or installed",
+  "source_hashes": {
+    "rebuild/documents/word_v3.py": "5a579ec9e7aa68b64731cd177efcdad9b0decd82dc0487a1a94b5ebc714011bb",
+    "rebuild/documents/test_temporal_format_pairs.py": "086a11c306efdf0b1fe7115e865a33a050c489edee326ee3f4c3831647418eda"
+  },
+  "commits_from_root_07079": [
+    "eae56b63fda5c524d35e03f7e7e409876db6885f",
+    "18e0f6f1df8e23d548e6eb30dc860ca8aa26dc2f",
+    "6007a95e4af398a4ebca8d20d2343039fd43f96a",
+    "8f4c468998d55ab2593d9be85261e7fb6c10c609",
+    "601aab2b765be28d0d0c70626dcca9394ca41e2f",
+    "d3bad39a4805b07cd802a58dacf69770b2285acc"
+  ],
+  "new_focused_tests": {
+    "methods": 11,
+    "passed": 11,
+    "actual_exit": 0,
+    "test_seconds": 38.394,
+    "outer": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_temporal_format_pairs",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 39.02065639400098,
+      "timeout": false,
+      "pid": 2607833,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    }
+  },
+  "existing_affected_tests": {
+    "methods": 25,
+    "passed": 25,
+    "actual_exit": 0,
+    "test_seconds": 81.523,
+    "outer": {
+      "command": [
+        "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "documents.test_source_coverage.TerminalChoiceWriteIns",
+        "documents.test_source_coverage.ScalarCheckboxAlternatives",
+        "documents.test_source_coverage.PrintedOptionBranchInstructions",
+        "-v"
+      ],
+      "actual_exit": 0,
+      "elapsed_s": 82.18028216299717,
+      "timeout": false,
+      "pid": 2613686,
+      "reaped": true,
+      "provider": 0,
+      "database": 0,
+      "renderer": 0
+    },
+    "count_correction": "26 was an estimate in commentary; actual finished log has25."
+  },
+  "original_source_proof": {
+    "source_commit": "d3bad39a4805b07cd802a58dacf69770b2285acc",
+    "byte_equivalent_to_prior_original_export": true,
+    "source_word_sha256": "5a579ec9e7aa68b64731cd177efcdad9b0decd82dc0487a1a94b5ebc714011bb",
+    "original_sha256": "500efd5985a715277144cfaa42d8dbe72ee748fa11bb43a6215ed944b0bc352d",
+    "export_sha256": "21e679128c8ff7c2b8b354a487d217a52c477b84c8043e9cb2a9fedd35b6106b",
+    "old_fields_except_key_byte_equivalent": true,
+    "new_destinations": [
+      "word/document.xml#b/tbl[0]/tr[1]/tc[2]/p[0]",
+      "word/document.xml#b/tbl[0]/tr[1]/tc[2]/p[1]"
+    ],
+    "unwritten_paragraph_count": 1057,
+    "wrong_unwritten_paragraphs": [],
+    "historical_clock_mapping_accepted": true,
+    "score": {
+      "n": 559,
+      "ok": 550,
+      "missed": 9,
+      "wrong": 0,
+      "extras": 2,
+      "strict": false,
+      "tolerant": false
+    },
+    "missing_ids": [
+      "A9",
+      "A300",
+      "A307",
+      "A314",
+      "A321",
+      "A328",
+      "A335",
+      "A342",
+      "A349"
+    ],
+    "elapsed_s": 46.82374141099717,
+    "provider": 0,
+    "database": 0,
+    "renderer": 0,
+    "qualification": "source-only affected original proof; actual whole route/PDF not run"
+  },
+  "original_process": {
+    "command": [
+      "/opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/bin/python",
+      "-B",
+      "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d11-temporal-source-20261004/original_proof_v4.py"
+    ],
+    "actual_exit": 0,
+    "elapsed_s": 47.50403402400116,
+    "timeout": false,
+    "pid": 2617253,
+    "reaped": true,
+    "provider": 0,
+    "database": 0,
+    "renderer": 0
+  },
+  "fixed_whole_document_gates": {
+    "overall_required": "54/60",
+    "holdout_required": "18/20",
+    "current_d11_strict": false,
+    "new_whole_application_or_pdf_run": false,
+    "native_word_unverified": true,
+    "manual_score_changes": 0,
+    "scorer_changes": 0,
+    "rights_changes": 0
+  },
+  "counterexamples": {
+    "duplicate_raw_writer": "Ops eae exact duplicate original f4890b52\u2026 wrong output619e927\u2026; application reachability not established. Captured fresh8f before and601 refusal; current d3 focused duplicate controls pass.",
+    "compound_eae": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d11-temporal-source-20261004/compound-source-probe-eae56",
+    "fresh_human_6007": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d11-temporal-source-20261004/unmodified-human-source-6007",
+    "appointment_and_coordination_601a": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d11-temporal-source-20261004/clause-before-601a",
+    "exact_corrected_old_and_fresh_fields": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d11-temporal-source-20261004/clause-after-d3bad"
+  },
+  "evidence_limits": [
+    "First shell wrong-path attempt ran no methods; metadata retained. First8-method suite2failures preserved as source/failure metadata plus tool transcript; no separate raw suite log archived.",
+    "original_proof_v2 scripts were prepared but never executed.",
+    "Final601 score was transferred from8f Detector equivalence; d3 proof-v4 actually reruns unchanged scorer on fresh mapping.",
+    "Raw physical writer counterexamples do not prove application reachability; current D11 full-route/PDF remains pending."
+  ],
+  "artifact_seal": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d11-temporal-source-20261004/artifact-seal-d3bad.json",
+    "sha256": "cf399a0b74669c927f6d80625bb1df3a029582dc9ba90c095919c5711e1ea687",
+    "files": 136,
+    "total_bytes": 6791669
+  },
+  "active_owned_children": [],
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "cleanup_recovered_bytes": 0,
+  "next_steps": [
+    "Independent finished-diff refutation on frozen d3bad; verify concrete findings before any edit.",
+    "Root integration of full six-commit source chain only after refutation.",
+    "Authorized coherent affected D11 actual upload-to-export with fixed GT559 when root grants serialized DB/renderer slot.",
+    "Remaining finite D11 omissions A9/A300/A307/A314/A321/A328/A335/A342/A349 are retained; no new implementation started."
+  ]
+}

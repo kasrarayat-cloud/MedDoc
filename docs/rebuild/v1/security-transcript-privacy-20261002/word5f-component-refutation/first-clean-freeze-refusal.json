@@ -1,0 +1,13 @@
+{
+  "source_commit": "5f39682fcaee98847d338e55d3cf556fe12876eb",
+  "status": "whole-tree clean preparation refused before any source copy or probe",
+  "changed_file": "rebuild/core/tests/test_source_coverage_workflow.py",
+  "changed_file_sha256": "b59f8147b44e14166705d6b20df715a30f0fa6a1cb5ce62cdea7053f95062c09",
+  "diff_sha256": "879e582d8fffe87e820b83b40aae491da07cd86cd76a9943112e283aa93ac015",
+  "whole_tree_preparation_exit": 1,
+  "following_missing_instrument_exit": 2,
+  "provider_requests": 0,
+  "database_connections": 0,
+  "measurement_started": false,
+  "resolution": "Distinct exact-product component-only freeze explicitly authorized by lead; excluded unused fixture diff retained, no product guard weakening."
+}

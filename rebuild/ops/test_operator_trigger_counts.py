@@ -37,7 +37,7 @@ def stated_counts(text):
 class OperatorTriggerCounts(unittest.TestCase):
     def test_every_stated_trigger_count_is_the_release_contract(self):
         expected = len(integrity_contract.GUARDS)
-        self.assertEqual(expected, 107)  # 82 (settlement) + 10 retention hold/admission + 10 redaction (0033) + 5 coding (0034)
+        self.assertEqual(expected, 111)  # 107 through0034 + import manifest0035 + transcript custody0036/0037
         for name, path in TEXTS.items():
             with self.subTest(text=name):
                 counts = stated_counts(path.read_text())

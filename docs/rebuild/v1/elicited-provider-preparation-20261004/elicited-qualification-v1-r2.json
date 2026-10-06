@@ -1,0 +1,216 @@
+{
+  "stage": "elicited_qualification",
+  "version": "elicited-qualification-v1",
+  "provider_upload_allowed": true,
+  "independently_authored": true,
+  "corpus_qualification": false,
+  "previously_exposed_synthetic_notes": true,
+  "restricted_originals_sent": false,
+  "forms": {
+    "elicited-single-v1": {
+      "sha256": "24ed56ea292b245e17eea1a438d8815d17e335503d36f1623a48e53f74db354a",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        }
+      ],
+      "labels": [
+        "Patient response about relationships"
+      ],
+      "detected_engine": null
+    },
+    "elicited-seven-v1": {
+      "sha256": "c60eb8cc263cf620792b78ee6fb0c24327883fba85741c7ca6f06dea7f4c1920",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Housing suitability",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Housing suitability",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Monitoring relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Monitoring relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[1]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Patient response about relationships",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Patient response about relationships",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[2]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Clinical diagnosis",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Clinical diagnosis",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[3]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Medication administration",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Medication administration",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[4]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Physical illness affecting attendance",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Physical illness affecting attendance",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[5]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        },
+        {
+          "key": "v3_7",
+          "label": "Clinician contact and patient seen",
+          "kind": "text",
+          "context": "Synthetic clinical reporting worksheet > Clinician contact and patient seen",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[6]/tc[1]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "707ff0b397bfe562cb2b088f99bcb6f3de27ed7ed3f461640d6a2ded2ad8e47f"
+          }
+        }
+      ],
+      "labels": [
+        "Housing suitability",
+        "Monitoring relationships",
+        "Patient response about relationships",
+        "Clinical diagnosis",
+        "Medication administration",
+        "Physical illness affecting attendance",
+        "Clinician contact and patient seen"
+      ],
+      "detected_engine": null
+    }
+  },
+  "cases": [
+    {
+      "id": "E01",
+      "form": "elicited-single-v1",
+      "notes": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+      "desired_supported": {
+        "Patient response about relationships": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits."
+      },
+      "required_holds": [],
+      "notes_sha256": "44581ad04be64400204c11e9acf1997cee77c07e0f34bb4bd5535dedb8d5a0f6"
+    },
+    {
+      "id": "E02",
+      "form": "elicited-seven-v1",
+      "notes": "The current supported residence provides staff supervision and secure medication storage.\n\nThe patient reports stable relationships with family and expects no relationship changes before the next report.\n\nThe relationship reporting condition is monitored during weekly supervision visits.\n\nWhen asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.\n\nThe patient attends an art class three times a week and enjoys painting.\n\nThe diagnosis remains unchanged from the previous clinical report.\n\nThe prescribed medication is administered by residence staff and each administered dose is recorded.\n\nThe patient has taken every prescribed dose during this reporting period.\n\nNo new physical illness has affected treatment attendance during this reporting period.\n\nThe clinical supervisor saw the patient at the community clinic on 20 September 2026.\n\nThe patient says regular attendance at the art class is the main progress since discharge.\n\nThe patient has read the report and had an opportunity to add comments about the report.",
+      "desired_supported": {
+        "Housing suitability": "The current supported residence provides staff supervision and secure medication storage.",
+        "Monitoring relationships": "The relationship reporting condition is monitored during weekly supervision visits.",
+        "Patient response about relationships": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+        "Clinical diagnosis": "The diagnosis remains unchanged from the previous clinical report.",
+        "Medication administration": "The prescribed medication is administered by residence staff and each administered dose is recorded.",
+        "Physical illness affecting attendance": "No new physical illness has affected treatment attendance during this reporting period.",
+        "Clinician contact and patient seen": "The clinical supervisor saw the patient at the community clinic on 20 September 2026."
+      },
+      "required_holds": [],
+      "notes_sha256": "1a1847b12da2eb931744d02331fe7c7f652f9020774d92481f48dfc5f6b64704"
+    },
+    {
+      "id": "E03",
+      "form": "elicited-single-v1",
+      "notes": "When asked directly about relationships, the father said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+      "desired_supported": {},
+      "required_holds": [
+        "Patient response about relationships"
+      ],
+      "notes_sha256": "ffd0e33e00d6ea8b101f4b620c0c8e8c5b76426ec80148cf760aee27f845716b"
+    },
+    {
+      "id": "E04",
+      "form": "elicited-single-v1",
+      "notes": "If asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.",
+      "desired_supported": {},
+      "required_holds": [
+        "Patient response about relationships"
+      ],
+      "notes_sha256": "49a5fc364df0d2cd7fea8c9c22121ed88172e7bde16c96fbcf593458d19aaa3b"
+    },
+    {
+      "id": "E05",
+      "form": "elicited-single-v1",
+      "notes": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff might confirm attendance at planned visits.",
+      "desired_supported": {},
+      "required_holds": [
+        "Patient response about relationships"
+      ],
+      "notes_sha256": "5d934bd3e59527d613022ea5efe86817352d27b06f11b1199c4e58963ace73b9"
+    }
+  ],
+  "desired_positive_answers": 8,
+  "required_held_answers": 3,
+  "scope": "New synthetic physical forms for elicited-proof behavior. Original three CI fixtures stay offline."
+}

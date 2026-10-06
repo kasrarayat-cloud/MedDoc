@@ -1,0 +1,6 @@
+{
+  "worker_exit": 1,
+  "renderer_exit": -2,
+  "socket_removed": true,
+  "timed_out": false
+}

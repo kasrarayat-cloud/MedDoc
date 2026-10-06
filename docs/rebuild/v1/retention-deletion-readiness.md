@@ -1,5 +1,26 @@
 # Retention and deletion readiness — operator preparation
 
+## Current scoped engineering status — 2026-10-03
+
+The dated inventory below remains historical. The current integration source includes the scoped hold registry,
+preserved prior rows/files, authenticated disposition planning/review, independently signed instruction and hold
+journals, prospective two-person empty-draft disposition, unfinalized-document redaction, and quarantined restore
+admission/replay. These replace the earlier statements that no hold, tombstone or disposition workflow exists.
+The operators still cannot select a retention period or silently enable disposal from the console.
+
+Deletion remains deliberately limited. The empty-draft adapter refuses clinical, reviewed, finalized, financial,
+job and preservation history. Redaction preserves financial/audit rows and refuses finalized documents, generation
+batches, immutable reviewed transcripts, unresolved work/funds, active holds and shared or preserved files. It is an
+explicit two-custodian act bound to an exact content digest and independently signed authority/checkpoint, rather
+than a general scheduled purge. Reviewed transcript evidence is classified as protected in the canonical policy
+and cannot be assigned an aging window by this preparation tool.
+
+An approved retention/deletion schedule, applicable consent/authority, independent journal custody, backup/provider/
+download reconciliation and actual restored-target admission remain release dependencies. General patient/account
+purge and deletion of rich finalized or transcript-bearing graphs are unsupported. No deletion, policy admission,
+new duration or production database mutation occurred in this continuation. Current operations and the concrete
+owner handoff are recorded in [storage-resume-operations-20261003.md](storage-resume-operations-20261003.md).
+
 **Status: read-only inventory and local preservation enforcement prepared; policy unset; purge unavailable. B-L6 remains open.**
 The September27 continuation adds the hold registry, protected prior values/files, administration and cleanup controls described in `retention-preservation-20260927.md`. The inventory below records the earlier baseline; its statements that no hold registry exists are superseded by that implementation report. Disposition, deletion, external-copy and restored-backup reconciliation remain open.
 This is engineering preparation, not a legal retention schedule or authority to destroy records.

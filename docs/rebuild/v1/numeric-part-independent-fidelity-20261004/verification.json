@@ -1,0 +1,212 @@
+{
+  "candidate": "2d40c73c310062715f66fee07373dd17948b377f",
+  "lens": "Preserved bytes, numeric ranges/separators, captions/neighbors, linked package parts and stale/overlapping forged exports",
+  "result": "NOTHING FOUND",
+  "first_exit_code": 0,
+  "valid_hyperlink_packet_exit_code": 0,
+  "deadline_seconds_per_packet": 120,
+  "qualified_cases": 12,
+  "additional_preserved_initial_cases": 12,
+  "recompilation_refusals_per_qualified_case": [
+    "forged_capacity",
+    "duplicate_overlap",
+    "changed_original"
+  ],
+  "forged_or_stale_refusals": 36,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "source_git_bytes_match": true,
+  "read_only_worktree_clean": true,
+  "source_hashes": {
+    "rebuild/documents/word_v3.py": "3d00204e2efde798fbb0b4f1c9658d9ebe602d61c02c1b2a3476120431c0a34e",
+    "rebuild/documents/source_policy.py": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+  },
+  "artifact_hashes": {
+    "case-00-bookmarks-export.docx": "64b272e0ee6ec3d1b323ef556988a2d455a82ae548399c1ed4283af95de47c8d",
+    "case-00-bookmarks-original.docx": "f439dcbbdf9a14b87df0d4b5b4b3887a319cb3dffc18ed74ea8924654ae17018",
+    "case-00-fonts-export.docx": "a95c314d34a3d95b213856cfa7535bd91815cd2aa709ce9a279523f8969c4f14",
+    "case-00-fonts-original.docx": "184811ead685046df0f8774e2a68f4cb424e2af869f92aff68b282e405b44d53",
+    "case-00-runs-export.docx": "0e17e8e873c43b7c5cb3fc41bcd789a31fc32f0f42244b3e8b4ed580b2de199e",
+    "case-00-runs-original.docx": "7c022e27b2a1a9b74c70c4599f8e3dad6e1fc94756cec08fab4136ac30857e41",
+    "case-00-table-export.docx": "c56799bbbeeeaf8f830025aa59e855885e4ea9c63b14f351ed30f88039631b49",
+    "case-00-table-original.docx": "ffb01cc196cd997958edb216b9f7bf8829a6cbe36634203845adad5570e0fb31",
+    "case-01-bookmarks-export.docx": "68dfceabbbedd3b734bdba21b37092d9d8fa3b90ab636598e9a79f981f9ca773",
+    "case-01-bookmarks-original.docx": "bcae65a1234a23d248da670abad94e84cd98e863d2ab197909c61e498cc20b6f",
+    "case-01-fonts-export.docx": "c86b1f575a080a3853301dcf39301f8f255de71acb39cb784d68f6bf1726ff4d",
+    "case-01-fonts-original.docx": "d1b6d7efc112af5fbb62f671076871ded8c7d42dc9941871c2effe9b61bbc085",
+    "case-01-runs-export.docx": "8939aca6cadc6cd52b934eb3028c1aa999238827635502d33ff64ddf276aa0f0",
+    "case-01-runs-original.docx": "9fa1dee6f01b9565f1168ec67a4ecd88186c0c0ddd54f0c74cc98b1655ffa1ae",
+    "case-01-table-export.docx": "65e2c040cf600eedb69b92420de033ad8ee817bbe7c34dedd5b5344f92d98f65",
+    "case-01-table-original.docx": "cfa3e8d0410f3426ba9c7891331b3adc53951a3ecbe14d2682936a1076189051",
+    "case-02-bookmarks-export.docx": "ee0e736cf0c5eeecfdfba6c25018209639d3062f1beb39589d7970131c8d7dd8",
+    "case-02-bookmarks-original.docx": "e3c18edb047fcdabc06655998d62d1ff3ef5e13c0891fef859d8f441a7a7ba9a",
+    "case-02-fonts-export.docx": "cfe8ee1c27a8d5b9d4daa9cdba83b97099a534bb233feb2b93a9b574d858a97c",
+    "case-02-fonts-original.docx": "872e36c2dbf06675e39b3ba9e7bc9192c8a0497b4046cd68ecf1be3d7584f945",
+    "case-02-runs-export.docx": "29ce345a9d44c7d4974a56e615104e891c3caf4b7a8360b5b36e4328ba9fab24",
+    "case-02-runs-original.docx": "7f2029e8c87d7053d8f92fc6ef4a0c932669adba66be04d8b5fd027140a841f5",
+    "case-02-table-export.docx": "c48aefc133d7b2180593934c59df2de8d3bd96db579312cd6b27db4b506a07dd",
+    "case-02-table-original.docx": "c4df40d6d752cdbebf6ff74d023ac4080d6f4ea132d64f2dce04ee5413342312",
+    "probe-valid-links.log": "2b4949fbe5a9476895b1f0495100760631920a94141e236fae6c2a2e1dcc952a",
+    "probe-valid-links.py": "9acc0e46f7b137d32812821df4be66a2d0777c5005c49ad0db1507e9b2ede9d4",
+    "probe.log": "2b4949fbe5a9476895b1f0495100760631920a94141e236fae6c2a2e1dcc952a",
+    "probe.py": "a374e8f9282980becee61bab43521fc203babbc258108674c05a23ba65f20406",
+    "result-valid-links.json": "61729a3764082c809892923d65bcfd22547856b173d882f269b143b05a1b2410",
+    "result.json": "17b20c1c17ee0666f8edc17414b0f70e24992024f49ec4f8c5de352f82c970f5",
+    "valid-case-00-bookmarks-export.docx": "c36e94976e0a4ba4c072fb765a57cca7269c45badea38890d4853b33bc5fab54",
+    "valid-case-00-bookmarks-original.docx": "4a584dd10cf2333b31c8244c182b31bb1457e71b3af3a451856e8b3e6103b648",
+    "valid-case-00-fonts-export.docx": "6f581b0df0eace9d9349f151e460b33f3afab5a7613a999026c604da5be03400",
+    "valid-case-00-fonts-original.docx": "87ec430c4e524fb3693a25a0fb7ea8e1d320b49170e11c869f45d1cb8988413b",
+    "valid-case-00-runs-export.docx": "4b10915cdb90329587b47fa03c0508128be32ef5d7ef3e3836b8e83524cbdf66",
+    "valid-case-00-runs-original.docx": "388a23db81d77b65025c8f00f25609d434691f414b43bcda82dea1d0590f4bf9",
+    "valid-case-00-table-export.docx": "937b7e650e0896dfe5444e08852182fba34957e2eb7f2821469a1c25a0b90aaf",
+    "valid-case-00-table-original.docx": "53a15b0ee399e0d9d790b2aec15f78c69a827e96536fab5c46b6a51a7a1e2cb0",
+    "valid-case-01-bookmarks-export.docx": "97df2a50a98ae2b831d8b8d24cd3a364a29ff42ea380fb840ccff53e1543d4df",
+    "valid-case-01-bookmarks-original.docx": "8eae9b74c3af50eb0bdb19ec739cf7e53c65cf6dedf54d2c332db132b2e73ba9",
+    "valid-case-01-fonts-export.docx": "942cc18c3796feba71495aad8c08dacdddb8d6c51310da4c0058290d02577cd4",
+    "valid-case-01-fonts-original.docx": "aecf474b1fdd39dd258c5111eae30a95023127aca7944c6a8da59432116a45ca",
+    "valid-case-01-runs-export.docx": "885573b218218c28c5ea68a45a00a4281c49c4a9a28eac8cbd450e8e5d5ac27d",
+    "valid-case-01-runs-original.docx": "785a28657bccbb143adf5fe32d497d148929fbd3bf6ec9d48daab6b31f33378b",
+    "valid-case-01-table-export.docx": "365c43de48216a89e6b249c747b865b3ceae981e275d5ee6093187ffd3c65512",
+    "valid-case-01-table-original.docx": "32c6044c5070854c5399c8b61796f647c7fe19507a04484fcb32ea89d3d5d2c4",
+    "valid-case-02-bookmarks-export.docx": "a5123363f6a4e4a5e910f5c91f680d3a61816d0079dc51c64b26ef789967e679",
+    "valid-case-02-bookmarks-original.docx": "64e4256f99dc692b8b52c7f1c5b49346c7ed79f4a91ba9fdedfebe31a6682f07",
+    "valid-case-02-fonts-export.docx": "a503bf52c2b770ab5063d9b79f806f14bc7ce8fc724ca814741ed60acd709693",
+    "valid-case-02-fonts-original.docx": "8fd43d6db92be874775ac7ad1dfdba54765da9ee394ba8fa721998ad73d2acb9",
+    "valid-case-02-runs-export.docx": "52df14bb416d947f1a90cf3ce4bd3520295ed93c13a25cd7fbd764b791c987bb",
+    "valid-case-02-runs-original.docx": "8ffdb7f892536cb052f288683c3b180d234d54405a7140a725563f8af01f66cb",
+    "valid-case-02-table-export.docx": "0ffa68940b0467fceb5b57ab521ce95bc418cb93cd4aaedf1dce9a2bc28db41a",
+    "valid-case-02-table-original.docx": "4c897034e6196539ed1bf1da26c134586f6214d7c00cff3ba8e4794a2ace19be"
+  },
+  "limits": [
+    "The first packet retained hyperlink XML but used an unresolved relationship ID; its originals/exports remain diagnostic only for that hyperlink claim.",
+    "The distinct final packet uses actual valid external-hyperlink relationships without making any network request.",
+    "No native Microsoft Word or renderer inspection; no corpus score, automatic correctness or clinical signing qualification.",
+    "Bounded independent probes do not establish universal document support."
+  ],
+  "raw_evidence_directory": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/numeric-refute-2d40c73c",
+  "raw_manifest_sha256": "00b2452e88a0854f5a519705ad88f87ab4b2362433e4c3c940a36aa3a7ff9164",
+  "final_result": {
+    "candidate": "2d40c73c310062715f66fee07373dd17948b377f",
+    "lens": "Numeric separator/caption/neighbor/package fidelity and recompilation attacks",
+    "cases": [
+      {
+        "case": "valid-case-00-runs",
+        "band": "\u25af/\u25af",
+        "variant": "runs",
+        "source_sha256": "388a23db81d77b65025c8f00f25609d434691f414b43bcda82dea1d0590f4bf9",
+        "export_sha256": "4b10915cdb90329587b47fa03c0508128be32ef5d7ef3e3836b8e83524cbdf66",
+        "parts": 2,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-00-fonts",
+        "band": "\u25af/\u25af",
+        "variant": "fonts",
+        "source_sha256": "87ec430c4e524fb3693a25a0fb7ea8e1d320b49170e11c869f45d1cb8988413b",
+        "export_sha256": "6f581b0df0eace9d9349f151e460b33f3afab5a7613a999026c604da5be03400",
+        "parts": 2,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-00-bookmarks",
+        "band": "\u25af/\u25af",
+        "variant": "bookmarks",
+        "source_sha256": "4a584dd10cf2333b31c8244c182b31bb1457e71b3af3a451856e8b3e6103b648",
+        "export_sha256": "c36e94976e0a4ba4c072fb765a57cca7269c45badea38890d4853b33bc5fab54",
+        "parts": 2,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-00-table",
+        "band": "\u25af/\u25af",
+        "variant": "table",
+        "source_sha256": "53a15b0ee399e0d9d790b2aec15f78c69a827e96536fab5c46b6a51a7a1e2cb0",
+        "export_sha256": "937b7e650e0896dfe5444e08852182fba34957e2eb7f2821469a1c25a0b90aaf",
+        "parts": 2,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-01-runs",
+        "band": " \u25af\u25af : \u25af\u25af : \u25af\u25af\u25af ",
+        "variant": "runs",
+        "source_sha256": "785a28657bccbb143adf5fe32d497d148929fbd3bf6ec9d48daab6b31f33378b",
+        "export_sha256": "885573b218218c28c5ea68a45a00a4281c49c4a9a28eac8cbd450e8e5d5ac27d",
+        "parts": 3,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-01-fonts",
+        "band": " \u25af\u25af : \u25af\u25af : \u25af\u25af\u25af ",
+        "variant": "fonts",
+        "source_sha256": "aecf474b1fdd39dd258c5111eae30a95023127aca7944c6a8da59432116a45ca",
+        "export_sha256": "942cc18c3796feba71495aad8c08dacdddb8d6c51310da4c0058290d02577cd4",
+        "parts": 3,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-01-bookmarks",
+        "band": " \u25af\u25af : \u25af\u25af : \u25af\u25af\u25af ",
+        "variant": "bookmarks",
+        "source_sha256": "8eae9b74c3af50eb0bdb19ec739cf7e53c65cf6dedf54d2c332db132b2e73ba9",
+        "export_sha256": "97df2a50a98ae2b831d8b8d24cd3a364a29ff42ea380fb840ccff53e1543d4df",
+        "parts": 3,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-01-table",
+        "band": " \u25af\u25af : \u25af\u25af : \u25af\u25af\u25af ",
+        "variant": "table",
+        "source_sha256": "32c6044c5070854c5399c8b61796f647c7fe19507a04484fcb32ea89d3d5d2c4",
+        "export_sha256": "365c43de48216a89e6b249c747b865b3ceae981e275d5ee6093187ffd3c65512",
+        "parts": 3,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-02-runs",
+        "band": "\u25af\u25af\u25af-\u25af\u25af.\u25af\u25af\u25af\u25af",
+        "variant": "runs",
+        "source_sha256": "8ffdb7f892536cb052f288683c3b180d234d54405a7140a725563f8af01f66cb",
+        "export_sha256": "52df14bb416d947f1a90cf3ce4bd3520295ed93c13a25cd7fbd764b791c987bb",
+        "parts": 3,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-02-fonts",
+        "band": "\u25af\u25af\u25af-\u25af\u25af.\u25af\u25af\u25af\u25af",
+        "variant": "fonts",
+        "source_sha256": "8fd43d6db92be874775ac7ad1dfdba54765da9ee394ba8fa721998ad73d2acb9",
+        "export_sha256": "a503bf52c2b770ab5063d9b79f806f14bc7ce8fc724ca814741ed60acd709693",
+        "parts": 3,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-02-bookmarks",
+        "band": "\u25af\u25af\u25af-\u25af\u25af.\u25af\u25af\u25af\u25af",
+        "variant": "bookmarks",
+        "source_sha256": "64e4256f99dc692b8b52c7f1c5b49346c7ed79f4a91ba9fdedfebe31a6682f07",
+        "export_sha256": "a5123363f6a4e4a5e910f5c91f680d3a61816d0079dc51c64b26ef789967e679",
+        "parts": 3,
+        "outcome": "pass"
+      },
+      {
+        "case": "valid-case-02-table",
+        "band": "\u25af\u25af\u25af-\u25af\u25af.\u25af\u25af\u25af\u25af",
+        "variant": "table",
+        "source_sha256": "4c897034e6196539ed1bf1da26c134586f6214d7c00cff3ba8e4794a2ace19be",
+        "export_sha256": "0ffa68940b0467fceb5b57ab521ce95bc418cb93cd4aaedf1dce9a2bc28db41a",
+        "parts": 3,
+        "outcome": "pass"
+      }
+    ],
+    "provider_calls": 0,
+    "database_calls": 0,
+    "renderer_calls": 0,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "3d00204e2efde798fbb0b4f1c9658d9ebe602d61c02c1b2a3476120431c0a34e",
+      "rebuild/documents/source_policy.py": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+    },
+    "findings": [],
+    "result": "NOTHING FOUND in bounded independent controls; no universal Word claim"
+  }
+}

@@ -1,0 +1,546 @@
+{
+  "version": "original-holdout20-application-prepared-v1",
+  "state": "PREPARED_ONLY",
+  "final_source_commit": null,
+  "execution_authorized": false,
+  "manifest_sha256": "3c8b7497d367f14577091a458c73e4e60c9f78589f280f4e1015026ab9cfbf33",
+  "thresholds": {
+    "overall_required": 54,
+    "overall_denominator": 60,
+    "holdout_required": 18,
+    "holdout_denominator": 20,
+    "family_fraction": 0.75
+  },
+  "provider_calls": 0,
+  "originals_previously_exposed": true,
+  "new_independence_claim": false,
+  "gate_pass": false,
+  "parent_driver_sha256": {
+    "run_dev_application_gate_v2.py.source": "a7059768fc9b4208ab639a5acb6fff7ed7a8f780597506b18c122636afa1fcb7",
+    "dev_application_gate_v2.py.source": "fbf37994963d6a39ba546eb35e5bec7a3967e545a707ab253c746be9f45ab918",
+    "fixed_render_checker.py.source": "a1cd77577e266b25f8c42d01a5aba7fd4f05ea042eee50822ac944e09e09aa0e"
+  },
+  "unsupported_originals": [
+    "H03",
+    "H20"
+  ],
+  "records": [
+    {
+      "holdout_id": "H01",
+      "original_sha256": "b50388c19e609e79d13e0f25fccac2995e7286481fede1c3930d46778ebfd926",
+      "corpus_file": "holdout/originals/H01-b50388c19e60.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H01-b50388c19e60.json",
+      "groundtruth_sha256": "c5f5677c7c7f73ea9a38d4d9e14142a76f9907dfb58b7b2d52bf76f749f9dd47",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H02",
+      "original_sha256": "687e94896e4df9f48bac6622788d79a6f376110521957b9cd38dc2175897526a",
+      "corpus_file": "holdout/originals/H02-687e94896e4d.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F4",
+        "F5"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H02-687e94896e4d.json",
+      "groundtruth_sha256": "1ea52d6b67464308e20cb263b8a3724b07fc437e2d567ec479a067114f8c2f13",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H03",
+      "original_sha256": "5adc1289b543681935fb30afd931a02d785f4a07d5c0801f98a861ee3a24808b",
+      "corpus_file": "holdout/originals/H03-5adc1289b543.doc",
+      "families": [],
+      "format": "doc",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H03-5adc1289b543.json",
+      "groundtruth_sha256": "37e62e65d89d206e15920917f38f8ab295ec5181497704159f909a20c07567db",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H04",
+      "original_sha256": "3715f2f80889884afd1f014bcd369fa1c2a3a17059b3cab6a603ec559be1f308",
+      "corpus_file": "holdout/originals/H04-3715f2f80889.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H04-3715f2f80889.json",
+      "groundtruth_sha256": "00bd8265697e86fc00f58f4830e97e8fbf39bc9e98503554db3222061154235d",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H05",
+      "original_sha256": "6b2cfc3a29f2683b0ed355816d1aeaa55cba8f00846864d429db2ea81312c3f3",
+      "corpus_file": "holdout/originals/H05-6b2cfc3a29f2.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F5",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H05-6b2cfc3a29f2.json",
+      "groundtruth_sha256": "7776712c17ce94b2399adb9ecfec53245d75239634bba5c1caf3f289a1e6393e",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H06",
+      "original_sha256": "a7bf90d167b5100df402f2bec34ba1e67281ddcefb75428aba82b85db59c5874",
+      "corpus_file": "holdout/originals/H06-a7bf90d167b5.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H06-a7bf90d167b5.json",
+      "groundtruth_sha256": "172caf258df259c5172497766d627643c4042cfa2d2c8a1c8d8d805dbd6fb05d",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H07",
+      "original_sha256": "3d835f8834881bd352305542be889ded4d7ac500d13e97acd9714ba1e9361620",
+      "corpus_file": "holdout/originals/H07-3d835f883488.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H07-3d835f883488.json",
+      "groundtruth_sha256": "982edff6802e5c68b9a8892ee097000c53509a3617666138ddc0a6757d4ba132",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H08",
+      "original_sha256": "b87238c11dd67f69cc334a5562d26122b42e591c44a0674f0dfaf4ba0bafe113",
+      "corpus_file": "holdout/originals/H08-b87238c11dd6.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H08-b87238c11dd6.json",
+      "groundtruth_sha256": "3332118984c1cd3afc1ac4a1cc92c203fc0ba6104405f391a5c8c85f9b97f745",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H09",
+      "original_sha256": "430af1e02b915b2304c663f6c4e25c8af1f25a2ea1a02e4651f51ec7a4d4c366",
+      "corpus_file": "holdout/originals/H09-430af1e02b91.docx",
+      "families": [
+        "F2",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H09-430af1e02b91.json",
+      "groundtruth_sha256": "68170ca4083a1c99f32bd3bcbb9d4f3854640090113323b4d8253138fc2432d7",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H10",
+      "original_sha256": "2bafe1a4cffeb777f8b52eda80fe940de9271bd854fde4badf44898b9324eb16",
+      "corpus_file": "holdout/originals/H10-2bafe1a4cffe.docx",
+      "families": [
+        "F5",
+        "F7"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H10-2bafe1a4cffe.json",
+      "groundtruth_sha256": "bd9f742ea5e7325bf8420adc801c0d990ee303e6e78a28a3ed47bb755189e072",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H11",
+      "original_sha256": "ff923d7b8ed2cd549c6b74fc8d30dd3889d16c5dbbb464c844f69ec0e6159ba4",
+      "corpus_file": "holdout/originals/H11-ff923d7b8ed2.docx",
+      "families": [
+        "F1",
+        "F5",
+        "F7"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H11-ff923d7b8ed2.json",
+      "groundtruth_sha256": "75e34c8d33f47e4bad7c410d4b59630dfef307dfd8266797dfa09651876035ac",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H12",
+      "original_sha256": "870414ddbfefd522c9ed96b21b6f8356dac2b4d6d7ce5951e0ddd944b8544a6b",
+      "corpus_file": "holdout/originals/H12-870414ddbfef.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F4",
+        "F5",
+        "F7"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H12-870414ddbfef.json",
+      "groundtruth_sha256": "af9da0dc8420aaaeb136206b47a4cc1f8f5f724617f4c0f9406316332f9c00db",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H13",
+      "original_sha256": "ea693106c8c48eaa167872afb4c34410c3aecc899c0ee5eba8eef458f8a82238",
+      "corpus_file": "holdout/originals/H13-ea693106c8c4.docx",
+      "families": [
+        "F1",
+        "F5",
+        "F6"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H13-ea693106c8c4.json",
+      "groundtruth_sha256": "7db0826fd1075d0290ab2b5da5cc33fbbac53814e7a52dd0336ba86b932905ee",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H14",
+      "original_sha256": "99b8c67312910b7ec8b27c78e0807933b332741e775ce90ba0bf0d2d439ee6c8",
+      "corpus_file": "holdout/originals/H14-99b8c6731291.docx",
+      "families": [
+        "F10",
+        "F2",
+        "F4",
+        "F6",
+        "F7"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H14-99b8c6731291.json",
+      "groundtruth_sha256": "35b9e28fa8d7370e057f9a978a05ef51fcafdb67cb5b2a2599383037e9700836",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H15",
+      "original_sha256": "d4ce44196f5a71d4b375ca3fd3c17b253d48cb4f841ca224c44c72cc4e6b9112",
+      "corpus_file": "holdout/originals/H15-d4ce44196f5a.docx",
+      "families": [
+        "F1",
+        "F5",
+        "F7",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H15-d4ce44196f5a.json",
+      "groundtruth_sha256": "fcf91e0377e5d86f35f58b8c355b477919d704310504b801650a597a77d195de",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H16",
+      "original_sha256": "f62811e31a3a6a8e912ce9d2673f4bf521424806d6afb62fe7ba2d7ac8dec66d",
+      "corpus_file": "holdout/originals/H16-f62811e31a3a.docx",
+      "families": [
+        "F1"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H16-f62811e31a3a.json",
+      "groundtruth_sha256": "39705412f7e71c5b7f934cf2548c118b00888aa8d9cb6a957810a06684b7de68",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H17",
+      "original_sha256": "d2c0100f61b91dd8ed9572f67224efcf228aab25ff1b56a8e8d3238885967d88",
+      "corpus_file": "holdout/originals/H17-d2c0100f61b9.docx",
+      "families": [
+        "F5"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H17-d2c0100f61b9.json",
+      "groundtruth_sha256": "0aa86068472b71306a5d570f9e636f37ec37313c5ba9a612e6bd24ff8c07f24f",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H18",
+      "original_sha256": "0a9169f5e9d907b722c1ff501ad807448ad2eccad4128a984bcbbb3a8af8f614",
+      "corpus_file": "holdout/originals/H18-0a9169f5e9d9.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H18-0a9169f5e9d9.json",
+      "groundtruth_sha256": "21e401c20f8c0f3096661a8e52b7a0b56598021d038230e845efcac2658ccfa4",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H19",
+      "original_sha256": "64e5706373fa14538f589fd1da535ff9fda261b6281f99148b3411cdc244ce1f",
+      "corpus_file": "holdout/originals/H19-64e5706373fa.docx",
+      "families": [
+        "F1",
+        "F10",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F9"
+      ],
+      "format": "docx",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H19-64e5706373fa.json",
+      "groundtruth_sha256": "4b22a59f94c518dffa47b5b93f7d919400b667f06d2c6496d9ab456551aa58c9",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    },
+    {
+      "holdout_id": "H20",
+      "original_sha256": "97fcbc6e17b62a7121fb62a2279ffceb21254c98c3e05e26f12d738d7339ef19",
+      "corpus_file": "holdout/originals/H20-97fcbc6e17b6.doc",
+      "families": [],
+      "format": "doc",
+      "groundtruth": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/holdout/groundtruth/H20-97fcbc6e17b6.json",
+      "groundtruth_sha256": "6524f93c78d843fd4a6313ad3e3b3453a7fef54904ed037bbdd0c41d503aec27",
+      "fixed_profiles": [
+        "empty",
+        "ordinary",
+        "long"
+      ],
+      "previously_exposed": true,
+      "automatic_credit": false
+    }
+  ],
+  "packets": [
+    {
+      "packet": "H01",
+      "identities": [
+        "H01",
+        "H02",
+        "H03"
+      ],
+      "inner_deadline_seconds": 900,
+      "outer_deadline_seconds": 1260
+    },
+    {
+      "packet": "H02",
+      "identities": [
+        "H04",
+        "H05",
+        "H06"
+      ],
+      "inner_deadline_seconds": 900,
+      "outer_deadline_seconds": 1260
+    },
+    {
+      "packet": "H03",
+      "identities": [
+        "H07",
+        "H08",
+        "H09"
+      ],
+      "inner_deadline_seconds": 900,
+      "outer_deadline_seconds": 1260
+    },
+    {
+      "packet": "H04",
+      "identities": [
+        "H10",
+        "H11",
+        "H12"
+      ],
+      "inner_deadline_seconds": 900,
+      "outer_deadline_seconds": 1260
+    },
+    {
+      "packet": "H05",
+      "identities": [
+        "H13",
+        "H14",
+        "H15"
+      ],
+      "inner_deadline_seconds": 900,
+      "outer_deadline_seconds": 1260
+    },
+    {
+      "packet": "H06",
+      "identities": [
+        "H16",
+        "H17",
+        "H18"
+      ],
+      "inner_deadline_seconds": 900,
+      "outer_deadline_seconds": 1260
+    },
+    {
+      "packet": "H07",
+      "identities": [
+        "H19",
+        "H20"
+      ],
+      "inner_deadline_seconds": 900,
+      "outer_deadline_seconds": 1260
+    }
+  ],
+  "rights_ledger": null,
+  "rights_ledger_sha256": null,
+  "historical_first_pass_results_sha256": "59ee50e29a882443c9c9a34bb3f1ef9562d988a8aad7e92eae98dc505283354f",
+  "historical_automatic_success": 0,
+  "original_content_read_in_preparation": false,
+  "groundtruth_preparation_read": "hash-only, no answer parsing",
+  "source_code_shared": "unchanged canonicalDEV parent literals; metadata derivative only; no processor substitution",
+  "protocol": {
+    "path": "docs/rebuild/v1/word-compatibility-target.md",
+    "sha256": "f0f6931c38379a34924dbd9595af8eaf7f99c4585ee28b242185a931f8409b75"
+  },
+  "unchanged_helpers": {
+    "score.py": "d9e0c5bbb7c51d10bb30c1e65f2ec5b7cd1569e6baed6db95d8207c66938e88c",
+    "final_eval.py": "97c3a9ee081b1f20c7d2219f0ce16dc3786238765ae913096a290378bf4dd17a",
+    "fill_eval.py": "7c74e1d3a46a0252d0b79169ac7cf0905222e7d741ee8061130bc37a2bf2a848",
+    "render_eval.py": "265ff7ad137889717a2f93554c8926f93f4cccd76b8c120eeda50bd5bf8f8a76",
+    "v2/answering.py": "75d61b7c29bc129fb03a8a1fcc17fac9cafb2423af28eaca0951e87c7912f6c4",
+    "v2/ticked.py": "e45a7fc00fd2a2d97173c9093cd1caebe1c7cdd7fe23ffeea6c12fdcdab37b79"
+  }
+}

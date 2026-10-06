@@ -217,11 +217,33 @@ class SignatureIsRecognisedByPolicyOrLabel(TestCase):
     def test_signature_shaped_questions_are_recognised_wherever_they_sit(self):
         for label in ('Electronically signed by', 'Signed by', 'Signature', 'Signature:',
                       'Physician signature', 'Surgeon signature', 'Signature of surgeon',
-                      'Signed', 'Signed by (MD)', 'Electronically signed by (print name)',
+                      'Signed', 'Signed by (MD)', 'Signature (doctor)',
                       'Signature/Date', 'Electronically signed by\uff1a', 'Electronically signed by.'):
             for locator in ({'cell': 0}, {'tab_form': {'version': 1}}):
                 with self.subTest(label=label, locator=tuple(locator)):
                     self.assertTrue(self.recognised(label, locator))
+
+    def test_a_print_name_or_another_signer_never_appoints_the_finalizer(self):
+        """Keep the old print-name case; its established human-owner policy supersedes the old True expectation.
+
+        Actual legacy upload/review/export controls remain in LegacyRound1's
+        r2_07 method. This policy control covers both original locator families,
+        including a stale policy and note-derived finalizer name.
+        """
+        from core.tab_review import another_signers_line
+        for label in ('Electronically signed by (print name)', 'Signed by (name)',
+                      'Patient signature', 'Signed by (witness)', 'Manager signature'):
+            for locator in ({'cell': 0}, {'tab_form': {'version': 1}}):
+                with self.subTest(label=label, locator=tuple(locator)):
+                    field = {'key': 'k', 'label': label, 'kind': 'text', 'locator': locator,
+                             'answer_policy': 'clinician_identity'}
+                    self.assertTrue(another_signers_line(field))
+                    self.assertFalse(self.recognised(label, locator))
+                    from core.tab_review import clinician_identity
+                    self.assertFalse(clinician_identity(field))
+                    notes = label + ': Dr Synthetic Finalizer'
+                    out = validate_selections(notes, [field], response([field], {'k': ['Dr Synthetic Finalizer']}))
+                    self.assertEqual((out['k']['status'], out['k']['text']), ('missing', ''))
 
     def test_a_date_question_that_merely_says_signature_is_not_an_identity_field(self):
         """The false-refusal control. Treating these as signatures would block finalization."""

@@ -1,0 +1,15 @@
+{
+  "status": "refused_before_source_copy_and_probes",
+  "reason": "transcript_context hash differs from declared3b925 before run",
+  "actual_hashes": {
+    "source_scope.py": "bb72acca0bb6d0f3df3832ccc76758bb14decc7b7cedce96a7a1d3df3b7543f7",
+    "generation.py": "77e123ba8407cb82a660c5769b483b55673f3ac16b650b7eb692ce7ea53bd1c1",
+    "transcript_context.py": "df959c48b7db9c85390240cca089c4c7e31fd5d643d9f4ef811d3c5cf6c12de2"
+  },
+  "source_copy_status": "not created",
+  "governance_probes": 0,
+  "provider_requests": 0,
+  "database_connections": 0,
+  "setup_exit_code": 1,
+  "nonexistent_probe_launch_exit_code": 2
+}

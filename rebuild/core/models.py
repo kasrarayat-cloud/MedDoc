@@ -302,6 +302,9 @@ class TemplateVersion(Entity):
     # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
     corrections=models.JSONField(default=dict,blank=True,db_default={})
     assistance=models.JSONField(default=dict,blank=True,db_default={})
+    # Import choice and physical coverage are evidence of the original inspection,
+    # preserved through every immutable correction version; never a compatibility score.
+    import_manifest=models.JSONField(default=dict,blank=True,db_default={})
     # Unknown on all historical mappings; absence is never proof of independent
     # fields. This immutable version can carry a separately qualified rule manifest.
     generation_constraints=models.JSONField(null=True,blank=True,default=None)
@@ -321,8 +324,8 @@ class TemplateVersion(Entity):
         except ObjectDoesNotExist:return None
     @property
     def needs_confirmation(self):
-        """A contract v3 mapping starts no document until a clinician states they checked every field against the form."""
-        return self.contract=='v3' and self.confirmed is None
+        """New v3 mappings and freshly reinspected forms require their own explicit review."""
+        return (self.contract=='v3' or 'reinspection' in self.import_manifest) and self.confirmed is None
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
 class MappingConfirmation(Entity):
     """A clinician's statement that every field of one contract v3 mapping version was checked against the form.
@@ -396,6 +399,33 @@ class Job(ProviderIdentifiers,Entity):
     @property
     def pricing_snapshot(self):
         return self.config.get('pricing_version','Not captured for this historical job')
+
+class TranscriptReview(Entity):
+    """Clinician edits and source context kept separately from immutable provider output.
+
+    Clinical text stays in the clinical database, never in the audit metadata.
+    Later note edits leave this evidence intact and invalidate its context grant.
+    """
+    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,related_name='transcript_reviews')
+    job=models.ForeignKey(Job,on_delete=models.PROTECT,related_name='transcript_reviews')
+    reviewed_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='+')
+    source_revision=models.PositiveIntegerField()
+    source_sha256=models.CharField(max_length=64)
+    raw_sha256=models.CharField(max_length=64)
+    result_sha256=models.CharField(max_length=64)
+    reviewed_sha256=models.CharField(max_length=64)
+    reviewed_text=models.TextField()
+    span_start=models.PositiveIntegerField()
+    span_end=models.PositiveIntegerField()
+    patient_context=models.BooleanField(default=False)
+    context_token=models.TextField(blank=True)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['job','source_revision'],name='transcript_review_source_once')]
+    def save(self,*args,**kwargs):
+        if not self._state.adding:raise ValidationError('Transcript reviews are append-only.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs):raise ValidationError('Transcript reviews cannot be deleted.')
+
 class GenerationBatch(Entity):
     encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,related_name='generation_batches')
     user=models.ForeignKey(User,on_delete=models.PROTECT)

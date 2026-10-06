@@ -1,0 +1,38 @@
+{
+  "commit": "09644640759200813c40c3246b92299999a64aca",
+  "files": [
+    {
+      "path": "rebuild/documents/word_v3.py",
+      "sha256": "345f44a0984a0f59126b9323a83af3301f3583d2f1adac39587e7e6526799623"
+    },
+    {
+      "path": "rebuild/documents/service.py",
+      "sha256": "43044bc679a99dfe55af171e87f57644502212bea929e484a26c7d612911c1e5"
+    },
+    {
+      "path": "rebuild/documents/import_selection.py",
+      "sha256": "06df2620f8d52891511f9f6e20785c52ee215012cece0d3180a582449fed4128"
+    },
+    {
+      "path": "rebuild/documents/source_policy.py",
+      "sha256": "a2a58f447d0ab7f9deac49b87683c2e815b0dcd6210b5d20f31d31079521b890"
+    },
+    {
+      "path": "rebuild/documents/test_source_coverage.py",
+      "sha256": "739fd77dc0fdea1f024ad71eaefca4f53a390772566711e6805aa204d5cf1e6a"
+    },
+    {
+      "path": "rebuild/core/v3_mapping.py",
+      "sha256": "950834131edbb89c4c3c83a600502b592e816e9ce4d8067823696704c0d11ae9"
+    },
+    {
+      "path": "rebuild/core/import_binding.py",
+      "sha256": "73eea4c1e6ac219c82fc51574071e9d8b1a28051ace126e3ecb0e8a92175647b"
+    },
+    {
+      "path": "rebuild/core/destination_roles.py",
+      "sha256": "46f4955a7662a4d8d0847d1641f4d61ddd25276fc652035a2ba5a0122a2a3834"
+    }
+  ],
+  "rights": "author source commit; self-authored synthetic structural probe documents; no provider upload"
+}

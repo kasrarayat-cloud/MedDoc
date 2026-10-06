@@ -111,9 +111,11 @@ from pathlib import Path
 try:
     from . import provider_campaign as pc
     from . import sonnet5_qa as sq
+    from . import standing_qa_signing as qa_signing
 except ImportError:                                  # (run as a script: ops/ is on sys.path)
     import provider_campaign as pc
     import sonnet5_qa as sq
+    import standing_qa_signing as qa_signing
 
 RUNNER = Path(__file__).resolve()
 REBUILD = RUNNER.parents[1]
@@ -183,12 +185,17 @@ MAX_DEADLINE_SECONDS = 600
 #: Which stage runner a stage uses ('model_check': sonnet5_qa.run_model_check; transcription:
 #: standing_qa_transcription.TranscriptionRun; the others: sonnet5_stages.Run).
 STAGE_KIND = {'model_check': 'model_check', 'mapping': 'mapping', 'notes_comparison': 'ordinary_notes',
-              'd30_d31_structure': 'ordinary_notes', 'transcription': 'transcription'}
+              'notes_qualification': 'ordinary_notes', 'elicited_qualification': 'ordinary_notes',
+              'word_structure_qualification': 'ordinary_notes',
+              'd30_d31_structure': 'ordinary_notes', 'transcription': 'transcription', 'ordinary_batch': 'ordinary_batch'}
 #: The pricing keys each stage's sends are priced under (every one must be declared for a declared stage).
 STAGE_PRICING = {'model_check': ('model_check',), 'mapping': ('mapping',),
                  'notes_comparison': ('ordinary_notes', 'ordinary_notes_field_relations'),
+                 'notes_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
+                 'elicited_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
+                 'word_structure_qualification': ('ordinary_notes', 'ordinary_notes_field_relations'),
                  'd30_d31_structure': ('ordinary_notes', 'ordinary_notes_field_relations'),
-                 'transcription': ('transcription',)}
+                 'transcription': ('transcription',), 'ordinary_batch': ('ordinary_notes', 'ordinary_notes_field_relations')}
 _ALL_OFF = {'QUILLMD_WM_NARRATIVE': '0', 'QUILLMD_V3_HISTORY_CONTEXT': '0', 'QUILLMD_V3_GENERATION_BATCHES': '0',
             'QUILLMD_V3_FIELD_RELATIONS': '0', 'QUILLMD_MAPPING_ASSISTANCE': '0', 'QUILLMD_MAPPING_ASSISTANCE_LIVE': '0',
             'QUILLMD_LAYOUT_SOCKET': '', 'QUILLMD_LAYOUT_SERVICE_UID': ''}
@@ -200,7 +207,11 @@ STAGE_FLAGS = {'model_check': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'legacy'},
                'mapping': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_MAPPING_ASSISTANCE': '1',
                            'QUILLMD_MAPPING_ASSISTANCE_LIVE': '1'},
                'notes_comparison': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'notes_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'elicited_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'word_structure_qualification': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'd30_d31_structure': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'ordinary_batch': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
                'transcription': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_DEEPGRAM_MIP_OPT_OUT': 'true',
                                  'QUILLMD_DEEPGRAM_SMART_FORMAT': 'false'}}
 #: The flags the pricing versions are computed under, per pricing key (`transcription` also under the declared
@@ -222,6 +233,10 @@ FLAG_SETTINGS = {'QUILLMD_WM_NARRATIVE': ('WM_NARRATIVE', bool), 'QUILLMD_V3_HIS
 MODEL_CHECK_SEND = 'model_check:fixed-case'
 #: The 14 frozen notes cases with a default send (cases.json), each sent on BOTH requests.
 NOTES_COMPARISON_CASES = 14
+# This separate prospective stage always measures the complete qualified arm.
+# It never narrows the historical comparison or accepts an arbitrary case list.
+NOTES_QUALIFICATION_CASE_IDS = tuple(f'N{i:02d}' for i in range(1, 14)) + ('N16',)
+NOTES_REVIEW_STAGES = ('notes_comparison', 'notes_qualification')
 #: Why the D30/D31-structure stage has no plan yet (it refuses rather than guess one).
 D30_D31_NOT_ESTABLISHED = (
     'not established: no frozen, provider-safe synthetic D30/D31-structure input set exists. The D30/D31 whole-app '
@@ -242,8 +257,14 @@ AUDIO_LABEL = 'synthesized speech, not a human microphone recording'
 AUDIO_READ_LIMIT = 16 * 1024 * 1024
 #: The frozen synthetic notes form (diagnostics/notes cases.json, built by its frozen generator and checked against its
 #: sha256) every transcript is generated on: a general clinical intake (chief complaint, history, examination,
-#: assessment, plan …) that fits any of the allowlisted scripts.
+#: assessment, plan …). Historical campaigns keep this exact form. A new
+#: declaration may explicitly pin the supplemental procedure form below.
 TRANSCRIPTION_FORM = 'r1-11'
+TRANSCRIPTION_FORM_HASHES = {
+    TRANSCRIPTION_FORM: 'ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa',
+    'synthetic-colonoscopy-voice-v1': '1d2240c577e2472f25521e9c59fdb8d10ab109b514fc4aa043db095ee309fd8e',
+    'builtin-soap-voice-v1': 'd92f300248ced2b07f6da5f0e7c12beaf43b01c0264253fd1b40ef2cb78f03aa',
+}
 #: A declared rate: USD per audio minute, positive, at most ten decimals.
 TRANSCRIPTION_RATE = re.compile(r'(?:0|[1-9][0-9]{0,2})\.[0-9]{1,10}|[1-9][0-9]{0,2}')
 
@@ -314,11 +335,86 @@ def transcription_module():
     return standing_qa_transcription
 
 
+def voice_forms_module(form_id=None):
+    if form_id == 'builtin-soap-voice-v1':
+        try:
+            from . import standing_qa_soap_form
+        except ImportError:
+            import standing_qa_soap_form
+        return standing_qa_soap_form
+    require(form_id in (None, 'synthetic-colonoscopy-voice-v1'), 'Unknown supplemental voice form.')
+    try:
+        from . import standing_qa_voice_forms
+    except ImportError:
+        import standing_qa_voice_forms
+    return standing_qa_voice_forms
+
+
+def transcription_form_id(audio_id, forms=()):
+    """An exact declared per-recording identity; absence preserves old r1-11."""
+    require(audio_id in AUDIO_BY_ID, 'A transcription form belongs to an allowlisted recording.')
+    overrides = dict(forms)
+    name = overrides.get(audio_id, TRANSCRIPTION_FORM)
+    allowed = {TRANSCRIPTION_FORM: set(AUDIO_BY_ID),
+               'synthetic-colonoscopy-voice-v1': {'colonoscopy-speech'},
+               'builtin-soap-voice-v1': {'soap-ankle-speech'}}
+    require(name in TRANSCRIPTION_FORM_HASHES and audio_id in allowed.get(name, set()),
+            'A supplemental voice form belongs only to its prospectively declared recording.')
+    return name
+
+
+def transcription_form_spec(send, inputs):
+    name = transcription_form_id(send.case, (inputs or {}).get('transcription_forms', ()))
+    require(send.form == name, 'The transcription send differs from its declared per-recording form.')
+    spec = inputs['cases']['forms'][name]
+    require(spec['sha256'] == TRANSCRIPTION_FORM_HASHES[name], 'The transcription form differs from its pinned hash.')
+    if name != TRANSCRIPTION_FORM:
+        expected, _ = voice_forms_module(name).frozen()
+        require(spec == expected, 'The supplemental form mapping or expectations differ from the committed freeze.')
+    return spec
+
+
+def build_transcription_forms(target, inputs):
+    """Keep the original frozen generator unchanged; add only a declared new form."""
+    supplemental = {name for name in TRANSCRIPTION_FORM_HASHES if name != TRANSCRIPTION_FORM}
+    forms = inputs['cases']['forms']
+    legacy_inputs = {**inputs, 'cases': {**inputs['cases'], 'forms': {
+        name: value for name, value in forms.items() if name not in supplemental}}}
+    built = sq.stages_module().build_forms(target, 'ordinary_notes', legacy_inputs)
+    for name in sorted(supplemental & set(forms)):
+        manifest, raw = voice_forms_module(name).frozen()
+        require(forms[name] == manifest, 'The supplemental form differs from its committed freeze.')
+        path = Path(target) / f'{name}.docx'
+        if os.path.lexists(path):
+            require(pc.read_private(path, limit=1024 * 1024) == raw,
+                    'The retained supplemental original differs from its frozen bytes.')
+        else:
+            pc.write_new(path, raw, raw=True)
+        built[name] = raw
+    return built
+
+
 #: The files a reopening must show were repaired (A2): the historical set and the mapping, relations and Word modules
 #: it lacked (a mapping-only repair could not pass A2 honestly there), the product's recording reader and submission
 #: preparation, and this runner.
 WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
-    'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py', 'rebuild/core/mapping_assistance.py',
+    'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py',
+    'rebuild/ops/standing_qa_elicited.py', 'rebuild/ops/fixtures/elicited-qualification-v1.json',
+    'rebuild/ops/standing_qa_word_structure.py', 'rebuild/ops/fixtures/word-structure-qualification-v1.json',
+    'rebuild/ops/fixtures/word-structure-qualification-v2.json',
+    'rebuild/ops/standing_qa_batch.py', 'rebuild/ops/fixtures/ordinary-batch-101-v1.json',
+    'rebuild/ops/fixtures/ordinary-batch-101-v1.docx', 'rebuild/core/batch_jobs.py',
+    'rebuild/core/ordinary_source_scope.py', 'rebuild/core/reviewed_source.py',
+    'rebuild/core/reviewed_procedure_source.py', 'rebuild/core/transcript_context.py',
+    'rebuild/core/source_scope.py', 'rebuild/core/reviewed_speaker.py',
+    'rebuild/core/v3_actors.py', 'rebuild/core/v3_syntax.py',
+    'rebuild/ops/standing_qa_signing.py',
+    'rebuild/ops/standing_qa_notes_review.py', 'rebuild/ops/fixtures/frozen-notes-consent-review-v1.json',
+    'rebuild/ops/standing_qa_voice_forms.py', 'rebuild/ops/fixtures/synthetic-colonoscopy-voice-v1.json',
+    'rebuild/ops/standing_qa_soap_form.py', 'rebuild/ops/fixtures/builtin-soap-voice-v1.json',
+    'rebuild/ops/standing_qa_voice_review.py', 'rebuild/ops/fixtures/reviewed-synthetic-voice-v1.json',
+    'rebuild/core/soap_document.py', 'rebuild/core/soap_views.py',
+    'rebuild/core/mapping_assistance.py',
     'rebuild/core/mapping_wire.py', 'rebuild/core/mapping_jobs.py', 'rebuild/core/destination_roles.py',
     'rebuild/core/v3_mapping.py', 'rebuild/core/v3_field_relations.py', 'rebuild/core/v3_literal_facts.py',
     'rebuild/core/v3_destination.py', 'rebuild/core/generation_batch.py', 'rebuild/core/tab_review.py',
@@ -446,6 +542,8 @@ class StandingDeclaration:
     restricted_inputs_ledger: str
     restricted_inputs_ledger_sha256: str
     transcription: object = None    # TranscriptionTerms when a transcription stage is declared, else None
+    qa_signing_key_file: object = None  # Prospective opt-in only; historical declarations keep random process keys.
+    notes_mapping_review: str = ''  # Absence preserves the historical exact-field confirmation path.
 
     # (read by provider_campaign code written for the historical declaration)
     total_limit = None
@@ -497,22 +595,37 @@ class TranscriptionTerms:
     #: or 'field_relations' (the candidate's claude-sonnet-5-5 default; switched on around that send only, priced under
     #: voice_notes_field_relations). Optional in a declaration; absent means 'default', what campaigns 1 and 2 ran.
     notes_contract: str = 'default'
+    # New campaigns may exercise the actual clinician transcript-context review.
+    # An absent term preserves every historical campaign's unconfirmed behavior.
+    patient_context: bool = False
+    # An absent override preserves the historical record byte contract.
+    forms: tuple = ()
+    # Explicit prospective synthetic review; absence retains historical raw ASR.
+    review: str = ''
 
     def parameters(self):
         """The query parameters the one request carries, exactly (core.jobs.deepgram_parameters' shape)."""
         return {'model': self.model, 'smart_format': self.smart_format, 'mip_opt_out': self.mip_opt_out}
 
     def record(self):
-        return {'provider': self.provider, 'model': self.model, 'rate_per_minute': self.rate_per_minute,
+        value = {'provider': self.provider, 'model': self.model, 'rate_per_minute': self.rate_per_minute,
                 'parameters': self.parameters(), 'notes_contract': self.notes_contract,
                 'inputs': [AUDIO_BY_ID[i].record() for i in self.inputs]}
+        if self.patient_context:
+            value['patient_context'] = True
+        if self.forms:
+            value['forms'] = [{'audio_id': audio_id, 'id': name, 'sha256': TRANSCRIPTION_FORM_HASHES[name]}
+                              for audio_id, name in self.forms]
+        if self.review:
+            value['review_manifest_sha256'] = self.review
+        return value
 
 
 #: The transcription section's one-value lines, each stated exactly once when a transcription stage is declared.
 TRANSCRIPTION_LINES = ('transcription_provider', 'transcription_model', 'transcription_rate_per_minute',
                        'transcription_mip_opt_out', 'transcription_smart_format', 'transcription_credential_file')
 #: Transcription lines a declaration MAY state, at most once each.
-TRANSCRIPTION_OPTIONAL_LINES = ('transcription_notes_contract',)
+TRANSCRIPTION_OPTIONAL_LINES = ('transcription_notes_contract', 'transcription_patient_context', 'transcription_review')
 #: The pricing key a transcript's generation is quoted under, per declared notes contract. `voice_notes_field_relations`
 #: is computed under the transcription stage's flags (its declared voice rate, which every pricing version hashes) with
 #: field relations on — never the notes stage's relations version, whose voice rate is another.
@@ -521,6 +634,8 @@ TRANSCRIPTION_NOTES_CONTRACTS = {'default': 'transcription', 'field_relations': 
 #: `transcription_` prefix: every `transcription_*:` token in a declaration is read as a transcription term.)
 VOICE_PRICING_KEYS = tuple(TRANSCRIPTION_NOTES_CONTRACTS.values())
 TRANSCRIPTION_INPUT = re.compile(r'^transcription_input: ([a-z0-9][a-z0-9-]{0,63}) ([0-9a-f]{64})[ \t]*$', re.M)
+TRANSCRIPTION_FORM_LINE = re.compile(
+    r'^transcription_form: ([a-z0-9][a-z0-9-]{0,63}) ([a-z0-9][a-z0-9-]{0,63}) ([0-9a-f]{64})[ \t]*$', re.M)
 
 
 def transcription_terms(text, seen, stages, credential_file):
@@ -544,7 +659,7 @@ def transcription_terms(text, seen, stages, credential_file):
         require(len(re.findall(rf'(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)) <= 1,
                 f'A transcription stage states `{name}:` at most once.')
     unknown = sorted({name.lower() for name in named} - set(TRANSCRIPTION_LINES) - set(optional)
-                     - {'transcription_input'})
+                     - {'transcription_input', 'transcription_form'})
     require(not unknown, 'The declaration states transcription terms this runner does not know: ' + ', '.join(unknown))
 
     def one(name, pattern=r'(\S+)'):
@@ -583,8 +698,36 @@ def transcription_terms(text, seen, stages, credential_file):
         contract = one('transcription_notes_contract')     # (stated: it must be one plain line, as every term is)
     require(contract in TRANSCRIPTION_NOTES_CONTRACTS,
             'transcription_notes_contract is `default` or `field_relations`.')
+    patient_context = False
+    if re.findall(r'(?<![A-Za-z0-9_])transcription_patient_context(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I):
+        context = one('transcription_patient_context')
+        require(context in ('true', 'false'), 'transcription_patient_context is `true` or `false`.')
+        patient_context = context == 'true'
+    require(not patient_context or contract == 'field_relations',
+            'A confirmed transcript requires the field-relations generation contract.')
+    review = ''
+    if re.findall(r'(?<![A-Za-z0-9_])transcription_review(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I):
+        review = one('transcription_review', r'([0-9a-f]{64})')
+        try:
+            from . import standing_qa_voice_review
+        except ImportError:
+            import standing_qa_voice_review
+        require(review == standing_qa_voice_review.MANIFEST_SHA256 and patient_context,
+                'A synthetic correction names the frozen review hash and requires explicit transcript-context review.')
+    form_lines = TRANSCRIPTION_FORM_LINE.findall(text)
+    require(len(form_lines) == len(re.findall(
+        r'(?<![A-Za-z0-9_])transcription_form(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)),
+        'Every transcription_form is one plain line with recording, allowlisted form id and pinned hash.')
+    require(len({row[0] for row in form_lines}) == len(form_lines), 'A recording has at most one declared form.')
+    forms = tuple((audio.id, name) for audio in TRANSCRIPTION_AUDIO
+                  for audio_id, name, digest in form_lines if audio_id == audio.id)
+    for audio_id, name, digest in form_lines:
+        require(audio_id in ids, 'A transcription form names only a recording declared in this campaign.')
+        require(transcription_form_id(audio_id, forms) == name and TRANSCRIPTION_FORM_HASHES[name] == digest,
+                'A transcription form names an allowlisted form with its exact pinned hash.')
     return TranscriptionTerms(provider, model, rate, 'true', smart_format, credential,
-                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)), contract)
+                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)),
+                              contract, patient_context, forms, review)
 
 
 #: Exactly one authorization line (provider_campaign.AUTHORIZATION_LINE finds every line that reads as one), this form.
@@ -747,6 +890,32 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
     for named in (credential_file, password_file, restricted):
         pc.refuse_env_path(named)
     transcription = transcription_terms(text, seen, stages, credential_file)
+    signing_file = qa_signing.declared_file(text, seen, campaign_root)
+    notes_review = ''
+    if re.findall(r'(?<![A-Za-z0-9_])notes_mapping_review(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I):
+        notes_review = one('notes_mapping_review', r'([0-9a-f]{64})')
+        try:
+            from . import standing_qa_notes_review as nr
+        except ImportError:
+            import standing_qa_notes_review as nr
+        require(notes_review == nr.MANIFEST_SHA256 and any(stage in ids for stage in NOTES_REVIEW_STAGES),
+                'The explicit notes mapping review requires its frozen hash and a notes stage.')
+    if 'elicited_qualification' in ids:
+        require(one('elicited_fixture_manifest', r'([0-9a-f]{64})') == elicited_module().MANIFEST_SHA256
+                and next(stage.sends for stage in stages if stage.id == 'elicited_qualification') == 5,
+                'The elicited stage requires its exact separately declared five-case synthetic freeze.')
+    elif re.search(r'^elicited_fixture_manifest:', text, re.M):
+        raise Refused('An elicited fixture declaration requires its own stage.')
+    if 'word_structure_qualification' in ids:
+        require(one('word_structure_fixture_manifest', r'([0-9a-f]{64})') == word_structure_module().MANIFEST_SHA256
+                and next(stage.sends for stage in stages if stage.id == 'word_structure_qualification') == 3,
+                'The Word structure stage requires its exact separately declared three-case synthetic freeze.')
+    elif re.search(r'^word_structure_fixture_manifest:', text, re.M):
+        raise Refused('A Word structure fixture declaration requires its own stage.')
+    if 'notes_qualification' in ids:
+        require(notes_review, 'The qualified-only stage requires the exact prospective notes mapping review.')
+        require(next(stage.sends for stage in stages if stage.id == 'notes_qualification') == 14,
+                'The qualified-only stage declares all fourteen frozen cases.')
     if transcription is not None and transcription.notes_contract != 'default':
         key = TRANSCRIPTION_NOTES_CONTRACTS[transcription.notes_contract]
         require(key in names, f'Stage transcription has no declared pricing version for {key} (its notes contract).')
@@ -762,7 +931,7 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
         stages=tuple(stages), root=campaign_root, qa_database=database, credential_file=credential_file,
         qa_database_password_file=password_file, restricted_inputs_ledger=restricted,
         restricted_inputs_ledger_sha256=one('restricted_inputs_ledger_sha256', r'([0-9a-f]{64})'),
-        transcription=transcription)
+        transcription=transcription, qa_signing_key_file=signing_file, notes_mapping_review=notes_review)
     print(f'declaration {relative}: committed {commit_time} in {commit}; sha256 {declaration.sha256}; authority '
           f'{authority_id}; mode {MODE}; monetary ceiling none', file=out)
     return declaration
@@ -910,15 +1079,45 @@ def _read_bounded(path, limit=8 * 1024 * 1024):
         os.close(fd)
 
 
+def batch_module():
+    try:
+        from . import standing_qa_batch
+    except ImportError:
+        import standing_qa_batch
+    return standing_qa_batch
+
+
+def elicited_module():
+    try:
+        from . import standing_qa_elicited
+    except ImportError:
+        import standing_qa_elicited
+    return standing_qa_elicited
+
+
+def word_structure_module():
+    try:
+        from . import standing_qa_word_structure
+    except ImportError:
+        import standing_qa_word_structure
+    return standing_qa_word_structure
+
+
 def send_inputs(send, inputs):
     """{'form_sha256', 'notes_sha256'? | 'audio_sha256'?} of what `send` would put in a provider request: the fixed
     model-check case, a frozen mapping form, a frozen notes case, or an allowlisted synthetic recording and the frozen
     form its transcript is generated on — never anything else. (A transcript's notes are provider output: their sha256
     is known only once the transcription send has made them, and its generation attempt records it.)"""
+    if send.group == 'elicited_qualification':
+        return elicited_module().send_inputs(send, inputs)
+    if send.group == 'word_structure_qualification':
+        return word_structure_module().send_inputs(send, inputs)
+    if send.path in batch_module().PATHS:
+        return batch_module().send_inputs(send, inputs)
     if send.path == 'model_check':
         return {'form_sha256': sq.FORM_SHA256, 'notes_sha256': sq.NOTES_SHA256}
     if send.path in TRANSCRIPTION_PATHS:
-        return {'form_sha256': inputs['cases']['forms'][TRANSCRIPTION_FORM]['sha256'],
+        return {'form_sha256': transcription_form_spec(send, inputs)['sha256'],
                 'audio_sha256': audio_entry(send.case).sha256}
     if send.kind == 'mapping' or send.path == 'mapping_encounter':
         return {'form_sha256': inputs['forms_sha256'][f'mapping/{send.form}.docx']}
@@ -935,6 +1134,12 @@ def standing_plan(stage, inputs=None):
     guess one."""
     stages = sq.stages_module()
     Send = stages.Send
+    if stage == 'elicited_qualification':
+        return elicited_module().plan_sends(inputs)
+    if stage == 'word_structure_qualification':
+        return word_structure_module().plan_sends(inputs)
+    if stage == 'ordinary_batch':
+        return batch_module().plan_sends(inputs)
     if stage == 'model_check':
         return [Send(1, MODEL_CHECK_SEND, 'generation', 'sonnet5-model-check', 'model_check', 'model_check', None,
                      'model_check')]
@@ -949,13 +1154,23 @@ def standing_plan(stage, inputs=None):
         sends = []
         for audio in TRANSCRIPTION_AUDIO:                       # (allowlist order, whatever order they were named in)
             if audio.id in chosen:
-                sends.append(Send(len(sends) + 1, f'transcription:{audio.id}', 'transcription', TRANSCRIPTION_FORM,
+                name = transcription_form_id(audio.id, (inputs or {}).get('transcription_forms', ()))
+                sends.append(Send(len(sends) + 1, f'transcription:{audio.id}', 'transcription', name,
                                   'transcription', 'transcription', audio.id, 'transcription'))
-                sends.append(Send(len(sends) + 1, f'generation:{audio.id}', 'generation', TRANSCRIPTION_FORM,
+                sends.append(Send(len(sends) + 1, f'generation:{audio.id}', 'generation', name,
                                   'transcription_generation', 'transcription', audio.id, generation_key))
         return sends
     if stage == 'mapping':
         return stages.plan_sends('mapping', inputs)
+    if stage == 'notes_qualification':
+        compared = standing_plan('notes_comparison', inputs)
+        qualified = [send for send in compared if send.path == 'field_relations']
+        require(tuple(send.case for send in qualified) == NOTES_QUALIFICATION_CASE_IDS
+                and len({send.id for send in qualified}) == 14
+                and all(send.kind == 'generation' and send.pricing_key == 'ordinary_notes_field_relations'
+                        for send in qualified),
+                'The qualified-only stage requires the complete unchanged fourteen-case qualified arm.')
+        return [dataclasses.replace(send, index=index) for index, send in enumerate(qualified, 1)]
     if stage == 'notes_comparison':
         cases = sorted(inputs['cases']['cases'], key=lambda case: case['id'])
         compared = [case for case in cases if 'default' in case['send_paths']]
@@ -982,13 +1197,16 @@ def plan_definitions(inputs):
     """Every stage's plan, as data (no declaration, credential, network or database)."""
     report = {}
     for stage in STAGE_KIND:
+        own_inputs = (batch_module().frozen_inputs() if stage == 'ordinary_batch'
+                      else word_structure_module().frozen_inputs() if stage == 'word_structure_qualification'
+                      else elicited_module().frozen_inputs() if stage == 'elicited_qualification' else inputs)
         try:
-            sends = standing_plan(stage, inputs)
+            sends = standing_plan(stage, own_inputs)
         except Refused as refused:
             report[stage] = {'established': False, 'statement': str(refused)}
             continue
         report[stage] = {'established': True, 'kind': STAGE_KIND[stage], 'pricing_keys': list(STAGE_PRICING[stage]),
-                         'flags': STAGE_FLAGS[stage], 'sends': [{**s.record(), 'inputs': send_inputs(s, inputs)}
+                         'flags': STAGE_FLAGS[stage], 'sends': [{**s.record(), 'inputs': send_inputs(s, own_inputs)}
                                                                 for s in sends], 'count': len(sends)}
         if stage == 'transcription':
             report[stage].update(
@@ -1006,11 +1224,42 @@ def stage_inputs(stage, declaration):
     diagnostics otherwise, and for transcription also the declared recordings."""
     if stage == 'model_check':
         return None
+    if stage == 'elicited_qualification':
+        require(declaration.stage(stage).sends == 5, 'The declaration does not admit the complete elicited plan.')
+        return elicited_module().frozen_inputs()
+    if stage == 'word_structure_qualification':
+        require(declaration.stage(stage).sends == 3, 'The declaration does not admit the complete Word plan.')
+        return word_structure_module().frozen_inputs()
+    if stage == 'ordinary_batch':
+        return batch_module().frozen_inputs()
     inputs = sq.stages_module().frozen_inputs()
+    if stage in NOTES_REVIEW_STAGES and declaration.notes_mapping_review:
+        try:
+            from . import standing_qa_notes_review as nr
+        except ImportError:
+            import standing_qa_notes_review as nr
+        inputs = nr.inputs_with_review(inputs, nr.frozen(declaration.notes_mapping_review))
+        inputs['notes_mapping_review_manifest_sha256'] = declaration.notes_mapping_review
     if stage == 'transcription':
         require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
         inputs = {**inputs, 'transcription_audio': declaration.transcription.inputs,
                   'transcription_notes_contract': declaration.transcription.notes_contract}
+        if declaration.transcription.review:
+            try:
+                from . import standing_qa_voice_review
+            except ImportError:
+                import standing_qa_voice_review
+            reviews = standing_qa_voice_review.frozen(declaration.transcription.review)
+            for audio_id in declaration.transcription.inputs:
+                require(audio_id in reviews and reviews[audio_id]['audio_sha256'] == AUDIO_BY_ID[audio_id].sha256,
+                        'The prospective review must bind each declared synthetic recording.')
+            inputs['transcription_review_manifest_sha256'] = declaration.transcription.review
+        if declaration.transcription.forms:
+            inputs['transcription_forms'] = declaration.transcription.forms
+            for name in sorted({name for _, name in declaration.transcription.forms if name != TRANSCRIPTION_FORM}):
+                manifest, _ = voice_forms_module(name).frozen()
+                inputs = {**inputs, 'cases': {**inputs['cases'], 'forms': {
+                    **inputs['cases']['forms'], manifest['id']: manifest}}}
     return inputs
 
 
@@ -1018,6 +1267,8 @@ def needs(send):
     """The id of the send that must be made in the SAME run before `send` can be — a mapping encounter needs its form's
     proposal (sonnet5_stages.Run.templates), a transcript's generation needs the encounter its transcription send made
     (standing_qa_transcription.TranscriptionRun.transcribed), both held only in the request process — or None."""
+    if send.path == 'ordinary_batch_second':
+        return batch_module().FIRST
     if send.path == 'mapping_encounter':
         return f'mapping:{send.form}'
     if send.path == 'transcription_generation':
@@ -1026,7 +1277,8 @@ def needs(send):
 
 
 #: Why a stranded send is not sent, by its path (the mapping wording is the historical rule's, unchanged).
-STRANDED_WHY = {'mapping_encounter': "needs its form's mapping send in the same run, and that send was already made; it "
+STRANDED_WHY = {'ordinary_batch_second': 'needs the first child in this same run; an earlier child is never re-sent',
+                'mapping_encounter': "needs its form's mapping send in the same run, and that send was already made; it "
                                      'is not sent',
                 'transcription_generation': "needs its recording's transcription send in the same run, and that send "
                                             'was already made; it is not sent'}
@@ -1183,11 +1435,19 @@ class StandingLedger(pc.Ledger):
                 f'{send_key} already has an attempt in this campaign; a send is never made twice.')
         in_run = sum(1 for a, _ in rows if a.get('run') == run['run'])
         require(in_run < run['max_sends'], f'Run {run["run_id"]} has made all {run["max_sends"]} sends it may make.')
+        _, signing_record = signing_identity(campaign)
+        require(attempt.get(qa_signing.FIELD) in (None, signing_record),
+                'The attempt carries another QA signing identity.')
+        if signing_record is not None:
+            attempt[qa_signing.FIELD] = signing_record
         form = attempt.get('form_sha256')
         require(isinstance(form, str) and form in run['allowed_inputs'],
                 'The attempt\'s form is not one of the synthetic inputs its run allows.')
         require(form not in set(run['restricted_inputs']),
                 'The attempt\'s form is a development original marked "no provider upload"; it is never sent.')
+        if attempt['stage'] in NOTES_REVIEW_STAGES:
+            require(attempt.get('notes_mapping_review_manifest_sha256', '') == declaration.notes_mapping_review,
+                    'The attempt does not bind the prospectively declared notes mapping review.')
         if attempt['stage'] == 'transcription' or 'audio_sha256' in attempt:
             # (a recording is the runner's allowlisted synthetic speech for THIS send, one its run allows, and never a
             # restricted original — whatever the worker or a run record says)
@@ -1199,6 +1459,11 @@ class StandingLedger(pc.Ledger):
             require(audio in run['allowed_inputs'], 'The attempt\'s recording is not one its run allows.')
             require(audio not in set(run['restricted_inputs']),
                     'The attempt\'s recording is marked "no provider upload"; it is never sent.')
+            name = transcription_form_id(entry.id, declaration.transcription.forms)
+            require((send or {}).get('form') == name and form == TRANSCRIPTION_FORM_HASHES[name],
+                    'The attempt form is not the exact declared form for this recording.')
+            require(attempt.get('transcription_review_manifest_sha256', '') == declaration.transcription.review,
+                    'The attempt does not bind the prospectively declared transcript correction freeze.')
         attempt.update(mode=MODE, monetary_ceiling=None, run=run['run'], run_id=run['run_id'],
                        attempt_id=f'{declaration.campaign}/{run["run_id"]}/attempt-{attempt["number"]:03d}',
                        send_key=send_key, engine_files=watched_hashes())
@@ -1277,7 +1542,20 @@ class StandingCampaign(pc.Campaign):
         rows = self.rows() if rows is None else rows
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         self.require_pinned_terms(rows)
+        signing_identity(self)
+        if stage.id in NOTES_REVIEW_STAGES:
+            require(all(a.get('notes_mapping_review_manifest_sha256', '') == self.declaration.notes_mapping_review
+                        for a, _ in rows if a.get('stage') == stage.id),
+                    'An edited declaration never changes an earlier notes mapping review.')
         if stage.id == 'transcription' and self.declaration.transcription is not None:
+            for attempt, _ in rows:
+                if attempt.get('stage') != 'transcription':
+                    continue
+                send = attempt.get('send') or {}
+                name = transcription_form_id(send.get('case'), self.declaration.transcription.forms)
+                require(send.get('form') == name and attempt.get('form_sha256') == TRANSCRIPTION_FORM_HASHES[name],
+                        'The campaign\'s earlier transcript requests used another form; '
+                        'an edited declaration never changes the recorded form for a recording.')
             # The Deepgram request parameters are pinned like the terms (refutation r1 B-F1): smart formatting is in no
             # pricing version, so without this an edited declaration could flip it inside one stage and one `passed`
             # verdict would cover two different requests.
@@ -1295,6 +1573,16 @@ class StandingCampaign(pc.Campaign):
             require(all(found == key for found in generated),
                     'The campaign\'s earlier transcript generations ran under another notes contract than the declared '
                     f'{self.declaration.transcription.notes_contract!r}; an edited declaration never changes what is admitted.')
+            reviewed = [attempt.get('transcription_patient_context', False) for attempt, _ in rows
+                        if attempt.get('stage') == 'transcription']
+            require(all(value is self.declaration.transcription.patient_context for value in reviewed),
+                    'The campaign\'s earlier transcript requests used another patient-context review; '
+                    'an edited declaration never changes what is admitted.')
+            edits = [attempt.get('transcription_review_manifest_sha256', '') for attempt, _ in rows
+                     if attempt.get('stage') == 'transcription']
+            require(all(value == self.declaration.transcription.review for value in edits),
+                    'The campaign\'s earlier transcript requests used another correction freeze; '
+                    'an edited declaration never changes what is admitted.')
         in_force = self.limits(rows).stage(stage.id)
         for prerequisite in in_force.requires:
             require(self.ledger.stage_state(prerequisite)['state'] == 'passed',
@@ -1584,6 +1872,24 @@ def preflights(root):
     return found
 
 
+def signing_identity(campaign, *, create=False):
+    """Validate the optional file against every append-only identity pin."""
+    if create:
+        campaign.ledger._require_lock()
+    key, record = qa_signing.load(campaign.declaration, campaign.root, create=create)
+    if key and CONTEXT_VARIABLE in os.environ:
+        require(pc.constant_time_equal(key, os.environ.get('QUILLMD_SECRET_KEY', '')),
+                'The request process does not carry the pinned QA signing key.')
+    previous = [attempt for attempt, _ in campaign.rows()]
+    previous += [opened for opened, _ in campaign.runs.listing()]
+    for number, result in preflights(campaign.root):
+        path = campaign.root / 'preflight' / f'{number:03d}' / 'qa-signing-key.json'
+        # This pin precedes the models request, including an interrupted preflight.
+        previous.append({qa_signing.FIELD: pc.read_json(path)} if os.path.lexists(path) else {})
+    qa_signing.require_history(record, previous)
+    return key, record
+
+
 def require_preflight(campaign):
     """A recorded preflight whose returned id is the declared model, for this campaign."""
     matched = [result for _, result in preflights(campaign.root) if isinstance(result, dict)
@@ -1602,10 +1908,13 @@ def run_preflight(campaign, *, secret, transport=None):
     declaration = campaign.declaration
     campaign.ledger._require_lock()
     campaign.require_not_stopped()
+    signing_key, signing_record = signing_identity(campaign)
     base = pc.private_directory(campaign.root / 'preflight')
     number = len(preflights(campaign.root)) + 1
     evidence = base / f'{number:03d}'
     evidence.mkdir(mode=0o700)
+    if signing_record is not None:
+        pc.write_new(evidence / 'qa-signing-key.json', signing_record)
     url = MODELS_URL + declaration.model
     guard = _preflight_transport_class()(transport or httpx.HTTPTransport(), url, evidence, secret)
     client = anthropic.Anthropic(api_key=secret, base_url=PROVIDER_ROOT, max_retries=0,
@@ -1632,10 +1941,14 @@ def run_preflight(campaign, *, secret, transport=None):
               'status_code': (received or {}).get('status_code'), 'request_id': (received or {}).get('request_id'),
               'request_captured': (evidence / 'request.json').exists(), 'error': error,
               'generation_proof': False, 'statement': PREFLIGHT_STATEMENT, 'recorded_at': pc.now()}
+    if signing_record is not None:
+        result[qa_signing.FIELD] = signing_record
     result['matches_declared'] = bool(received is not None and received.get('status_code') == 200 and error is None
                                       and body.get('id') == declaration.model)
     try:
         hits = pc.leaked(evidence, secret)
+        if signing_key:
+            hits += pc.leaked(evidence, signing_key)
     except pc.Refused as refused:
         hits = [f'unscannable: {refused}']
     if hits:
@@ -1656,10 +1969,15 @@ def begin_run(campaign, stage, sends, inputs, cap, provenance):
     clash = sorted(set(allowed) & restricted)
     require(not clash, 'A planned input is a development original marked "no provider upload": ' + ', '.join(clash))
     extra = {}
+    _, signing_record = signing_identity(campaign)
+    if signing_record is not None:
+        extra[qa_signing.FIELD] = signing_record
     if stage == 'transcription':
         terms = campaign.declaration.transcription
         require(terms is not None and all(send.case in terms.inputs for send in sends),
                 'A transcription run sends only the recordings its declaration names.')
+        require(all(send.form == transcription_form_id(send.case, terms.forms) for send in sends),
+                'A transcription run sends only the declared form for each recording.')
         extra['audio'] = [audio_entry(audio_id).record() for audio_id in dict.fromkeys(send.case for send in sends)]
     return campaign.runs.begin(campaign.ledger, {
         'campaign': campaign.declaration.campaign, 'authority_id': campaign.declaration.authority_id, 'stage': stage,
@@ -1720,6 +2038,12 @@ def price_sends(stage, sends, inputs, state_dir, declaration, limits=None):
     stages = sq.stages_module()
     limits = declaration.limits() if limits is None else limits
     expect = declaration.expect(limits)
+    if stage == 'elicited_qualification':
+        return elicited_module().price_sends(sends, inputs, state_dir, declaration, limits)
+    if stage == 'word_structure_qualification':
+        return word_structure_module().price_sends(sends, inputs, state_dir, declaration, limits)
+    if stage == 'ordinary_batch':
+        return batch_module().price_sends(sends, inputs, state_dir, declaration, limits)
     forms = stages.build_forms(Path(state_dir) / 'forms', 'mapping' if stage == 'mapping' else 'ordinary_notes', inputs) \
         if stage != 'model_check' else {}
     originals = Path(state_dir) / 'files' / 'originals'
@@ -1778,6 +2102,32 @@ def cancel_queued(world):
         return {'error': f'{type(error).__name__}: {error}'[:300]}
 
 
+def qualification_result(stage, record, stops):
+    """A prospective qualification cannot inherit historical unsafe veto behavior.
+
+    The original worker classification stays immutable in its evidence file.
+    The new run's record explicitly distinguishes its stricter stop policy.
+    Historical stages return the exact original object and stop decision.
+    """
+    if stage not in ('notes_qualification', 'elicited_qualification', 'word_structure_qualification') or stops:
+        return record, stops
+    verdict = record.get('verdict')
+    require(isinstance(verdict, dict) and isinstance(verdict.get('unsafe'), list)
+            and isinstance(verdict.get('contract'), list) and isinstance(verdict.get('fields'), dict),
+            'A qualified result has no complete unsafe classification; no further send is eligible.')
+    require(verdict == pc.classify_case(verdict['fields'], verdict['unsafe'] + verdict['contract']),
+            'A qualified result differs from its full frozen classification; no further send is eligible.')
+    require(not verdict['contract'],
+            'A qualified contract failure cannot be returned as a non-stopping result.')
+    if not verdict['unsafe'] and verdict.get('verdict') != 'unsafe':
+        return record, stops
+    return {**record, 'stops_stage': True, 'recorded_as': 'qualification_unsafe',
+            'qualification_policy': {'contract': 'standing-qualified-notes-v1',
+                'worker_stops_stage': record.get('stops_stage'),
+                'worker_recorded_as': record.get('recorded_as'),
+                'reason': 'An unsafe qualified answer stops this prospective stage.'}}, True
+
+
 def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=None, rebuild=REBUILD,
               database_prefix=sq.DATABASE_PREFIX, transcription_secret=None):
     """One bounded run of a mapping, notes or transcription stage, through the historical per-send machinery
@@ -1809,7 +2159,7 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
             campaign, secret=secret, transcription_secret=transcription_secret, database_prefix=database_prefix,
             rebuild=rebuild, environ=environ, expect=declaration.expect(limits))
     else:
-        checked = stages.stage_preconditions(declaration, kind, root, database_prefix=database_prefix, rebuild=rebuild,
+        checked = stages.stage_preconditions(declaration, 'ordinary_notes' if stage == 'ordinary_batch' else kind, root, database_prefix=database_prefix, rebuild=rebuild,
                                              environ=environ, ledger=ledger, expect=declaration.expect(limits))
     inputs = stage_inputs(stage, declaration)
     plan = standing_plan(stage, inputs)
@@ -1822,10 +2172,16 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     require_none_stranded(stage, remaining)                 # (before anything is written: the historical rule)
     cap = limits.max_sends_per_run if max_sends is None else min(int(max_sends), limits.max_sends_per_run)
     require(cap > 0, 'A run makes at least one send.')
+    if stage in ('notes_qualification', 'elicited_qualification', 'word_structure_qualification'):
+        cap = min(cap, 1)  # Inspect each qualified result before any following request.
     selected = select_batch(remaining, cap)
     run = begin_run(campaign, stage, selected, inputs, cap, provenance)
     try:
-        forms = stages.build_forms(root / 'forms' / stage, 'ordinary_notes' if transcribing else kind, inputs)
+        forms = (build_transcription_forms(root / 'forms' / stage, inputs) if transcribing
+                 else word_structure_module().build_forms(root / 'forms' / stage, inputs) if stage == 'word_structure_qualification'
+                 else elicited_module().build_forms(root / 'forms' / stage, inputs) if stage == 'elicited_qualification'
+                 else batch_module().build_forms(root / 'forms' / stage, inputs) if stage == 'ordinary_batch'
+                 else stages.build_forms(root / 'forms' / stage, kind, inputs))
         restricted = set(run['restricted_inputs'])
         for name, data in forms.items():
             require(hashlib.sha256(data).hexdigest() not in restricted,
@@ -1839,7 +2195,10 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
                                          deadline=limits.request_deadline_seconds)
             worker.planned = tr.planned_maxima(selected, declaration)
         else:
-            worker = stages.Run(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
+            worker_class = (elicited_module().ElicitedRun if stage == 'elicited_qualification'
+                            else word_structure_module().WordStructureRun if stage == 'word_structure_qualification'
+                            else batch_module().BatchRun if stage == 'ordinary_batch' else stages.Run)
+            worker = worker_class(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
                                 world=world, checked=checked, deadline=limits.request_deadline_seconds)
             scratch = pc.private_directory(root / 'tmp' / f'price-{stage}-{run["run_id"]}')
             worker.planned = {key: value['maximum_cost'] for key, value in price_sends(
@@ -1877,10 +2236,23 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
         if done is None:
             continue
         record, stops = done
+        qualified, stops = qualification_result(stage, record, stops)
+        if qualified is not record:
+            require(worker.sends and worker.sends[-1] is record,
+                    'The qualified worker result does not match its retained send record.')
+            worker.sends[-1] = qualified
+            record = qualified
         if stops:
             worker.stopped = {'send': send.id, 'attempt': record.get('attempt'), 'findings': record.get('findings')}
-            reasons.append(f'{send.id}: ' + '; '.join(f['why'] for f in record.get('findings') or []))
+            reason = '; '.join(f['why'] for f in record.get('findings') or [])
+            if record.get('qualification_policy'):
+                reason = record['qualification_policy']['reason'] + (' ' + reason if reason else '')
+            reasons.append(f'{send.id}: ' + reason)
     base = {'settled_before_start': settled, 'stale_jobs_cancelled': stale}
+    if stage == 'ordinary_batch' and (halted or reasons or worker.stopped):
+        base['batch_abort'] = worker.abort_remaining('The supplemental run halted or failed; no child is resent.')
+        if base['batch_abort'].get('error'):
+            reasons.append('Batch cleanup failed; the retained original cleanup error needs reconciliation.')
     if halt_jobs is not None:
         base['halt_jobs'] = halt_jobs
     return decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, halted=halted)
@@ -1893,6 +2265,9 @@ def run_secrets(campaign, worker):
     deepgram = getattr(worker, 'transcription_secret', None)
     if deepgram:
         found.append((deepgram, campaign.declaration.transcription.credential_file))
+    signing_key, _ = signing_identity(campaign)
+    if signing_key:
+        found.append((signing_key, campaign.declaration.qa_signing_key_file))
     return found
 
 
@@ -2004,12 +2379,15 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
         for name, entry in definitions.items():
             if not entry.get('established'):
                 continue
+            if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification', 'word_structure_qualification') and not any(s.id == name for s in declaration.stages):
+                entry['declared'] = False
+                continue
             if name == 'transcription':
                 if declaration.transcription is None:
                     entry['declared'] = False                # (defined, not declared: nothing of it can be sent)
                     continue
-                sends = standing_plan(name, {**inputs, 'transcription_audio': declaration.transcription.inputs,
-                                             'transcription_notes_contract': declaration.transcription.notes_contract})
+                declared_inputs = stage_inputs(name, declaration)
+                sends = standing_plan(name, declared_inputs)
                 entry['declared_terms'] = declaration.transcription.record()
                 # (the definitions show the product's default; with a declaration, report what IS sent — refutation r1
                 # B-F3: a `true` declaration printed smart_format 'false')
@@ -2021,10 +2399,19 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                 entry['pricing_keys'] = sorted({'transcription', key})
                 entry['generation_path_flags'] = (sq.stages_module().steps.PATH_FLAGS['field_relations']
                                                   if key != 'transcription' else {})
-                entry['sends'] = [{**row, 'pricing_key': next(s.pricing_key for s in sends if s.id == row['id'])}
-                                  for row in entry['sends'] if any(s.id == row['id'] for s in sends)]
+                entry['sends'] = [{**send.record(), 'inputs': send_inputs(send, declared_inputs)} for send in sends]
+                if declaration.transcription.forms:
+                    entry['form'] = 'per_recording'
+                    entry['forms'] = [{'audio_id': audio_id,
+                        'id': transcription_form_id(audio_id, declaration.transcription.forms),
+                        'sha256': TRANSCRIPTION_FORM_HASHES[transcription_form_id(audio_id, declaration.transcription.forms)]}
+                        for audio_id in declaration.transcription.inputs]
             else:
-                sends = standing_plan(name, inputs)
+                own_inputs = (stage_inputs(name, declaration)
+                              if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification', 'word_structure_qualification') else inputs)
+                sends = standing_plan(name, own_inputs)
+                if name == 'notes_qualification':
+                    entry['notes_mapping_review_manifest_sha256'] = own_inputs['notes_mapping_review_manifest_sha256']
             left = remaining_sends(campaign, name, sends)
             entry['remaining'] = [send.id for send in left]
             entry['stranded'] = [send.id for send in stranded(left)]         # (never sent here: the stage cannot pass)
@@ -2169,7 +2556,8 @@ def request_environment(key, declaration, root, password, context, flags, door, 
     campaign's own QA database and state, and the door's two variables (so the request process re-checks the door).
     `transcription_key`: the Deepgram key, for a transcription run's request process only (outer passes it for no other
     command or stage); the request process takes it out of its environment before anything else (inner)."""
-    extra = {'DJANGO_SETTINGS_MODULE': 'quillmd.settings', 'QUILLMD_SECRET_KEY': secrets.token_urlsafe(48),
+    signing_key, _ = signing_identity(StandingCampaign(declaration, root))
+    extra = {'DJANGO_SETTINGS_MODULE': 'quillmd.settings', 'QUILLMD_SECRET_KEY': signing_key or secrets.token_urlsafe(48),
              'QUILLMD_DB_NAME': declaration.qa_database, 'QUILLMD_DB_USER': QA_SERVER['user'],
              'QUILLMD_DB_PASSWORD': password, 'QUILLMD_DB_HOST': QA_SERVER['host'], 'QUILLMD_DB_PORT': QA_SERVER['port'],
              'QUILLMD_STATE_DIR': str(root / 'qa-state'), 'QUILLMD_ENV_MANAGED': '1', 'QUILLMD_ADMIN_SITE': '0',
@@ -2201,6 +2589,13 @@ def outer(command, stage=None, max_sends=None, path=None):
     for name in ('ledger', 'runs', 'evidence', 'preflight', 'qa-state', 'access', 'home', 'tmp', 'forms'):
         pc.private_directory(root / name)
     require(not os.path.lexists(root / STOP_NAME), f'The Stop file {root / STOP_NAME} exists; nothing is sent.')
+    if declaration.qa_signing_key_file:
+        campaign = StandingCampaign(declaration)
+        campaign.ledger.acquire()
+        try:
+            signing_identity(campaign, create=True)
+        finally:
+            campaign.ledger.release()
     key = pc.load_credential(declaration.credential_file, declaration)
     # (the Deepgram key: read for a transcription run ONLY, by the same file rules, before anything is sent — a missing,
     # linked, wrongly owned or wrongly permissioned file refuses here, before the database or the request process, and
@@ -2252,6 +2647,9 @@ def inner():
             'The request process runs only at this campaign\'s root.')
     campaign = StandingCampaign(declaration)
     campaign.ledger.acquire()
+    signing_key, _ = signing_identity(campaign)
+    require(signing_key is None or pc.constant_time_equal(signing_key, os.environ.get('QUILLMD_SECRET_KEY', '')),
+            'The request process does not carry the pinned QA signing key.')
     pc.scrubbed_now()
     campaign.require_not_stopped()
     key = os.environ['ANTHROPIC_API_KEY']
@@ -2297,9 +2695,17 @@ def inner():
     finally:
         os.environ.pop('ANTHROPIC_API_KEY', None)
         os.environ.pop(TRANSCRIPTION_KEY_VARIABLE, None)
+        if signing_key:
+            os.environ.pop('QUILLMD_SECRET_KEY', None)
     text = json.dumps(result, indent=1, default=str)
+    if signing_key:
+        hits = pc.leaked(campaign.root, signing_key, exclude=(declaration.qa_signing_key_file,))
+        if hits:
+            campaign.ledger.write_stop({'reason': 'the campaign evidence carries its QA signing key', 'detail': hits})
+            raise Refused('The evidence carried a QA signing key; the result was withheld and the campaign stopped.')
     require(key not in text and not pc.KEY_SHAPE.search(text.encode())
-            and not (transcription_key and transcription_key in text),
+            and not (transcription_key and transcription_key in text)
+            and not (signing_key and signing_key in text),
             'The result carried a key-shaped value; withheld.')
     print(text)
     return code
@@ -2417,7 +2823,9 @@ def priced_plan(stage=None, path=None):
                                 for send_id, value in planned.items()}
                 continue
             with override_settings(**expected_settings(name)):
-                priced = price_sends(name, standing_plan(name, inputs), inputs, Path(scratch) / name, declaration)
+                own_inputs = (stage_inputs(name, declaration)
+                              if name in ('ordinary_batch', 'notes_qualification', 'elicited_qualification', 'word_structure_qualification') else inputs)
+                priced = price_sends(name, standing_plan(name, own_inputs), own_inputs, Path(scratch) / name, declaration)
             report[name] = {send_id: {k: (format(v, 'f') if isinstance(v, Decimal) else v) for k, v in row.items()}
                             for send_id, row in priced.items()}
             report[name]['_calculated_worst_case_usd'] = format(sum((row['bound'] for row in priced.values()),

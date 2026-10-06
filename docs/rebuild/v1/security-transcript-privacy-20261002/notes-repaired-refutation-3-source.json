@@ -1,0 +1,17 @@
+{
+  "finished_frozen_diff": true,
+  "files": [
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-3-source/source_scope.py",
+      "sha256": "3f3d36950bd58d57ecb8eba9a8e1e9632cc56f546dd9c3fc7fad340e29cb877c"
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-3-source/generation.py",
+      "sha256": "77e123ba8407cb82a660c5769b483b55673f3ac16b650b7eb692ce7ea53bd1c1"
+    },
+    {
+      "retained": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/notes-repaired-refutation-3-source/transcript_context.py",
+      "sha256": "3b925017fb157d864e9a4941c8c01d3e9086c19107c43a22b59fa96d9da40454"
+    }
+  ]
+}

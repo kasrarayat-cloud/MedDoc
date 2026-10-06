@@ -281,16 +281,20 @@ class Sonnet55Profile(SimpleTestCase):
         secret = {'QUILLMD_DEPLOYMENT_PROFILE': 'production', 'QUILLMD_AI_MODE': 'live', 'QUILLMD_AI_PROVIDER': 'anthropic',
                   'QUILLMD_AI_MODEL': MODEL, 'QUILLMD_AI_THINKING': 'between_tools', 'QUILLMD_AI_EFFORT': 'medium',
                   'QUILLMD_AI_INPUT_RATE': '2', 'QUILLMD_AI_OUTPUT_RATE': '10', 'QUILLMD_AI_CACHED_RATE': '0.20',
-                  'QUILLMD_AI_INFERENCE_GEO': 'us'}
+                  'QUILLMD_AI_INFERENCE_GEO': 'us', 'QUILLMD_V3_FIELD_RELATIONS': '0'}
         self.assertLessEqual(set(secret), deployment_profile.ENVIRONMENT_NAMES)
         parsed = renderer.parse(json.dumps(secret))
         self.assertEqual(parsed, secret)
         rendered = renderer.render(parsed).decode()
         self.assertIn("QUILLMD_AI_MODEL='claude-sonnet-5-5'\n", rendered)
         self.assertIn("QUILLMD_AI_THINKING='between_tools'\n", rendered)
+        self.assertIn("QUILLMD_V3_FIELD_RELATIONS='0'\n", rendered)
+        from quillmd.application_profile import field_relations_switch
         settings = {name[len('QUILLMD_'):]: value for name, value in parsed.items() if name.startswith('QUILLMD_AI_')}
+        settings.update(V3_FIELD_RELATIONS_SWITCH=field_relations_switch(parsed), V3_FIELD_RELATIONS=False)
         with override_settings(**settings), patch.dict(os.environ, PRICE_ENV):
             config = g.configuration()
+        self.assertNotIn('ordinary_field_contract', config)
         self.assertEqual(config['request_profile'], {'profile': 'claude-sonnet-5-5-v1', 'max_output_tokens': 8000,
                                                      'timeout_seconds': 120, 'thinking': BETWEEN, 'effort': 'medium',
                                                      'inference_geo': 'us'})
@@ -487,7 +491,7 @@ class Sonnet55Outcomes(OutcomeFixture, TestCase):
     """Through enqueue + run_one with the real SDK: what the document and the books look like after each outcome."""
 
     def run_real(self, encounter, reply):
-        wire = Wire(reply)
+        wire = Wire(self.source_reply(encounter, reply))
         with wire.patched():
             job = enqueue(encounter, self.user)
             self.assertTrue(run_one())
@@ -571,7 +575,7 @@ class Sonnet55Outcomes(OutcomeFixture, TestCase):
         self.assertEqual(job.config['pricing_version'], SONNET_55_ADAPTIVE_HIGH)
         hold = sum(Reservation.objects.filter(job=job).values_list('amount', flat=True), Decimal(0))
         self.assertGreaterEqual(hold, Decimal(16000) * 10 / 1000000 * Decimal('1.5'))
-        wire = Wire(message55(text(SELECTED), ident='msg_queued'))
+        wire = Wire(self.source_reply(encounter, message55(text(SELECTED), ident='msg_queued')))
         with wire.patched():                                         # settings now say disabled / medium
             self.assertTrue(run_one())
         assert_sonnet_55_request(self, wire.json(), thinking=ADAPTIVE, effort='high', max_tokens=16000)

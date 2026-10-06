@@ -1,0 +1,138 @@
+{
+  "finished": {
+    "implementation_commit": "7af94030fd3d5d8a2fa5ff4b14c9c64528f86187",
+    "readonly_path": "/opt/meddoc-pro/.worktrees/v1-clinical-source-refute-7af94030",
+    "source_unchanged_through_final_packet": true,
+    "source_hashes": {
+      "rebuild/core/ordinary_source_scope.py": "66c975fa8ac6e7fb0ad23fa9b8e69ce7d063732cbe16dd63ea1769e4ee728f6a",
+      "rebuild/core/reviewed_source.py": "55389836f9de2df235fd416d6a6e4a0f353ed02df920d3d58a1f0e7e468f3dfe",
+      "rebuild/core/tests/test_v3_ordinary_source_scope.py": "726e804ccaaa89a1672ffa7a8181e16bb9a2d8789eee949f7738a43db0ec00df",
+      "rebuild/core/tests/test_reviewed_procedure_source.py": "4dde056f0e9b767c99fff48b50e66ccf13a44e71edcb86a90b6d025f6e7d0bda"
+    },
+    "source_clean": true,
+    "new_source_helpers": false,
+    "modified_priced_sources": [
+      "rebuild/core/ordinary_source_scope.py",
+      "rebuild/core/reviewed_source.py"
+    ],
+    "claims": [
+      "Later demonstrative, definite or source-pointer nonperson subject with another bearer object/possessor retains backward ownership dependency.",
+      "Current-patient exclusion, another time, uncertain/open source ownership remain held.",
+      "Passive agent authorship, explicit current-patient report, unequivocal cancelled foreign attribution and distinct unrelated/family events remain separate.",
+      "Complete direct nonfinite VBG symptom-denial argument can be separate from current medication intake; class/unknown/medication/embedded-clause guards remain.",
+      "Retained016 remains7of8 desired supports,033 remains10of11 with actualC08 conflict. No historical provider/wire/source/proof/transcript rewrite."
+    ],
+    "failure_evidence": [
+      "Root9b explicit backwardreport9unsafe",
+      "Root9b ownershipsupplement9unsafe (three overlap with first9b may-belong categories declared separately)",
+      "backward-report-9b5-diagnostic.json",
+      "First focused gerund fix still held xcomp bleeding; actual parser-role description corrected.",
+      "Second coherent packet missed current patient in bearer list,3 failures; names_person does not include this_patient."
+    ],
+    "logs": {
+      "backward-report-new-grammar-first.log": {
+        "methods": 3,
+        "exit": 1,
+        "seconds": 42.094,
+        "failures": 1,
+        "sha256": "e4c574d85a9d5ed31ea39fdb47a04eaec0c171b914b08ef56f61590b0bf71b98"
+      },
+      "backward-report-medication-second.log": {
+        "methods": 2,
+        "exit": 0,
+        "seconds": 12.905,
+        "sha256": "e1458a6bc10c82f9a8a55f7efb33ce97e537bddd6544bd56f00174c44b0f5007"
+      },
+      "backward-report-coherent-second.log": {
+        "methods": 14,
+        "exit": 1,
+        "seconds": 136.654,
+        "failures": 3,
+        "sha256": "4c08aa245c39e7463e980f8ca7c7c56ec94f7edaf85fcc0e782505f976a72543"
+      },
+      "backward-report-coherent-third.log": {
+        "methods": 14,
+        "exit": 0,
+        "seconds": 137.434,
+        "sha256": "7de32c63a3fba4b004fae66c1602dbf5ddf283266486ea3dd4cae1f878a90d5b"
+      }
+    },
+    "pure_provider_calls": 0,
+    "pure_DB_calls": 0,
+    "next_action": "Root finished-diff refutation, exact integration/source freeze and affected gates before anynew-2 preflight/provider send.",
+    "all_task_children_completed": true
+  },
+  "original_root_results": [
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-ordinary-procedure-9b5-independent/result.json",
+      "sha256": "afc76b4e74c666f1a015c52d716180ac3d558ea5bf2fc44ba53e3dce33bd2e68",
+      "recorded_counts": {
+        "controls": 60,
+        "unsafe": 3,
+        "false_holds": 1,
+        "wrong_fidelity": 0,
+        "elapsed_seconds": 34.48457874500309
+      },
+      "classification": "Raw first instrument flags preserved; later-family-event allegations are not demonstrated wrong actor."
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-procedure-backward-attribution-9b5-independent/result.json",
+      "sha256": "b1980c95d47af9f22d5c417a40d2058c7f7ae59e56cc88875d5ef715ceba7ba7",
+      "recorded_counts": {
+        "controls": 24,
+        "unsafe": 9,
+        "false_holds": 0,
+        "wrong_fidelity": 0,
+        "elapsed_seconds": 25.148976322001545
+      },
+      "classification": "Concrete report bearer/exclusion/time source qualification, unchanged original controls."
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-procedure-backward-attribution-7907-baseline/result.json",
+      "sha256": "313859cd842894edc82f2dc41801aaa76da73a332202a48459916cb8db76a87e",
+      "recorded_counts": {
+        "controls": 24,
+        "unsafe": 0,
+        "false_holds": 3,
+        "wrong_fidelity": 0,
+        "elapsed_seconds": 22.169080890998885
+      },
+      "classification": "Concrete report bearer/exclusion/time source qualification, unchanged original controls."
+    },
+    {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/root-procedure-source-attribution-supplement-9b-baseline/result.json",
+      "sha256": "e1c4f1750c58351a5af635f71efe7aa56e67ee311c4239a5f1fb369ebe88d1e3",
+      "recorded_counts": {
+        "controls": 30,
+        "unsafe": 9,
+        "false_holds": 0,
+        "wrong_fidelity": 0,
+        "elapsed_seconds": 33.73676440899726
+      },
+      "classification": "Concrete report bearer/exclusion/time source qualification, unchanged original controls."
+    }
+  ],
+  "applicable_denominators": "Each packet retains its own counts; overlapping inputs are not summed as independent cases.",
+  "root_refutation": "Pending on clean7af; 9b remains blocked from integration.",
+  "old_paid_campaigns": "All157 historical attempts remainclosed unchanged. No new-2 preflight/runtime/DB/key/send has been created.",
+  "proof_wire_confirmation": [
+    {
+      "attempt": "016",
+      "case_sha256": "23b68bc34559648bc33cabf6a6bc8d6860b605b7d766851753d1462fb5dc60ad",
+      "model_body_exact_original": true,
+      "notes_and_physical_fields_exact_original": true,
+      "original_inputs_hash_match": true,
+      "review_span_exact": true,
+      "raw_envelope_preserved_at": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004/evidence/016/provider-result.json"
+    },
+    {
+      "attempt": "033",
+      "case_sha256": "388546a0b52b4946e8bdf823858ef768c88ecdc543ff37190eef4a6fc4f1f268",
+      "model_body_exact_original": true,
+      "notes_and_physical_fields_exact_original": true,
+      "original_inputs_hash_match": true,
+      "review_span_exact": true,
+      "raw_envelope_preserved_at": "/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261004/evidence/033/provider-result.json"
+    }
+  ]
+}

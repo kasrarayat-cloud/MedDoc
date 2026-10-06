@@ -1,0 +1,7 @@
+Native selected-legacy DEV preparation
+
+Not executed. The first D01/D02 attempt stopped because the v3-only adapter did not drive their automatically selected legacy routes. This prospective adapter preserves the originals, actual selected engine and native mapping. It resolves native source element coordinates only for the unchanged fixed GT scorer; the projection never becomes an application mapping. It captures actual stored WM review requirements rather than assuming them from a prior artifact.
+
+Three fixed profiles remain unchanged, including values the native contract may refuse. A refusal remains a failed profile. Two separately labeled clinician recovery profiles use the retained approved WM values/variants and explicit D02 finalizer identity review; they cannot count as automatic success. Every current claim token comes from the actual rendered page after an unreviewed alternative save. No role, provenance, ownership, layout, source, runtime or billing guard is patched. Ordinary deployment processor ownership and native Word remain unverified by isolated QA qualification.
+
+Actual application execution awaits an explicit root freeze and serialized QA/render grant. The outer process bounds the child at 900 seconds and the whole two-document run at 1200 seconds, proves clean exact source before/after, archives exports before assertions, and verifies direct database absence and renderer/socket teardown. Provider calls are forbidden.

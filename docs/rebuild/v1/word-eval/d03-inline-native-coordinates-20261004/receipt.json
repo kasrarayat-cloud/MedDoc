@@ -1,0 +1,41 @@
+{
+  "base_source_commit": "7907ae5aa38c2a6c9e27eab1b09a758df315125b",
+  "word_source_sha256": "ec0923abe0b9ab03e502d114312b9945c857245741a7cb11f683467609e89c8a",
+  "test_source_sha256": "cf48b4c0c1dcc5bc41f4d3193cdf0b655204a541c0be801f3a5e3d018856d984",
+  "pure_packet": {
+    "methods": 54,
+    "seconds": 26.939,
+    "deadline_seconds": 180,
+    "actual_exit": 0
+  },
+  "actual_original_coordinate_proof_exit": 0,
+  "provider_calls": 0,
+  "database_calls": 0,
+  "renderer_calls": 0,
+  "actual_http_requalification": "pending finished-diff independent refutation and coherent source freeze",
+  "first_mapping": {
+    "correct": 45,
+    "denominator": 88,
+    "missed": 32,
+    "wrong": 11,
+    "extras": 2,
+    "strict": false
+  },
+  "first_actual_coverage_post_status": 400,
+  "manual_corrections": 0,
+  "unchanged_contract": [
+    "core overlap comparison",
+    "physical role and human signing guard",
+    "mapping/provenance verification",
+    "acceptance thresholds and denominators",
+    "original sources and fixed scorers"
+  ],
+  "source_claims": [
+    "Only original-proven inline SDT/FF extents are returned in their containing paragraph coordinates.",
+    "Whole-parent/table exclusions and overlapping native spans still touch.",
+    "Unknown/block/unproven or empty extents retain whole-slot fallback.",
+    "Source is parsed anew per call; no mutable or cross-document cache.",
+    "Coordinate read does not mutate DOCX bytes or physical roles."
+  ],
+  "initial_test_only_failures": "pure-roles.log retains two failed Manager-comments native-checkbox assertions; this Boolean choice does not establish a person identity signing act. The corrected physical-role control uses the independently established explicit witness act. Earlier first unarchived tool-output test also contained checkbox signature caption assertions and a python-docx save timestamp equality assertion; no original/export bytes from that first synthetic diagnostic were retained."
+}

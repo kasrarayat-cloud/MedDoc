@@ -1,0 +1,21 @@
+{
+  "status": "finished-source-awaiting-independent-refutation",
+  "writer": "/opt/meddoc-pro/.worktrees/v1-independent-word-20261003T183045Z",
+  "parent_commit": "a161bd75d51aa1b10ced06001ee2974941dc4ed5",
+  "source_hashes": {
+    "rebuild/documents/word_v3.py": "901460d7806d4f4f9dbcdc9adfe58878d63f133232378a5e0b892d7e5eaaa2fd",
+    "rebuild/documents/test_source_coverage.py": "f9ff10027bd79b15aa7d78cd149f20bfc28c1e43ff02fb22a2be36aac22cd6f5"
+  },
+  "receipt_sha256": "c18457a63b6c86a92a0c5a4dd7e207dd5c099477eab3a3bcb370b1e79fc5e438",
+  "active_children": [],
+  "database_slot_used": false,
+  "d03_separate_writer": "/opt/meddoc-pro/.worktrees/v1-word-d03-parent-subgroups-20261004",
+  "d03_source_unchanged": true,
+  "remaining_d07_misses": [
+    "A10",
+    "A17",
+    "A26",
+    "A27",
+    "A28"
+  ]
+}

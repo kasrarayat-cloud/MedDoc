@@ -551,7 +551,7 @@ class NoCredentialOpenAIAdapter(DeniedNetwork, SyntheticFixture, TestCase):
 
         def handler(request):
             sent.append(request)
-            body = json.dumps({'fields': [{'key': 'symptoms', 'quotes': ['no chest pain'], 'conflict': False}]})
+            body = json.dumps({'fields': [{'key': self.encounter.template_version.fields[0]['key'], 'quotes': ['no chest pain'], 'conflict': False}]})
             return httpx.Response(200, json=openai_response_json(body), headers={'x-request-id': 'req_synthetic_openai'})
         with no_credential_for_any_provider(OPENAI_API_KEY=SYNTHETIC_KEY), openai_over_mock_transport(handler):
             self.assertTrue(run_job())
@@ -564,7 +564,7 @@ class NoCredentialOpenAIAdapter(DeniedNetwork, SyntheticFixture, TestCase):
         self.assertEqual(set(Reservation.objects.filter(job=job).values_list('state', flat=True)), {'settled'})
         self.assertGreater(Usage.objects.get(job=job).charged_cost, 0)
         self.encounter.refresh_from_db()
-        self.assertEqual(self.encounter.answers['symptoms']['text'], 'no chest pain')
+        self.assertEqual(self.encounter.answers[self.encounter.template_version.fields[0]['key']]['text'], 'no chest pain')
         self.assertEqual(self.connects, [])
 
     def assert_uncertain_with_its_hold(self, job):

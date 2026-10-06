@@ -1,0 +1,16 @@
+{
+  "files": {
+    "README.md": "5fa12547e6180a5b9679b71bf68aafbecc1e0618be6f5e7c7a5984300877bd3b",
+    "initial-fixture-failures.log": "454dae5001b6fe9fcc16b5ac0b76c0fe30380c73c0a005fe8eb15a344dbcc9df",
+    "affected-63-pass.log": "f50824d3c9e2b08814d2120a572fe81ec6cfdf400d4701169d9a59ce28ee97a6",
+    "intermediate-fixture-import-failure.log": "111d02226adef3a97ee80854917de71800226bc86c34fbf89410acfd9fbdaf01",
+    "nine-controls-pass.log": "f3e54a48033a5d8fecee376e68a55297e80a477bb132fd1e11cf490ff9409814",
+    "prove-original.py.source": "b749135cf611e3d7ec0618d393f28ce9c669a559a52659fee177ddd61499e21d",
+    "original-source-proof.json": "da5587d09e97e4be4ff441a418b593243297de53aa441670a1663c523b270d85"
+  },
+  "raw_runtime_proof": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d05-noop-footer-source-proof-20261004",
+  "provider_calls": 0,
+  "database_runs": 0,
+  "renderer_runs": 0,
+  "qualification_status": "affected source-only pass; whole-document automatic gate remains failed"
+}

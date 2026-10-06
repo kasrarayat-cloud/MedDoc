@@ -1,0 +1,70 @@
+{
+  "actual_original_replay": {
+    "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+    "export_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+    "exact_original_bytes": true,
+    "reviewed_false_fields": 7,
+    "states": {
+      "v3_7": [
+        false
+      ],
+      "v3_14": [
+        false
+      ],
+      "v3_18": [
+        false
+      ],
+      "v3_22": [
+        false
+      ],
+      "v3_26": [
+        false
+      ],
+      "v3_30": [
+        false
+      ],
+      "v3_35": [
+        false
+      ]
+    },
+    "source_word_sha256": "d9f7ff25109afbbff05a1867d8393324d94c7c4f46e85ebdc6cab01eeadf9629",
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0,
+    "whole_document_gate_pass": false
+  },
+  "affected_methods": {
+    "tests": 11,
+    "failures": 0,
+    "errors": 0,
+    "success": true,
+    "elapsed": 9.722144346997084,
+    "source_hashes": {
+      "rebuild/documents/word_v3.py": "d9f7ff25109afbbff05a1867d8393324d94c7c4f46e85ebdc6cab01eeadf9629",
+      "rebuild/documents/test_word_v3.py": "79e6c0f9b925769feaa4df493d679296575e1f8a6960382c468bc71852c39a11"
+    },
+    "source_unchanged": true,
+    "fill_attempts": 38,
+    "refused": 4,
+    "exports": 34,
+    "provider_calls": 0,
+    "db_calls": 0,
+    "render_calls": 0
+  },
+  "first_actual_failure": {
+    "fields": 7,
+    "changed": true,
+    "original_sha256": "9eeac252e6d2d6fe5a1f05adc2dc74de63c7e415aeb09d4590f5e06203b462d6",
+    "export_sha256": "7bea25c4d5a172b1cd40eab3b8954dfb5972cf9bc15a51a6d965926803d3603e"
+  },
+  "first_actual_failure_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/word/d08-original-false-noop-reproduction-20261004",
+  "original_app_failure_path": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/storage-resume-20261003T215613Z/operations/dev-d08d09-1459595e-20261004/replay-v2/dev-application-1459595edd45-1791102061725144354/D08",
+  "preserved_test_failures": [
+    "two stale assertions required materialized checked=0 even though default0 already represented false",
+    "new test referenced absent constrained_checkbox_state API (instrument error)",
+    "first replacement mixed-glyph readback used an output-only ordinal after inserted literal checkbox text (instrument error); corrected to effective native ff state while original physical glyph/text checks remain"
+  ],
+  "automatic_whole_document_pass": false,
+  "mapping_score_unchanged": "D08 original actual29/41 correct2miss10wrong5extras; ordinary/long save400 remains open.",
+  "full_application_route_after_patch": false
+}

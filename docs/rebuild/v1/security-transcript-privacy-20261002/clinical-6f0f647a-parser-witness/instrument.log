@@ -1,0 +1,260 @@
+{
+  "source_commit": "6f0f647a3d10227fc7ed9a30698c1877a7fff22f",
+  "cases": 6,
+  "elapsed_seconds": 2.152,
+  "witness": "/opt/meddoc-pro/rebuild/.runtime/v1-sol-continuation-20261002/security/diagnose-clinical-6f0f647a.json",
+  "summaries": [
+    {
+      "name": "without_same_swelling",
+      "causes": [],
+      "actors": [
+        {
+          "quote": "Examination mild swelling over the left lateral ankle.",
+          "kind": "missing",
+          "other_floor": false,
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "ankl",
+            "ankle",
+            "examin",
+            "examination",
+            "swell",
+            "swelling"
+          ]
+        },
+        {
+          "quote": "The patient has a left ankle without swelling.",
+          "kind": "patient",
+          "other_floor": false,
+          "claim_keys": [
+            "ankl",
+            "ankle"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "ankl",
+            "ankle"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absent_same_swelling",
+      "causes": [],
+      "actors": [
+        {
+          "quote": "Examination mild swelling over the left lateral ankle.",
+          "kind": "missing",
+          "other_floor": false,
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "ankl",
+            "ankle",
+            "examin",
+            "examination",
+            "swell",
+            "swelling"
+          ]
+        },
+        {
+          "quote": "The patient has absent swelling over the left ankle.",
+          "kind": "patient",
+          "other_floor": false,
+          "claim_keys": [
+            "absent"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "absent",
+            "ankl",
+            "ankle"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "free_same_swelling",
+      "causes": [],
+      "actors": [
+        {
+          "quote": "Examination mild swelling over the left lateral ankle.",
+          "kind": "missing",
+          "other_floor": false,
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "ankl",
+            "ankle",
+            "examin",
+            "examination",
+            "swell",
+            "swelling"
+          ]
+        },
+        {
+          "quote": "The patient has a swelling-free left ankle.",
+          "kind": "patient",
+          "other_floor": false,
+          "claim_keys": [
+            "ankl",
+            "ankle"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "ankl",
+            "ankle"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "same_topic_explicit_other",
+      "causes": [
+        [
+          {
+            "id": 2,
+            "quote": "Her father has no swelling over the left ankle.",
+            "start": 55,
+            "end": 102,
+            "correction_value": null
+          },
+          null
+        ]
+      ],
+      "actors": [
+        {
+          "quote": "Examination mild swelling over the left lateral ankle.",
+          "kind": "missing",
+          "other_floor": false,
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "ankl",
+            "ankle",
+            "examin",
+            "examination",
+            "swell",
+            "swelling"
+          ]
+        },
+        {
+          "quote": "Her father has no swelling over the left ankle.",
+          "kind": "other",
+          "other_floor": true,
+          "claim_keys": [
+            "ankl",
+            "ankle",
+            "fath",
+            "father",
+            "swell",
+            "swelling"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "ankl",
+            "ankle",
+            "fath",
+            "father",
+            "swell",
+            "swelling"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "without_left_pain",
+      "causes": [],
+      "actors": [
+        {
+          "quote": "The patient reports pain in the left knee.",
+          "kind": "patient",
+          "other_floor": false,
+          "claim_keys": [
+            "knee",
+            "pain"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "knee",
+            "pain"
+          ]
+        },
+        {
+          "quote": "The patient has a left knee without pain.",
+          "kind": "patient",
+          "other_floor": false,
+          "claim_keys": [
+            "knee",
+            "pain"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "knee",
+            "pain"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "same_polarity_exclusive",
+      "causes": [],
+      "actors": [
+        {
+          "quote": "The patient reports pain in the left knee.",
+          "kind": "patient",
+          "other_floor": false,
+          "claim_keys": [
+            "knee",
+            "pain"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "knee",
+            "pain"
+          ]
+        },
+        {
+          "quote": "Only her father has left knee pain.",
+          "kind": "other",
+          "other_floor": true,
+          "claim_keys": [
+            "fath",
+            "father",
+            "leav",
+            "leave",
+            "pain"
+          ],
+          "negated_keys": [],
+          "named_keys": [
+            "fath",
+            "father",
+            "knee",
+            "pain"
+          ]
+        }
+      ]
+    }
+  ]
+}

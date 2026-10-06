@@ -22,7 +22,7 @@ except ImportError:
 
 LIVE = 'quillmd-production.c1a2b3c4d5e6.us-east-1.rds.amazonaws.com'
 DRILL = 'quillmd-production-drill-20261101t0300.c1a2b3c4d5e6.us-east-1.rds.amazonaws.com'
-#: This release's guard count (92 since 0032); every restore below declares it.
+#: This release's source-bound guard count; every restore below declares it.
 RELEASE = len(restore_check.integrity_contract.GUARDS)
 
 
@@ -207,7 +207,11 @@ class RestoreCheckTests(unittest.TestCase):
         database=FakeDatabase(self.files)
         new=[row for row in database.triggers if row[0] in ('core_redactionrequest','core_redactiontombstone')
              or row[2]=='quillmd_redaction_guard']
-        self.assertEqual(len(new),10)
+        # 0037 adds the immutable transcript-review redaction boundary. Its
+        # exact identity joins the ten retained request/tombstone guards.
+        self.assertEqual(len(new),11)
+        self.assertIn(('core_redactiontombstone', 'redactiontombstone_transcript',
+                       'quillmd_transcript_redaction_guard', 7), [row[:4] for row in new])
         self.assertTrue(restore_check.integrity_contract.assess(database.triggers,[('public','origin')],RELEASE)['passed'])
         for row in new:
             index=database.triggers.index(row)
