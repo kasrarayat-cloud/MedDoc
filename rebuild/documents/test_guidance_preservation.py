@@ -129,6 +129,19 @@ class LegacyTextBounds(unittest.TestCase):
                 listed = [row['slot'] for row in w.outline(data(legacy_text(**changes)))['slots']]
                 self.assertIn('word/document.xml#b/p[0]/ff[0]', listed)
 
+    def test_a_guidance_host_that_prints_its_own_line_stays_a_place(self):
+        # Refutation round 5: a paragraph holding an underlined writing line beside a guidance control was dropped
+        # from the outline, so the engine's own field there failed mapping confirmation.
+        doc = legacy_text(help_text='Press TAB to continue.')
+        line = etree.fromstring('<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                '<w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>')
+        doc.paragraphs[0]._p.insert(1 if doc.paragraphs[0]._p.find(w.q('w:pPr')) is not None else 0, line)
+        doc.add_paragraph('Plan: ____')
+        raw = data(doc)
+        slots = [row['slot'] for row in w.outline(raw)['slots']]
+        self.assertIn('word/document.xml#b/p[0]', slots)
+        self.assertNotIn('word/document.xml#b/p[0]/ff[0]', slots)
+
     def test_source_guidance_classification_keeps_legitimate_one_character_controls(self):
         for changes in ({'name':'BloodGroup'}, {'label':'Blood group: '}, {'points':'22'},
                         {'result':'A'}, {'default':'O'}, {'limit':'2'}, {'help_text':None}):

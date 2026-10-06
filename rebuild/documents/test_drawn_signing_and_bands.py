@@ -223,17 +223,25 @@ class DrawnSigningBand(unittest.TestCase):
         word.fill(raw, fields, {f['key']: '14/03/2026' if f['kind'] == 'date' else 'Synthetic answer' for f in writable})
 
     def test_a_clinical_sign_caption_is_not_a_signing_band(self):
-        raw = drawn_band(caption='Name of sign if positive\t\tSite')
-        fields = word.inspect(raw)['fields']
-        self.assertFalse([f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
-                                                   for r in f.get('source_questions', []))])
+        # Rounds 4-5: a clinical 'sign', an adjective 'initial' or an identifier 'initials' is not a signing act.
+        for caption in ('Name of sign if positive\t\tSite', 'Troponin (initial)\t\tTime',
+                        'Initial and repeat troponin\t\tResult', 'Patient initials\t\tDate of birth'):
+            with self.subTest(caption):
+                fields = word.inspect(drawn_band(caption=caption))['fields']
+                self.assertFalse([f for f in fields if any(r.get('relation') == 'protected_inline_signing_lines'
+                                                           for r in f.get('source_questions', []))])
 
     def test_a_visible_writing_line_below_the_band_is_kept_and_reviewed(self):
         # Refutation round 4: a ruled line under the caption may be another field's line. It stays unwritten and,
-        # as in the previous reading, a clinician reviews it before generation.
+        # as in the previous reading, a clinician reviews it before generation. Round 5: a positional-tab leader
+        # draws a line too.
         for name, xml in (('underlined tab', '<w:r><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>'),
                           ('bottom border', '<w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" '
-                                            'w:color="000000"/></w:pBdr></w:pPr>')):
+                                            'w:color="000000"/></w:pBdr></w:pPr>'),
+                          ('leader tab', '<w:pPr><w:tabs><w:tab w:val="right" w:leader="underscore" w:pos="9000"/>'
+                                         '</w:tabs></w:pPr><w:r><w:tab/></w:r>'),
+                          ('positional tab leader', '<w:r><w:ptab w:relativeTo="margin" w:alignment="right" '
+                                                    'w:leader="underscore"/></w:r>')):
             with self.subTest(name):
                 found = word.inspect(drawn_band(spacer_xml=xml))
                 self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[3]'])
@@ -241,6 +249,19 @@ class DrawnSigningBand(unittest.TestCase):
                                  ['ambiguous_signing_band'])
         found = word.inspect(drawn_band())
         self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
+
+    def test_a_spacer_that_prints_nothing_raises_no_review(self):
+        # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician
+        # to review them held generation for nothing.
+        for name, xml in (('page break', '<w:r><w:br w:type="page"/></w:r>'), ('line break', '<w:r><w:br/></w:r>'),
+                          ('plain tab', '<w:r><w:tab/></w:r>'),
+                          ('underlined mark', '<w:pPr><w:rPr><w:u w:val="single"/></w:rPr></w:pPr>'),
+                          ('highlighted mark', '<w:pPr><w:rPr><w:highlight w:val="yellow"/></w:rPr></w:pPr>'),
+                          ('numbering off', '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr></w:pPr>')):
+            with self.subTest(name):
+                found = word.inspect(drawn_band(spacer_xml=xml))
+                self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[3]'])
+                self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
 
     def test_a_bare_date_caption_under_its_line_is_not_promoted_to_a_signing_event(self):
         raw = drawn_band(caption='Date', lines=1)
@@ -396,6 +417,91 @@ class DrawnBandRoute(unittest.TestCase):
             fill_template(path, result['fields'], answers, Path(tmp) / 'out.docx')
             self.assertEqual([c.text for c in Document(Path(tmp) / 'out.docx').tables[0].columns[1].cells],
                              ['Synthetic answer', 'Synthetic answer'])
+
+    def test_a_band_repeated_in_footer_copies_is_held_in_every_copy(self):
+        # Refutation round 5: identical bands in the first-page and default footers merge into one field; the
+        # routing account must still hold every copy's places, or the import fell to a dead legacy route.
+        import tempfile
+        from pathlib import Path
+        from django.test import override_settings
+        from .service import inspect_template, fill_template
+        doc = Document()
+        doc.add_paragraph('Synthetic clinic review form')
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = 'Patient name'
+        table.cell(1, 0).text = 'Diagnosis'
+        doc.add_paragraph('End of form.')
+        section = doc.sections[0]
+        section.different_first_page_header_footer = True
+        for footer in (section.first_page_footer, section.footer):
+            lines = footer.paragraphs[0]
+            lines._p.append(line_run(1, fallback=False))
+            lines.add_run('\t\t')
+            lines._p.append(line_run(2, fallback=False))
+            caption = footer.add_paragraph('Signature of Patient or Representative\t\t\tDate')
+            level = OxmlElement('w:outlineLvl')
+            level.set(qn('w:val'), '2')
+            caption._p.get_or_add_pPr().append(level)
+            spacer = footer.add_paragraph()
+            for node in etree.fromstring('<w:wrap %s><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>'
+                                         '</w:wrap>' % DECLARED):
+                spacer._p.append(node)
+        with tempfile.TemporaryDirectory() as tmp, override_settings(QUILLMD_WORD_AUTO_PREFER_V3=True):
+            path = Path(tmp) / 'original.docx'
+            path.write_bytes(data(doc))
+            result = inspect_template(path, engine='auto')
+            self.assertEqual(result['import_manifest']['engine'], 'v3')
+            self.assertFalse(result['import_manifest']['coverage']['v3_uncovered_legacy_places'])
+            answers = {f['key']: 'Synthetic answer' for f in result['fields']
+                       if not f.get('write_protected') and f['kind'] not in ('signature', 'initials')}
+            fill_template(path, result['fields'], answers, Path(tmp) / 'out.docx')
+
+    def test_a_form_kept_on_legacy_keeps_exporting_with_a_band(self):
+        # Refutation round 5: a form that stays on legacy for another reason (numbered underlined lines that v3
+        # does not cover) gained a whole-export refusal from the band's protected spacer. Legacy keeps its previous
+        # reading of the band's places; the band's protection belongs to the v3 route.
+        import tempfile
+        from pathlib import Path
+        from . import engine
+        underlined = '<w:r %s><w:rPr><w:u w:val="single"/></w:rPr><w:tab/></w:r>' % DECLARED
+
+        def report(band):
+            doc = Document()
+            doc.add_paragraph('Synthetic endoscopy report')
+            name = doc.add_paragraph('PATIENT NAME: ')
+            name._p.append(etree.fromstring(underlined))
+            heading = doc.add_paragraph('FINDINGS')
+            level = OxmlElement('w:outlineLvl')
+            level.set(qn('w:val'), '1')
+            heading._p.get_or_add_pPr().append(level)
+            for number in (1, 2, 3):
+                item = doc.add_paragraph('%d. ' % number)
+                item._p.append(etree.fromstring(underlined))
+            if band:
+                lines = doc.add_paragraph()
+                lines._p.append(line_run(1, fallback=False))
+                lines.add_run('\t\t')
+                lines._p.append(line_run(2, fallback=False))
+                caption = doc.add_paragraph('Signature of Patient or Representative\t\t\tDate')
+                level = OxmlElement('w:outlineLvl')
+                level.set(qn('w:val'), '2')
+                caption._p.get_or_add_pPr().append(level)
+                spacer = doc.add_paragraph()
+                spacer._p.append(etree.fromstring(underlined))
+            doc.add_paragraph('End of report.')
+            return data(doc)
+
+        for band in (False, True):
+            with self.subTest(band=band), tempfile.TemporaryDirectory() as tmp:
+                workspace = Path(tmp)
+                (workspace / 'input.docx').write_bytes(report(band))
+                result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': 'auto',
+                                                    'prefer_v3_parity': True})
+                self.assertEqual(result['import_manifest']['engine'], 'legacy')
+                key = next(f['key'] for f in result['fields'] if f['label'].upper().startswith('PATIENT NAME'))
+                engine.process(workspace, {'format': 'docx', 'operation': 'fill', 'mapping': result['fields'],
+                                           'answers': {key: 'Alex Example'}, 'engine': 'legacy'})
+                self.assertIn('Alex Example', Document(workspace / 'output.docx').paragraphs[1].text)
 
     def test_band_parts_never_compete_with_the_forms_own_questions(self):
         # Refutation round 4: a bare 'Date' band part shared its question key with the form's own 'Date' and held

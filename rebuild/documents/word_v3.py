@@ -1679,6 +1679,7 @@ class Detector:
         self.layout_candidates = []
         self.withdrawn_areas: list[Area] = []   # EC3: answer areas withdrawn from shared merged cells
         self.source_guidance_areas: list[Area] = []  # preserved source controls, never clinical answer destinations
+        self.signing_band_places: list[str] = []  # every drawn band's line, caption and spacer place, in every part
         self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
         self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
         self.notes: list[str] = []
@@ -9187,10 +9188,11 @@ class Detector:
                 self.add(area)
             self.claimed.update((id(slot.el), id(caption.el)))
             self.protected_regions.update((slot.id, caption.id))
+            self.signing_band_places += [slot.id, caption.id] + ([spacer.id] if spacer is not None else [])
             if spacer is not None:
                 self.claimed.add(id(spacer.el))
                 self.protected_regions.add(spacer.id)
-                if not self.plain_spacing_paragraph(spacer, unused_tab_stops=True):
+                if self.band_spacer_draws_line(spacer):
                     # A visible writing line here (underline, leader, border)
                     # may be another field's line: keep it unwritten AND have
                     # a clinician review it, as the previous reading did.
@@ -9199,6 +9201,27 @@ class Detector:
                                         'review whether it belongs to the signing event or to another field. '
                                         'Location: ' + spacer.id)
             self.notes.append(reason + ' Location: ' + slot.id)
+
+    def band_spacer_draws_line(self, spacer):
+        """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,
+        a leader tab stop it actually uses, or a positional tab with a leader. Breaks, plain tabs and paragraph-mark
+        formatting print nothing."""
+        ppr = spacer.el.find(q('w:pPr'))
+        bottom = ppr.find(q('w:pBdr') + '/' + q('w:bottom')) if ppr is not None else None
+        if bottom is not None and bottom.get(q('w:val')) not in (None, 'none', 'nil'):
+            return True
+        for run in spacer.el.iter(R):
+            props = run.find(q('w:rPr'))
+            line = props.find(q('w:u')) if props is not None else None
+            if (line is not None and line.get(q('w:val')) not in ('none',)
+                    and (run.find(q('w:tab')) is not None
+                         or any(t.text and not t.text.strip(' \u00a0') for t in run.iter(q('w:t'))))):
+                return True
+            if any(tab.get(q('w:leader')) not in (None, 'none') for tab in run.iter(q('w:ptab'))):
+                return True
+        stops = ppr.find(q('w:tabs')) if ppr is not None else None
+        return bool(stops is not None and spacer.el.find('.//' + q('w:r') + '/' + q('w:tab')) is not None
+                    and any(tab.get(q('w:leader')) not in (None, 'none') for tab in stops.iter(q('w:tab'))))
 
     def rule_signing_captions(self):
         for slot in [s for s in self.index.slots if s.kind == "p"]:
@@ -10712,21 +10735,38 @@ def band_next(element):
 
 
 def band_signing_label(label):
-    """A drawn band's signing part: the engine's signing place AND signature or initials wording, so a clinical
-    'Name of sign if positive' is never read as a signing event."""
-    return bool(signing_place(label) and (SIGNATURE.search(label) or INITIALS.search(label)))
+    """A drawn band's signing part: the engine's signing place AND signature wording, so neither a clinical 'Name of
+    sign if positive' nor an identifier or adjective 'initial(s)' ('Patient initials', 'Troponin (initial)') is
+    read as a signing event."""
+    return bool(signing_place(label) and SIGNATURE.search(label))
+
+
+def signing_band_places(data):
+    """Every drawn signing band's places (lines, caption, spacer) in every part, header and footer copies included:
+    the routing reader's account of what v3 holds. Runs only the band rule on a fresh reading of the original."""
+    detector = Detector(open_package(data))
+    detector.rule_inline_signing_lines()
+    return list(detector.signing_band_places)
 
 
 def source_guidance_place(detector, slot):
-    """An exact preserved guidance control, or the otherwise empty paragraph that only hosts such controls."""
+    """An exact preserved guidance control, or a paragraph whose every run belongs to such controls (one that also
+    prints a line of its own, such as an underlined tab, stays a place)."""
     if slot.kind == "ff":
         return slot.info.get("field") == "FORMTEXT" and ff_source_guidance(slot.el)
     if slot.kind != "p":
         return False
     controls = [c for c in slot.children if c.kind == "ff"]
-    return (bool(controls) and len(controls) == len(slot.children)
-            and all(c.info.get("field") == "FORMTEXT" and ff_source_guidance(c.el) for c in controls)
-            and not detector.ptext(slot.el)[0].replace("\x00", "").strip())
+    if (not controls or len(controls) != len(slot.children)
+            or not all(c.info.get("field") == "FORMTEXT" and ff_source_guidance(c.el) for c in controls)):
+        return False
+    owned = set()
+    for control in controls:
+        _, end = _field_result_runs(control.el)
+        if end is None:
+            return False
+        owned.update(id(run) for run in [control.el, *_siblings_between(control.el, end), end])
+    return all(id(run) in owned for run in slot.el.iter(R))
 
 
 def preserved_source_guidance(detector):

@@ -706,6 +706,12 @@ def legacy_roles(fields, mapping, *, source=None):
         reader = word_v3._PlaceReader(detector.index)
         places = import_selection.legacy_places(document, paragraphs, cells, fields, detector)
         roles = word_v3.destination_roles_of(package)
+        # A drawn signing band is v3-only knowledge (it selects the v3 route
+        # whenever v3 keeps every legacy place). A form that stays on legacy
+        # for another reason keeps legacy's previous reading of those places,
+        # rather than a new whole-export refusal.
+        band = set(word_v3.signing_band_places(data))
+        roles = [role for role in roles if not (role.get('source') == 'protected_region' and role['place'] in band)]
         # Historical legacy metadata does not establish permission for a
         # document action or another author's statement. Read the original
         # role and its actual writing extent; known human signature/initials
@@ -860,7 +866,8 @@ def inspect_auto(workspace, *, preferred='auto', prefer_v3_parity=False):
                 roles = word_v3.destination_roles(path.read_bytes(), reviewed)
                 ordinary = candidates - set(roles.get('violations', {}))
             selected, coverage = import_selection.choose(legacy, advanced, places,
-                                                         word_v3._PlaceReader(detector.index), ordinary_roles=ordinary)
+                                                         word_v3._PlaceReader(detector.index), ordinary_roles=ordinary,
+                                                         band_places=word_v3.signing_band_places(path.read_bytes()))
             if preferred == 'auto' and prefer_v3_parity:
                 roles=word_v3.destination_roles(path.read_bytes(),advanced['fields'])
                 # The broad checkbox-word veto is not a destination-role
