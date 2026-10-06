@@ -9231,11 +9231,12 @@ class Detector:
             # reviewed, never a neutral answer that lost the caption's label. A line with its own label (a field, a
             # placeholder, a row captioned below it) is not the caption's and stays the form's; the first paragraph
             # that is not the caption's ends them.
-            own = None   # read only when a line follows: a band with none never needs the band-free reading
+            own = None   # read only for a writing line: a band with none after it never needs the band-free reading
             further = band_next((spacer or caption).el)
             while further is not None:
                 line = self.index.by_el.get(id(further))
-                if line is None or line.kind != 'p' or line.parent is not slot.parent:
+                if (line is None or line.kind != 'p' or line.parent is not slot.parent
+                        or not self.band_writing_line(line, caption)):
                     break
                 if own is None:
                     own = self.band_caption_places(caption)
@@ -9265,6 +9266,23 @@ class Detector:
             if area_label == label or area_label.endswith(' \u2014 ' + label):
                 own.update(places)
         return own
+
+    def band_writing_line(self, line, caption):
+        """Whether a paragraph below a band can be one of its caption's own writing lines: it holds an answer place the
+        engine's readers see (a blank, insertion or placeholder span, a drawn line, a box, control, field, text box or
+        object), or it is an empty line under a narrative caption (rule_lines_below_label's band of blank lines).
+        Printed prose, an empty spacing line or a picture alone is no signing area's writing line: the band ends
+        there, without the band-free reading."""
+        text, pieces = self.ptext(line.el)
+        if (merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
+                or self.band_spacer_draws_line(line) or BOX in text or CHECKED in text or "\x00" in text
+                or any(node.tag in (TXBX, SDT, FLDCHAR, q("w:fldSimple"), q("w:object")) for node in line.el.iter())):
+            return True
+        if text.strip():
+            return False
+        label = self.text(caption.el).strip()
+        return label.endswith(":") and (re.match(r"^[•●▪‣]\s+", label) is not None
+                                        or self.list_info(caption.el) is not None)
 
     def band_token_line(self, line):
         """A line that is one {{token}} and nothing else that names it (the legacy route's own placeholder syntax):

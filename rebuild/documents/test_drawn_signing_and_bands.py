@@ -596,6 +596,50 @@ class DetectionCost(unittest.TestCase):
             word.signing_band_places(band_form(['_' * 31, 'End of record.']))
             self.assertEqual(len(runs), 2)             # other bytes have their own reading
 
+    def test_only_a_writing_line_below_a_band_asks_the_band_free_reading(self):
+        # Refutation round 11 (cost): on large table-heavy forms the speed-ups saved almost nothing, so the one
+        # band-free reading per operation still took forms past the CPU limit where e0 imported them. The reading
+        # decides which writing lines are the caption's; printed prose, an empty spacing line or a picture alone below
+        # the band is no writing line, and ends the band without it.
+        runs = []
+        detect = word.Detector.detect
+
+        def counted(detector):
+            if not detector._inline_bands:
+                runs.append(detector)
+            return detect(detector)
+
+        def band_form(after, spacer=True, caption='Signature of patient'):
+            doc = Document()
+            doc.add_paragraph('Synthetic consent record')
+            doc.add_paragraph()._p.append(line_run(1, fallback=False))
+            doc.add_paragraph(caption)
+            if spacer:
+                doc.add_paragraph()
+            for text in after:
+                if text == 'band':
+                    doc.add_paragraph()._p.append(line_run(2, fallback=False))
+                    doc.add_paragraph('Signature of witness')
+                else:
+                    doc.add_paragraph(text)
+            return data(doc)
+
+        shapes = [(['End of record.'], True, 0), (['', '', 'End of record.'], True, 0), (['band', 'End.'], True, 0),
+                  (['_' * 30], False, 1), (['\u2610 Patient unable to sign'], True, 1), (['{{Date signed}}'], False, 1),
+                  (['', 'End.'], True, 0)]
+        with mock.patch.object(word.Detector, 'detect', counted):
+            for after, spacer, expected in shapes:
+                with self.subTest(after=after, spacer=spacer):
+                    word._BAND_FREE_READINGS.clear()
+                    runs.clear()
+                    word.inspect(band_form(after, spacer))
+                    self.assertEqual(len(runs), expected)
+            # an empty line under a narrative caption ('- Signature of patient:') is a writing line
+            word._BAND_FREE_READINGS.clear()
+            runs.clear()
+            word.inspect(band_form(['', '', 'End.'], True, caption='\u2022 Signature of patient:'))
+            self.assertEqual(len(runs), 1)
+
     def test_the_text_fast_path_reads_exactly_what_the_glyph_map_reads(self):
         # Outside the symbol fonts the glyph map changes only box glyphs and private-use box codes, so a text holding
         # none of them maps to itself - every character of the basic plane is checked; in a symbol font an ASCII letter
