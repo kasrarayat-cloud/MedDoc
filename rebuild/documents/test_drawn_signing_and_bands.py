@@ -859,13 +859,16 @@ class DetectionCost(unittest.TestCase):
             self.assertEqual(len(runs), 1)
 
     def test_the_text_fast_path_reads_exactly_what_the_glyph_map_reads(self):
-        # Outside the symbol fonts the glyph map changes only box glyphs and private-use box codes, so a text holding
-        # none of them maps to itself - every character of the basic plane is checked; in a symbol font an ASCII letter
-        # can draw a box ('o' in Wingdings), and the fast path never applies.
-        for font in ('', 'arial'):
-            plane = ''.join(chr(code) for code in range(0x10000) if not 0xD800 <= code <= 0xDFFF)
-            mapped = [ch for ch in plane if word.map_text(ch, font) != word.map_char(ch, font)]
-            self.assertEqual(mapped, [], font)
+        # Outside the symbol fonts the glyph map changes only box glyphs and private-use box codes, so only those are
+        # replaced; in a symbol font an ASCII letter can draw a box ('o' in Wingdings), and that font's whole table is
+        # applied (refutation round 12: the per-character map was most of a detection on box-glyph forms). Every
+        # code point is checked, one at a time and as one text, in plain and symbol fonts.
+        every = [chr(code) for code in range(0x110000) if not 0xD800 <= code <= 0xDFFF]
+        for font in ('', 'arial', 'wingdings', 'wingdings 2', 'symbol'):
+            with self.subTest(font=font):
+                expected = [word.map_char(ch, font) for ch in every]
+                self.assertEqual([ch for ch, mapped in zip(every, expected) if word.map_text(ch, font) != mapped], [])
+                self.assertEqual(word.map_text(''.join(every), font), ''.join(expected))
         samples = [''.join(map(chr, range(0x80))), 'Signature of patient: ____', '\u2610 Yes \u2612 No',
                    'o q r * R S T Q x \xa8 \xa1', ''.join(chr(code) for code in (0xF06F, 0xF0FE, 0x2A, 0x6F)), '',
                    'The patient\u2019s \u201cconsent\u201d \u2014 r\xe9sum\xe9 \u540d\u524d \u25cb Yes \u25c9 No \u2611 \u20dd',
@@ -875,6 +878,29 @@ class DetectionCost(unittest.TestCase):
                 with self.subTest(font=font, text=text[:16]):
                     self.assertEqual(word.map_text(text, font), ''.join(word.map_char(ch, font) for ch in text))
         self.assertEqual(word.map_text('o', 'wingdings'), word.BOX)
+
+    def test_the_memoised_text_readings_answer_exactly_as_the_readings_themselves(self):
+        # Refutation round 12 (cost): a band's band-free reading is a second detection repeating the main detection's
+        # pure readings of printed words. They are read once per text in a process; each memo answers what its reading
+        # answers, for both of its flags (which change the answer: 'Review:' governs, 'up to 3 boxes' bounds).
+        word._ACTION_MEMO.clear()
+        word._LIMIT_MEMO.clear()
+        texts = ['Consent:', 'Review:', 'I consent to treatment', 'Authorisation', 'Patient consent: I agree',
+                 'Declaration: I confirm the above', 'Signature of patient', 'Fever', 'Tick one box only',
+                 'Tick up to 3 boxes', 'up to 3 boxes', 'Select one', 'one answer per row', '', None]
+        for _ in range(2):    # the second pass answers from the memos
+            for text in texts:
+                for flag in (False, True):
+                    with self.subTest(text=text, flag=flag):
+                        self.assertEqual(word.Detector.checkbox_source_action(text, governing=flag),
+                                         word.Detector._checkbox_source_action(text, governing=flag))
+                        self.assertEqual(word.limit_language(text, local=flag), word._limit_language(text, local=flag))
+        self.assertIn(('Review:', True), word._ACTION_MEMO)
+        self.assertIn(('up to 3 boxes', True), word._LIMIT_MEMO)
+        self.assertNotEqual(word.Detector._checkbox_source_action('Review:', governing=False),
+                            word.Detector._checkbox_source_action('Review:', governing=True))
+        self.assertNotEqual(word._limit_language('up to 3 boxes', local=False),
+                            word._limit_language('up to 3 boxes', local=True))
 
     def test_one_detection_pass_reads_each_slot_visibility_once_and_a_later_read_is_fresh(self):
         # Refutation round 11 (cost): on printed-table forms a quarter of every detection re-read the same slots'

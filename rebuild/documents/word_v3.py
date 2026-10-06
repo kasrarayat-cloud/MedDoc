@@ -407,11 +407,21 @@ MAPPED_CHARS = re.compile("[%s]" % re.escape(GLYPH_BOX + GLYPH_CHECKED
 
 
 def map_text(text: str, font: str) -> str:
-    """map_char over a whole text. Outside the symbol fonts map_char changes only a box glyph or a private-use box
-    code, so a text holding none of them maps to itself."""
-    if font not in SYMBOL_BOXES and MAPPED_CHARS.search(text) is None:
-        return text
-    return "".join(map_char(c, font) for c in text)
+    """map_char over a whole text, exactly: outside the symbol fonts map_char changes only the characters MAPPED_CHARS
+    matches, so only those are replaced; in a symbol font every character it changes is in that font's glyph_table."""
+    table = _SYMBOL_GLYPH_TABLES.get(font)
+    if table is None:
+        return MAPPED_CHARS.sub(_map_plain_glyph, text)
+    return text.translate(table)
+
+
+def glyph_table(font: str) -> dict:
+    """Every character map_char changes in this font, and what it becomes: the box glyphs, the private-use box codes
+    and, in a symbol font, its own box codes plain or in the private-use area. map_char changes nothing else."""
+    table = SYMBOL_BOXES.get(font) or ()
+    candidates = set(GLYPH_BOX + GLYPH_CHECKED) | {chr(code) for codes in PUA_BOXES for code in codes}
+    candidates |= {chr(base + code) for codes in table for code in codes for base in (0, 0xF000)}
+    return {ord(ch): map_char(ch, font) for ch in candidates if map_char(ch, font) != ch}
 
 
 def map_char(ch: str, font: str) -> str:
@@ -434,6 +444,14 @@ def map_char(ch: str, font: str) -> str:
     if code in PUA_BOXES[1]:
         return CHECKED
     return ch
+
+
+_SYMBOL_GLYPH_TABLES = {font: glyph_table(font) for font in SYMBOL_BOXES}
+_PLAIN_GLYPHS = {chr(code): mapped for code, mapped in glyph_table('').items()}
+
+
+def _map_plain_glyph(match):
+    return _PLAIN_GLYPHS.get(match.group(), match.group())
 
 
 DIGIT_BOX = "\u25af"          # a symbol-font digit-entry box (one character position of a number)
@@ -1313,7 +1331,23 @@ def positive_command(text):
     return any(MANY_COMMAND.search(clause) and not negated_command(clause) for clause in _clauses(text))
 
 
+_LIMIT_MEMO = {}   # limit_language's answers by (sentence, local): a pure reading of the printed words, shared by every
+                   # detection in this process (a band's band-free reading repeats the main detection's sentences)
+_ACTION_MEMO = {}  # Detector.checkbox_source_action's answers by (text, governing), likewise
+
+
 def limit_language(sentence, *, local=False):
+    """_limit_language, read once per sentence in this process."""
+    key = (sentence or "", bool(local))
+    found = _LIMIT_MEMO.get(key)
+    if found is None:
+        if len(_LIMIT_MEMO) >= 200000:
+            _LIMIT_MEMO.clear()
+        found = _LIMIT_MEMO[key] = _limit_language(sentence, local=local)
+    return found
+
+
+def _limit_language(sentence, *, local=False):
     """One-only or limited-count language in one printed sentence (fail-closed): a selection command with a limit
     (limited_selection), a negated count, a count with a recording verb or an answer noun, a bare count, a one-only
     count with no verb, or exclusivity. Positive commands and open counts are never limits. A counted bound of two or
@@ -3542,7 +3576,20 @@ class Detector:
             r'(?:\s+(?!of\b)[^:;?!\r\n]+)?\s*[:.]?', text, re.I)
 
     @classmethod
-    def checkbox_source_action(cls,text,*,governing=False):
+    def checkbox_source_action(cls, text, *, governing=False):
+        """_checkbox_source_action, read once per text in this process: a pure reading of the printed words (its
+        helpers read only their arguments and the module's constants), shared by every detection - a band's band-free
+        reading repeats the main detection's texts."""
+        key = (str(text or ''), bool(governing))
+        found = _ACTION_MEMO.get(key)
+        if found is None:
+            if len(_ACTION_MEMO) >= 200000:
+                _ACTION_MEMO.clear()
+            found = _ACTION_MEMO[key] = cls._checkbox_source_action(text, governing=governing)
+        return found
+
+    @classmethod
+    def _checkbox_source_action(cls,text,*,governing=False):
         """Printed performative ownership, not a signer-name guess.
 
         Ordinary clinical states and recorded-status labels are not this frame.
