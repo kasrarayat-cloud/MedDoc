@@ -9170,11 +9170,13 @@ class Detector:
             # The previous detector borrowed the combined caption to invent a
             # date on the immediately following empty paragraph. That spacer
             # is part of this preserved signing band, not an ordinary answer,
-            # when it shows nothing at all; it is then one of the band's places.
+            # when it shows nothing at all or only a typed writing line (the
+            # caption's own line, which would otherwise lose its label and
+            # become a neutral answer); it is then one of the band's places.
             after = band_next(caption.el)
             spacer = self.index.by_el.get(id(after)) if after is not None else None
             if not (spacer is not None and spacer.kind == 'p' and spacer.parent is slot.parent
-                    and not self.ptext(spacer.el)[0].strip()
+                    and (not self.ptext(spacer.el)[0].strip() or self.band_typed_line(spacer))
                     and not any(node.tag in BAND_SPACER_CONTENT for node in spacer.el.iter())):
                 spacer = None
             if spacer is not None:
@@ -9196,13 +9198,23 @@ class Detector:
             if spacer is not None:
                 self.claimed.add(id(spacer.el))
                 self.protected_regions.add(spacer.id)
-                if self.band_spacer_draws_line(spacer):
+                if self.band_spacer_draws_line(spacer) or self.band_typed_line(spacer):
                     # A visible writing line here (underline, leader, border)
                     # may be another field's line: keep it unwritten AND have
                     # a clinician review it, as the previous reading did.
                     self.coverage_issue(spacer, 'ambiguous_signing_band',
                                         DRAWN_BAND_SPACER_REVIEW + 'Location: ' + spacer.id)
             self.notes.append(reason + ' Location: ' + slot.id)
+
+    def band_typed_line(self, spacer):
+        """A paragraph that prints only a typed writing line: every printed character lies in a blank the engine's own
+        blank reader reads (underscores, dots), with no label of its own."""
+        text, pieces = self.ptext(spacer.el)
+        spans = self.blank_spans(text, pieces)
+        rest = list(text)
+        for start, end, _ in spans:
+            rest[start:end] = ' ' * (end - start)
+        return bool(spans) and not ''.join(rest).strip()
 
     def band_spacer_draws_line(self, spacer):
         """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,

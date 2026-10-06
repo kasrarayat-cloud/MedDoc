@@ -250,6 +250,30 @@ class DrawnSigningBand(unittest.TestCase):
         found = word.inspect(drawn_band())
         self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
 
+    def test_a_typed_writing_line_under_the_caption_is_the_bands_reviewed_spacer(self):
+        # Refutation round 7: the band claims its caption, so a typed line under it (underscores, dots) lost its
+        # label and became a neutral writable 'Answer' that generation filled - the line e0 read as the signature
+        # area. It is the band's spacer, kept unwritten and reviewed exactly like a drawn line; a labelled line
+        # ('Print name: ____') stays its own field.
+        caption = 'Patient signature\t\t\tPrint name'
+        for name, line in (('underscores', '_' * 30), ('dots', '.' * 30)):
+            with self.subTest(name):
+                raw = drawn_band(caption, spacer_xml='<w:r><w:t>%s</w:t></w:r>' % line)
+                found = word.inspect(raw)
+                self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[3]'])
+                self.assertEqual([i['detail'] for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'],
+                                 [word.DRAWN_BAND_SPACER_REVIEW + 'Location: ' + BODY + 'b/p[3]'])
+                self.assertIn(BODY + 'b/p[3]', word.signing_band_places(raw))
+                writable = [f for f in found['fields'] if not f.get('write_protected')]
+                final = word.fill(raw, found['fields'], {f['key']: 'Alex Example' for f in writable})
+                self.assertEqual(slot_bytes(final, 'b/p[3]'), slot_bytes(raw, 'b/p[3]'))
+        raw = drawn_band(caption, spacer_xml='<w:r><w:t xml:space="preserve">Print name: ________</w:t></w:r>')
+        found = word.inspect(raw)
+        self.assertEqual([(f['label'], bool(f.get('write_protected'))) for f in found['fields']
+                          if f['locator']['slot'] == 'b/p[3]'], [('Print name', False)])
+        self.assertFalse([i for i in found['coverage_issues'] if i['slot'] == 'b/p[3]'])
+        self.assertNotIn(BODY + 'b/p[3]', word.signing_band_places(raw))
+
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician
         # to review them held generation for nothing.
@@ -522,6 +546,7 @@ class DrawnBandRoute(unittest.TestCase):
             'leader tab stop': '<w:p %s><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9000"/></w:tabs>'
                                '</w:pPr><w:r><w:tab/></w:r></w:p>' % DECLARED,
             'underlined tab': '<w:p %s>%s</w:p>' % (DECLARED, underlined.replace(' ' + DECLARED, '')),
+            'typed line': '<w:p %s><w:r><w:t>%s</w:t></w:r></w:p>' % (DECLARED, '_' * 30),
         }
 
         def report(spacer, *, numbered=True, typed=False, caption='Patient signature\t\t\tPrint name', outlined=False):
@@ -572,7 +597,7 @@ class DrawnBandRoute(unittest.TestCase):
                                            'answers': {key: 'Alex Example'}, 'engine': 'legacy'})
                 return result['import_manifest']['engine'], coverage, Document(workspace / 'output.docx')
 
-        for spacer in ('bottom border', 'positional tab leader', 'leader tab stop'):
+        for spacer in ('bottom border', 'positional tab leader', 'leader tab stop', 'typed line'):
             raw = report(spacer)
             self.assertTrue([issue for issue in word.inspect(raw)['coverage_issues']
                              if issue['code'] == 'ambiguous_signing_band'])
@@ -583,6 +608,7 @@ class DrawnBandRoute(unittest.TestCase):
                     self.assertFalse(coverage.get('block_generation'))
                     self.assertNotIn('advanced_unresolved_areas', coverage)
                     self.assertEqual(output.paragraphs[1].text, 'PATIENT NAME: Alex Example')
+                    self.assertEqual(output.paragraphs[8].text, Document(io.BytesIO(raw)).paragraphs[8].text)
         # The settings default engine keeps a band form without lost places on legacy as well.
         _, coverage, _ = imported(report('bottom border', numbered=False), 'legacy')
         self.assertFalse(coverage.get('block_generation'))
