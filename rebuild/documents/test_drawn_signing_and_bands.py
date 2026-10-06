@@ -448,13 +448,13 @@ class DrawnSigningBand(unittest.TestCase):
                 self.assertFalse([f for f in found['fields'] if f['locator']['part'] != 'word/document.xml'
                                   and not f.get('write_protected')])
 
-    def test_a_token_under_the_caption_is_held_and_reviewed_yet_mappable_and_legacy_fills_it(self):
-        # Refutation rounds 10-11: whose field a lone {{token}} under the caption names cannot be read from its wording -
+    def test_a_token_under_the_caption_is_held_on_v3_and_legacy_fills_a_lone_token_by_name(self):
+        # Refutation rounds 10-12: whose field a lone {{token}} under the caption names cannot be read from its wording -
         # '{{patient_signature}}', '{{Signature1}}' and '{{date_signed}}' passed every signing reader. On v3 it stays the
-        # band's, held and reviewed as e0's v3 reading held it (the caption's signature field), but it is not protected:
-        # a clinician who finds it is another field ('{{Next review date}}') maps it by hand. A bracket stays protected.
-        # On the legacy route a legacy {{token}} in the band no longer holds the whole import (round 11 routing:1): legacy
-        # fills it by name, as e0's legacy route did.
+        # band's, protected and reviewed as e0's v3 reading held it (the caption's signature field). Round 12: held but
+        # unprotected it was not mappable in the application and a stored field could write it, so no manual field or
+        # stored field is placed there. On the legacy route a legacy {{token}} that is a whole band line no longer holds
+        # the import (round 11 routing:1): legacy fills it by name, as e0's legacy route did.
         import tempfile
         from pathlib import Path
         from . import engine
@@ -484,11 +484,19 @@ class DrawnSigningBand(unittest.TestCase):
                 self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[4]'])
                 self.assertIn('b/p[4]', [i['slot'] for i in found['coverage_issues'] if i['code'] == 'ambiguous_signing_band'])
                 target = [{'kind': 'text', 'label': 'Mapped by hand', 'slot': 'word/document.xml#b/p[4]'}]
+                with self.assertRaises(word.V3Failure):          # protected: no manual field there
+                    word.locate(raw, target)
+                # A stored non-signing field there (round 12: a historical v3 mapping carrying the token's own name).
+                stored = [{'key': 'v3_9', 'kind': 'text', 'label': token.strip('{}[]'),
+                           'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[4]',
+                                       'target': {'type': 'span', 'start': 0, 'end': len(token),
+                                                  'shape': 'bracket' if token.startswith('[') else 'token'},
+                                       'fingerprint': slot_bytes(raw, 'b/p[4]')}}]
+                self.assertTrue(word.destination_roles(raw, stored)['violations'])    # nor a stored field
+                with self.assertRaises(word.V3Failure):
+                    word.fill(raw, stored, {'v3_9': 'Synthetic answer'})
                 if token.startswith('['):
-                    with self.assertRaises(word.V3Failure):      # a bracket line stays protected
-                        word.locate(raw, target)
                     continue
-                self.assertFalse(word.destination_roles(raw, word.locate(raw, target))['violations'])
                 with tempfile.TemporaryDirectory() as tmp:
                     workspace = Path(tmp)
                     (workspace / 'input.docx').write_bytes(raw)
@@ -501,6 +509,161 @@ class DrawnSigningBand(unittest.TestCase):
                     engine.process(workspace, {'format': 'docx', 'operation': 'fill', 'mapping': result['fields'],
                                                'answers': {key: 'Synthetic answer'}, 'engine': 'legacy'})
                     self.assertIn('Synthetic answer', Document(workspace / 'output.docx').paragraphs[4].text)
+
+    def test_a_prompt_e0_could_not_resolve_keeps_holding_a_legacy_import_beside_a_token(self):
+        # Refutation round 12 (routing:0): on the default legacy engine e0 held these forms for good - the prompt under
+        # the caption is an insertion e0 cannot resolve, and no legacy review clears it. Round 11 dropped the claimed
+        # prompt's own issue (the band's quiet line reading) while a legacy {{token}} in the band stopped holding, so
+        # legacy wrote a generated value into '{{Date signed}}' or '{{Signature1}}'. A claimed line keeps e0's issue.
+        import tempfile
+        from pathlib import Path
+        from . import engine
+        grey = '<w:r %s><w:rPr><w:color w:val="808080"/></w:rPr><w:t xml:space="preserve">%%s</w:t></w:r>' % DECLARED
+
+        def letter(caption, lines):
+            doc = Document()
+            doc.add_paragraph('Synthetic consent record')
+            doc.add_paragraph('PATIENT NAME: {{Patient full name}}')
+            drawn = doc.add_paragraph()
+            for number in range(caption.count('\t\t\t') + 1):
+                if number:
+                    drawn.add_run('\t\t')
+                drawn._p.append(line_run(number + 1, fallback=False))
+            doc.add_paragraph(caption)
+            for kind, text in lines:
+                if kind == 'grey':
+                    doc.add_paragraph()._p.append(etree.fromstring(grey % text))
+                else:
+                    doc.add_paragraph(text)
+            doc.add_paragraph('End of form.')
+            return data(doc)
+
+        prompt = ('grey', 'Enter name or initials here')
+        for caption, lines, held in (('Signature of patient', [prompt, ('text', '{{Date signed}}')], 'b/p[4]'),
+                                     ('Signature of patient', [prompt, ('text', '{{Signature1}}')], 'b/p[4]'),
+                                     ('Signature of patient', [('text', '{{Date signed}}'), prompt], 'b/p[5]'),
+                                     ('Signature of patient', [('grey', 'Enter {{Date signed}} or time here')], 'b/p[4]'),
+                                     ('Signature of Patient\t\t\tDate', [('text', '<{insert name>'), ('text', '{{Date signed}}')],
+                                      'b/p[4]')):
+            with self.subTest(caption=caption, lines=lines):
+                raw = letter(caption, lines)
+                with tempfile.TemporaryDirectory() as tmp:
+                    workspace = Path(tmp)
+                    (workspace / 'input.docx').write_bytes(raw)
+                    result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': 'legacy'})
+                    coverage = result['import_manifest']['coverage']
+                    self.assertEqual(result['import_manifest']['engine'], 'legacy')
+                    self.assertTrue(coverage.get('block_generation'))
+                    self.assertIn(('unresolved_insertion_source', held),
+                                  [(i['code'], i['slot']) for i in coverage['advanced_unresolved_areas']])
+
+    def test_a_token_sharing_its_band_line_with_a_mark_keeps_holding_a_legacy_import(self):
+        # Refutation round 12 (token:0): the legacy {{token}} exemption covered any token in the band, so a signing
+        # date's line - '{{Date signed}} ____________' under 'Patient signature   Date' - was filled by legacy with a
+        # generated date where e0 held the import. Only a token that is the whole band line is filled by its name.
+        import tempfile
+        from pathlib import Path
+        from . import engine
+
+        def letter(caption, line):
+            doc = Document()
+            doc.add_paragraph('Synthetic clinic letter')
+            doc.add_paragraph('PATIENT NAME: {{Patient full name}}')
+            drawn = doc.add_paragraph()
+            for number in range(caption.count('\t\t\t') + 1):
+                if number:
+                    drawn.add_run('\t\t')
+                drawn._p.append(line_run(number + 1, fallback=False))
+            doc.add_paragraph(caption)
+            doc.add_paragraph(line)
+            doc.add_paragraph('End of letter.')
+            return data(doc)
+
+        def legacy_import(raw):
+            with tempfile.TemporaryDirectory() as tmp:
+                workspace = Path(tmp)
+                (workspace / 'input.docx').write_bytes(raw)
+                result = engine.process(workspace, {'format': 'docx', 'operation': 'inspect', 'engine': 'legacy'})
+                self.assertEqual(result['import_manifest']['engine'], 'legacy')
+                return result['import_manifest']['coverage']
+
+        for caption, line, held in (('Patient signature\t\t\tDate', '{{Date signed}} ' + '_' * 12, True),
+                                    ('Patient signature\t\t\tDate', '{{patient_signature}} ' + '_' * 12, True),
+                                    ('Signature of patient', '{{Date signed}} |__|__| / |__|__|', True),
+                                    ('Patient signature\t\t\tDate', '{{Date signed}}', False)):
+            with self.subTest(caption=caption, line=line):
+                raw = letter(caption, line)
+                self.assertIn(BODY + 'b/p[4]', word.signing_band_places(raw))
+                coverage = legacy_import(raw)
+                self.assertEqual(bool(coverage.get('block_generation')), held)
+                self.assertEqual(('ambiguous_signing_band', 'b/p[4]') in
+                                 [(i['code'], i['slot']) for i in coverage.get('advanced_unresolved_areas') or []], held)
+
+    def test_a_narrative_signing_caption_keeps_its_unresolved_band_unwritten(self):
+        # Refutation round 12 (routing:1): e0 read '• Signature of patient:' and the blank lines below it as one printed
+        # narrative band it could not resolve (unresolved_narrative_band), so the writing line there was excluded and
+        # could not be generated. Claiming the caption dropped that exclusion: the writing line became a neutral 'Answer'
+        # that generation filled. e0's unresolved narrative band is now the caption's own lines - unwritten, reviewed.
+        rpr = '<w:rPr>%s<w:u w:val="single"/></w:rPr>'
+        lines = {'underlined tab': '<w:r %s>%s<w:tab/></w:r>' % (DECLARED, rpr % ''),
+                 'underlined spaces': '<w:r %s>%s<w:t xml:space="preserve">%s</w:t></w:r>' % (DECLARED, rpr % '', ' ' * 12),
+                 'underlined em spaces': '<w:r %s>%s<w:t xml:space="preserve">%s</w:t></w:r>' % (DECLARED, rpr % '',
+                                                                                             ' ' * 8),
+                 'hidden underlined tab': '<w:r %s>%s<w:tab/></w:r>' % (DECLARED, rpr % '<w:vanish/>')}
+        for name, run in lines.items():
+            with self.subTest(name):
+                doc = Document()
+                doc.add_paragraph('Synthetic consent record')
+                doc.add_paragraph('PATIENT NAME: {{Patient full name}}')
+                doc.add_paragraph()._p.append(line_run(1, fallback=False))
+                doc.add_paragraph('• Signature of patient:')
+                doc.add_paragraph()
+                doc.add_paragraph()._p.append(etree.fromstring(run))
+                doc.add_paragraph('End of form.')
+                raw = data(doc)
+                free = word.Detector(word.open_package(raw), _inline_bands=False)
+                free.detect()
+                self.assertIn(('unresolved_narrative_band', 'b/p[5]'), [(i['code'], i['slot']) for i in free.coverage_issues])
+                found = word.inspect(raw)
+                self.assertIn(BODY + 'b/p[5]', word.signing_band_places(raw))
+                self.assertFalse([f for f in found['fields'] if f['locator']['slot'] == 'b/p[5]'])
+                self.assertIn('b/p[5]', [i['slot'] for i in found['coverage_issues'] if i['code'] == 'ambiguous_signing_band'])
+                writable = [f for f in found['fields'] if not f.get('write_protected')]
+                final = word.fill(raw, found['fields'], {f['key']: 'Alex Example' for f in writable})
+                self.assertEqual(slot_bytes(final, 'b/p[5]'), slot_bytes(raw, 'b/p[5]'))
+        # A line the caption labels can head such a band too ('{insert detail}' read under the caption): claiming that
+        # line drops the same exclusion, so its whole band is the caption's - its plain blank line included.
+        # Another caption's band after it ('- Comments:') stays that caption's, as e0 read it.
+        doc = Document()
+        doc.add_paragraph('Synthetic consent record')
+        doc.add_paragraph('PATIENT NAME: {{Patient full name}}')
+        doc.add_paragraph()._p.append(line_run(1, fallback=False))
+        doc.add_paragraph('Signature of patient')
+        doc.add_paragraph()
+        doc.add_paragraph('• Notes {insert detail}:')
+        doc.add_paragraph()
+        doc.add_paragraph()._p.append(etree.fromstring(lines['underlined tab']))
+        doc.add_paragraph('• Comments:')
+        doc.add_paragraph()
+        doc.add_paragraph()._p.append(etree.fromstring(lines['underlined tab']))
+        doc.add_paragraph('End of form.')
+        raw = data(doc)
+        free = word.Detector(word.open_package(raw), _inline_bands=False)
+        free.detect()
+        self.assertEqual(sorted(free.narrative_bands), [tuple(BODY + 'b/p[%d]' % n for n in (5, 6, 7)),
+                                                        tuple(BODY + 'b/p[%d]' % n for n in (8, 9, 10))])
+        found = word.inspect(raw)
+        band = word.signing_band_places(raw)
+        self.assertEqual([place for place in band if place.startswith(BODY)][-3:],
+                         [BODY + 'b/p[%d]' % n for n in (5, 6, 7)])
+        self.assertFalse([f for f in found['fields'] if f['locator']['slot'] in ('b/p[6]', 'b/p[7]')])
+        self.assertEqual(sorted(i['slot'] for i in found['coverage_issues'] if i['code'] == 'unresolved_narrative_band'),
+                         ['b/p[10]', 'b/p[8]', 'b/p[9]'])
+        # (the Comments band's own answer stays excluded until a clinician removes it, as on e0)
+        writable = [f for f in found['fields'] if not f.get('write_protected')
+                    and f['locator']['slot'] not in ('b/p[8]', 'b/p[9]', 'b/p[10]')]
+        final = word.fill(raw, found['fields'], {f['key']: 'Alex Example' for f in writable})
+        self.assertEqual(slot_bytes(final, 'b/p[7]'), slot_bytes(raw, 'b/p[7]'))
 
     def test_a_spacer_that_prints_nothing_raises_no_review(self):
         # Refutation round 5: breaks, a plain tab and paragraph-mark formatting print no line; asking a clinician
@@ -546,11 +709,11 @@ class DrawnSigningBand(unittest.TestCase):
         self.assertEqual([c.text for c in Document(io.BytesIO(final)).tables[0].rows[1].cells],
                          ['Synthetic drug A', '5 mg', 'oral'])
 
-    def test_the_band_reads_its_lines_without_recording_the_paragraph_readers_issues_or_notes(self):
+    def test_the_band_keeps_the_paragraph_readers_issues_where_e0_raised_them_and_in_e0s_order(self):
         # Refutation round 11 (corpus:2): the band asks the paragraph readers whether a line below it holds an answer
-        # place, and those readers record coverage issues and notes as they read. A line the band claims is never read
-        # by them, so its one review is the band's; a line that ends the band keeps e0's issues and notes, in e0's
-        # order (the band-free reading's), with only the band's own note added.
+        # place, and those readers record coverage issues and notes as they read. A line that ends the band keeps e0's
+        # issues and notes in e0's order (the band-free reading's), with only the band's own note added. Round 12: a
+        # line the band claims keeps e0's own issues too (they held a legacy import there), then the band's review.
         def band_form(before, below, header=False):
             doc = Document()
             if before:
@@ -578,9 +741,14 @@ class DrawnSigningBand(unittest.TestCase):
                 raw = band_form(None, run('Enter name or initials here', grey=True), header)
                 part, slot = place.split('#')
                 found = word.inspect(raw)
+                free = word.Detector(word.open_package(raw), _inline_bands=False)
+                free.detect()
+                at = lambda issues: [(i['code'], i['detail']) for i in issues if (i['part'], i['slot']) == (part, slot)]
                 self.assertIn(place, word.signing_band_places(raw))
-                self.assertEqual([i['code'] for i in found['coverage_issues'] if (i['part'], i['slot']) == (part, slot)],
-                                 ['ambiguous_signing_band'])
+                self.assertEqual([code for code, _ in at(free.coverage_issues)], ['unresolved_insertion_source'])
+                self.assertEqual(at(found['coverage_issues']),
+                                 at(free.coverage_issues) + [('ambiguous_signing_band',
+                                                              word.DRAWN_BAND_SPACER_REVIEW + 'Location: ' + place)])
         for before, below in (('Enter clinic or ward here', 'Enter name or initials here'),
                               ('[Ward/Clinic]', '[Patient/Representative]'),
                               (None, '______________ [Patient/Representative]')):

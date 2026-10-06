@@ -1696,7 +1696,7 @@ class Detector:
     def __init__(self, package: Package, *, layout_proposal=False, _table_instructions=True, _inline_bands=True):
         self.package = package
         self._inline_bands = _inline_bands
-        self._band_free_areas = None   # the band-free reading's (label, places), read once for the band rule
+        self._band_free_areas = None   # the band-free reading's (areas, narrative places), read once for the band rule
         self.index = SlotIndex(package)
         self.areas: list[Area] = []
         self.layout_proposal = layout_proposal
@@ -1705,8 +1705,10 @@ class Detector:
         self.withdrawn_areas: list[Area] = []   # EC3: answer areas withdrawn from shared merged cells
         self.source_guidance_areas: list[Area] = []  # preserved source controls, never clinical answer destinations
         self.signing_band_places: list[str] = []  # every drawn band's line, caption and spacer place, in every part
+        self.signing_band_tokens: list[str] = []  # the band places that are a lone {{token}} line (band_token_line)
         self.merged_copies: list = []            # (kept area, merged header/footer copy): the copy's own places
         self.coverage_issues: list[dict] = []   # source-bound exclusions, never inferred from field counts
+        self.narrative_bands: list[tuple] = []  # each unresolved printed narrative band's places: caption, blank lines
         self.shared_kept: set = set()            # id() of signing/protected areas kept inside a shared merged cell
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
@@ -8483,6 +8485,7 @@ class Detector:
                             self.coverage_issue(source, 'unresolved_narrative_band',
                                 'This printed caption and blank band have unresolved structure or visibility; '
                                 'preserve them and review the exact source relationship.')
+                        self.narrative_bands.append(tuple(source.id for source in [ps, *blanks]))
                     continue
                 if requested and (not self.tab_source_visible(ps) or self.question_box_paragraph(ps.el)[2]
                                   or any(not self.plain_spacing_paragraph(b, unused_tab_stops=True) or not self.tab_source_visible(b)
@@ -9255,19 +9258,25 @@ class Detector:
                 line = self.index.by_el.get(id(further))
                 if line is None or line.kind != 'p' or line.parent is not slot.parent:
                     break
-                text, spans = self.band_line_spans(line)
-                if not self.band_writing_line(line, caption, text, spans):
+                text, spans, read = self.band_line_spans(line)
+                # Once the band-free reading is known, a line it gives the caption is the caption's whether or not it
+                # shows a writing place (a narrative band's plain blank line); before, only a writing line asks it.
+                if not (own is not None and line.id in own) and not self.band_writing_line(line, caption, text, spans):
                     break
                 if own is None:
                     own = self.band_caption_places(caption)
                 if line.id not in own:
                     break
+                self.keep_line_records(*read)
                 self.signing_band_places.append(line.id)
                 self.claimed.add(id(line.el))
-                if not self.band_token_line(text, spans):
-                    # A {{token}} names a field: held and reviewed like the caption's other lines, never generated,
-                    # but a clinician who finds it is not the signing event's may still map it by hand.
-                    self.protected_regions.add(line.id)
+                self.protected_regions.add(line.id)
+                if self.band_token_line(text, spans):
+                    # A lone {{token}} is the legacy route's own placeholder. Whose field it names is not read from its
+                    # wording, so v3 holds it like the caption's other lines (refutation round 12: held but unprotected,
+                    # it was not mappable in the application and a stored field could write it); the legacy route
+                    # fills it by its own name, as e0's legacy route did (engine.inspect_auto).
+                    self.signing_band_tokens.append(line.id)
                 self.coverage_issue(line, 'ambiguous_signing_band', DRAWN_BAND_SPACER_REVIEW + 'Location: ' + line.id)
                 further = band_next(line.el)
             self.notes.append(reason + ' Location: ' + slot.id)
@@ -9280,11 +9289,18 @@ class Detector:
         every detection of those bytes in this process."""
         if self._band_free_areas is None:
             self._band_free_areas = band_free_reading(self.package.data)
+        areas, narrative = self._band_free_areas
         label = clean_label(self.text(caption.el))
         own = set()
-        for area_label, places in self._band_free_areas:
+        for area_label, places in areas:
             if area_label == label or area_label.endswith(' \u2014 ' + label):
                 own.update(places)
+        for band in narrative:
+            if caption.id in band or own.intersection(band):
+                # e0 read a printed narrative band it could not resolve, headed by the caption or by a line the caption
+                # labels: claiming its caption drops e0's exclusion of its blank lines, so the whole band is the
+                # caption's - unwritten and reviewed, never a neutral answer generation fills (refutation round 12).
+                own.update(band)
         return own
 
     def band_writing_line(self, line, caption, text, spans):
@@ -9312,17 +9328,29 @@ class Detector:
         return not clean_label(''.join(ch for i, ch in enumerate(text) if not start <= i < end).replace('_', ''))
 
     def band_line_spans(self, line):
-        """A line's answer spans as the paragraph readers see them, read for the band without those readers' side
-        effects (the coverage issues and notes they record as they read): a line the band claims is never read by
-        them, so its one review is the band's, and a line that ends the band records its own issues and notes when
-        they read it, in e0's order (refutation round 11, corpus:2)."""
+        """A line's answer spans as the paragraph readers see them, with the coverage issues and notes those readers
+        record as they read it, held apart from the detector's own: a line that ends the band records its own issues
+        and notes when the paragraph readers read it, in e0's order (refutation round 11, corpus:2), and a line the
+        band claims - which those readers then never read - keeps them through keep_line_records."""
         text, pieces = self.ptext(line.el)
         issues, notes = self.coverage_issues, self.notes
         self.coverage_issues, self.notes = [], []
         try:
-            return text, merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
+            spans = merge_spans(self.explicit_insertion_spans(line, text, pieces) + self.blank_spans(text, pieces))
+            return text, spans, (self.coverage_issues, self.notes)
         finally:
             self.coverage_issues, self.notes = issues, notes
+
+    def keep_line_records(self, issues, notes):
+        """A claimed band line keeps the issues and notes e0's paragraph readers record for it (band_line_spans): a
+        prompt e0 could not resolve there still needs its review and still holds a legacy import, as on e0, beside the
+        band's own review (refutation round 12: dropping them let the legacy engine fill a {{token}} in the band)."""
+        for issue in issues:
+            if not any(prior['id'] == issue['id'] for prior in self.coverage_issues):
+                self.coverage_issues.append(issue)
+        for note in notes:
+            if note not in self.notes:
+                self.notes.append(note)
 
     def band_spacer_draws_line(self, spacer):
         """Whether an otherwise empty paragraph prints a writing line: a bottom border, an underlined tab or space,
@@ -10871,9 +10899,11 @@ _BAND_FREE_READINGS = {}
 
 
 def band_free_reading(data):
-    """Every area of the band-free reading of these exact original bytes (the detector with the drawn band rule off),
-    as (label, places): each place the area reads, its merged header/footer copies' own places included (a copy's
-    further lines are its own; the merged area names only the copy's first). Read once per original in this process."""
+    """The band-free reading of these exact original bytes (the detector with the drawn band rule off) as (areas,
+    narrative). Areas are (label, places): each place the area reads, its merged header/footer copies' own places
+    included (a copy's further lines are its own; the merged area names only the copy's first). Narrative holds the
+    places of each printed narrative band e0 could not resolve (rule_lines_below_label's unresolved_narrative_band:
+    its caption and blank lines), one set per band. Read once per original in this process."""
     key = hashlib.sha256(data).digest()
     reading = _BAND_FREE_READINGS.get(key)
     if reading is None:
@@ -10882,22 +10912,29 @@ def band_free_reading(data):
         copies = {}
         for kept, copy in reader.merged_copies:
             copies.setdefault(id(kept), []).append(copy)
-        reading = tuple((area.label, frozenset([place.id for source in [area, *copies.get(id(area), [])]
-                                                for place in [source.slot, *source.extra_slots] if place is not None]
-                                               + [copy['part'] + '#' + copy['slot'] for copy in area.target.get('copies', [])]))
-                        for area in reader.areas)
+        areas = tuple((area.label, frozenset([place.id for source in [area, *copies.get(id(area), [])]
+                                              for place in [source.slot, *source.extra_slots] if place is not None]
+                                             + [copy['part'] + '#' + copy['slot'] for copy in area.target.get('copies', [])]))
+                      for area in reader.areas)
+        reading = (areas, tuple(frozenset(band) for band in reader.narrative_bands))
         if len(_BAND_FREE_READINGS) >= 4:
             _BAND_FREE_READINGS.clear()
         _BAND_FREE_READINGS[key] = reading
     return reading
 
 
-def signing_band_places(data):
-    """Every drawn signing band's places (lines, caption, spacer) in every part, header and footer copies included:
-    the routing reader's account of what v3 holds. Runs only the band rule on a fresh reading of the original."""
+def signing_band_reading(data):
+    """(places, tokens): every drawn signing band's places (lines, caption, spacer) in every part, header and footer
+    copies included - the routing reader's account of what v3 holds - and those of them that are a lone {{token}} line.
+    Runs only the band rule on a fresh reading of the original."""
     detector = Detector(open_package(data))
     detector.rule_inline_signing_lines()
-    return list(detector.signing_band_places)
+    return list(detector.signing_band_places), list(detector.signing_band_tokens)
+
+
+def signing_band_places(data):
+    """Every drawn signing band's places (signing_band_reading)."""
+    return signing_band_reading(data)[0]
 
 
 def source_guidance_place(detector, slot):
