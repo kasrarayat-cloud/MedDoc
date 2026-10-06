@@ -542,13 +542,18 @@ class DetectionCost(unittest.TestCase):
             word.signing_band_places(band_form(['_' * 31, 'End of record.']))
             self.assertEqual(len(runs), 2)             # other bytes have their own reading
 
-    def test_the_ascii_text_fast_path_reads_exactly_what_the_glyph_map_reads(self):
-        # Every box glyph and private-use box code lies outside ASCII, so outside the symbol fonts ASCII text maps to
-        # itself; in a symbol font an ASCII letter can draw a box ('o' in Wingdings), and the fast path never applies.
-        self.assertTrue(all(ord(ch) > 0x7F for ch in word.GLYPH_BOX + word.GLYPH_CHECKED))
-        self.assertTrue(all(code > 0x7F for codes in word.PUA_BOXES for code in codes))
+    def test_the_text_fast_path_reads_exactly_what_the_glyph_map_reads(self):
+        # Outside the symbol fonts the glyph map changes only box glyphs and private-use box codes, so a text holding
+        # none of them maps to itself - every character of the basic plane is checked; in a symbol font an ASCII letter
+        # can draw a box ('o' in Wingdings), and the fast path never applies.
+        for font in ('', 'arial'):
+            plane = ''.join(chr(code) for code in range(0x10000) if not 0xD800 <= code <= 0xDFFF)
+            mapped = [ch for ch in plane if word.map_text(ch, font) != word.map_char(ch, font)]
+            self.assertEqual(mapped, [], font)
         samples = [''.join(map(chr, range(0x80))), 'Signature of patient: ____', '\u2610 Yes \u2612 No',
-                   'o q r * R S T Q x \xa8 \xa1', ''.join(chr(code) for code in (0xF06F, 0xF0FE, 0x2A, 0x6F)), '']
+                   'o q r * R S T Q x \xa8 \xa1', ''.join(chr(code) for code in (0xF06F, 0xF0FE, 0x2A, 0x6F)), '',
+                   'The patient\u2019s \u201cconsent\u201d \u2014 r\xe9sum\xe9 \u540d\u524d \u25cb Yes \u25c9 No \u2611 \u20dd',
+                   '\u25a1 Yes \u274f \u2751 \u2752 \u25a2 \u25a3 \uf0a8 \uf078 \uf052 done']
         for font in ('', 'arial', 'wingdings', 'wingdings 2', 'symbol', 'segoe ui symbol'):
             for text in samples:
                 with self.subTest(font=font, text=text[:16]):

@@ -401,10 +401,15 @@ def run_font(r) -> str:
     return (fonts.get(q("w:ascii")) or fonts.get(q("w:hAnsi")) or fonts.get(q("w:cs")) or "").strip().lower()
 
 
+#: Every character map_char can change outside the symbol fonts: a box glyph or a private-use box code.
+MAPPED_CHARS = re.compile("[%s]" % re.escape(GLYPH_BOX + GLYPH_CHECKED
+                                             + "".join(chr(code) for codes in PUA_BOXES for code in codes)))
+
+
 def map_text(text: str, font: str) -> str:
-    """map_char over a whole text. Outside the symbol fonts an ASCII character never draws a box (every box glyph and
-    private-use box code lies outside ASCII), so ASCII text maps to itself."""
-    if font not in SYMBOL_BOXES and text.isascii():
+    """map_char over a whole text. Outside the symbol fonts map_char changes only a box glyph or a private-use box
+    code, so a text holding none of them maps to itself."""
+    if font not in SYMBOL_BOXES and MAPPED_CHARS.search(text) is None:
         return text
     return "".join(map_char(c, font) for c in text)
 
