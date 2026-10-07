@@ -136,8 +136,8 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "preparation_only": true,
   "protocol_qualified": false,
   "provider_retries": 0,
-  "served_revision": null,
-  "source_base": "4f24e6dc6cf609ecffa5d4a678c0838d04e9e6bb"
+  "served_revision": "ce8213cd494f44828440caf20468ec6477cf718b",
+  "source_base": "ce8213cd494f44828440caf20468ec6477cf718b"
 }
 ```
 
@@ -148,9 +148,10 @@ operations identity to the clean canonical worktree Git HEAD. The caller must
 match that derived identity, which must also equal merged origin/main, pass the
 exact M6 four-path scope and exact citation checks, and be recorded in output.
 Missing or changed derivation policy and a literal operational self-pin refuse.
-The served revision remains an independently declared literal identity; its
-currently null preparation field refuses until a genuinely qualified availability
-release supplies that existing commit in a later reviewed declaration.
+The served revision remains an independently declared literal identity. It now
+names the merged recovery release prospectively; the null availability receipt
+and false source flags still refuse until that release actually completes
+recovery and its existing protected receipt is bound in a reviewed declaration.
 The future source gate requires a clean canonical operations worktree, precisely
 these four changed paths, the normal committed ruled declaration and an exact
 merged citation. The installed tree must independently be clean at the declared
@@ -278,7 +279,7 @@ Required external qualification remains a genuine complete availability receipt,
 reviewed current native authorization semantics, actual measured completion
 provenance, a new reviewed operational M6 descendant and finished independent
 refutation plus exact merged citation. The presently literal M6 remains the
-existing preparation base until that real merge is known. No installed Host,
+reviewed merged recovery base; a successful recovery receipt remains required. No installed Host,
 authentication, provider, database write or service action was run to prepare or
 test this code, and no successful campaign is asserted.
 
@@ -416,3 +417,15 @@ five-lock checks remain. Preflight's internal bound is 600 seconds, covering the
 natural wait, drain and complete admission within the unchanged wrapper ceiling.
 The final focused local suite passes 65 tests, including genuine prior-publication
 reproduction and substantive refusal controls; this remains an offline result.
+
+### Recovery merge inherited, 7 October 2026
+
+The four-path acceptance worktree is rebased onto guarded recovery merge
+`ce8213cd494f44828440caf20468ec6477cf718b` (PR #1303). M6 and the prospective
+served revision name that exact commit. The merged publisher repair and exact
+seven-difference preservation boundary are inherited without reapplying them.
+Original drafts including `3b6cf06bc8fa7787fdc01c541b5363a53420c0de` and
+`010fd98348c9be4766254021b643e13643928620` remain reachable through the retained
+local archive branch. All acceptance source and declaration qualification flags
+remain false, and `availability_receipt_sha256` remains null until genuine
+completion. A prospective revision is not evidence of a running release.

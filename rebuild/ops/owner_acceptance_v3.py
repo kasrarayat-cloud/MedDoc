@@ -38,7 +38,7 @@ TEST = 'rebuild/ops/test_owner_acceptance_v3.py'
 ENTRY = 'scripts/run-owner-acceptance-v3.py'
 DECL = 'docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md'
 ALLOWED = frozenset((SELF, TEST, ENTRY, DECL))
-M6 = '4f24e6dc6cf609ecffa5d4a678c0838d04e9e6bb'
+M6 = 'ce8213cd494f44828440caf20468ec6477cf718b'
 OPERATIONS_REVISION_POLICY = 'derive_clean_canonical_worktree_head_with_exact_merged_main_scope_and_ci_v1'
 ORIGIN = 'https://app.quillmd.com:9443'
 MODEL = 'claude-sonnet-5-5'
@@ -1918,6 +1918,7 @@ def plan():
             'fixed_child_protocol_qualified': FIXED_CHILD_PROTOCOL_QUALIFIED,
             'origin': ORIGIN, 'source_base': M6, 'declaration': DECL, 'source_paths': sorted(ALLOWED),
             'dependency_sha256': DEPENDENCIES, 'operations_revision': None, 'served_revision': None,
+            'prospective_served_revision': M6,
             'operations_revision_policy': OPERATIONS_REVISION_POLICY,
             'maximum_generations': 5, 'maximum_transcriptions': 1, 'maximum_provider_exposure': '0.70',
             'maximum_authentication_seconds': 180, 'shared_browser_verifier_seconds': 1200,
