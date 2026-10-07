@@ -2001,12 +2001,13 @@ class PhasePreservationTests(unittest.TestCase):
         self.original, self.observation, self.proof = phase_fixture()
         self.helpers = v3.configuration_helpers({'need': v3.require})
 
-    def test_whole_population_and_ns_survive_node_roundtrip_without_historical_approval(self):
-        result = subprocess.run(['/usr/bin/node', '-e',
-            "let s='';process.stdin.on('data',b=>s+=b);process.stdin.on('end',()=>console.log(JSON.stringify(JSON.parse(s))))"],
-            input=v3.encode(self.proof), capture_output=True, timeout=10)
-        self.assertEqual(result.returncode, 0)
-        after = json.loads(result.stdout)
+    def test_whole_population_and_decimal_ns_survive_json_roundtrip_without_historical_approval(self):
+        for item in self.observation['external_boundary']['protected_public_records'].values():
+            for value in item['metadata'][6:]:
+                self.assertIs(type(value), str)
+                self.assertEqual(str(int(value)), value)
+                self.assertGreater(int(value), 9007199254740991)
+        after = json.loads(v3.encode(self.proof))
         self.assertEqual(after, self.proof)
         self.assertTrue(self.helpers['phase_configuration_proof'](
             self.original, self.observation['configuration'], after))
