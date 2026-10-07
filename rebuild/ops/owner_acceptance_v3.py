@@ -86,6 +86,7 @@ DEPENDENCIES = {
 EXECUTION_QUALIFIED = True
 NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED = True
 FIXED_CHILD_PROTOCOL_QUALIFIED = True
+PHASE_PRESERVATION_PROTOCOL_QUALIFIED = True
 ENTRY_OBSERVATIONS = {'installed_state_accessed': False, 'authentication_possible': False,
                       'provider_possible': False}
 PARENT_PHASES = ('normal-auth', 'browser', 'verify')
@@ -98,6 +99,36 @@ POST_RESTORE_PROPOSAL = BASE / 'recovery-20261007/post-restoration-current-prese
 POST_RESTORE_PROPOSAL_SHA = '5521e9a5fc47573b8c315ccc5a7c4c38c66deb48d453f532023aae2165bf220a'
 POST_RESTORE_OWNER_REPLY = BASE / 'recovery-20261007/owner-post-restoration-preservation-message-ee71e3-v1.json'
 POST_RESTORE_OWNER_REPLY_SHA = '54c79de6d9d9805ceda92881db58c91447f09495391b84e526e2975be96b836f'
+PRESERVATION_SCOPE_REPLY = BASE / 'recovery-20261007/owner-quill-only-preservation-scope-clarification-v1.json'
+PRESERVATION_SCOPE_REPLY_SHA = 'eba2682c051e29c5d915f21f02e06175562b5b602ab10c48fd42f6152f2c216e'
+B3_PRESERVATION_REPLY = BASE / 'recovery-20261007/owner-additional-preservation-message-b3df-v1.json'
+B3_PRESERVATION_REPLY_SHA = 'c3fa17f7f7d2c79a9cf09e89d577cfda1f5477f1cc3dee780a61a7450c0b21cc'
+B3_PRESERVATION_PROPOSAL = BASE / 'recovery-20261007/additional-preservation-candidate-b3df-v1.json'
+B3_PRESERVATION_PROPOSAL_SHA = '88353ba211d0757dd8c775e10bea410a3170709a2ed6c6c74b2d0c59c6bcc0cb'
+PHASE_PRESERVATION_PATH = PREPARATION / 'co-tenant-phase-preservation.json'
+PHASE_PRESERVATION_PROTOCOL = 'quill-only-phase-preservation-v1'
+PHASE_CONFIGURATION_PATHS = (
+    '/etc/systemd/system/voiceassistmain-product.service',
+    '/etc/nginx/sites-available/voice.kasitcorp.com', '/etc/nginx/snippets/founder-dashboard-callback.conf',
+    '/etc/systemd/system/founder-dashboard-callback.service',
+    '/etc/systemd/system/voiceassist-restaurant-tajrish-20261007@.service',
+    '/etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.service',
+    '/etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.timer',
+    '/etc/systemd/system/voiceassistmain-restaurant-voice.service',
+    '/etc/systemd/system/timers.target.wants/voiceassist-restaurant-tajrish-20261007-retention.timer',
+    '/etc/systemd/system/multi-user.target.wants/voiceassistmain-restaurant-voice.service')
+PHASE_LINK_TARGETS = {path: '/etc/systemd/system/' + path.rsplit('/', 1)[1]
+                     for path in PHASE_CONFIGURATION_PATHS[-2:]}
+PHASE_OTHER_UNIT_FIELDS = {
+    name: ('DropInPaths', 'FragmentPath', 'Id', 'LoadState', 'NeedDaemonReload', 'UnitFileState')
+        + (() if name.endswith('.timer') else ('Group', 'User', 'WorkingDirectory'))
+    for name in ('voiceassist-restaurant-tajrish-20261007-retention.service',
+                 'voiceassist-restaurant-tajrish-20261007-retention.timer', 'voiceassistmain-restaurant-voice.service')}
+PHASE_OWNER_HISTORY = {'scope_reply_sha256': PRESERVATION_SCOPE_REPLY_SHA,
+    'b3_historical_proposal_sha256': B3_PRESERVATION_PROPOSAL_SHA,
+    'b3_historical_reply_sha256': B3_PRESERVATION_REPLY_SHA,
+    'ee71_historical_proposal_sha256': POST_RESTORE_PROPOSAL_SHA,
+    'ee71_historical_reply_sha256': POST_RESTORE_OWNER_REPLY_SHA}
 POST_RESTORE_PINS = {'availability_receipt_sha256': '17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd',
  'configuration_differences': [{'before': {'device': 2050,
                                            'gid': 0,
@@ -272,7 +303,8 @@ def stamp(value):
 
 def execution_gate():
     require(EXECUTION_QUALIFIED and NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED
-            and FIXED_CHILD_PROTOCOL_QUALIFIED, 'v3_execution_source_protocol_unqualified')
+            and FIXED_CHILD_PROTOCOL_QUALIFIED and PHASE_PRESERVATION_PROTOCOL_QUALIFIED,
+            'v3_execution_source_protocol_unqualified')
 
 
 def failure_summary(error):
@@ -354,6 +386,7 @@ def write_new(path, value):
             output.write(raw)
             output.flush()
             os.fsync(output.fileno())
+        os.fsync(parent)
 
 
 def module_from_bytes(raw, path, expected):
@@ -368,6 +401,18 @@ def module_from_bytes(raw, path, expected):
 CONFIGURATION_ADMISSION_SOURCE = r'''
 import ast as _configuration_ast
 import copy as _configuration_copy
+import hashlib as _configuration_hashlib
+import json as _configuration_json
+import re as _configuration_re
+from datetime import datetime as _configuration_datetime
+
+def configuration_date(value):
+    try:
+        result = _configuration_datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except (ValueError, AttributeError, TypeError):
+        need(False, 'v3_phase_timestamp')
+    need(result.tzinfo is not None, 'v3_phase_timestamp')
+    return result
 
 def configuration_same(left, right):
     if type(left) is not type(right):
@@ -379,7 +424,7 @@ def configuration_same(left, right):
         return len(left) == len(right) and all(configuration_same(a, b) for a, b in zip(left, right))
     return left == right
 
-def current_configuration_proof(expected, current, proof):
+def historical_current_configuration_proof(expected, current, proof):
     need(isinstance(expected, dict) and isinstance(current, dict) and isinstance(proof, dict),
          'v3_current_configuration_proof_inputs')
     need(all(type(path) is str for path in expected) and all(type(path) is str for path in current),
@@ -409,6 +454,171 @@ def current_configuration_proof(expected, current, proof):
          'v3_current_configuration_proof_binding')
     return True
 
+def configuration_digest(value):
+    return _configuration_hashlib.sha256(_configuration_json.dumps(
+        value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+def phase_configuration_proof(expected, current, proof):
+    need(type(expected) is dict and type(current) is dict and type(proof) is dict,
+         'v3_phase_configuration_inputs')
+    fields = {'format', 'protocol', 'owner_scope_reply_sha256', 'historical_original_configuration_sha256',
+        'phase_observation_path', 'phase_observation_sha256', 'phase_observation',
+        'external_net_differences', 'historical_deployment_authorization_verified',
+        'historical_manifest_mismatch_resolved', 'original_baseline_replaced', 'voiceassist_actions'}
+    need(set(proof) == fields and type(proof['format']) is int and proof['format'] == 2
+         and proof['protocol'] == PHASE_PRESERVATION_PROTOCOL
+         and proof['owner_scope_reply_sha256'] == PRESERVATION_SCOPE_REPLY_SHA
+         and proof['phase_observation_path'] == PHASE_PRESERVATION_PATH,
+         'v3_phase_configuration_scope')
+    need(proof['historical_deployment_authorization_verified'] is False
+         and proof['historical_manifest_mismatch_resolved'] is False
+         and proof['original_baseline_replaced'] is False
+         and type(proof['voiceassist_actions']) is int and proof['voiceassist_actions'] == 0,
+         'v3_phase_configuration_no_foreign_authority')
+    observation = proof['phase_observation']
+    need(type(observation) is dict and set(observation) == {'format', 'protocol', 'owner_scope_reply_sha256',
+        'historical_original_configuration_sha256', 'configuration', 'external_boundary', 'captured_at', 'binding'},
+        'v3_phase_observation_schema')
+    need(type(observation['format']) is int and observation['format'] == 1
+         and observation['protocol'] == PHASE_PRESERVATION_PROTOCOL
+         and observation['owner_scope_reply_sha256'] == PRESERVATION_SCOPE_REPLY_SHA
+         and observation['historical_original_configuration_sha256'] == configuration_digest(expected)
+         == proof['historical_original_configuration_sha256']
+         and configuration_digest(observation) == proof['phase_observation_sha256'],
+         'v3_phase_observation_cross_binding')
+    binding = observation['binding']
+    need(type(binding) is dict and set(binding) == {'operations_revision', 'served_revision',
+        'availability_receipt_sha256', 'parent_pid', 'parent_start_ticks', 'preparation_directory'}
+        and all(type(binding[name]) is str and len(binding[name]) == 40
+            and all(char in '0123456789abcdef' for char in binding[name])
+            for name in ('operations_revision', 'served_revision'))
+        and type(binding['availability_receipt_sha256']) is str
+        and len(binding['availability_receipt_sha256']) == 64
+        and all(char in '0123456789abcdef' for char in binding['availability_receipt_sha256'])
+        and all(type(binding[name]) is int and 0 < binding[name] <= 9007199254740991 for name in ('parent_pid', 'parent_start_ticks'))
+        and binding['preparation_directory'] == PHASE_PREPARATION_PATH,
+        'v3_phase_operation_binding')
+    need(type(observation['captured_at']) is str and configuration_date(observation['captured_at']).tzinfo is not None,
+         'v3_phase_capture_time')
+    need(configuration_same(current, observation['configuration']), 'v3_phase_configuration_drift')
+    def safe_json(value):
+        if type(value) is int: return abs(value) <= 9007199254740991
+        if type(value) is dict: return all(safe_json(item) for item in value.values())
+        if type(value) is list: return all(safe_json(item) for item in value)
+        return type(value) in (str, bool, type(None))
+    need(safe_json(observation), 'v3_phase_lossless_browser_representation')
+    need(all(type(path) is str for path in expected) and all(type(path) is str for path in current),
+         'v3_phase_configuration_string_paths')
+    allowed = set(PHASE_CONFIGURATION_PATHS)
+    differences = [{'path': path, 'historical_present': path in expected, 'phase_present': path in current,
+                    'historical': expected.get(path), 'phase': current.get(path)}
+        for path in sorted(set(expected) | set(current))
+        if path not in expected or path not in current or not configuration_same(expected[path], current[path])]
+    need({item['path'] for item in differences} <= allowed
+         and configuration_same(differences, proof['external_net_differences']),
+         'v3_phase_configuration_only_scoped_external_history')
+    need(type(observation['external_boundary']) is dict
+         and observation['external_boundary'].get('protocol') == PHASE_PRESERVATION_PROTOCOL
+         and observation['external_boundary'].get('owner_scope_reply_sha256') == PRESERVATION_SCOPE_REPLY_SHA,
+         'v3_phase_external_observation_binding')
+    phase_external_proof(observation['external_boundary'])
+    records = observation['external_boundary']['protected_public_records']
+    for path in PHASE_CONFIGURATION_PATHS:
+        item = records[path]
+        projected = dict(zip(('device', 'inode', 'uid', 'gid', 'mode'), item['metadata'][:5]))
+        key = 'link' if path in PHASE_LINK_TARGETS else 'sha256'
+        projected[key] = item[key]
+        need(configuration_same(current.get(path), projected), 'v3_phase_configuration_native_projection')
+    return True
+
+def phase_external_proof(boundary):
+    fields = {'protocol', 'owner_scope_reply_sha256', 'owner_history', 'native_host_proof',
+        'product_loaded_state', 'additional_unit_configuration', 'protected_public_records',
+        'deployment_record_facts', 'voiceassist_actions', 'historical_deployment_authorization_verified'}
+    need(set(boundary) == fields and boundary['owner_scope_reply_sha256'] == PRESERVATION_SCOPE_REPLY_SHA
+        and boundary['historical_deployment_authorization_verified'] is False
+        and type(boundary['voiceassist_actions']) is int and boundary['voiceassist_actions'] == 0,
+        'v3_phase_external_schema')
+    need(configuration_same(boundary['owner_history'], PHASE_OWNER_HISTORY), 'v3_phase_external_history_binding')
+    product = boundary['product_loaded_state']
+    need(type(product) is dict and set(product) == set(POST_RESTORE_PINS['product_loaded_state'])
+        and all(type(value) is str for value in product.values())
+        and product['LoadState'] == 'loaded' and product['NeedDaemonReload'] == 'no'
+        and product['FragmentPath'] == '/etc/systemd/system/voiceassistmain-product.service'
+        and product['DropInPaths'] == '' and product['User'] == product['Group'] == 'voiceassistmain'
+        and product['ActiveState'] == 'active' and product['SubState'] == 'running'
+        and product['UnitFileState'] in ('enabled', 'disabled', 'static', 'indirect', 'enabled-runtime')
+        and _configuration_re.fullmatch('[1-9][0-9]*', product['ExecMainStartTimestampMonotonic'])
+        and _configuration_re.fullmatch('[a-f0-9]{32}', product['InvocationID'])
+        and _configuration_re.fullmatch('[1-9][0-9]*', product['MainPID'])
+        and _configuration_re.fullmatch('/opt/voiceassistmain-product/releases/[a-f0-9]{24}', product['WorkingDirectory']),
+        'v3_phase_product_population')
+    native = boundary['native_host_proof']
+    need(type(native) is dict and set(native) == {'hostname', 'machine_id_sha256', 'pid1_comm', 'boot_id',
+        'mount_namespace', 'pid_namespace'} and all(type(value) is str and value for value in native.values()),
+        'v3_phase_native_host_schema')
+    units = boundary['additional_unit_configuration']
+    need(type(units) is dict and set(units) == set(PHASE_OTHER_UNIT_FIELDS)
+        and all(type(units[name]) is dict and set(units[name]) == set(fields)
+            and all(type(value) is str for value in units[name].values())
+            for name, fields in PHASE_OTHER_UNIT_FIELDS.items()), 'v3_phase_other_unit_fields')
+    need(all(units[name]['Id'] == name and units[name]['FragmentPath'] == '/etc/systemd/system/' + name
+        and units[name]['LoadState'] == 'loaded' and units[name]['NeedDaemonReload'] == 'no'
+        and units[name]['DropInPaths'] == '' for name in units), 'v3_phase_loaded_unit_configuration')
+    facts = boundary['deployment_record_facts']
+    need(type(facts) is dict and set(facts) == {'manifest_path', 'installation_receipt_path', 'installation_id',
+        'current_release', 'receipt_belongs_to_manifest_release', 'manifest_release_matches_loaded_unit',
+        'receipt_manifest_hash_matches_current', 'receipt_pid_matches_loaded_unit', 'recorded_manifest_sha256',
+        'recorded_main_pid', 'historical_deployment_authorization_verified',
+        'manifest_pid_mismatches_are_historical_approval_prerequisites'}
+        and type(facts.get('installation_receipt_path')) is str
+        and facts['manifest_path'] == '/etc/voiceassistmain-product.json'
+        and facts['installation_receipt_path'] == '/var/lib/voiceassistmain-product-installation/' + facts['installation_id'] + '.json'
+        and type(facts['installation_id']) is str and _configuration_re.fullmatch(
+            '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', facts['installation_id'])
+        and facts['current_release'] == product['WorkingDirectory']
+        and all(type(facts[name]) is bool for name in ('receipt_belongs_to_manifest_release',
+            'manifest_release_matches_loaded_unit', 'receipt_manifest_hash_matches_current', 'receipt_pid_matches_loaded_unit'))
+        and type(facts['recorded_main_pid']) is str and type(facts['recorded_manifest_sha256']) is str
+        and facts['historical_deployment_authorization_verified'] is False
+        and facts['manifest_pid_mismatches_are_historical_approval_prerequisites'] is False,
+        'v3_phase_deployment_fact_schema')
+    records = boundary['protected_public_records']
+    need(type(records) is dict and set(records) == set(PHASE_CONFIGURATION_PATHS) | {
+        facts['manifest_path'], facts['installation_receipt_path']}, 'v3_phase_all_protected_paths')
+    for path, item in records.items():
+        link = path in PHASE_LINK_TARGETS
+        need(type(item) is dict and set(item) == {'metadata', 'nlink', 'link' if link else 'sha256'}
+            and type(item['nlink']) is int and item['nlink'] == 1, 'v3_phase_record_schema')
+        values = item['metadata']
+        need(type(values) is list and len(values) == 8 and all(type(value) is int for value in values[:6])
+            and values[0] > 0 and values[1] > 0 and values[2:4] == [0, 0]
+            and values[4] == (0o777 if link else 0o644) and values[5] > 0
+            and all(type(value) is str and _configuration_re.fullmatch('[1-9][0-9]*', value) for value in values[6:]),
+            'v3_phase_meaningful_metadata')
+        need(item['link'] == PHASE_LINK_TARGETS[path] if link else type(item['sha256']) is str
+            and len(item['sha256']) == 64 and all(char in '0123456789abcdef' for char in item['sha256']),
+            'v3_phase_record_content')
+    return True
+
+def phase_report_admission(expected, current, proof, report, authority, operations, served, availability_sha):
+    phase_configuration_proof(expected, current, proof)
+    observation = proof['phase_observation']; binding = observation['binding']
+    need(binding['operations_revision'] == operations == report['operations_revision']
+        and binding['served_revision'] == served == report['served_revision']
+        and binding['availability_receipt_sha256'] == availability_sha == report['availability_receipt_sha256']
+        and configuration_same(authority.get('phase_preservation'), {
+            'path': PHASE_PRESERVATION_PATH, 'sha256': proof['phase_observation_sha256'], 'binding': binding}),
+        'v3_phase_report_authority_binding')
+    need(configuration_date(observation['captured_at']) <= configuration_date(report['started_at']) <= configuration_date(report['finished_at']),
+         'v3_phase_admission_interval')
+    return True
+
+def current_configuration_proof(expected, current, proof):
+    if type(proof) is dict and proof.get('protocol') == PHASE_PRESERVATION_PROTOCOL:
+        return phase_configuration_proof(expected, current, proof)
+    return historical_current_configuration_proof(expected, current, proof)
+
 def adapt_configuration_admission(scope, raw):
     tree = _configuration_ast.parse(raw)
     functions = [node for node in tree.body if isinstance(node, _configuration_ast.FunctionDef)
@@ -423,9 +633,12 @@ def adapt_configuration_admission(scope, raw):
     need(len(comparisons) == 1, 'v3_current_configuration_exact_frozen_predicate')
     replacement = _configuration_ast.parse(
         "(snapshot.get(name)==receipt['before'].get(name) if name!='configuration' else "
+        "(phase_report_admission(receipt['before'].get(name),snapshot.get(name),report.get('co_tenant_preservation_admission'),"
+        "report,authority,operations,served,availability_sha) if "
+        "'phase_preservation' in authority else "
         "(configuration_same(snapshot.get(name),receipt['before'].get(name)) or "
         "current_configuration_proof(receipt['before'].get(name), snapshot.get(name), "
-        "report.get('co_tenant_preservation_admission'))))", mode='eval').body
+        "report.get('co_tenant_preservation_admission')))))", mode='eval').body
     class Replace(_configuration_ast.NodeTransformer):
         def visit_Compare(self, node):
             return _configuration_copy.deepcopy(replacement) if node is comparisons[0] else self.generic_visit(node)
@@ -437,10 +650,20 @@ def adapt_configuration_admission(scope, raw):
 '''
 
 
+def configuration_constants():
+    return dict(POST_RESTORE_PINS=copy.deepcopy(POST_RESTORE_PINS),
+                POST_RESTORE_PROPOSAL_SHA=POST_RESTORE_PROPOSAL_SHA,
+                POST_RESTORE_OWNER_REPLY_SHA=POST_RESTORE_OWNER_REPLY_SHA,
+                PRESERVATION_SCOPE_REPLY_SHA=PRESERVATION_SCOPE_REPLY_SHA,
+                PHASE_PRESERVATION_PROTOCOL=PHASE_PRESERVATION_PROTOCOL,
+                PHASE_PRESERVATION_PATH=str(PHASE_PRESERVATION_PATH),
+                PHASE_PREPARATION_PATH=str(PREPARATION), PHASE_CONFIGURATION_PATHS=PHASE_CONFIGURATION_PATHS,
+                PHASE_LINK_TARGETS=PHASE_LINK_TARGETS, PHASE_OTHER_UNIT_FIELDS=PHASE_OTHER_UNIT_FIELDS,
+                PHASE_OWNER_HISTORY=PHASE_OWNER_HISTORY)
+
+
 def configuration_helpers(scope):
-    scope.update(POST_RESTORE_PINS=copy.deepcopy(POST_RESTORE_PINS),
-                 POST_RESTORE_PROPOSAL_SHA=POST_RESTORE_PROPOSAL_SHA,
-                 POST_RESTORE_OWNER_REPLY_SHA=POST_RESTORE_OWNER_REPLY_SHA)
+    scope.update(configuration_constants())
     exec(compile(CONFIGURATION_ADMISSION_SOURCE, '<reviewed-configuration-proof>', 'exec'), scope)
     return scope
 
@@ -753,7 +976,7 @@ def live_identity(availability, current, served):
             'same_pid_start_source_and_configuration': True}
 
 
-def current_external_boundary(recovery, acknowledgement):
+def historical_exact_external_boundary(recovery, acknowledgement):
     """Observe the separately authorized exact current boundary; change no foreign state."""
     execution_gate()
     require(isinstance(POST_RESTORE_OWNER_REPLY_SHA, str)
@@ -871,12 +1094,203 @@ def current_external_boundary(recovery, acknowledgement):
             'additional_unit_configuration': stable_units}
 
 
-def preserved_snapshot(expected, current, database, configuration_proof=None):
+def preservation_scope_authority():
+    """Authenticate the actual scoped repair instruction, retaining prior decisions as history."""
+    retained = {}
+    for path, digest in ((PRESERVATION_SCOPE_REPLY, PRESERVATION_SCOPE_REPLY_SHA),
+                         (B3_PRESERVATION_REPLY, B3_PRESERVATION_REPLY_SHA),
+                         (B3_PRESERVATION_PROPOSAL, B3_PRESERVATION_PROPOSAL_SHA),
+                         (POST_RESTORE_PROPOSAL, POST_RESTORE_PROPOSAL_SHA),
+                         (POST_RESTORE_OWNER_REPLY, POST_RESTORE_OWNER_REPLY_SHA)):
+        raw = protected(path)
+        require(sha(raw) == digest, 'v3_phase_owner_history_hash')
+        retained[str(path)] = json.loads(raw)
+    scope = retained[str(PRESERVATION_SCOPE_REPLY)]
+    require(type(scope.get('format')) is int and scope['format'] == 1
+            and scope.get('decision') == 'clarify_preservation_scope_and_authorize_scoped_procedure_repair'
+            and scope.get('question_call_id') == 'call_a2012a39145d49f288af32dd675d30f4'
+            and isinstance(scope.get('owner_reply'), str) and scope['owner_reply'].strip()
+            and scope.get('quillmd_services_must_remain_running') is True
+            and all(scope.get(name) is False for name in ('checks_disabled_authorized',
+                'original_baseline_replacement_authorized', 'historical_deployment_authorization_verified',
+                'manifest_mismatch_resolved_by_authorization', 'voiceassistmain_actions_authorized',
+                'provider_allowances_expanded')), 'v3_phase_owner_scope')
+    b3 = retained[str(B3_PRESERVATION_REPLY)]
+    require(type(b3.get('format')) is int and b3['format'] == 1
+            and b3.get('decision') == 'authorize_exact_additional_b3df_preservation_boundary'
+            and b3.get('owner_reply') == 'Authorize only this exact b3df preservation boundary'
+            and b3.get('proposal_path') == str(B3_PRESERVATION_PROPOSAL)
+            and b3.get('proposal_sha256') == B3_PRESERVATION_PROPOSAL_SHA
+            and all(b3.get(name) is False for name in ('future_differences_authorized',
+                'historical_deployment_authorization_verified', 'original_baseline_replaced',
+                'voiceassistmain_changes_authorized')), 'v3_phase_b3_historical_scope')
+    return {'scope_reply_sha256': PRESERVATION_SCOPE_REPLY_SHA,
+            'b3_historical_proposal_sha256': B3_PRESERVATION_PROPOSAL_SHA,
+            'b3_historical_reply_sha256': B3_PRESERVATION_REPLY_SHA,
+            'ee71_historical_proposal_sha256': POST_RESTORE_PROPOSAL_SHA,
+            'ee71_historical_reply_sha256': POST_RESTORE_OWNER_REPLY_SHA}
+
+
+def phase_configuration_packet(original, observation):
+    helpers = configuration_helpers({'need': require})
+    same = helpers['configuration_same']
+    current = observation['configuration']
+    differences = [{'path': path, 'historical_present': path in original, 'phase_present': path in current,
+                    'historical': original.get(path), 'phase': current.get(path)}
+        for path in sorted(set(original) | set(current))
+        if path not in original or path not in current or not same(original[path], current[path])]
+    proof = {'format': 2, 'protocol': PHASE_PRESERVATION_PROTOCOL,
+        'owner_scope_reply_sha256': PRESERVATION_SCOPE_REPLY_SHA,
+        'historical_original_configuration_sha256': helpers['configuration_digest'](original),
+        'phase_observation_path': str(PHASE_PRESERVATION_PATH),
+        'phase_observation_sha256': sha(encode(observation)), 'phase_observation': copy.deepcopy(observation),
+        'external_net_differences': differences, 'historical_deployment_authorization_verified': False,
+        'historical_manifest_mismatch_resolved': False, 'original_baseline_replaced': False, 'voiceassist_actions': 0}
+    helpers['phase_configuration_proof'](original, current, proof)
+    return proof
+
+
+def current_external_boundary(recovery, acknowledgement):
+    """Fresh scoped observation; old receipt/PID equality is historical evidence only.
+
+    Reads the existing protected configuration population, four loaded units and
+    two bounded public JSON records. Never traverses foreign release contents.
+    The caller pins this observation once and compares it during its own phase.
+    """
+    execution_gate()
+    authority = preservation_scope_authority()
+    export, boundary = recovery.owner_boundary_inputs(acknowledgement)
+    recovery.acknowledge_current_owner_configuration(boundary['before'], boundary['after'], acknowledgement)
+    native = recovery.native_boundary_identity()
+    require(native == export['native_host_proof'], 'v3_phase_native_host')
+    fields = tuple(POST_RESTORE_PINS['product_loaded_state'])
+    product_name = recovery.EXTERNAL_UNIT.rsplit('/', 1)[1]
+    product = recovery.owner_unit_state(product_name, fields)
+    require(set(product) == set(fields) and all(type(value) is str for value in product.values())
+            and product['LoadState'] == 'loaded' and product['NeedDaemonReload'] == 'no'
+            and product['FragmentPath'] == recovery.EXTERNAL_UNIT
+            and product['DropInPaths'] == ''
+            and re.fullmatch('/opt/voiceassistmain-product/releases/[a-f0-9]{24}', product['WorkingDirectory'])
+            and product['User'] == product['Group'] == 'voiceassistmain'
+            and product['UnitFileState'] in ('enabled', 'disabled', 'static', 'indirect', 'enabled-runtime')
+            and product['ActiveState'] == 'active' and product['SubState'] == 'running'
+            and re.fullmatch('[1-9][0-9]*', product['MainPID'])
+            and re.fullmatch('[a-f0-9]{32}', product['InvocationID']), 'v3_phase_loaded_product')
+    sources = recovery.source_files
+    records, parsed = {}, {}
+    def metadata(info):
+        values = recovery.full_native_metadata(info)
+        return values[:6] + [str(value) for value in values[6:]]
+    def regular(root_fd, path):
+        fd = sources.open_relative(root_fd, path[1:])
+        try:
+            before = os.fstat(fd)
+            require(stat.S_ISREG(before.st_mode) and before.st_uid == before.st_gid == 0
+                    and stat.S_IMODE(before.st_mode) == 0o644 and before.st_nlink == 1
+                    and not os.listxattr(fd), 'v3_phase_public_metadata')
+            raw = sources.bytes_at(fd, 2 * 1024 * 1024)
+            reopened = sources.open_relative(root_fd, path[1:])
+            try:
+                require(sources.stable(before) == sources.stable(os.fstat(fd))
+                        == sources.stable(os.fstat(reopened)), 'v3_phase_public_race')
+            finally: os.close(reopened)
+            records[path] = {'metadata': metadata(before), 'nlink': 1, 'sha256': sha(raw)}
+            return raw
+        finally: os.close(fd)
+    additional = export['additional_configuration_evidence']
+    with sources.open_root(Path('/')) as root_fd:
+        paths = {item['path'] for item in POST_RESTORE_PINS['configuration_differences']} | {
+            item['path'] for item in additional['exact_added_files']}
+        require(len(paths) == 8, 'v3_phase_finite_configuration_scope')
+        for path in sorted(paths):
+            raw = regular(root_fd, path)
+            if path == recovery.EXTERNAL_UNIT:
+                require([line for line in raw.splitlines() if line.strip().startswith(b'WorkingDirectory=')]
+                        == [b'WorkingDirectory=' + product['WorkingDirectory'].encode()],
+                        'v3_phase_loaded_fragment_binding')
+        for item in additional['exact_added_enablement_links']:
+            path = Path(item['path']); parent = sources.open_relative(root_fd, str(path.parent)[1:], directory=True)
+            try:
+                before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+                target = os.readlink(path.name, dir_fd=parent)
+                require(stat.S_ISLNK(before.st_mode) and before.st_uid == before.st_gid == 0
+                        and before.st_nlink == 1 and stat.S_IMODE(before.st_mode) == 0o777
+                        and target == recovery.CURRENT_OWNER_PINS['added_links'][str(path)]
+                        and sources.stable(before) == sources.stable(os.stat(path.name, dir_fd=parent, follow_symlinks=False)),
+                        'v3_phase_enablement_link')
+                records[str(path)] = {'metadata': metadata(before), 'nlink': 1, 'link': target}
+            finally: os.close(parent)
+        manifest_path = '/etc/voiceassistmain-product.json'
+        manifest = json.loads(regular(root_fd, manifest_path))
+        installation = manifest.get('installation_id')
+        require(type(installation) is str and re.fullmatch(
+            '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', installation),
+            'v3_phase_canonical_installation_path')
+        receipt_path = '/var/lib/voiceassistmain-product-installation/' + installation + '.json'
+        receipt = json.loads(regular(root_fd, receipt_path))
+        facts = {'manifest_path': manifest_path, 'installation_receipt_path': receipt_path,
+            'installation_id': installation, 'current_release': product['WorkingDirectory'],
+            'receipt_belongs_to_manifest_release': all(type(manifest.get(key)) is str
+                and manifest.get(key) == receipt.get(key) for key in ('installation_id', 'source_sha256', 'release_root')),
+            'manifest_release_matches_loaded_unit': manifest.get('release_root') == product['WorkingDirectory'],
+            'receipt_manifest_hash_matches_current': receipt.get('manifest_sha256') == records[manifest_path]['sha256'],
+            'receipt_pid_matches_loaded_unit': type(receipt.get('main_pid')) is int
+                and receipt['main_pid'] == int(product['MainPID']),
+            'recorded_manifest_sha256': str(receipt.get('manifest_sha256')), 'recorded_main_pid': str(receipt.get('main_pid')),
+            'historical_deployment_authorization_verified': False,
+            'manifest_pid_mismatches_are_historical_approval_prerequisites': False}
+    def observe_other(expected):
+        name = expected['Id']; actual = recovery.owner_unit_state(name, tuple(expected))
+        require(set(actual) == set(expected) and all(type(value) is str for value in actual.values())
+                and actual['ActiveState'] in ('active', 'inactive', 'activating', 'deactivating', 'failed', 'reloading', 'maintenance')
+                and actual['SubState'] in ('dead', 'running', 'waiting', 'elapsed', 'exited', 'failed', 'start',
+                    'start-pre', 'start-post', 'stop', 'stop-sigterm', 'stop-sigkill', 'stop-post',
+                    'final-sigterm', 'final-sigkill', 'auto-restart', 'cleaning', 'reload'),
+                'v3_phase_other_unit_population')
+        return {key: value for key, value in actual.items() if key not in ('ActiveState', 'SubState')}
+    stable_units = {}
+    for expected in additional['loaded_states']:
+        name = expected['Id']; stable = observe_other(expected)
+        require(observe_other(expected) == stable,
+                'v3_phase_other_unit_configuration_race')
+        stable_units[name] = stable
+    require(recovery.owner_unit_state(product_name, fields) == product
+            and recovery.native_boundary_identity() == native, 'v3_phase_native_final_race')
+    # Reopen the complete finite population after collecting units and JSON facts.
+    with sources.open_root(Path('/')) as root_fd:
+        for path, item in records.items():
+            if 'sha256' in item:
+                before = copy.deepcopy(item); regular(root_fd, path)
+                require(records[path] == before, 'v3_phase_complete_file_race')
+            else:
+                parent = sources.open_relative(root_fd, str(Path(path).parent)[1:], directory=True)
+                try:
+                    info = os.stat(Path(path).name, dir_fd=parent, follow_symlinks=False)
+                    require(metadata(info) == item['metadata'] and info.st_nlink == 1
+                            and os.readlink(Path(path).name, dir_fd=parent) == item['link'], 'v3_phase_complete_link_race')
+                finally: os.close(parent)
+    require(recovery.owner_unit_state(product_name, fields) == product
+            and recovery.native_boundary_identity() == native, 'v3_phase_final_loaded_identity_race')
+    for expected in additional['loaded_states']:
+        require(observe_other(expected) == stable_units[expected['Id']], 'v3_phase_final_other_configuration_race')
+    result = {'protocol': PHASE_PRESERVATION_PROTOCOL, 'owner_scope_reply_sha256': PRESERVATION_SCOPE_REPLY_SHA,
+            'owner_history': authority, 'native_host_proof': native, 'product_loaded_state': product,
+            'additional_unit_configuration': stable_units, 'protected_public_records': records,
+            'deployment_record_facts': facts, 'voiceassist_actions': 0,
+            'historical_deployment_authorization_verified': False}
+    configuration_helpers({'need': require})['phase_external_proof'](result)
+    return result
+
+
+def preserved_snapshot(expected, current, database, configuration_proof=None, *, phase_required=False):
     require(current['database'] == database, 'v3_database_snapshot_race')
     for label in ('mail', 'static'):
         require(expected[label] == current[label], 'v3_preserved_' + label)
     helpers = configuration_helpers({'need': require})
-    if not helpers['configuration_same'](expected['configuration'], current['configuration']):
+    require(not phase_required or type(configuration_proof) is dict
+            and configuration_proof.get('protocol') == PHASE_PRESERVATION_PROTOCOL, 'v3_phase_proof_required')
+    if (isinstance(configuration_proof, dict) and configuration_proof.get('protocol') == PHASE_PRESERVATION_PROTOCOL
+            or not helpers['configuration_same'](expected['configuration'], current['configuration'])):
         helpers['current_configuration_proof'](
             expected['configuration'], current['configuration'], configuration_proof)
     require(all(current['files'].get(name) == value for name, value in expected['files'].items()),
@@ -1560,12 +1974,16 @@ def protocol_pipeline(host, contract, operations, served):
         host.write_attempt(operations, served, before, after)
         try:
             host.child('browser', operations, served, phase_deadline)
+            host.recheck_phase_preservation()
             host.child('verify', operations, served, phase_deadline)
             report = host.independent_report()
             require(report['complete'] is True and report['operations_revision'] == operations
                     and report['served_revision'] == served, 'v3_independent_report_revision_binding')
             deadline_remaining(phase_deadline, host.clock)
+            host.recheck_phase_preservation()
             host.write_complete(report)
+            host.recheck_phase_preservation()
+            deadline_remaining(phase_deadline, host.clock)
             return report
         except BaseException:
             host.write_stop('v3_campaign_failed_or_unknown_preserve_availability_and_records')
@@ -1817,15 +2235,18 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
     py = ("import base64,json,sys;scope={};exec(compile(base64.b64decode("
           + repr(base64.b64encode(blobs['acceptance_v3_contract.py']).decode())
           + "),'<authenticated-v3-contract>','exec'),scope);"
-          + "scope.update(POST_RESTORE_PINS=json.loads(" + repr(encode(POST_RESTORE_PINS).decode())
-          + "),POST_RESTORE_PROPOSAL_SHA=" + repr(POST_RESTORE_PROPOSAL_SHA)
-          + ",POST_RESTORE_OWNER_REPLY_SHA=" + repr(POST_RESTORE_OWNER_REPLY_SHA) + ");"
+          + "scope.update(json.loads(" + repr(encode(configuration_constants()).decode()) + "));"
           + "exec(compile(" + repr(CONFIGURATION_ADMISSION_SOURCE)
           + ",'<reviewed-configuration-proof>','exec'),scope);"
           + "scope['adapt_configuration_admission'](scope,base64.b64decode("
           + repr(base64.b64encode(blobs['acceptance_v3_contract.py']).decode()) + "));"
           + "value=json.load(sys.stdin);"
           "raw=bytes.fromhex(value['raw_hex']);args=value['args'];kind=value['kind'];"
+          "receipt_raw=bytes.fromhex(value['receipt_raw_hex'])if kind=='admission'else b'';"
+          "scope['need'](scope['sha'](receipt_raw)==args['availability_sha'],'v3_js_raw_receipt_hash')if kind=='admission'else None;"
+          "args.update(receipt=json.loads(receipt_raw))if kind=='admission'else None;"
+          "args.update(before=json.loads(bytes.fromhex(value['before_raw_hex'])),"
+          "after=json.loads(bytes.fromhex(value['after_raw_hex'])))if kind=='auth'else None;"
           "result=scope['availability'](raw,bytes.fromhex(value['original_hex']),**args)"
           "if kind=='availability'else scope['auth_sequence'](raw,**args)if kind=='auth'"
           "else scope['admission'](raw,**args);print(json.dumps(result,separators=(',',':')))")
@@ -1835,9 +2256,18 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
     old_gate = b"export function executionGate(){if(!EXECUTION_QUALIFIED||!NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED||!FIXED_RUNNER_QUALIFIED)throw new Error('acceptance_v3_execution_unqualified');}"
     common = replace_once(common, old_gate, gate.encode(), 'native_child_gate')
     start = common.index(b'export function validateV3(kind,args){')
-    common = common[:start] + ("export function validateV3(kind,args){return JSON.parse(execFileSync("
+    common = common[:start] + ("const verifiedRawInputs=new Map();export function validateV3(kind,args){"
+        "const value={kind,...args};if(kind==='admission'){if(verifiedRawInputs.has('availability'))"
+        "value.receipt_raw_hex=verifiedRawInputs.get('availability');else if(typeof value.receipt_raw_hex!=='string')"
+        "throw new Error('Validated raw availability required');}"
+        "if(kind==='auth'){if(!verifiedRawInputs.has('before-auth')||!verifiedRawInputs.has('after-auth'))"
+        "throw new Error('Validated raw admissions required');"
+        "value.before_raw_hex=verifiedRawInputs.get('before-auth');value.after_raw_hex=verifiedRawInputs.get('after-auth');}"
+        "const result=JSON.parse(execFileSync("
         + json.dumps(str(PYTHON)) + ",['-B','-c'," + json.dumps(py)
-        + "],{input:JSON.stringify({kind,...args}),encoding:'utf8',maxBuffer:4194304,timeout:15000}));}\n").encode()
+        + "],{input:JSON.stringify(value),encoding:'utf8',maxBuffer:4194304,timeout:15000}));"
+        "if(kind==='availability')verifiedRawInputs.set('availability',args.raw_hex);"
+        "if(kind==='admission')verifiedRawInputs.set(args.args.phase,args.raw_hex);return result;}\n").encode()
     url = 'data:text/javascript;base64,' + base64.b64encode(common).decode()
     result = replace_once(result, b"from './acceptance-v3-contract.mjs'", ('from ' + json.dumps(url)).encode(), 'contract_import')
     result = result.replace(b'privateRead(new URL(import.meta.url).pathname)',
@@ -1880,7 +2310,7 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
 
 
 def verifier_adapter(raw, common, authority, availability_verifier, completion_check=None,
-                     publisher_admission=None):
+                     publisher_admission=None, phase_preservation=None):
     """Use the full frozen independent DB/files/SDK/Word verifier, not browser flags."""
     require(sha(raw) == DEPENDENCIES['verify_installed_acceptance_v3.py'], 'v3_frozen_dependency_hash')
     tree = ast.parse(raw)
@@ -1915,12 +2345,17 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
             for key in reports[0].value.keys), 'v3_exact_final_doctor_verifier_report')
     reports[0].value.keys.append(ast.Constant('doctor_final_storage_state'))
     reports[0].value.values.append(ast.parse("progress['doctor_final_storage_state']", mode='eval').body)
+    if phase_preservation is not None:
+        require(callable(phase_preservation), 'v3_phase_verifier_callback')
+        reports[0].value.keys.append(ast.Constant('co_tenant_preservation_admission'))
+        reports[0].value.values.append(ast.parse('phase_preservation()', mode='eval').body)
     module = types.ModuleType('_quillmd_v3_independent_verifier')
     module.__file__ = str(FROZEN / 'verify_installed_acceptance_v3.py')
     module.__dict__.update(v3_execution_gate=execution_gate, validate_v3_availability=common.availability,
         validate_v3_admission=common.admission, validate_v3_auth_sequence=common.auth_sequence,
         validate_admin_final_storage=validate_admin_final_storage,
         validate_doctor_final_storage=validate_doctor_final_storage,
+        phase_preservation=phase_preservation,
         AVAILABILITY=str(AVAILABILITY), PREPARATION=str(PREPARATION), ADMIN=str(ADMIN), CAMPAIGN=str(CAMPAIGN))
     exec(compile(ast.fix_missing_locations(tree), module.__file__, 'exec'), module.__dict__)
     module.load_v3_authority = lambda operations, served: copy.deepcopy(authority) if (
@@ -1980,6 +2415,8 @@ class InstalledHost:
         self.publication_alignment = None
         self.parent_lock_context = None
         self.own_hold_mode = None
+        self.co_tenant_phase_observation = None
+        self.co_tenant_phase_raw = None
 
     def canonical(self, path):
         return Path(path).resolve(strict=True)
@@ -2049,7 +2486,12 @@ class InstalledHost:
         adapt_publisher_adjudicator(self.availability_verifier)
 
     def authority(self):
-        return derive_authority(self.contract, self.common, self.operations, self.served, self.admission_raws)
+        result = derive_authority(self.contract, self.common, self.operations, self.served, self.admission_raws)
+        if self.co_tenant_phase_observation is not None:
+            result['phase_preservation'] = {'path': str(PHASE_PRESERVATION_PATH),
+                'sha256': sha(self.co_tenant_phase_raw),
+                'binding': copy.deepcopy(self.co_tenant_phase_observation['binding'])}
+        return result
 
     def authenticate_availability(self, contract, operations, served):
         raw = protected(AVAILABILITY / 'complete.json')
@@ -2186,14 +2628,51 @@ class InstalledHost:
     def snapshot(self):
         acknowledgement = self.recovery.contract_from_bytes(
             self.read_source(self.source / self.recovery.DECL))['external_configuration_ack']
+        captured_at = datetime.now(timezone.utc).isoformat()
         before = current_external_boundary(self.recovery, acknowledgement)
         snapshot = self.old.snapshot(self.native, self.backup, self.storage)
-        configuration_helpers({'need': require})['current_configuration_proof'](
-            self.receipt['before']['configuration'], snapshot['configuration'], before['configuration_admission'])
         require(current_external_boundary(self.recovery, acknowledgement) == before,
                 'v3_current_configuration_snapshot_race')
-        self.current_co_tenant_boundary = before
+        if self.co_tenant_phase_observation is None:
+            require(self.inside and self.own_hold_mode in ('--execute', '--preflight', '--admit-before-auth', '--admit-after-auth')
+                    and self.parent_lock_context['parent_pid'] == os.getpid()
+                    and self.parent_lock_context['parent_start_ticks'] == process_start(Path('/proc/self/stat').read_text()),
+                    'v3_child_cannot_capture_new_phase_baseline')
+            self.check_publication_hold()
+            observation = {'format': 1, 'protocol': PHASE_PRESERVATION_PROTOCOL,
+                'owner_scope_reply_sha256': PRESERVATION_SCOPE_REPLY_SHA,
+                'historical_original_configuration_sha256': sha(encode(self.receipt['before']['configuration'])),
+                'configuration': copy.deepcopy(snapshot['configuration']), 'external_boundary': before,
+                'captured_at': captured_at, 'binding': {'operations_revision': self.operations,
+                    'served_revision': self.served, 'availability_receipt_sha256': sha(self.availability_raw),
+                    'parent_pid': os.getpid(), 'parent_start_ticks': process_start(Path('/proc/self/stat').read_text()),
+                    'preparation_directory': str(PREPARATION)}}
+            proof = phase_configuration_packet(self.receipt['before']['configuration'], observation)
+            self.co_tenant_phase_observation, self.co_tenant_phase_raw = observation, encode(observation)
+        else:
+            proof = phase_configuration_packet(self.receipt['before']['configuration'], self.co_tenant_phase_observation)
+        helpers = configuration_helpers({'need': require})
+        helpers['phase_configuration_proof'](self.receipt['before']['configuration'], snapshot['configuration'], proof)
+        require(helpers['configuration_same'](before, self.co_tenant_phase_observation['external_boundary']),
+                'v3_phase_external_drift')
+        self.current_co_tenant_boundary = dict(before, configuration_admission=proof)
         return snapshot
+
+    def recheck_phase_preservation(self):
+        require(self.inside and self.co_tenant_phase_observation is not None, 'v3_phase_baseline_required')
+        acknowledgement = self.recovery.contract_from_bytes(
+            self.read_source(self.source / self.recovery.DECL))['external_configuration_ack']
+        before = current_external_boundary(self.recovery, acknowledgement)
+        configuration = self.native.configuration()
+        after = current_external_boundary(self.recovery, acknowledgement)
+        helpers = configuration_helpers({'need': require})
+        require(helpers['configuration_same'](before, after)
+                and helpers['configuration_same'](before, self.co_tenant_phase_observation['external_boundary'])
+                and helpers['configuration_same'](configuration, self.co_tenant_phase_observation['configuration']),
+                'v3_phase_preservation_drift')
+        if os.path.lexists(PREPARATION):
+            require(protected(PHASE_PRESERVATION_PATH) == self.co_tenant_phase_raw, 'v3_phase_saved_observation_changed')
+        return phase_configuration_packet(self.receipt['before']['configuration'], self.co_tenant_phase_observation)
 
     def recheck_source_and_idle(self, receipt, operations, served):
         require(self.inside, 'v3_parent_hold_required')
@@ -2291,7 +2770,7 @@ class InstalledHost:
                     == self.publication_alignment['selected']['row'], 'v3_admitted_selected_publication')
         snapshot = self.snapshot()
         preserved_snapshot(receipt['before'], snapshot, admission['current_database_fingerprint'],
-                           self.current_co_tenant_boundary['configuration_admission'])
+                           self.current_co_tenant_boundary['configuration_admission'], phase_required=True)
         worker = receipt['units_after'][UNITS[2]]
         report = {'format': 3, 'complete': True, 'phase': phase, 'operations_revision': operations,
             'served_revision': served, 'availability_receipt_sha256': sha(self.availability_raw),
@@ -2318,6 +2797,8 @@ class InstalledHost:
     def create_exclusive_preparation(self, operations, served, before):
         require(self.inside and not os.path.lexists(PREPARATION), 'v3_exclusive_preparation')
         PREPARATION.mkdir(mode=0o700)
+        require(self.co_tenant_phase_raw is not None, 'v3_phase_baseline_required')
+        write_new(PHASE_PRESERVATION_PATH, self.co_tenant_phase_raw)
         write_new(PREPARATION / 'publisher-alignment.json', self.publication_alignment)
         write_new(PREPARATION / 'admission-before-auth.json', self.admission_raws['before-auth'])
         write_new(PREPARATION / 'parent.json', {'format': 3, 'operations_revision': operations,
@@ -2331,6 +2812,7 @@ class InstalledHost:
             'parent_start_ticks': process_start(Path('/proc/self/stat').read_text()),
             'deadline_monotonic': deadline, 'locks': copy.deepcopy(self.lock_rows),
             'publisher_alignment_sha256': sha(encode(self.publication_alignment) + b'\n'),
+            'phase_preservation_sha256': sha(self.co_tenant_phase_raw),
             'authority': self.authority(), 'admission_sha256': {k: sha(v) for k, v in self.admission_raws.items()}}
         raw = encode(value) + b'\n'
         write_new(PREPARATION / ('parent-phase-' + phase + '.json'), raw)
@@ -2356,7 +2838,8 @@ class InstalledHost:
         require(self.inside, 'v3_parent_hold_required')
         write_new(ATTEMPT, {'format': 3, 'attempt': 1, 'operations_revision': operations, 'served_revision': served,
             'before_auth_sha256': sha(self.admission_raws['before-auth']),
-            'after_auth_sha256': sha(self.admission_raws['after-auth']), 'provider_retries': 0})
+            'after_auth_sha256': sha(self.admission_raws['after-auth']),
+            'phase_preservation_sha256': sha(self.co_tenant_phase_raw), 'provider_retries': 0})
 
     def independent_report(self):
         return json.loads(protected(REPORT))
@@ -2365,6 +2848,8 @@ class InstalledHost:
         write_new(CAMPAIGN / 'complete.json', {'format': 3, 'complete': True,
             'operations_revision': self.operations, 'served_revision': self.served,
             'independent_report_sha256': sha(protected(REPORT)), 'independent_report': str(REPORT),
+            'phase_preservation_sha256': sha(self.co_tenant_phase_raw),
+            'co_tenant_preservation_admission': self.recheck_phase_preservation(),
             'availability_preserved': True, 'provider_retries': 0})
 
     def write_stop(self, reason):
@@ -2381,6 +2866,8 @@ def installed_contract(host):
     require(contract.get('protocol_qualified') is True and all(contract.get(name) is True for name in (
         'execution_qualified', 'native_authorization_protocol_qualified', 'fixed_child_protocol_qualified')),
         'v3_declaration_source_qualification_required')
+    require(contract.get('phase_preservation') == phase_declaration(),
+            'v3_declared_phase_preservation_protocol')
     require(contract.get('post_restoration_preservation') == {
                 'protocol': 'post-restoration-exact-owner-preservation-v1',
                 'proposal': {'path': str(POST_RESTORE_PROPOSAL), 'sha256': POST_RESTORE_PROPOSAL_SHA},
@@ -2396,6 +2883,40 @@ def installed_contract(host):
         require(re.findall(('^' + name + ': ([a-f0-9]{64})$').encode(), raw, re.M) == [expected.encode()],
                 'v3_committed_frozen_input_pin')
     return raw, contract
+
+
+def phase_declaration():
+    return {'protocol': PHASE_PRESERVATION_PROTOCOL,
+        'source_protocol_qualified': PHASE_PRESERVATION_PROTOCOL_QUALIFIED,
+        'scope_reply': {'path': str(PRESERVATION_SCOPE_REPLY), 'sha256': PRESERVATION_SCOPE_REPLY_SHA},
+        'b3_authorized_history': {'proposal_path': str(B3_PRESERVATION_PROPOSAL),
+            'proposal_sha256': B3_PRESERVATION_PROPOSAL_SHA, 'owner_reply_path': str(B3_PRESERVATION_REPLY),
+            'owner_reply_sha256': B3_PRESERVATION_REPLY_SHA},
+        'phase_observation_path': str(PHASE_PRESERVATION_PATH),
+        'protected_external_configuration_paths': list(PHASE_CONFIGURATION_PATHS),
+        'historical_approval_verified': False, 'future_deployment_approval': False,
+        'historical_manifest_pid_match_required': False, 'foreign_release_inventory_scan': False,
+        'original_baseline_replaced': False, 'voiceassist_actions': 0,
+        'phase_baseline_captured_once': True, 'during_phase_drift_refuses': True}
+
+
+def adopt_phase_observation(host, raw, context):
+    require(host.co_tenant_phase_observation is None and sha(raw) == context.get('phase_preservation_sha256'),
+            'v3_child_phase_packet_hash')
+    observation = json.loads(raw)
+    binding = {'operations_revision': host.operations, 'served_revision': host.served,
+        'availability_receipt_sha256': sha(host.availability_raw), 'parent_pid': context['parent_pid'],
+        'parent_start_ticks': context['parent_start_ticks'], 'preparation_directory': str(PREPARATION)}
+    require(configuration_helpers({'need': require})['configuration_same'](observation.get('binding'), binding)
+            and context.get('authority', {}).get('phase_preservation') == {
+                'path': str(PHASE_PRESERVATION_PATH), 'sha256': sha(raw), 'binding': binding},
+            'v3_child_phase_packet_authority')
+    proof = phase_configuration_packet(host.receipt['before']['configuration'], observation)
+    require(all(configuration_helpers({'need': require})['configuration_same'](
+        json.loads(report)['co_tenant_preservation_admission'], proof)
+        for report in host.admission_raws.values()), 'v3_child_phase_admission_cross_hash')
+    host.co_tenant_phase_observation, host.co_tenant_phase_raw = observation, raw
+    return proof
 
 
 def admit_parent_child(host, phase, context_sha):
@@ -2416,8 +2937,9 @@ def admit_parent_child(host, phase, context_sha):
     host.admission_raws = {value: protected(PREPARATION / ('admission-' + value + '.json')) for value in phases}
     require(context.get('admission_sha256') == {key: sha(value) for key, value in host.admission_raws.items()},
             'v3_parent_admission_hashes')
-    require(context.get('authority') == host.authority(), 'v3_derived_parent_authority_changed')
     receipt = host.authenticate_availability(host.contract, host.operations, host.served)
+    adopt_phase_observation(host, protected(PHASE_PRESERVATION_PATH), context)
+    require(context.get('authority') == host.authority(), 'v3_derived_parent_authority_changed')
     for value, report_raw in host.admission_raws.items():
         host.common.admission(report_raw, value, host.authority(), receipt, host.operations, host.served,
                               sha(host.availability_raw))
@@ -2427,6 +2949,7 @@ def admit_parent_child(host, phase, context_sha):
                 and attempt.get('operations_revision') == host.operations and attempt.get('served_revision') == host.served
                 and attempt.get('before_auth_sha256') == sha(host.admission_raws['before-auth'])
                 and attempt.get('after_auth_sha256') == sha(host.admission_raws['after-auth'])
+                and attempt.get('phase_preservation_sha256') == sha(host.co_tenant_phase_raw)
                 and attempt.get('provider_retries') == 0, 'v3_single_clinical_attempt_binding')
     else:
         require(not any(os.path.lexists(path) for path in (ADMIN, CAMPAIGN, ATTEMPT)), 'v3_no_authentication_reuse')
@@ -2437,6 +2960,8 @@ def admit_parent_child(host, phase, context_sha):
     host.inside = True
     if phase != 'verify':
         host.recheck_source_and_idle(receipt, host.operations, host.served)
+    else:
+        host.recheck_phase_preservation()
     parent_phase_admission(context, phase, host.operations, host.served, source=host.source)
     return context
 
@@ -2467,13 +2992,16 @@ def dispatch_verification(host, context_sha):
     context = admit_parent_child(host, 'verify', context_sha)
     verifier = verifier_adapter(host.blobs['verify_installed_acceptance_v3.py'], host.common,
                                 host.authority(), host.availability_verifier, host.measured_completion,
-                                host.publisher_admission)
+                                host.publisher_admission, host.recheck_phase_preservation)
     verifier.verify(types.SimpleNamespace(progress=str(CAMPAIGN / 'progress.json'), output=str(REPORT)))
     report = json.loads(protected(REPORT))
     require(report.get('complete') is True and report.get('operations_revision') == host.operations
             and report.get('served_revision') == host.served
             and report.get('provider_calls') == report.get('database_writes') == 0,
             'v3_independent_native_verification')
+    proof = host.recheck_phase_preservation()
+    require(configuration_helpers({'need': require})['configuration_same'](
+        report.get('co_tenant_preservation_admission'), proof), 'v3_final_phase_report_binding')
     parent_phase_admission(context, 'verify', host.operations, host.served, source=host.source)
     deadline_remaining(context['deadline_monotonic'], host.clock)
     return report
@@ -2485,6 +3013,8 @@ def plan():
             'execution_qualified': EXECUTION_QUALIFIED,
             'native_authorization_protocol_qualified': NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED,
             'fixed_child_protocol_qualified': FIXED_CHILD_PROTOCOL_QUALIFIED,
+            'phase_preservation_protocol_qualified': PHASE_PRESERVATION_PROTOCOL_QUALIFIED,
+            'phase_preservation': phase_declaration(),
             'origin': ORIGIN, 'source_base': M6, 'declaration': DECL, 'source_paths': sorted(ALLOWED),
             'dependency_sha256': DEPENDENCIES, 'operations_revision': None, 'served_revision': None,
             'prospective_served_revision': M6,
@@ -2496,7 +3026,7 @@ def plan():
                 'proposal_sha256': POST_RESTORE_PROPOSAL_SHA,
                 'owner_reply_source_binding_present': isinstance(POST_RESTORE_OWNER_REPLY_SHA, str),
                 'historical_deployment_authorization_verified': False},
-            'remaining_dependencies': ['exact separately bound owner reply for the four post-restoration differences',
+            'remaining_dependencies': ['finished phase-preservation source qualification',
                 'exact merged operations and normal-descendant citations',
                 'fresh bounded native source, recovery and preservation admissions',
                 'one authorized normal-MFA and synthetic workflow campaign'],
