@@ -64,7 +64,7 @@ RESTRICTED_NAMES = b'    server_name quillmd.com www.quillmd.com admin.quillmd.c
 ACTIVE_PROTOCOL_QUALIFIED = True
 PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED = True
 INGRESS_PUBLICATION_QUALIFIED = True
-SERVED_VERIFICATION_PROTOCOL_QUALIFIED = False
+SERVED_VERIFICATION_PROTOCOL_QUALIFIED = True
 SERVED_VERIFICATION_POLICY = {
     'mode':'--verify-served','output':str(VERIFY_OUTPUT),'attempt':str(VERIFY_ATTEMPT),
     'requests':[{'actor':'doctor','method':'GET','path':'/'},

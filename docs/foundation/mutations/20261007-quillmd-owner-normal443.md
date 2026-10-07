@@ -108,7 +108,7 @@ static assets, schemas and original captures remain byte-identical.
       }
     ]
   },
-  "served_verification_protocol_qualified": false,
+  "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
   "source_base": "9fad5a65e196428726540da0f0936f70cc768d05"
@@ -245,8 +245,8 @@ re-observed through the bounded reviewed reader and retains device2050,
 inode919665, root ownership, mode0644, single link, no xattrs and the pinned hash.
 The three operational source gates and application source gate now qualify the
 finished protocol. The explicit application environment setting remains disabled.
-The acceptance merge's complete CI citation and exact normal PR/merge citations
-remain pending execution prerequisites. These
+The acceptance merge's complete CI citation is established; exact normal PR/merge
+citations remain execution prerequisites. These
 are specific execution inputs, not a request for further historical VoiceAssist
 approval. Existing V8/V15 exports and recorded preservation decision remain
 untouched, and historical deployment approval remains unverified. Runtime execution
@@ -264,8 +264,8 @@ source evidence; they do not claim that the future campaign or transition ran.
 
 The separate `--verify-served` command is a distinct one-shot verification after a
 genuine completed normal transition. Its fixed protected output and attempt paths
-are declared above. Source qualification of this new mode remains false until its
-finished checks and independent refutation complete. Its read-only default never
+are declared above. Source qualification of this new mode follows its finished
+checks, independent refutation and exact acceptance dependency citation. Its read-only default never
 claims that either a campaign, transition or authenticated served verification
 has run.
 
@@ -347,8 +347,13 @@ authenticates the protected owner reply at SHA-256
 and exactly the four separately reviewed post-restoration differences. Historical
 deployment authorization remains unverified; original captures, exports and the
 earlier owner decision remain intact. This binding does not authorize any further
-VoiceAssist change. The acceptance merge citation is still pending, so the new
-served-verification source qualification remains false. The normal environment
-default is disabled, and genuine completed campaign, current sessions and normal
-completion remain runtime prerequisites. No campaign, transition or authenticated
-served verification is asserted by the new source base.
+VoiceAssist change. The exact acceptance merge citation completed with CI run
+`37689655420` attempt1 and secrets run `37689655464` attempt1; its protected
+citation log has SHA-256
+`d096aea858d2da9afc06df0473e8b63118cc57a241c055a3083f50c3ae81c0ae`.
+The finished served-verification protocol now qualifies as source. The normal
+environment default is disabled, and genuine completed campaign, admitted current
+co-tenant boundary, current sessions and normal completion remain runtime
+prerequisites. Any further unadmitted co-tenant difference refuses before an
+authenticated request or service action. No campaign, transition or authenticated
+served verification is asserted by source qualification.
