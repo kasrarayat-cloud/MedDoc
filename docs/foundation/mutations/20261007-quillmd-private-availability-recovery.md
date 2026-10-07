@@ -40,6 +40,43 @@ remainsUNKNOWN. The03:18 co-tenant unit discrepancy independently explains a
 current preservation refusal, not the missing historical reason. Preserve all
 original and failed continuation receipts, sealed environments and outputs.
 
+### Publisher timestamp comparison repair,7October2026
+
+The14:34 read-only refusal retained the fixed label
+`publisher_record_changed_during_adjudication`, not its individual observations.
+It does not establish which row, unit or journal component differed. Preserve that
+receipt and do not infer its historical cause from a later successful admission.
+
+A controlled counterexample proves a comparison defect in the frozen verifier:
+PostgreSQL JSON represents the unchanged instant `.123450` as `.12345`; the
+initial adjudicator parses it back to `.123450`, while its reread compares the
+original JSON string. The recovery adapter canonicalizes only `created_at`,
+`computed_at` and `published_at` to aware UTC instants on both publisher reads.
+All eleven columns, every timestamp microsecond, actual unit/invocation drift,
+journal drift, source pins, reproduction and private-input checks remain guarded.
+Missing, malformed or naive timestamps refuse. The adapter permits only the
+frozen observer's exact read-only SQL statement. It performs no write or publish.
+
+The frozen verifier and its original qualification remain byte-identical. This
+comparison repair does not acknowledge co-tenant deployment authorization, pause
+timers, suppress concurrent metadata changes or enable installation execution.
+
+### Public source and citation admission hardening,7October2026
+
+Before citation or private verification, admit every Git-tracked operator file's
+native UID/GID1000, canonical public mode, single regular inode, absent extended
+attributes and exact target Git bytes. Reuse the reviewed permission-repair
+reader with explicit held directory descriptors and no symlink traversal. Admit
+only public Git-tracked rebuild source in the installed tree; private environment
+and runtime paths are excluded. Keep all nine approved source paths unchanged.
+
+Bind the loaded contract and committed declaration to the retained authenticated
+declaration bytes. Execute all three exact-revision citation checks and their
+library from sealed buffers, without reopening mutable script paths. Require the
+helper's source tree to equal this operator's tree; do not rebind module globals.
+The frozen verifier, approval protocol and installation qualification remain
+unchanged. These source checks make no service, file-content or database change.
+
 Timeline evidence is
 rebuild/.runtime/owner-demo-20261006/recovery-20261007/timeline-20261007T052127Z.json,
 SHA2564203bc23a31572fdb2b36afa7286748e3be7d6e7d2bb5725fabf0f2a0d7b666d.
@@ -231,7 +268,33 @@ and reviewed. No current unit hash is inserted as an approved expected value.
   "output": "/opt/meddoc-pro/rebuild/.runtime/private-availability-recovery-20261007",
   "prepared_release": "fa331c8e33ccf4ed82c7b0a6c36283f463092f62",
   "provider_calls": 0,
+  "publisher_alignment": {
+    "automatic_retries": false,
+    "manual_publications": 0,
+    "maximum_wait_seconds": 360,
+    "poll_interval_seconds": 1,
+    "protocol": "one-natural-publication-under-input-exclusions-v1",
+    "provider_calls": 0,
+    "service_timeout_seconds": 60,
+    "timer_accuracy_seconds": 15,
+    "timer_cadence_seconds": 300,
+    "timer_or_service_actions": 0,
+    "unit_source_sha256": {
+      "quillmd-fresh-operations-publisher.service": "62bdacb5d40862e11c8321cedaadf2a6e6b3c1e583a3557abdde900be8dfd2c9",
+      "quillmd-fresh-operations-publisher.timer": "4327daca96a0cd4299487060b05a0e48afee762f3dd65f6170a40ebbad6ec12d"
+    }
+  },
   "readonly_qualified": true,
+  "ruled_time_budget": {
+    "completion_seconds": 240,
+    "environment_variable": "RULED_ACT_MAX_SECS",
+    "full_readiness_seconds": 90,
+    "maximum_seconds": 1200,
+    "natural_wait_seconds": 360,
+    "preparation_seconds": 30,
+    "publication_drain_seconds": 120,
+    "source_checks_seconds": 300
+  },
   "storage_allowances": {
     "background_bytes": 8589934592,
     "peak_bytes": 1073741824,
@@ -320,3 +383,49 @@ The command has not been executed. Missing/incoherent records, concurrent change
 wrong host/identity or any unexpected unit difference refuse; do not retry via
 another identity. Actual approval schema and authorization linkage still need
 independent review and source qualification before the availability act can run.
+
+## Prospective natural-publication sequencing and measured completion
+
+The frozen publisher check compares a retained row against current authenticated
+operational inputs. A monitor update after that publication can make its reported
+age impossible to reproduce at the old publication time. Controlled exact-frozen
+source tests establish this sequencing counterexample; they do not reconstruct
+the cause of the historical 14:34 or 15:11 refusals. The original failures and the
+frozen verifier remain unchanged.
+
+The proposed admission holds the existing four input operation locks first,
+permits one independently verified natural timer publication, then acquires the
+existing publication exclusion and drains. It rechecks the exact selected row,
+unit, timer, journal and two descriptor-read current public unit sources, then
+runs the complete unchanged admission once. Only the exact selected row and
+measured invocation can be admitted. There is no manual publication, timer or
+publisher service action, admission retry, future source clock, mismatch
+suppression, or healthy claim for a verified unhealthy exit-1 publication.
+
+The wait refuses after 360 seconds. This is a conservative refusal bound, not a
+guarantee that the next publication will complete: the 300-second cadence plus
+15-second accuracy plus 60-second service ceiling can total 375 seconds. Failure
+produces no recovery output, installation marker, source forward or service start.
+The existing exclusion may truthfully record coordination events.
+
+The ruled wrapper must explicitly receive RULED_ACT_MAX_SECS=1200. The prospective
+budget reserves 300 seconds for source checks, 360 for the natural publication,
+120 for drain and its reread, 90 for full readiness, 30 for preparation and the
+unchanged 240-second completion deadline (1140 seconds total). Monotonic elapsed
+and remaining-time checks refuse stage overruns or insufficient reserved time
+before recovery output and the attempt. The existing ruled watchdog remains the
+hard overall ceiling; measured stage checks refuse after a blocking call returns,
+rather than claiming to interrupt each dependency at its stage allowance.
+
+A future completion separately retains completion_unit_provenance: exactly the
+three owned application units, each seven-field legacy state plus measured
+InvocationID and NeedDaemonReload. UUIDs must be 32 lowercase hex characters,
+reload must be no, and the seven-field projection must equal the unchanged legacy
+units_after map. Repeated observations bind these fields to the same completion
+and final receipt; invocation identity is never inferred from a PID. The frozen
+worker boundary map remains unchanged.
+
+This proposal does not qualify native approval or installation. Both source gates
+remain false pending actual reviewed authorization and installation readiness.
+Historical V8 collection is evidenced in the conversation; its literal false
+lineage field is unassessed. No V11 execution receipt is asserted by this amendment.
