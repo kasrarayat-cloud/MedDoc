@@ -169,6 +169,7 @@ class AvailabilityRecoveryTests(unittest.TestCase):
             tree.chmod(0o755)
             source = tree / 'rebuild/ops/new.py'
             source.parent.mkdir(parents=True, mode=0o755)
+            source.parent.chmod(0o755)
             source.parent.parent.chmod(0o755)
             source.write_text('fictional public source')
             source.chmod(0o644)
@@ -182,6 +183,20 @@ class AvailabilityRecoveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(act.Refusal, 'source_readability'):
                     act.source_readability(tree)
                 self.assertEqual(source.stat().st_mode & 0o777, 0o600)
+                source.chmod(0o644)
+                source.parent.chmod(0o700)
+                with self.assertRaisesRegex(act.Refusal, 'source_traversability'):
+                    act.source_readability(tree)
+                self.assertEqual(source.parent.stat().st_mode & 0o777, 0o700)
+                source.parent.chmod(0o755)
+                target = tree / 'retained.py'
+                target.write_text('fictional retained source')
+                target.chmod(0o644)
+                source.unlink()
+                source.symlink_to(target)
+                with self.assertRaisesRegex(act.Refusal, 'source_readability'):
+                    act.source_readability(tree)
+                self.assertTrue(source.is_symlink())
 
     def test_git_forward_has_explicit_public_umask_and_rechecks_source(self):
         result = SimpleNamespace(returncode=0, stdout=b'fictional forward', stderr=b'')
