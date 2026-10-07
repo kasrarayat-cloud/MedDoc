@@ -173,6 +173,20 @@ def operator_source_bytes(relative, mode=0o644, *, tree=None, root_fd=None):
         raise Refusal('availability_public_source_descriptor_refused') from None
 
 
+
+def public_git_blob(tree, revision, relative):
+    """Bounded public blob reads; metadata/command reads retain their old ceiling."""
+    require(tree in (SOURCE, ROOT) and re.fullmatch('[a-f0-9]{40}', revision or ''),
+            'availability_public_git_blob_scope')
+    try:
+        source_files.relative_path(relative)
+        # This already reviewed primitive caps stdout at 16 MiB and sanitizes
+        # Git's environment. The 2 MiB frozen command primitive is unchanged.
+        return source_files.git(tree, 'show', revision + ':' + relative)
+    except source_files.Refusal:
+        raise Refusal('availability_public_git_blob_refused') from None
+
+
 def contract_from_bytes(raw):
     marker = b'<!-- private-availability-contract -->\n```json\n'
     require(raw.count(marker) == 1, 'availability_declaration_contract')
@@ -241,9 +255,9 @@ def source_gate(target, contract):
             mode, _, stage = identity.split()
             require(stage == '0' and mode in ('100644', '100755'), 'availability_operator_index_type')
             raw = operator_source_bytes(relative, 0o644 if mode == '100644' else 0o755, root_fd=root_fd)
-            require(raw == old.git(SOURCE, 'show', target + ':' + relative), 'availability_operator_byte_identity')
+            require(raw == public_git_blob(SOURCE, target, relative), 'availability_operator_byte_identity')
             if relative.startswith('rebuild/') and relative not in ALLOWED:
-                require(raw == old.git(SOURCE, 'show', PREPARED + ':' + relative),
+                require(raw == public_git_blob(SOURCE, PREPARED, relative),
                         'availability_payload_byte_identity')
             if relative in retained_paths:
                 buffers[relative] = raw
@@ -258,7 +272,7 @@ def source_gate(target, contract):
             source_files.source_path(relative)
             require(stage == '0' and mode in ('100644', '100755'), 'availability_installed_index_type')
             raw = operator_source_bytes(relative, 0o644 if mode == '100644' else 0o755, root_fd=root_fd)
-            require(raw == old.git(ROOT, 'show', INSTALLED + ':' + relative),
+            require(raw == public_git_blob(ROOT, INSTALLED, relative),
                     'availability_installed_byte_identity')
     source_readability(ROOT)
     require(sha(buffers['rebuild/ops/legacy_model_activation.py']) == FROZEN_OPERATOR,
