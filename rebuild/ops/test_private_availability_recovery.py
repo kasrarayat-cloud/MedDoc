@@ -321,13 +321,17 @@ class AvailabilityRecoveryTests(unittest.TestCase):
                          'availability_protected_operation_failure')
 
     def test_actual_execute_gate_cannot_be_opened_by_future_declaration_flags_or_fake_proof(self):
-        with patch.object(act, 'readiness', side_effect=AssertionError('must not read state')), \
+        with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
+             patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False), \
+             patch.object(act, 'readiness', side_effect=AssertionError('must not read state')), \
              patch.object(act, 'existing_operation_locks', side_effect=AssertionError('must not create/open locks')):
             with self.assertRaisesRegex(act.Refusal, 'authorization_protocol_unqualified'):
                 act.complete_recovery(TARGET, {'installation_qualified': True,
                     'external_configuration_ack': {'qualified': True, 'fabricated': True}}, {},
                     host=None, backup=None, storage=None, exclusion=None, env_writer=None)
-        with patch.object(act, 'load_contract', side_effect=AssertionError('must not read authority/state')):
+        with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
+             patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False), \
+             patch.object(act, 'load_contract', side_effect=AssertionError('must not read authority/state')):
             with self.assertRaisesRegex(act.Refusal, 'authorization_protocol_unqualified'):
                 act.main(['--execute', '--operator-commit', TARGET])
 
@@ -801,7 +805,8 @@ class CurrentOwnerBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             stack, before, current, ack, _, _, _ = self.fixture(Path(temp))
             with stack:
-                with self.assertRaisesRegex(act.Refusal, 'current_owner_protocol_unqualified'):
+                with patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False), \
+                     self.assertRaisesRegex(act.Refusal, 'current_owner_protocol_unqualified'):
                     act.acknowledge_configuration(before, current, ack)
                 with patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', True):
                     result = act.acknowledge_configuration(before, current, ack)
@@ -831,7 +836,7 @@ class CurrentOwnerBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             stack, before, current, ack, _, _, _ = self.fixture(Path(temp))
             original, following, _, _ = population(); original['configuration'] = before; following['configuration'] = current
-            with stack:
+            with stack, patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False):
                 result = act.compare_population({'expected_population': original}, following,
                     {'current_database_fingerprint': following['database']}, ack, allow_pending=True)
             self.assertEqual(result['status'], 'RED'); self.assertFalse(result['qualified'])
@@ -922,13 +927,17 @@ class CurrentOwnerBoundaryTests(unittest.TestCase):
         marker = b'<!-- private-availability-contract -->\n```json\n'
         head, tail = raw.split(marker, 1); body, end = tail.split(b'\n```', 1); contract = json.loads(body)
         with patch.object(act, 'original_qualified_policy', return_value=contract['original_policy']):
-            self.assertFalse(act.contract_from_bytes(raw)['installation_qualified'])
-            contract['installation_qualified'] = True
-            qualified = head + marker + act.encode(contract) + b'\n```' + end
-            with self.assertRaisesRegex(act.Refusal, 'prospective_scope'): act.contract_from_bytes(qualified)
-            with patch.object(act, 'INSTALLATION_QUALIFIED', True):
-                self.assertTrue(act.contract_from_bytes(qualified)['installation_qualified'])
-            with patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', True), \
+            self.assertTrue(act.contract_from_bytes(raw)['installation_qualified'])
+            with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
+                 self.assertRaisesRegex(act.Refusal, 'prospective_scope'):
+                act.contract_from_bytes(raw)
+            contract['installation_qualified'] = False
+            unqualified = head + marker + act.encode(contract) + b'\n```' + end
+            with patch.object(act, 'INSTALLATION_QUALIFIED', False):
+                self.assertFalse(act.contract_from_bytes(unqualified)['installation_qualified'])
+            with self.assertRaisesRegex(act.Refusal, 'prospective_scope'):
+                act.contract_from_bytes(unqualified)
+            with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
                  self.assertRaisesRegex(act.Refusal, 'authorization_protocol_unqualified'):
                 act.complete_recovery(TARGET, contract, {}, host=None, backup=None, storage=None, exclusion=None, env_writer=None)
 

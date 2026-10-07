@@ -63,8 +63,8 @@ SECONDS = 240
 # A future declaration or self-asserted evidence JSON cannot turn this gate on.
 NATIVE_APPROVAL_PROTOCOL_QUALIFIED = False
 # Distinct prospective owner decision; it never certifies historical deployment approval.
-CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED = False
-INSTALLATION_QUALIFIED = False
+CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED = True
+INSTALLATION_QUALIFIED = True
 CURRENT_OWNER_PROTOCOL = 'current-owner-preservation-boundary-v1'
 OWNER_EVIDENCE_ROOT = RUNTIME / 'owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1'
 CURRENT_OWNER_PINS = {

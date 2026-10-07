@@ -185,7 +185,7 @@ and reviewed. No current unit hash is inserted as an approved expected value.
   "external_configuration_ack": {
     "approval_protocol": "current-owner-preservation-boundary-v1",
     "boundary_sha256": "a70f3b53fbf12a888d7c08f644d6a78df78cf621abd2c3d1a23d6e506b0e2798",
-    "current_owner_preservation_authorized": false,
+    "current_owner_preservation_authorized": true,
     "historical_deployment_authorization_verified": false,
     "independent_review": {
       "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1/native-admin-v15-independent-lineage-adjudication-v1.json",
@@ -195,15 +195,18 @@ and reviewed. No current unit hash is inserted as an approved expected value.
       "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1/native-admin-deployment-evidence-export-v15.json",
       "sha256": "b23c70d6811a9a1e14e24a6a495e5d4f0aeca2c4d9c7fc68cf2c2f7d5b77568b"
     },
-    "owner_decision_evidence": null,
-    "qualified": false,
-    "reason": "Pending the explicit exact-seven-delta current preservation decision; historical deployment authorization remains unverified. Native V15 proves current installation identity only.",
+    "owner_decision_evidence": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1/owner-current-configuration-preservation-decision-v1.json",
+      "sha256": "2f522ec71fdca5334143e5f051cb18131102c448da91d15eb46c544625be1e1f"
+    },
+    "qualified": true,
+    "reason": "The recorded user reply authorizes exactly the seven current preservation differences. V15 and independent review establish current release, installation, configuration and loaded identity. Historical deployment authorization remains unverified; no VoiceAssistMain mutation is authorized.",
     "unit_path": "/etc/systemd/system/voiceassistmain-product.service"
   },
   "format": 1,
   "frozen_operator_sha256": "89b79c18d6cdbeb2c78595d314df76dd8aa0185e14efa3d4f8b7550a117634f3",
   "frozen_verifier_sha256": "b77a1c48f2a08c8a0a73df6fc945da850bdc5f558254d32a526913409f17683c",
-  "installation_qualified": false,
+  "installation_qualified": true,
   "new_capture": false,
   "original_policy": {
     "admin_evidence_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-admin-continuation-20261007",
@@ -513,3 +516,22 @@ bridge would reject the real schema and has been removed. The unshipped proposal
 commit remains retained as failure evidence. Natural-publication fixtures now use
 the actual UUID shape, checked against both model and migration. The original
 full-row comparison, timestamp adapter and all meaningful refusal gates remain.
+
+
+## Recorded exact preservation decision and recovery qualification
+
+The owner answered “Authorize this exact preservation boundary” to question
+call_75026206f84147ca968af5cbe6ba1eec in this conversation. The protected
+transcription and strict decision document are hash-bound in the contract above.
+They authorize only the seven already enumerated current comparison differences,
+without replacing the original capture or claiming historical deployment approval.
+V8's hard-coded false remains unassessed; V11 execution remains unestablished.
+The historical authorization source gate remains false. The distinct current
+preservation gate and installation gate are qualified in this reviewed revision;
+execution still requires the exact merged source, complete citation, native
+rereads, complete original preservation admission, and the ruled procedure.
+
+The publisher timestamp repair is inherited from merged PR #1302 (ff60bc49).
+It is not reapplied. The unshipped bigint comparison proposal was withdrawn by
+6b42a044f after model/migration inspection established the actual UUID schema.
+The real selected UUID and all eleven row fields remain unchanged and checked.
