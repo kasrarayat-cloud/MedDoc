@@ -139,6 +139,41 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
     "resume_output": "/opt/meddoc-pro/rebuild/.runtime/legacy-model-continuation-20261007"
   },
   "outer_ceiling_seconds": 1680,
+  "phase_preservation": {
+    "b3_authorized_history": {
+      "owner_reply_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/owner-additional-preservation-message-b3df-v1.json",
+      "owner_reply_sha256": "c3fa17f7f7d2c79a9cf09e89d577cfda1f5477f1cc3dee780a61a7450c0b21cc",
+      "proposal_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/additional-preservation-candidate-b3df-v1.json",
+      "proposal_sha256": "88353ba211d0757dd8c775e10bea410a3170709a2ed6c6c74b2d0c59c6bcc0cb"
+    },
+    "during_phase_drift_refuses": true,
+    "foreign_release_inventory_scan": false,
+    "future_deployment_approval": false,
+    "historical_approval_verified": false,
+    "historical_manifest_pid_match_required": false,
+    "original_baseline_replaced": false,
+    "phase_baseline_captured_once": true,
+    "phase_observation_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/co-tenant-phase-preservation.json",
+    "protected_external_configuration_paths": [
+      "/etc/systemd/system/voiceassistmain-product.service",
+      "/etc/nginx/sites-available/voice.kasitcorp.com",
+      "/etc/nginx/snippets/founder-dashboard-callback.conf",
+      "/etc/systemd/system/founder-dashboard-callback.service",
+      "/etc/systemd/system/voiceassist-restaurant-tajrish-20261007@.service",
+      "/etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.service",
+      "/etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.timer",
+      "/etc/systemd/system/voiceassistmain-restaurant-voice.service",
+      "/etc/systemd/system/timers.target.wants/voiceassist-restaurant-tajrish-20261007-retention.timer",
+      "/etc/systemd/system/multi-user.target.wants/voiceassistmain-restaurant-voice.service"
+    ],
+    "protocol": "quill-only-phase-preservation-v1",
+    "scope_reply": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/owner-quill-only-preservation-scope-clarification-v1.json",
+      "sha256": "eba2682c051e29c5d915f21f02e06175562b5b602ab10c48fd42f6152f2c216e"
+    },
+    "source_protocol_qualified": true,
+    "voiceassist_actions": 0
+  },
   "post_restoration_preservation": {
     "owner_reply": {
       "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/owner-post-restoration-preservation-message-ee71e3-v1.json",
@@ -533,3 +568,42 @@ The owner separately authorized exactly these four differences in this conversat
 Independent finished refutation demonstrated a draft type-equality counterexample: outside the four allowed paths, uid integer0 to booleanFalse passed Python equality. The protected offline demonstrator is retained separately. The correction uses recursive typed JSON equality and explicit key presence for the entire configuration population, including the unchanged-configuration fallback. Regression controls reject that case, deleted null-valued paths, non-string object keys and old comparison fallback; the other frozen predicates and genuine raw-report hash remain exact. This does not claim any live metadata type change.
 
 All 92 affected offline controls passed on the finished draft before owner binding, including the actual JavaScript-to-Python pure admission program. The exclusive protected log is `current-preservation-acceptance-affected-checks-v2.log` under the recovery evidence directory, SHA256 `0df4951ab510bd5774caf900fd810ed130df23d53331532c61a36e7b28003a83`. No live authentication, provider, service or database action occurred in these controls. Independent final refutation found no remaining demonstrated counterexample. These results qualify local preparation only; the actual bounded campaign remains unobserved until it executes.
+
+## Scoped phase preservation amendment — 7 October 2026
+
+The actual owner clarification is authenticated by the exact protected record
+and SHA in the contract. It authorizes this Quill-only procedure repair. The b3
+proposal and exact owner decision remain separate immutable history, alongside
+ee71, V15 and the original recovery captures. Preserving an observed deployment
+does not certify historical approval or resolve earlier manifest/PID uncertainty.
+
+The new source protocol has passed its affected offline controls. Finished
+independent refutation and exact committed head/merge citations remain required
+before installed execution. Each real campaign captures one
+separately typed, protected phase packet before authentication. It binds the actual
+operations and served revisions, recovery receipt, parent PID/start and fixed
+preparation path. Parent authority, children, admissions, attempt, independent
+report and completion retain its exact SHA. A child cannot create a replacement
+baseline. Historical net differences are reported only within the ten existing
+VoiceAssist protected paths, as unapproved historical changes; all other protected
+configuration remains equal to the retained recovery record.
+
+The phase observes all ten paths, their bytes/targets and meaningful native
+metadata, the product's thirteen properties and every original configuration
+field of the other three units. Only their already-declared natural ActiveState
+and SubState lifecycle remains variable. Product PID/invocation and all loaded
+configuration remain exact during this campaign. Nanosecond metadata uses exact
+decimal strings in the new packet so browser JSON cannot round it. Descriptors,
+root ownership, permissions, single-link identity, nofollow traversal and reopens
+remain required. All protected resources are rechecked during and after our own
+operations; drift preserves failure evidence and blocks replay.
+
+The bounded current public manifest/receipt facts are retained, including
+release-binding, manifest-hash and PID mismatches. Historical matching or
+approval is not a prerequisite to Quill-only verification. No foreign release
+file inventory is scanned, and no VoiceAssist file or service is changed. The
+original database, mail, static, file, MFA, clinical, worker, source, budget and
+provider predicates retain their existing scope. The frozen admission adapter
+changes only its configuration predicate and requires the phase packet even if
+current configuration has reverted to the original historical value. The same
+closed proof executes natively and inside the authenticated JavaScript bridge.

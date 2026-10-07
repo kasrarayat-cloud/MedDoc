@@ -76,6 +76,8 @@ class FakeHost:
         finally: self.events.append('locks-exit'); self.inside = False
     def recheck_source_and_idle(self, *args):
         assert self.inside; self.events.append('inside-source-idle')
+    def recheck_phase_preservation(self):
+        assert self.inside; self.events.append('phase-preservation')
     def admit(self, phase, *args):
         assert self.inside; self.events.append(phase); return {'complete': True}
     def create_exclusive_preparation(self, *args): assert self.inside; self.events.append('exclusive-preparation')
@@ -142,10 +144,11 @@ class InertAndSourceTests(unittest.TestCase):
         self.assertFalse(result['installed_state_accessed'])
         self.assertEqual((result['provider_calls'], result['authentication_submissions'], result['database_writes']), (0, 0, 0))
         self.assertTrue(all(result[name] for name in ('execution_qualified',
-            'native_authorization_protocol_qualified', 'fixed_child_protocol_qualified')))
+            'native_authorization_protocol_qualified', 'fixed_child_protocol_qualified', 'phase_preservation_protocol_qualified')))
 
     def test_each_source_qualification_is_independently_required(self):
-        names = ('EXECUTION_QUALIFIED', 'NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED', 'FIXED_CHILD_PROTOCOL_QUALIFIED')
+        names = ('EXECUTION_QUALIFIED', 'NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED', 'FIXED_CHILD_PROTOCOL_QUALIFIED',
+                 'PHASE_PRESERVATION_PROTOCOL_QUALIFIED')
         for name in names:
             values = dict.fromkeys(names, True); values[name] = False
             with self.subTest(name=name), patch.multiple(v3, **values), patch.dict(os.environ, {name: '1'}):
@@ -356,7 +359,7 @@ class InertAndSourceTests(unittest.TestCase):
         host = FakeHost(); v3.protocol_pipeline(host, contract(), OPS, SERVED)
         phases = [row for row in host.events if isinstance(row, str)]
         self.assertEqual(phases, ['dependencies', 'availability', 'locks-enter', 'inside-source-idle',
-            'before-auth', 'exclusive-preparation', 'after-auth', 'inside-source-idle', 'attempt', 'complete', 'locks-exit'])
+            'before-auth', 'exclusive-preparation', 'after-auth', 'inside-source-idle', 'attempt', 'phase-preservation', 'phase-preservation', 'complete', 'phase-preservation', 'locks-exit'])
         child = {row[0]: row[1] for row in host.events if isinstance(row, tuple) and row[0] in ('normal-auth', 'browser', 'verify')}
         self.assertEqual(child['browser'], child['verify']); self.assertLess(child['normal-auth'], child['browser'])
 
@@ -1222,7 +1225,7 @@ class FinancialAndExportTests:
             for phase in ('before-auth','after-auth'):
                 with self.subTest(phase=phase),self.assertRaises(Reached):host.admit(phase,contract(),{},OPS,SERVED)
             with self.assertRaises(Reached):host.recheck_source_and_idle({},OPS,SERVED)
-        def adapter(raw,common,authority,verifier,completion,publisher):
+        def adapter(raw,common,authority,verifier,completion,publisher,phase):
             self.assertEqual(publisher,host.publisher_admission)
             return types.SimpleNamespace(verify=lambda args:(_ for _ in ()).throw(Reached()))
         with patch.object(v3,'execution_gate'),patch.object(v3,'admit_parent_child',return_value={}),\
@@ -1551,7 +1554,7 @@ class FinancialAndExportTests:
             receipt = {'before': before, 'units_after': units, 'completed_at': START.isoformat(),
                        'admission': {'allowed_deltas': {'health_session': {}}}}
             report = {'format': 3, 'complete': True, 'phase': 'before-auth', 'operations_revision': OPS,
-                'served_revision': SERVED, 'availability_receipt_sha256': 'c'*64,
+                'served_revision': SERVED, 'availability_receipt_sha256': v3.sha(v3.encode(receipt)),
                 'original_activation': common.ORIGINAL, 'original_failed_sha256': common.ORIGINAL_SHA,
                 'original_backup_manifest_cipher_sha256': common.BACKUP_SHA, 'original_records_adjudicated': True,
                 'provider_calls': 0, 'database_writes_by_verifier': 0,
@@ -1567,7 +1570,7 @@ class FinancialAndExportTests:
                 raw = v3.encode(value)
                 authority = {'admissions': {'before-auth': {'path': common.PREPARATION+'/admission-before-auth.json',
                     'sha256': v3.sha(raw) if hash_override is None else hash_override}}}
-                return common.admission(raw, 'before-auth', authority, receipt, OPS, SERVED, 'c'*64)
+                return common.admission(raw, 'before-auth', authority, receipt, OPS, SERVED, v3.sha(v3.encode(receipt)))
             self.assertEqual(check(report), report)
             self.assertEqual(report['current_snapshot']['configuration'], controls.after)
             self.assertEqual(receipt['before']['configuration'], controls.before)
@@ -1595,9 +1598,9 @@ class FinancialAndExportTests:
                 raw = v3.encode(value)
                 arguments = {'phase': 'before-auth', 'authority': {'admissions': {'before-auth': {
                     'path': common.PREPARATION+'/admission-before-auth.json', 'sha256': v3.sha(raw)}}},
-                    'receipt': receipt, 'operations': OPS, 'served': SERVED, 'availability_sha': 'c'*64}
+                    'receipt': receipt, 'operations': OPS, 'served': SERVED, 'availability_sha': v3.sha(v3.encode(receipt))}
                 return subprocess.run(['/usr/bin/node', '--input-type=module', '-e', javascript],
-                    input=v3.encode({'raw_hex': raw.hex(), 'args': arguments}), capture_output=True, timeout=15)
+                    input=v3.encode({'raw_hex': raw.hex(), 'receipt_raw_hex': v3.encode(receipt).hex(), 'args': arguments}), capture_output=True, timeout=15)
             passed = javascript_check(report)
             self.assertEqual(passed.returncode, 0, passed.stderr.decode())
             self.assertEqual(json.loads(passed.stdout), report)
@@ -1605,6 +1608,62 @@ class FinancialAndExportTests:
             self.assertNotEqual(javascript_check(bad).returncode, 0)
         finally:
             controls.doCleanups()
+
+
+    def test_actual_frozen_phase_admission_and_embedded_bridge_require_lossless_exact_packet(self):
+        import re
+        original, observation, _ = phase_fixture()
+        database = {'pending_jobs': 0, 'held': 0}
+        before = {'configuration': original, 'files': {}, 'mail': {}, 'static': {}, 'database': database}
+        units = {name: {'MainPID': '123', 'ExecMainStartTimestampMonotonic': '456'} for name in self.common.UNITS}
+        receipt = {'before': before, 'units_after': units, 'completed_at': START.isoformat(),
+            'admission': {'allowed_deltas': {'health_session': {}}}}
+        availability_sha = v3.sha(v3.encode(receipt))
+        observation['binding']['availability_receipt_sha256'] = availability_sha
+        proof = v3.phase_configuration_packet(original, observation)
+        report = {'format': 3, 'complete': True, 'phase': 'before-auth', 'operations_revision': OPS,
+            'served_revision': SERVED, 'availability_receipt_sha256': availability_sha,
+            'original_activation': self.common.ORIGINAL, 'original_failed_sha256': self.common.ORIGINAL_SHA,
+            'original_backup_manifest_cipher_sha256': self.common.BACKUP_SHA, 'original_records_adjudicated': True,
+            'provider_calls': 0, 'database_writes_by_verifier': 0,
+            'current_snapshot': dict(before, configuration=observation['configuration']),
+            'current_database_fingerprint': database, 'service_identities': units,
+            'worker_running_idle': {'unit': self.common.UNITS[2], 'pid': 123, 'start_monotonic_usec': '456',
+                'pending_jobs': 0, 'held_reservations': 0, 'unresolved_reaper_paths': 0,
+                'existing_job_receipt_usage_rows_unchanged': True},
+            'allowed_deltas': {'health_session': {}, 'publisher': {'all_eleven_columns_accounted_for': True,
+                'publication': {'publication_verified': True}}, 'original_row_transitions': [], 'added_rows': [],
+                'normal_mfa': None}, 'started_at': START.isoformat(), 'finished_at': START.isoformat(),
+            'co_tenant_preservation_admission': proof}
+        phase_authority = {'path': str(v3.PHASE_PRESERVATION_PATH),
+            'sha256': proof['phase_observation_sha256'], 'binding': observation['binding']}
+        def arguments(value):
+            raw = v3.encode(value)
+            return {'phase': 'before-auth', 'authority': {'phase_preservation': phase_authority,
+                'admissions': {'before-auth': {'path': str(v3.PREPARATION/'admission-before-auth.json'),
+                    'sha256': v3.sha(raw)}}}, 'receipt': receipt, 'operations': OPS, 'served': SERVED,
+                'availability_sha': availability_sha}
+        self.assertEqual(self.common.admission(v3.encode(report), **arguments(report)), report)
+        blobs = {name: v3.protected(v3.FROZEN/name) for name in v3.DEPENDENCIES}
+        adapted = v3.javascript_adapter(blobs, 'browser', declaration(), {},
+            {'argv': ['-B', '-c', 'fictional gate never invoked'], 'source_fd': 9})
+        uri = json.loads(re.search(rb'from ("data:text/javascript;base64,[^"]+")', adapted).group(1))
+        javascript = ("import fs from 'node:fs';import {validateV3} from " + json.dumps(uri)
+            + ";console.log(JSON.stringify(validateV3('admission',JSON.parse(fs.readFileSync(0,'utf8')))));" )
+        def checked(value):
+            return subprocess.run(['/usr/bin/node', '--input-type=module', '-e', javascript],
+                input=v3.encode({'raw_hex': v3.encode(value).hex(), 'receipt_raw_hex': v3.encode(receipt).hex(),
+                    'args': arguments(value)}), capture_output=True, timeout=15)
+        result = checked(report)
+        self.assertEqual(result.returncode, 0, result.stderr.decode()[-500:])
+        self.assertEqual(json.loads(result.stdout), report)
+        for mutate in (lambda row: row.pop('co_tenant_preservation_admission'),
+            lambda row: row.__setitem__('co_tenant_preservation_admission', {'protocol':'post-restoration-exact-owner-preservation-v1'}),
+            lambda row: row['co_tenant_preservation_admission']['phase_observation']['binding'].__setitem__('parent_pid', 999)):
+            bad = copy.deepcopy(report); bad['current_snapshot']['configuration'] = original; mutate(bad)
+            with self.assertRaises((v3.Refusal, RuntimeError)):
+                self.common.admission(v3.encode(bad), **arguments(bad))
+            self.assertNotEqual(checked(bad).returncode, 0)
 
 
 class ExposureAndFilesTests(unittest.TestCase):
@@ -1734,7 +1793,7 @@ class PostRestorationConfigurationTests(unittest.TestCase):
         with patch.object(v3, 'POST_RESTORE_OWNER_REPLY_SHA', None), \
              patch.object(v3, 'protected', side_effect=AssertionError('input read')):
             with self.assertRaisesRegex(v3.Refusal, 'owner_reply_required'):
-                v3.current_external_boundary(object(), {})
+                v3.historical_exact_external_boundary(object(), {})
 
     def adapter(self, raw=None):
         if raw is None:
@@ -1857,7 +1916,7 @@ class PostRestorationNativeTests(unittest.TestCase):
 
     def test_real_disposable_descriptor_bytes_and_reopens_prove_current_native_fragment(self):
         with self.fixture() as (recovery, calls):
-            proof = v3.current_external_boundary(recovery, {})
+            proof = v3.historical_exact_external_boundary(recovery, {})
             self.assertTrue(proof['configuration_admission']['current_owner_preservation_authorized'])
             self.assertFalse(proof['configuration_admission']['historical_deployment_authorization_verified'])
             self.assertEqual(len(calls), 6)
@@ -1869,23 +1928,338 @@ class PostRestorationNativeTests(unittest.TestCase):
             ('calls_started', False), ('provider_writes', 1), ('nginx_changed', True)]:
             with self.subTest(key=key), self.fixture(receipt_change=lambda row: row.update({key:value})) as (recovery, _):
                 with self.assertRaisesRegex(v3.Refusal, 'installation_binding'):
-                    v3.current_external_boundary(recovery, {})
+                    v3.historical_exact_external_boundary(recovery, {})
 
     def test_native_product_identity_refuses_before_public_descriptor_access(self):
         with self.fixture(unit_change=lambda row: dict(row, InvocationID='a'*32)) as (recovery, calls):
-            with self.assertRaisesRegex(v3.Refusal, 'product_state'): v3.current_external_boundary(recovery, {})
+            with self.assertRaisesRegex(v3.Refusal, 'product_state'): v3.historical_exact_external_boundary(recovery, {})
             self.assertEqual(calls, {})
 
     def test_native_reopen_cannot_adopt_a_replacement_inode(self):
         with self.fixture(detach=True) as (recovery, _):
-            with self.assertRaisesRegex(v3.Refusal, 'public_race'): v3.current_external_boundary(recovery, {})
+            with self.assertRaisesRegex(v3.Refusal, 'public_race'): v3.historical_exact_external_boundary(recovery, {})
 
     def test_reply_cannot_manufacture_historical_or_mutation_authority(self):
         for key, value in [('format', True), ('decision', 'generic approval'), ('proposal_sha256', 'a'*64),
                            ('historical_deployment_authorization_verified', True), ('voiceassistmain_changes_authorized', True)]:
             with self.subTest(key=key), self.fixture(reply_change=lambda row: row.update({key:value})) as (recovery, calls):
-                with self.assertRaisesRegex(v3.Refusal, 'owner_reply_scope'): v3.current_external_boundary(recovery, {})
+                with self.assertRaisesRegex(v3.Refusal, 'owner_reply_scope'): v3.historical_exact_external_boundary(recovery, {})
                 self.assertEqual(calls, {})
+
+
+def phase_fixture(availability_sha='c' * 64):
+    """Fictional full-population packet, including large measured-ns representation."""
+    product = copy.deepcopy(v3.POST_RESTORE_PINS['product_loaded_state'])
+    product['WorkingDirectory'] = '/opt/voiceassistmain-product/releases/' + 'd' * 24
+    native = {'hostname': 'fictional-host', 'machine_id_sha256': 'a'*64, 'pid1_comm': 'systemd',
+        'boot_id': 'fictional-boot', 'mount_namespace': 'mnt:[123]', 'pid_namespace': 'pid:[123]'}
+    installation = '11111111-2222-4333-8444-555555555555'
+    receipt_path = '/var/lib/voiceassistmain-product-installation/' + installation + '.json'
+    records = {}
+    for index, path in enumerate((*v3.PHASE_CONFIGURATION_PATHS, '/etc/voiceassistmain-product.json', receipt_path)):
+        link = path in v3.PHASE_LINK_TARGETS
+        records[path] = {'metadata': [2050, 100 + index, 0, 0, 0o777 if link else 0o644, 100,
+            '1791399914209634909', '1791399914211634948'], 'nlink': 1,
+            'link' if link else 'sha256': v3.PHASE_LINK_TARGETS[path] if link else 'a'*64}
+    units = {name: {field: {'Id': name, 'FragmentPath': '/etc/systemd/system/' + name,
+        'DropInPaths': '', 'LoadState': 'loaded', 'NeedDaemonReload': 'no', 'UnitFileState': 'enabled',
+        'User': 'voiceassistmain', 'Group': 'voiceassistmain', 'WorkingDirectory': '/fictional/foreign'}[field]
+        for field in fields} for name, fields in v3.PHASE_OTHER_UNIT_FIELDS.items()}
+    facts = {'manifest_path': '/etc/voiceassistmain-product.json', 'installation_receipt_path': receipt_path,
+        'installation_id': installation, 'current_release': product['WorkingDirectory'],
+        'receipt_belongs_to_manifest_release': False, 'manifest_release_matches_loaded_unit': False,
+        'receipt_manifest_hash_matches_current': False, 'receipt_pid_matches_loaded_unit': False,
+        'recorded_manifest_sha256': 'b'*64, 'recorded_main_pid': '999',
+        'historical_deployment_authorization_verified': False,
+        'manifest_pid_mismatches_are_historical_approval_prerequisites': False}
+    boundary = {'protocol': v3.PHASE_PRESERVATION_PROTOCOL, 'owner_scope_reply_sha256': v3.PRESERVATION_SCOPE_REPLY_SHA,
+        'owner_history': copy.deepcopy(v3.PHASE_OWNER_HISTORY), 'native_host_proof': native,
+        'product_loaded_state': product, 'additional_unit_configuration': units,
+        'protected_public_records': records, 'deployment_record_facts': facts, 'voiceassist_actions': 0,
+        'historical_deployment_authorization_verified': False}
+    current = {}
+    for path in v3.PHASE_CONFIGURATION_PATHS:
+        item = records[path]; key = 'link' if path in v3.PHASE_LINK_TARGETS else 'sha256'
+        current[path] = dict(zip(('device', 'inode', 'uid', 'gid', 'mode'), item['metadata'][:5]), **{key: item[key]})
+    current['/opt/meddoc-pro/Caddyfile'] = {'uid': 0, 'gid': 0, 'mode': 0o644, 'device': 2050,
+        'inode': 42, 'sha256': 'f'*64}
+    original = copy.deepcopy(current)
+    original[v3.PHASE_CONFIGURATION_PATHS[0]]['sha256'] = 'b'*64
+    observation = {'format': 1, 'protocol': v3.PHASE_PRESERVATION_PROTOCOL,
+        'owner_scope_reply_sha256': v3.PRESERVATION_SCOPE_REPLY_SHA,
+        'historical_original_configuration_sha256': v3.sha(v3.encode(original)),
+        'configuration': current, 'external_boundary': boundary,
+        'captured_at': (START-timedelta(seconds=1)).isoformat(),
+        'binding': {'operations_revision': OPS, 'served_revision': SERVED,
+            'availability_receipt_sha256': availability_sha, 'parent_pid': 123, 'parent_start_ticks': 456,
+            'preparation_directory': str(v3.PREPARATION)}}
+    return original, observation, v3.phase_configuration_packet(original, observation)
+
+
+class PhasePreservationTests(unittest.TestCase):
+    def setUp(self):
+        self.original, self.observation, self.proof = phase_fixture()
+        self.helpers = v3.configuration_helpers({'need': v3.require})
+
+    def test_whole_population_and_ns_survive_node_roundtrip_without_historical_approval(self):
+        result = subprocess.run(['/usr/bin/node', '-e',
+            "let s='';process.stdin.on('data',b=>s+=b);process.stdin.on('end',()=>console.log(JSON.stringify(JSON.parse(s))))"],
+            input=v3.encode(self.proof), capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0)
+        after = json.loads(result.stdout)
+        self.assertEqual(after, self.proof)
+        self.assertTrue(self.helpers['phase_configuration_proof'](
+            self.original, self.observation['configuration'], after))
+        self.assertFalse(after['historical_manifest_mismatch_resolved'])
+        self.assertFalse(after['historical_deployment_authorization_verified'])
+
+    def test_all_ten_resources_native_fields_and_meaningful_metadata_are_required(self):
+        for mutate in (lambda row: row['external_boundary']['protected_public_records'].pop(v3.PHASE_CONFIGURATION_PATHS[7]),
+            lambda row: row['external_boundary']['additional_unit_configuration'][next(iter(v3.PHASE_OTHER_UNIT_FIELDS))].pop('User'),
+            lambda row: row['external_boundary']['protected_public_records'][v3.PHASE_CONFIGURATION_PATHS[0]]['metadata'].__setitem__(2, False),
+            lambda row: row['external_boundary']['protected_public_records'][v3.PHASE_CONFIGURATION_PATHS[0]]['metadata'].__setitem__(6, 1791399914209634909),
+            lambda row: row['external_boundary']['product_loaded_state'].__setitem__('NeedDaemonReload', 'yes'),
+            lambda row: row['external_boundary']['protected_public_records'][v3.PHASE_CONFIGURATION_PATHS[0]].__setitem__('sha256', 'f'*64)):
+            bad = copy.deepcopy(self.observation); mutate(bad)
+            with self.subTest(mutation=mutate), self.assertRaises(v3.Refusal):
+                v3.phase_configuration_packet(self.original, bad)
+
+    def test_outside_scope_changed_before_phase_is_not_admitted(self):
+        bad = copy.deepcopy(self.observation)
+        bad['configuration']['/opt/meddoc-pro/Caddyfile']['inode'] += 1
+        with self.assertRaisesRegex(v3.Refusal, 'only_scoped_external_history'):
+            v3.phase_configuration_packet(self.original, bad)
+
+    def test_reversion_to_old_configuration_never_bypasses_phase_comparison(self):
+        snapshot = {'configuration': self.original, 'database': {}, 'files': {}, 'mail': {}, 'static': {}}
+        before = copy.deepcopy(snapshot)
+        with self.assertRaisesRegex(v3.Refusal, 'configuration_drift'):
+            v3.preserved_snapshot(before, snapshot, {}, self.proof, phase_required=True)
+        for missing in (None, {'protocol': 'post-restoration-exact-owner-preservation-v1'}):
+            with self.assertRaisesRegex(v3.Refusal, 'phase_proof_required'):
+                v3.preserved_snapshot(before, snapshot, {}, missing, phase_required=True)
+
+    def test_actual_frozen_comparison_cannot_short_circuit_missing_or_old_phase_proof(self):
+        raw = b'''def admission(raw, phase, authority, receipt, operations, served, availability_sha):
+    report=json.loads(raw); snapshot=report['current_snapshot']
+    for name in ('files','mail','static','configuration'):
+        need(snapshot.get(name)==receipt['before'].get(name),'preserved_'+name)
+    return report
+'''
+        scope = v3.configuration_helpers({'need': v3.require, 'json': json})
+        scope['adapt_configuration_admission'](scope, raw)
+        authority = {'phase_preservation': {'path': str(v3.PHASE_PRESERVATION_PATH),
+            'sha256': self.proof['phase_observation_sha256'], 'binding': self.observation['binding']}}
+        report = {'operations_revision': OPS, 'served_revision': SERVED, 'availability_receipt_sha256': 'c'*64,
+            'started_at': START.isoformat(), 'finished_at': START.isoformat(),
+            'current_snapshot': {'configuration': self.observation['configuration']},
+            'co_tenant_preservation_admission': self.proof}
+        receipt = {'before': {'configuration': self.original}}
+        check = lambda value: scope['admission'](v3.encode(value), 'before-auth', authority, receipt, OPS, SERVED, 'c'*64)
+        self.assertEqual(check(report), report)
+        for proof in (None, {'protocol': 'post-restoration-exact-owner-preservation-v1'}):
+            bad = copy.deepcopy(report); bad['current_snapshot']['configuration'] = self.original
+            bad['co_tenant_preservation_admission'] = proof
+            with self.assertRaises(v3.Refusal): check(bad)
+        bad = copy.deepcopy(report); bad['co_tenant_preservation_admission']['phase_observation']['binding']['parent_pid'] += 1
+        with self.assertRaises(v3.Refusal): check(bad)
+
+    def test_child_adopts_only_exact_parent_packet_and_all_report_cross_hashes(self):
+        raw = v3.encode(self.observation)
+        host = types.SimpleNamespace(co_tenant_phase_observation=None, co_tenant_phase_raw=None,
+            operations=OPS, served=SERVED, availability_raw=b'fictional availability',
+            receipt={'before': {'configuration': self.original}}, admission_raws={})
+        observation = copy.deepcopy(self.observation)
+        observation['binding']['availability_receipt_sha256'] = v3.sha(host.availability_raw)
+        proof = v3.phase_configuration_packet(self.original, observation); raw = v3.encode(observation)
+        host.admission_raws = {'before-auth': v3.encode({'co_tenant_preservation_admission': proof})}
+        context = {'parent_pid': 123, 'parent_start_ticks': 456, 'phase_preservation_sha256': v3.sha(raw),
+            'authority': {'phase_preservation': {'path': str(v3.PHASE_PRESERVATION_PATH),
+                'sha256': v3.sha(raw), 'binding': observation['binding']}}}
+        self.assertEqual(v3.adopt_phase_observation(host, raw, context), proof)
+        with self.assertRaisesRegex(v3.Refusal, 'child_phase_packet_hash'):
+            v3.adopt_phase_observation(host, raw, context)
+        for mutate in (lambda row: row.__setitem__('parent_pid', 999),
+                       lambda row: row.__setitem__('phase_preservation_sha256', 'f'*64)):
+            host.co_tenant_phase_observation = None; bad = copy.deepcopy(context); mutate(bad)
+            with self.assertRaises(v3.Refusal): v3.adopt_phase_observation(host, raw, bad)
+
+    def test_new_source_flag_is_required_before_any_installed_access(self):
+        with (patch.object(v3, 'PHASE_PRESERVATION_PROTOCOL_QUALIFIED', False),
+              patch.object(v3, 'protected', side_effect=AssertionError('installed read')),
+              patch.object(v3, 'preservation_scope_authority', side_effect=AssertionError('owner record read'))):
+            with self.assertRaisesRegex(v3.Refusal, 'source_protocol_unqualified'):
+                v3.current_external_boundary(object(), {})
+            with self.assertRaisesRegex(v3.Refusal, 'source_protocol_unqualified'): v3.InstalledHost()
+        self.assertFalse(v3.plan()['installed_state_accessed'])
+
+    def snapshot_host(self, observation=None, *, child=False):
+        host = v3.InstalledHost.__new__(v3.InstalledHost)
+        host.inside = True; host.own_hold_mode = None if child else '--execute'
+        host.parent_lock_context = {'parent_pid': os.getpid(),
+            'parent_start_ticks': v3.process_start(Path('/proc/self/stat').read_text())}
+        host.check_publication_hold = lambda: True
+        host.operations = OPS; host.served = SERVED; host.availability_raw = b'fictional availability'
+        host.receipt = {'before': {'configuration': self.original}}
+        host.source = Path('/fictional/source'); host.read_source = lambda path: b'fictional declaration'
+        host.recovery = types.SimpleNamespace(DECL='fictional.md', contract_from_bytes=lambda raw: {'external_configuration_ack': {}})
+        host.native = types.SimpleNamespace(configuration=lambda: copy.deepcopy(self.observation['configuration']))
+        host.backup = object(); host.storage = object()
+        host.old = types.SimpleNamespace(snapshot=lambda *args: {'configuration': copy.deepcopy(self.observation['configuration'])})
+        host.co_tenant_phase_observation = observation
+        host.co_tenant_phase_raw = v3.encode(observation) if observation else None
+        return host
+
+    def test_self_owned_parent_captures_once_and_child_cannot_recapture(self):
+        host = self.snapshot_host()
+        with patch.object(v3, 'current_external_boundary', return_value=self.observation['external_boundary']):
+            first = host.snapshot(); raw = host.co_tenant_phase_raw
+            self.assertEqual(host.snapshot(), first)
+            self.assertEqual(host.co_tenant_phase_raw, raw)
+            child = self.snapshot_host(child=True)
+            with self.assertRaisesRegex(v3.Refusal, 'child_cannot_capture_new_phase_baseline'): child.snapshot()
+
+    def test_during_and_after_configuration_native_and_saved_packet_drift_refuse(self):
+        observation = copy.deepcopy(self.observation)
+        host = self.snapshot_host(observation)
+        with patch.object(v3, 'current_external_boundary', return_value=observation['external_boundary']), \
+             patch.object(v3.os.path, 'lexists', return_value=False):
+            self.assertEqual(host.recheck_phase_preservation()['phase_observation'], observation)
+            host.native.configuration = lambda: copy.deepcopy(self.original)
+            with self.assertRaisesRegex(v3.Refusal, 'phase_preservation_drift'): host.recheck_phase_preservation()
+        host = self.snapshot_host(observation)
+        bad = copy.deepcopy(observation['external_boundary']); bad['product_loaded_state']['MainPID'] = '999'
+        with patch.object(v3, 'current_external_boundary', return_value=bad):
+            with self.assertRaisesRegex(v3.Refusal, 'phase_preservation_drift'): host.recheck_phase_preservation()
+
+    def test_drift_during_completion_write_preserves_stop_and_blocks_success_without_replay(self):
+        host = FakeHost(); checked = []
+        def phase_check():
+            checked.append('check')
+            if len(checked) == 3: raise v3.Refusal('v3_phase_preservation_drift')
+        host.recheck_phase_preservation = phase_check
+        with self.assertRaisesRegex(v3.Refusal, 'phase_preservation_drift'):
+            v3.protocol_pipeline(host, contract(), OPS, SERVED)
+        self.assertEqual(len(checked), 3)
+        self.assertLess(host.events.index('complete'), host.events.index('STOP'))
+        self.assertEqual(sum(isinstance(row, tuple) and row[0] == 'browser' for row in host.events), 1)
+
+
+class PhaseNativeObservationTests(unittest.TestCase):
+    """Real disposable descriptors and fictional root/unit views; no host-native reads."""
+    @contextmanager
+    def fixture(self, *, receipt_mismatch=False, final_invocation_race=False, detach=False, timer_transition=False,
+                final_invalid_lifecycle=False):
+        _, observation, _ = phase_fixture()
+        expected = observation['external_boundary']; product = expected['product_loaded_state']
+        paths = list(v3.PHASE_CONFIGURATION_PATHS[:8])
+        additional = {'exact_added_files': [{'path': path} for path in paths[4:]],
+            'exact_added_enablement_links': [{'path': path} for path in v3.PHASE_CONFIGURATION_PATHS[-2:]],
+            'loaded_states': [dict(value, ActiveState='active', SubState='running')
+                for value in expected['additional_unit_configuration'].values()]}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = {'installation_id': expected['deployment_record_facts']['installation_id'],
+                'release_root': product['WorkingDirectory'], 'source_sha256': 'd'*64}
+            manifest_raw = v3.encode(manifest)
+            receipt = dict(manifest, manifest_sha256=v3.sha(manifest_raw), main_pid=int(product['MainPID']))
+            if receipt_mismatch: receipt.update(manifest_sha256='e'*64, main_pid=999, source_sha256='e'*64)
+            json_files = {'/etc/voiceassistmain-product.json': manifest_raw,
+                expected['deployment_record_facts']['installation_receipt_path']: v3.encode(receipt)}
+            for path in (*paths, *json_files):
+                target = root / path[1:]; target.parent.mkdir(parents=True, exist_ok=True)
+                raw = json_files.get(path, b'fictional foreign configuration\n')
+                if path == product['FragmentPath']:
+                    raw = b'[Service]\nWorkingDirectory=' + product['WorkingDirectory'].encode() + b'\n'
+                target.write_bytes(raw); target.chmod(0o644)
+            for path, target in v3.PHASE_LINK_TARGETS.items():
+                link = root/path[1:]; link.parent.mkdir(parents=True, exist_ok=True); link.symlink_to(target)
+            def root_view(info):
+                values = {name: getattr(info, name) for name in dir(info) if name.startswith('st_')}
+                values.update(st_uid=0, st_gid=0)
+                return types.SimpleNamespace(**values)
+            shim = types.SimpleNamespace(fstat=lambda fd: root_view(os.fstat(fd)),
+                stat=lambda *args, **kwargs: root_view(os.stat(*args, **kwargs)),
+                listxattr=os.listxattr, close=os.close, readlink=os.readlink)
+            metadata = lambda info: [info.st_dev, info.st_ino, info.st_uid, info.st_gid,
+                stat.S_IMODE(info.st_mode), info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+            @contextmanager
+            def open_root(path):
+                self.assertEqual(path, Path('/'))
+                fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                try: yield fd
+                finally: os.close(fd)
+            reads = []; counts = {}
+            def open_relative(root_fd, relative, directory=False):
+                reads.append(relative); counts[relative] = counts.get(relative, 0) + 1
+                if detach and relative == paths[0][1:] and counts[relative] == 2:
+                    target=root/relative; replacement=root/'replacement'
+                    replacement.write_bytes(target.read_bytes()); replacement.chmod(0o644); replacement.replace(target)
+                return os.open(relative, os.O_RDONLY | os.O_NOFOLLOW | (os.O_DIRECTORY if directory else 0), dir_fd=root_fd)
+            unit_counts = {}
+            def unit_state(name, fields):
+                unit_counts[name] = unit_counts.get(name, 0) + 1
+                if name == 'voiceassistmain-product.service':
+                    result = copy.deepcopy(product)
+                    if final_invocation_race and unit_counts[name] == 3: result['InvocationID'] = 'f'*32
+                else:
+                    result = dict(expected['additional_unit_configuration'][name], ActiveState='active',
+                        SubState='waiting' if name.endswith('.timer') else 'running')
+                    if timer_transition and name.endswith('.timer') and unit_counts[name] > 1:
+                        result.update(ActiveState='inactive', SubState='elapsed')
+                    if final_invalid_lifecycle and name.endswith('.timer') and unit_counts[name] == 3:
+                        result['SubState'] = 'unrecognized-state'
+                self.assertEqual(set(result), set(fields))
+                return result
+            recovery = types.SimpleNamespace(EXTERNAL_UNIT=product['FragmentPath'],
+                CURRENT_OWNER_PINS={'added_links': v3.PHASE_LINK_TARGETS},
+                owner_boundary_inputs=lambda ack: ({'native_host_proof': expected['native_host_proof'],
+                    'additional_configuration_evidence': additional}, {'before': {}, 'after': {}}),
+                acknowledge_current_owner_configuration=lambda *args: None,
+                native_boundary_identity=lambda: copy.deepcopy(expected['native_host_proof']),
+                owner_unit_state=unit_state, full_native_metadata=metadata,
+                source_files=types.SimpleNamespace(open_root=open_root, open_relative=open_relative,
+                    bytes_at=lambda fd, bound: os.read(fd, bound), stable=lambda info: tuple(metadata(info))))
+            with patch.object(v3, 'os', shim), patch.object(v3, 'preservation_scope_authority', return_value=v3.PHASE_OWNER_HISTORY):
+                yield recovery, reads
+
+    def test_finite_disposable_reader_reopens_each_record_and_does_not_scan_release(self):
+        with self.fixture() as (recovery, reads):
+            proof = v3.current_external_boundary(recovery, {})
+            self.assertEqual(len(proof['protected_public_records']), 12)
+            self.assertTrue(proof['deployment_record_facts']['receipt_pid_matches_loaded_unit'])
+            self.assertFalse(proof['historical_deployment_authorization_verified'])
+            self.assertFalse(any('/releases/' in path for path in reads))
+            for path, item in proof['protected_public_records'].items():
+                if 'sha256' in item: self.assertEqual(reads.count(path[1:]), 4)
+                self.assertTrue(all(type(value) is str for value in item['metadata'][6:]))
+
+    def test_current_receipt_hash_pid_and_source_mismatches_remain_recorded_nonprerequisites(self):
+        with self.fixture(receipt_mismatch=True) as (recovery, _):
+            proof = v3.current_external_boundary(recovery, {})
+            facts = proof['deployment_record_facts']
+            self.assertFalse(facts['receipt_belongs_to_manifest_release'])
+            self.assertFalse(facts['receipt_manifest_hash_matches_current'])
+            self.assertFalse(facts['receipt_pid_matches_loaded_unit'])
+            self.assertFalse(facts['manifest_pid_mismatches_are_historical_approval_prerequisites'])
+
+    def test_replaced_inode_and_invocation_during_final_file_reopen_refuse(self):
+        for value, label in (({'detach': True}, 'public_race'),
+                             ({'final_invocation_race': True}, 'final_loaded_identity_race')):
+            with self.subTest(value=value), self.fixture(**value) as (recovery, _):
+                with self.assertRaisesRegex(v3.Refusal, label): v3.current_external_boundary(recovery, {})
+
+    def test_natural_timer_lifecycle_is_explicit_and_preserves_configuration(self):
+        with self.fixture(timer_transition=True) as (recovery, _):
+            proof = v3.current_external_boundary(recovery, {})
+            timer = proof['additional_unit_configuration']['voiceassist-restaurant-tajrish-20261007-retention.timer']
+            self.assertEqual(set(timer), set(v3.PHASE_OTHER_UNIT_FIELDS['voiceassist-restaurant-tajrish-20261007-retention.timer']))
+            self.assertNotIn('ActiveState', timer); self.assertNotIn('SubState', timer)
+
+    def test_final_reread_does_not_hide_an_unrecognized_lifecycle_state(self):
+        with self.fixture(final_invalid_lifecycle=True) as (recovery, _):
+            with self.assertRaisesRegex(v3.Refusal, 'other_unit_population'):
+                v3.current_external_boundary(recovery, {})
 
 
 def local_qualification_suite():
