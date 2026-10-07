@@ -12,8 +12,8 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
-from django.db import transaction
-from django.http import HttpResponseForbidden, JsonResponse
+from django.db import DatabaseError, transaction
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.views.csrf import csrf_failure as default_csrf_failure
@@ -22,6 +22,10 @@ from django.views.decorators.http import require_http_methods, require_POST
 from .security import audit, rate_limit
 
 COOKIE = '__Host-quillmd_preview'
+# Later source qualification and an explicit setting are both required. A
+# declaration, environment variable or ingress change alone cannot enable 443.
+OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED = False
+OWNER_NORMAL_HOST = 'app.quillmd.com'
 SIGN_IN = '/preview/sign-in/'
 SIGN_OUT = '/preview/sign-out/'
 KIND = 'quillmd-preview-v1'
@@ -82,7 +86,7 @@ def valid_grant(store, now):
 
 
 @contextmanager
-def preview_store(request):
+def preview_store(request, *, existing_only=False):
     """Serialize per-browser updates; never modify another kind of session."""
     with transaction.atomic():
         key = request.COOKIES.get(COOKIE)
@@ -91,6 +95,11 @@ def preview_store(request):
         if key:
             Session.objects.select_for_update().filter(session_key=key).exists()
         store = SessionStore(session_key=key)
+        if existing_only and (store.get('kind') != KIND or not valid_grant(store, time.time())):
+            # An expired/deleted/replaced grant may race the earlier read. Do
+            # not create, renew, delete or save a session on the public route.
+            yield None
+            return
         if store.get('kind') != KIND:
             # A copied account-session cookie must not be changed or deleted.
             store = SessionStore()
@@ -120,6 +129,28 @@ def api_request(request):
             or 'application/json' in request.headers.get('Accept', ''))
 
 
+def owner_maintenance(*, admin=False):
+    message = ('QuillMD administration is temporarily unavailable while the new application is privately tested.'
+               if admin else 'QuillMD is being rebuilt. The doctor application is temporarily unavailable. Please contact your organization administrator.')
+    response = HttpResponse(message, status=503, content_type='text/plain; charset=utf-8')
+    response['Cache-Control'] = 'no-store'
+    response['Retry-After'] = '3600'
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
+
+
+def existing_owner_grant(request):
+    """Read an existing signed preview grant; never create or save a session."""
+    key = request.COOKIES.get(COOKIE)
+    if not isinstance(key, str) or not re.fullmatch(r'[a-z0-9]{32}', key):
+        return False
+    try:
+        value = SessionStore(session_key=key).load()
+    except DatabaseError:
+        return False
+    return isinstance(value, dict) and value.get('kind') == KIND and valid_grant(value, time.time())
+
+
 def error(request, message, *, status=403, heading='Private preview access required', continue_url=None):
     request.user = getattr(request, 'user', AnonymousUser())
     if api_request(request):
@@ -136,8 +167,17 @@ class PreviewAccessMiddleware:
     def __call__(self, request):
         host = request.get_host()
         marker = request.headers.get('X-QuillMD-Preview')
-        public_origin = host == urlsplit(settings.QUILLMD_PREVIEW_ORIGIN).netloc
         enabled = settings.QUILLMD_PREVIEW_AUTH_ENABLED and not settings.ADMIN_SITE
+        normal = host in {OWNER_NORMAL_HOST, OWNER_NORMAL_HOST + ':443'}
+        if host in {'admin.quillmd.com', 'admin.quillmd.com:443'}:
+            return owner_maintenance(admin=True)
+        if normal:
+            if (host != OWNER_NORMAL_HOST or not OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED
+                    or not getattr(settings, 'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', False)
+                    or not enabled or marker != '1' or not request.is_secure()
+                    or request.path in {SIGN_IN, SIGN_OUT} or not existing_owner_grant(request)):
+                return owner_maintenance()
+        public_origin = host == urlsplit(settings.QUILLMD_PREVIEW_ORIGIN).netloc or normal
         if not enabled:
             if marker is not None:
                 return error(request, 'Private preview access is not available. Please contact your platform operator.', status=503)
@@ -154,11 +194,13 @@ class PreviewAccessMiddleware:
         elif request.path in {SIGN_IN, SIGN_OUT}:
             response = self.get_response(request)
         else:
-            with preview_store(request) as store:
+            with preview_store(request, existing_only=normal) as store:
                 now = time.time()
-                granted = valid_grant(store, now)
+                granted = store is not None and valid_grant(store, now)
                 if granted:
                     store['grant'] = {**store['grant'], 'seen': now}
+                elif normal:
+                    return owner_maintenance()
                 elif request.method == 'GET' and not api_request(request):
                     destination = request.get_full_path()
                     if not safe_destination(destination):
