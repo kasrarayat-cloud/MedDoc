@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 import copy
+import fcntl
 import io
 import json
 import os
@@ -455,6 +456,96 @@ class ChildAndPrivateFileTests(unittest.TestCase):
 
 
 class NativeAdapterTests(unittest.TestCase):
+    def publication_fixture(self, runtime, *, drift=None, fail_wait=False, late=False, occupied=False):
+        for relative in (*v3.LOCKS, v3.PUBLICATION_LOCK):
+            path = runtime / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'')
+            path.chmod(0o600)
+        host = v3.InstalledHost.__new__(v3.InstalledHost)
+        host.inside = False; host.lock_rows = []; host.publication_alignment = None
+        host.operations = OPS; host.source = Path('/fictional/source'); host.backup = object()
+        clock = [100.0]; host.clock = lambda: clock[0]
+        host.read_source = lambda path: b'fictional reviewed declaration'
+        selected = {'row': {'key': 'backup', 'computed_at': '2026-10-07T16:00:00+00:00'},
+            'unit': {'InvocationID': 'a'*32}, 'timer': {'SubState': 'waiting'},
+            'journal': [('a'*32, 'fictional genuine publication')], 'coherent_unit': True}
+        current = copy.deepcopy(selected)
+        if drift == 'coherent_unit': current['coherent_unit'] = False
+        elif drift in ('row', 'unit', 'timer'): current[drift]['changed'] = True
+        elif drift == 'journal': current['journal'].append(('b'*32, 'fictional other invocation'))
+        sources = {'publisher.service': {'sha256': 'c'*64}}
+        calls = []
+        def source_pins():
+            calls.append('sources')
+            return {'changed': True} if drift == 'source' and len(calls) > 2 else sources
+        def wait(contract, observe):
+            self.assertFalse(host.inside)
+            self.assertEqual([row['path'] for row in host.lock_rows], [str(runtime/r) for r in v3.LOCKS])
+            for relative in v3.LOCKS:
+                fd = os.open(runtime/relative, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError): fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+                finally: os.close(fd)
+            if not occupied:
+                fd = os.open(runtime/v3.PUBLICATION_LOCK, os.O_RDWR)
+                try: fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+                finally: os.close(fd)
+            calls.append('wait')
+            if fail_wait: raise v3.Refusal('v3_fixture_no_natural_publication')
+            if late: clock[0] = 1001
+            return selected
+        host.recovery = types.SimpleNamespace(DECL='reviewed.md', contract_from_bytes=lambda raw: {'fixture': True},
+            publisher_unit_sources=source_pins, publisher_observer=lambda backup: lambda: current,
+            await_natural_publication=wait)
+        return host, clock
+
+    def test_natural_publication_wait_holds_four_inputs_before_fifth_lock(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(v3, 'os', FixtureOwnerOS()):
+            runtime = Path(temp)
+            with patch.object(v3, 'RUNTIME', runtime):
+                host, _ = self.publication_fixture(runtime)
+                with host.exclusions(OPS, 1000):
+                    self.assertTrue(host.inside)
+                    self.assertEqual(len(host.lock_rows), 5)
+                    self.assertEqual(host.publication_alignment['manual_publications'], 0)
+                    self.assertEqual(host.publication_alignment['timer_or_service_actions'], 0)
+                self.assertFalse(host.inside)
+                self.assertEqual(host.lock_rows, [])
+                self.assertIsNone(host.publication_alignment)
+
+    def test_selected_publication_or_source_drift_refuses_before_authentication(self):
+        for drift in ('row', 'unit', 'timer', 'journal', 'coherent_unit', 'source'):
+            with self.subTest(drift=drift), tempfile.TemporaryDirectory() as temp, patch.object(v3, 'os', FixtureOwnerOS()):
+                runtime = Path(temp)
+                with patch.object(v3, 'RUNTIME', runtime):
+                    host, _ = self.publication_fixture(runtime, drift=drift)
+                    with self.assertRaises(v3.Refusal), host.exclusions(OPS, 1000):
+                        self.fail('Entered authentication boundary after publisher drift')
+                    self.assertFalse(host.inside)
+                    self.assertEqual(host.lock_rows, [])
+
+    def test_failed_late_publication_and_bounded_drain_release_input_locks(self):
+        for kind in ('failed_wait', 'late_wait', 'occupied_publication'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temp, patch.object(v3, 'os', FixtureOwnerOS()):
+                runtime = Path(temp)
+                with patch.object(v3, 'RUNTIME', runtime):
+                    host, clock = self.publication_fixture(runtime, fail_wait=kind=='failed_wait',
+                        late=kind=='late_wait', occupied=kind=='occupied_publication')
+                    blocker = os.open(runtime/v3.PUBLICATION_LOCK, os.O_RDWR)
+                    try:
+                        if kind=='occupied_publication': fcntl.flock(blocker, fcntl.LOCK_EX|fcntl.LOCK_NB)
+                        with patch.object(v3.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0,clock[0]+seconds)):
+                            with self.assertRaises(v3.Refusal), host.exclusions(OPS, 1000):
+                                self.fail('Entered authentication after unknown publication')
+                        self.assertLessEqual(clock[0], 1001)
+                        self.assertFalse(host.inside); self.assertEqual(host.lock_rows, [])
+                        for relative in v3.LOCKS:
+                            fd = os.open(runtime/relative, os.O_RDWR)
+                            try: fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+                            finally: os.close(fd)
+                    finally: os.close(blocker)
+
     def test_actual_checked_native_namespace_has_closed_transitive_imports(self):
         names = ('managed_helper','private_storage','backup_restore','email_activation','activation_exclusion',
                  'legacy_model_activation','repair_source_permissions','publisher_verification','private_availability_recovery')

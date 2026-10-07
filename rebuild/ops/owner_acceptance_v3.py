@@ -1292,6 +1292,7 @@ class InstalledHost:
         self.lock_rows = []
         self.admission_raws = {}
         self.contract = None
+        self.publication_alignment = None
 
     def canonical(self, path):
         return Path(path).resolve(strict=True)
@@ -1380,7 +1381,7 @@ class InstalledHost:
     def exclusions(self, operations, deadline):
         require(not self.inside and operations == self.operations, 'v3_parent_exclusion_scope')
         with ExitStack() as stack:
-            for relative in (*LOCKS, PUBLICATION_LOCK):
+            def acquire(relative, limit):
                 path = RUNTIME / relative
                 fd = stack.enter_context(nofollow_file(path))
                 info = os.fstat(fd)
@@ -1392,15 +1393,37 @@ class InstalledHost:
                         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                         break
                     except BlockingIOError:
-                        deadline_remaining(deadline, self.clock)
+                        deadline_remaining(limit, self.clock)
                         time.sleep(.05)
                 self.lock_rows.append({'path': str(path), 'fd': fd, 'device': info.st_dev, 'inode': info.st_ino})
-            self.inside = True
             try:
+                for relative in LOCKS:
+                    acquire(relative, deadline)
+                # Freeze publisher inputs first, while leaving natural publication
+                # free. Otherwise an older row can describe an earlier monitor.
+                deadline_remaining(deadline, self.clock)
+                contract = self.recovery.contract_from_bytes(self.read_source(self.source / self.recovery.DECL))
+                sources = self.recovery.publisher_unit_sources()
+                observe = self.recovery.publisher_observer(self.backup)
+                selected = self.recovery.await_natural_publication(contract, observe)
+                deadline_remaining(deadline, self.clock)
+                acquire(PUBLICATION_LOCK, min(deadline, self.clock() + 120))
+                current = observe()
+                require(current['coherent_unit'] and all(current[name] == selected[name]
+                        for name in ('row', 'unit', 'timer', 'journal')),
+                        'v3_selected_publication_drift')
+                require(self.recovery.publisher_unit_sources() == sources,
+                        'v3_publisher_unit_file_drift')
+                deadline_remaining(deadline, self.clock)
+                self.publication_alignment = {'format': 3, 'selected': selected,
+                    'unit_sources': sources, 'maximum_natural_wait_seconds': 360,
+                    'manual_publications': 0, 'timer_or_service_actions': 0, 'provider_calls': 0}
+                self.inside = True
                 yield
             finally:
                 self.inside = False
                 self.lock_rows = []
+                self.publication_alignment = None
 
     def snapshot(self):
         return self.old.snapshot(self.native, self.backup, self.storage)
@@ -1496,6 +1519,9 @@ class InstalledHost:
         admission = installed_database_admission(contract, auth_packet=packet, operations=operations, served=served,
             availability_sha=sha(self.availability_raw), verifier_override=self.availability_verifier,
             native_modules=(self.old, self.backup))
+        require(isinstance(self.publication_alignment, dict)
+                and admission['allowed_deltas']['publisher']['current_full_row']
+                    == self.publication_alignment['selected']['row'], 'v3_admitted_selected_publication')
         snapshot = self.snapshot()
         preserved_snapshot(receipt['before'], snapshot, admission['current_database_fingerprint'])
         worker = receipt['units_after'][UNITS[2]]
@@ -1523,6 +1549,7 @@ class InstalledHost:
     def create_exclusive_preparation(self, operations, served, before):
         require(self.inside and not os.path.lexists(PREPARATION), 'v3_exclusive_preparation')
         PREPARATION.mkdir(mode=0o700)
+        write_new(PREPARATION / 'publisher-alignment.json', self.publication_alignment)
         write_new(PREPARATION / 'admission-before-auth.json', self.admission_raws['before-auth'])
         write_new(PREPARATION / 'parent.json', {'format': 3, 'operations_revision': operations,
             'served_revision': served, 'original_capture_adopted': False, 'provider_calls': 0,
@@ -1534,6 +1561,7 @@ class InstalledHost:
             'parent_pid': os.getpid(), 'parent_uid': os.getuid(),
             'parent_start_ticks': process_start(Path('/proc/self/stat').read_text()),
             'deadline_monotonic': deadline, 'locks': copy.deepcopy(self.lock_rows),
+            'publisher_alignment_sha256': sha(encode(self.publication_alignment) + b'\n'),
             'authority': self.authority(), 'admission_sha256': {k: sha(v) for k, v in self.admission_raws.items()}}
         raw = encode(value) + b'\n'
         write_new(PREPARATION / ('parent-phase-' + phase + '.json'), raw)
@@ -1601,6 +1629,10 @@ def admit_parent_child(host, phase, context_sha):
     require(sha(raw) == context_sha, 'v3_parent_context_changed')
     context = json.loads(raw)
     parent_phase_admission(context, phase, host.operations, host.served, source=host.source)
+    alignment_raw = protected(PREPARATION / 'publisher-alignment.json')
+    require(sha(alignment_raw) == context.get('publisher_alignment_sha256'),
+            'v3_parent_publication_alignment_hash')
+    host.publication_alignment = json.loads(alignment_raw)
     require(0 < context['deadline_monotonic'] - host.clock() <= (180 if phase == 'normal-auth' else 1200),
             'v3_exact_phase_ceiling')
     phases = ('before-auth',) if phase == 'normal-auth' else ('before-auth', 'after-auth')

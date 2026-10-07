@@ -329,3 +329,35 @@ test process and was restored there. These controls establish the bounded own
 subprocess mechanism; they do not qualify an installed Host, browser dispatcher,
 native installation, authentication or provider campaign. All three source
 qualification flags remain false.
+
+### Natural publication admission,7October2026
+
+The acceptance parent originally acquired all five exclusions immediately. A
+monitor update after the last completed publication can then leave the frozen
+row describing an older monitor even though both are individually authentic.
+This is the same demonstrated input/publication sequencing defect repaired in
+availability; it is not evidence of the cause of an unobserved historical refusal.
+
+The parent now holds the four input exclusions first, authenticates the reviewed
+recovery declaration and owned publisher unit files, and waits at most360seconds
+for a genuinely advancing completed natural publication using that reviewed
+observer/judge. Only then does it acquire publication exclusion, with a120second
+drain bound. Row, invocation, timer, journal and unit-file identities must still
+equal the selected observation before authentication. There is no manual publish,
+timer change, service action or admission retry. Failed/late selection and drift
+release the held input descriptors without entering authentication.
+
+The selected evidence is retained separately in `publisher-alignment.json` and
+hash-bound into every parent/child phase packet. Independent admissions must
+still reproduce the complete selected row. The original capture and all original
+publisher predicates remain intact. Offline kernel-lock controls establish the
+four-before-five order, exact-selection refusals and bounded failed drain using
+owned temporary files only.
+
+Qualification still must resolve an additional real sequencing constraint:
+during a long exclusion hold, the300second timer may execute an honestly deferred
+tick, changing the latest systemd InvocationID without publishing a row. The
+current frozen observer rejects that row/unit mismatch. No deferred invocation
+is silently treated as a publication, and no installed campaign has run. A
+finished, evidence-backed protocol for this case remains required before the
+source qualification flags can become true.
